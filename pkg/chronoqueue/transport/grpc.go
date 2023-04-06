@@ -2,7 +2,6 @@ package transport
 
 import (
 	"context"
-	"log"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 	"github.com/adrien19/chronoqueue/internal"
@@ -138,24 +137,14 @@ func (g *grpcServer) GetQueueState(ctx context.Context, r *chronoqueue.GetQueueS
 
 func decodeGRPCCreateQueueRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*chronoqueue.CreateQueueRequest)
-	// queueInfo := internal.QueueInfo{
-	// 	QueueName:            req.Queue.Name,
-	// 	QueueType:            internal.QueueType(req.Queue.Metadata.Type),
-	// 	PriorityRange:        internal.PriorityRange{},
-	// 	Attempts:             req.Queue.Metadata.DequeueAttempts,
-	// 	LeaseDuration:        req.Queue.Metadata.LeaseDuration,
-	// 	ExclusivityKey:       *req.Queue.Metadata.ExclusivityKey,
-	// 	InvisibilityDuration: *req.Queue.Metadata.InvisibilityDuration,
-	// }
-	return endpoints.CreateQueueRequest{QueueInfo: req.Queue}, nil
+	return req.Queue, nil
 }
 
 func decodeGRPCCreateQueueResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
 	if grpcReply == nil {
 		return &chronoqueue.CreateQueueResponse{}, nil
 	}
-	log.Println("======>> GRPC REPLY", grpcReply)
-	_ = grpcReply.(endpoints.CreateQueueResponse)
+	_ = grpcReply.(*chronoqueue.CreateQueueResponse)
 	return &chronoqueue.CreateQueueResponse{}, nil
 }
 
@@ -166,7 +155,6 @@ func decodeGRPCDeleteQueueRequest(_ context.Context, grpcReq interface{}) (inter
 
 func decodeGRPCDeleteQueueResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
 	if grpcReply == nil {
-		log.Println("======>> GRPC REPLY WAS EMPTY")
 		return &chronoqueue.DeleteQueueResponse{}, nil
 	}
 	_ = grpcReply.(endpoints.ErrorResponse)
@@ -175,26 +163,14 @@ func decodeGRPCDeleteQueueResponse(_ context.Context, grpcReply interface{}) (in
 
 func decodeGRPCPostMessageRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*chronoqueue.PostMessageRequest)
-	// messageInfo := internal.QueueMessageInfo{
-	// 	MessageID:            req.Message.MessageId,
-	// 	Payload:              req.Message.Metadata.Payload.AsMap(),
-	// 	Priority:             req.Message.Priority,
-	// 	State:                internal.State(req.Message.Metadata.State),
-	// 	InvisibilityDuration: *req.Message.Metadata.InvisibilityDuration,
-	// 	AttemptsLeft:         req.Message.Metadata.AttemptsLeft,
-	// 	LeaseExpiry:          *req.Message.Metadata.LeaseExpiry,
-	// }
-	return endpoints.PostMessageRequest{Request: &chronoqueue.PostMessageRequest{
-		QueueName: req.QueueName,
-		Message:   req.Message,
-	}}, nil
+	return req, nil
 }
 
 func decodeGRPCPostMessageResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
 	if grpcReply == nil {
 		return &chronoqueue.PostMessageResponse{}, nil
 	}
-	_ = grpcReply.(endpoints.PostMessageResponse)
+	_ = grpcReply.(*chronoqueue.PostMessageResponse)
 	return &chronoqueue.PostMessageResponse{}, nil
 }
 

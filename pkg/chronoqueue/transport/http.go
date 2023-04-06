@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
 
@@ -61,16 +62,16 @@ func NewHTTPHandler(ep endpoints.Set) http.Handler {
 }
 
 func decodeHTTPCreateQueueRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req endpoints.CreateQueueRequest
+	var req chronoqueue.Queue
 	if r.ContentLength == 0 {
 		logger.Log("Get request with no body")
-		return req, nil
+		return &req, nil
 	}
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
 	}
-	return req, nil
+	return &req, nil
 }
 
 func decodeHTTPDeleteQueueRequest(ctx context.Context, r *http.Request) (interface{}, error) {
@@ -83,12 +84,12 @@ func decodeHTTPDeleteQueueRequest(ctx context.Context, r *http.Request) (interfa
 }
 
 func decodeHTTPPostMessageRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req endpoints.PostMessageRequest
+	var req chronoqueue.PostMessageRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
 	}
-	return req, nil
+	return &req, nil
 }
 
 func decodeHTTPGetNextMessageRequest(_ context.Context, r *http.Request) (interface{}, error) {

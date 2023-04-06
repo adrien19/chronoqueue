@@ -1,56 +1,10 @@
 package endpoints
 
 import (
-	"log"
 	"time"
 
-	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 	"github.com/adrien19/chronoqueue/internal"
-	"google.golang.org/protobuf/encoding/protojson"
 )
-
-type CreateQueueRequest struct {
-	QueueInfo *pb_chronoqueue.Queue
-}
-
-func (cqr CreateQueueRequest) MarshalBinary() ([]byte, error) {
-	log.Println("Marshalling ===>> ", cqr)
-	return protojson.Marshal(cqr.QueueInfo)
-}
-
-// func (cqr CreateQueueRequest) MarshalToMapOfInterface() (map[string]interface{}, error) {
-// 	var tempMap map[string]interface{}
-// 	jsonData, err := protojson.Marshal(cqr.QueueInfo)
-// 	if err != nil {
-// 		log.Println("Failed to serialize queue's metadata")
-// 		return tempMap, err
-// 	}
-
-// 	if err := json.Unmarshal(jsonData, &tempMap); err != nil {
-// 		log.Println("Failed to deserialize queue's metadata")
-// 		return tempMap, err
-// 	}
-// 	return tempMap, nil
-// }
-
-func (cqr CreateQueueRequest) UnmarshalBinary(data []byte) error {
-	if err := protojson.Unmarshal(data, cqr.QueueInfo); err != nil {
-		return err
-	}
-	return nil
-}
-
-type CreateQueueResponse struct {
-	Reply *pb_chronoqueue.CreateQueueResponse `json:"reply"`
-}
-
-type PostMessageRequest struct {
-	Request *pb_chronoqueue.PostMessageRequest
-}
-
-type PostMessageResponse struct {
-	Request *pb_chronoqueue.PostMessageResponse
-}
 
 // type PostMessageRequest struct {
 // 	QueueName string                    `json:"queueName"`

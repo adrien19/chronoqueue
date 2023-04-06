@@ -34,8 +34,8 @@ func NewEndpointSet(svc chronoqueue.Service) Set {
 
 func MakeCreateQueueEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(CreateQueueRequest)
-		err = svc.CreateQueue(ctx, req.QueueInfo)
+		req := request.(*pb.Queue)
+		err = svc.CreateQueue(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -56,8 +56,8 @@ func MakeDeleteQueueEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 
 func MakePostMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(PostMessageRequest)
-		err = svc.PostMessage(ctx, req.Request.QueueName, req.Request.Message)
+		req := request.(*pb.PostMessageRequest)
+		err = svc.PostMessage(ctx, req.QueueName, req.Message)
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +133,7 @@ func MakeGetQueueStateEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 }
 
 func (s *Set) CreateQueue(ctx context.Context, queueInfo *pb.Queue) error {
-	_, err := s.CreateQueueEndpoint(ctx, CreateQueueRequest{QueueInfo: queueInfo})
+	_, err := s.CreateQueueEndpoint(ctx, queueInfo)
 	if err != nil {
 		return err
 	}
@@ -149,10 +149,7 @@ func (s *Set) DeleteQueue(ctx context.Context, queueName string) error {
 }
 
 func (s *Set) PostMessage(ctx context.Context, queueName string, message *pb.Message) error {
-	_, err := s.PostMessageEndpoint(ctx, PostMessageRequest{Request: &pb.PostMessageRequest{
-		QueueName: queueName,
-		Message:   message,
-	}})
+	_, err := s.PostMessageEndpoint(ctx, &pb.PostMessageRequest{QueueName: queueName, Message: message})
 	if err != nil {
 		return err
 	}
