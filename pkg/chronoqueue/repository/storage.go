@@ -12,6 +12,7 @@ import (
 	"github.com/adrien19/chronoqueue/internal"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Storage interface {
@@ -23,7 +24,7 @@ type Storage interface {
 	AcknowledgeMessage(ctx context.Context, queueName string, messageID string, state internal.State) error
 	RenewMessageLease(ctx context.Context, queueName string, leaseDuration int64, messageID string) error
 	PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error)
-	GetQueueState(ctx context.Context, queueName string) (internal.QueueStateInfo, error)
+	GetQueueState(ctx context.Context, request *chronoqueue.GetQueueStateRequest) (*chronoqueue.GetQueueStateResponse, error)
 }
 
 type storage struct {
@@ -364,7 +365,6 @@ func (as *storage) PeekQueueMessages(ctx context.Context, request *chronoqueue.P
 		}
 		var meta chronoqueue.Message_Metadata
 		err = protojson.Unmarshal([]byte(metaResult), &meta)
-		// message, err := internal.UnMarshalRedisMessageInfo(metaResult)
 		if err != nil {
 			log.Println("Failed to serialize message's metadata", err)
 			return nil, err
@@ -380,17 +380,18 @@ func (as *storage) PeekQueueMessages(ctx context.Context, request *chronoqueue.P
 	return &chronoqueue.PeekQueueMessagesResponse{Messages: messages}, nil
 }
 
-func (as *storage) GetQueueState(ctx context.Context, queueName string) (internal.QueueStateInfo, error) {
-	membersWithScores, err := as.redisClient.ZRangeByScoreWithScores(ctx, queueName, &redis.ZRangeBy{
+func (as *storage) GetQueueState(ctx context.Context, request *chronoqueue.GetQueueStateRequest) (*chronoqueue.GetQueueStateResponse, error) {
+	membersWithScores, err := as.redisClient.ZRangeByScoreWithScores(ctx, request.GetQueueName(), &redis.ZRangeBy{
 		Min:    "-inf",
 		Max:    "+inf",
 		Offset: 0,
 	}).Result()
 	if err != nil {
-		return internal.QueueStateInfo{}, err
+		return &chronoqueue.GetQueueStateResponse{}, err
 	}
 	// convert timefloat to time.
-	earliestDeadline := time.Unix(0, int64(membersWithScores[0].Score)*int64(time.Millisecond))
+	// Assumes the first element of array is empty string member
+	earliestDeadline := time.Unix(0, int64(membersWithScores[1].Score)*int64(time.Millisecond))
 
 	invisibleMessagesCount := 0
 	pendingMessagesCount := 0
@@ -401,33 +402,39 @@ func (as *storage) GetQueueState(ctx context.Context, queueName string) (interna
 
 	// Get the messages' values using their member IDs.
 	for _, memberID := range membersWithScores {
-		metaResult, err := as.redisClient.HGetAll(ctx, fmt.Sprintf("%s:%s:meta", queueName, memberID.Member)).Result()
+		if len(memberID.Member.(string)) == 0 {
+			continue
+		}
+		metaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), memberID.Member), "metadata").Result()
 		if err != nil {
-			return internal.QueueStateInfo{}, err
+			return &chronoqueue.GetQueueStateResponse{}, err
 		}
 		// Deserialize the message metadata
-		message, err := internal.UnMarshalRedisMessageInfo(metaResult)
+		var meta chronoqueue.Message_Metadata
+		err = protojson.Unmarshal([]byte(metaResult), &meta)
 		if err != nil {
-			log.Println("Failed to deserialize message's metadata")
-			return internal.QueueStateInfo{}, err
+			log.Println("Failed to serialize message's metadata", err)
+			return &chronoqueue.GetQueueStateResponse{}, err
 		}
-		switch message.State {
-		case internal.MESSAGE_INVISIBLE:
+
+		switch meta.GetState() {
+		case chronoqueue.Message_Metadata_INVISIBLE:
 			invisibleMessagesCount += 1
-		case internal.MESSAGE_PENDING:
+		case chronoqueue.Message_Metadata_PENDING:
 			pendingMessagesCount += 1
-		case internal.MESSAGE_RUNNING:
+		case chronoqueue.Message_Metadata_RUNNING:
 			runningMessagesCount += 1
-		case internal.MESSAGE_COMPLETED:
+		case chronoqueue.Message_Metadata_COMPLETED:
 			completedMessagesCount += 1
-		case internal.MESSAGE_CANCELED:
+		case chronoqueue.Message_Metadata_CANCELED:
 			canceledMessagesCount += 1
-		case internal.MESSAGE_ERRORED:
+		case chronoqueue.Message_Metadata_ERRORED:
 			erroredMessagesCount += 1
 		default:
 			continue
 		}
 	}
+
 	log.Println("====>> Queue State: ",
 		"invisibleMessagesCount: ", invisibleMessagesCount,
 		"pendingMessagesCount: ", pendingMessagesCount,
@@ -436,14 +443,14 @@ func (as *storage) GetQueueState(ctx context.Context, queueName string) (interna
 		"canceledMessagesCount: ", canceledMessagesCount,
 		"erroredMessagesCount: ", erroredMessagesCount,
 		"earliestDeadline: ", earliestDeadline)
-	return internal.QueueStateInfo{
+	return &chronoqueue.GetQueueStateResponse{
 		InvisibleMessagesCount: int32(invisibleMessagesCount),
 		PendingMessagesCount:   int32(pendingMessagesCount),
 		RunningMessagesCount:   int32(runningMessagesCount),
 		CompletedMessagesCount: int32(completedMessagesCount),
 		CanceledMessagesCount:  int32(canceledMessagesCount),
 		ErroredMessagesCount:   int32(erroredMessagesCount),
-		EarliestDeadline:       earliestDeadline,
+		EarliestDeadline:       timestamppb.New(earliestDeadline),
 	}, nil
 }
 

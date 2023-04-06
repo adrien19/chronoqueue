@@ -118,21 +118,13 @@ func MakePeekQueueMessagesEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 
 func MakeGetQueueStateEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(GetQueueStateRequest)
-		state, err := svc.GetQueueState(ctx, req.QueueName)
+		req := request.(*pb.GetQueueStateRequest)
+		state, err := svc.GetQueueState(ctx, req)
 		if err != nil {
-			return GetQueueStateResponse{}, err
+			return &pb.GetQueueStateResponse{}, err
 		}
 
-		return GetQueueStateResponse{
-			InvisibleMessagesCount: state.InvisibleMessagesCount,
-			PendingMessagesCount:   state.PendingMessagesCount,
-			RunningMessagesCount:   state.RunningMessagesCount,
-			CompletedMessagesCount: state.CompletedMessagesCount,
-			CanceledMessagesCount:  state.CanceledMessagesCount,
-			ErroredMessagesCount:   state.ErroredMessagesCount,
-			EarliestDeadline:       state.EarliestDeadline,
-		}, nil
+		return state, nil
 	}
 }
 
@@ -198,21 +190,13 @@ func (s *Set) PeekQueueMessages(ctx context.Context, queueName string) (*pb.Peek
 
 }
 
-func (s *Set) GetQueueState(ctx context.Context, queueName string) (GetQueueStateResponse, error) {
+func (s *Set) GetQueueState(ctx context.Context, queueName string) (*pb.GetQueueStateResponse, error) {
 	resp, err := s.GetQueueStateEndpoint(ctx, queueName)
 	if err != nil {
-		return GetQueueStateResponse{}, err
+		return &pb.GetQueueStateResponse{}, err
 	}
-	stateResp := resp.(GetQueueStateResponse)
+	stateResp := resp.(*pb.GetQueueStateResponse)
 
-	return GetQueueStateResponse{
-		InvisibleMessagesCount: stateResp.InvisibleMessagesCount,
-		PendingMessagesCount:   stateResp.PendingMessagesCount,
-		RunningMessagesCount:   stateResp.RunningMessagesCount,
-		CompletedMessagesCount: stateResp.CompletedMessagesCount,
-		CanceledMessagesCount:  stateResp.CanceledMessagesCount,
-		ErroredMessagesCount:   stateResp.ErroredMessagesCount,
-		EarliestDeadline:       stateResp.EarliestDeadline,
-	}, nil
+	return stateResp, nil
 
 }

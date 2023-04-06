@@ -8,7 +8,6 @@ import (
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
 	grpctransport "github.com/go-kit/kit/transport/grpc"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type grpcServer struct {
@@ -221,18 +220,10 @@ func decodeGRPCPeekQueueMessagesResponse(_ context.Context, grpcReply interface{
 
 func decodeGRPCGetQueueStateRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*chronoqueue.GetQueueStateRequest)
-	return endpoints.GetQueueStateRequest{QueueName: req.QueueName}, nil
+	return req, nil
 }
 
 func decodeGRPCGetQueueStateResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
-	reply := grpcReply.(endpoints.GetQueueStateResponse)
-	return &chronoqueue.GetQueueStateResponse{
-		InvisibleMessagesCount: reply.InvisibleMessagesCount,
-		PendingMessagesCount:   reply.PendingMessagesCount,
-		RunningMessagesCount:   reply.RunningMessagesCount,
-		CompletedMessagesCount: reply.CompletedMessagesCount,
-		CanceledMessagesCount:  reply.CanceledMessagesCount,
-		ErroredMessagesCount:   reply.ErroredMessagesCount,
-		EarliestDeadline:       timestamppb.New(reply.EarliestDeadline),
-	}, nil
+	reply := grpcReply.(*chronoqueue.GetQueueStateResponse)
+	return reply, nil
 }

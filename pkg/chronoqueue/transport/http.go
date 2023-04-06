@@ -133,12 +133,12 @@ func decodeHTTPGetPeekQueueMessagesRequest(_ context.Context, r *http.Request) (
 }
 
 func decodeHTTPGetQueueStateRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req endpoints.GetQueueStateRequest
+	var req chronoqueue.GetQueueStateRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
 	}
-	return req, nil
+	return &req, nil
 }
 
 func encodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {

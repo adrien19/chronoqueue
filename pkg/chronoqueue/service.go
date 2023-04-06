@@ -15,5 +15,5 @@ type Service interface {
 	AcknowledgeMessage(ctx context.Context, queueName string, messageID string, state internal.State) error
 	RenewMessageLease(ctx context.Context, queueName string, leaseDuration int64, messageID string) error
 	PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error)
-	GetQueueState(ctx context.Context, queueName string) (internal.QueueStateInfo, error)
+	GetQueueState(ctx context.Context, request *chronoqueue.GetQueueStateRequest) (*chronoqueue.GetQueueStateResponse, error)
 }
