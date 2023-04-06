@@ -4,7 +4,6 @@ import (
 	"context"
 
 	pb "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
-	"github.com/adrien19/chronoqueue/internal"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue"
 	"github.com/go-kit/kit/endpoint"
 )
@@ -58,7 +57,7 @@ func MakeDeleteQueueEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 func MakePostMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(PostMessageRequest)
-		err = svc.PostMessage(ctx, req.QueueName, req.Message)
+		err = svc.PostMessage(ctx, req.Request.QueueName, req.Request.Message)
 		if err != nil {
 			return nil, err
 		}
@@ -149,8 +148,11 @@ func (s *Set) DeleteQueue(ctx context.Context, queueName string) error {
 	return nil
 }
 
-func (s *Set) PostMessage(ctx context.Context, queueName string, message internal.QueueMessageInfo) error {
-	_, err := s.PostMessageEndpoint(ctx, PostMessageRequest{QueueName: queueName, Message: message})
+func (s *Set) PostMessage(ctx context.Context, queueName string, message *pb.Message) error {
+	_, err := s.PostMessageEndpoint(ctx, PostMessageRequest{Request: &pb.PostMessageRequest{
+		QueueName: queueName,
+		Message:   message,
+	}})
 	if err != nil {
 		return err
 	}

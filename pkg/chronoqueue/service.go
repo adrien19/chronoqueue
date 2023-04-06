@@ -10,7 +10,7 @@ import (
 type Service interface {
 	CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue) error
 	DeleteQueue(ctx context.Context, queueName string) error
-	PostMessage(ctx context.Context, queueName string, message internal.QueueMessageInfo) error
+	PostMessage(ctx context.Context, queueName string, message *chronoqueue.Message) error
 	GetNextMessage(ctx context.Context, queueName string, leaseDuration int64) (internal.QueueMessageInfo, error)
 	AcknowledgeMessage(ctx context.Context, queueName string, messageID string, state internal.State) error
 	RenewMessageLease(ctx context.Context, queueName string, leaseDuration int64, messageID string) error

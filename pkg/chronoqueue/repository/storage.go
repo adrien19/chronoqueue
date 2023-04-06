@@ -17,7 +17,7 @@ import (
 type Storage interface {
 	CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue) error
 	DeleteQueue(ctx context.Context, queueName string) error
-	CreateQueueMessage(ctx context.Context, queueName string, message internal.QueueMessageInfo) error
+	CreateQueueMessage(ctx context.Context, queueName string, message *chronoqueue.Message) error
 	GetQueueMessage(ctx context.Context, queueName string, leaseDuration int64) (internal.QueueMessageInfo, error)
 	DeleteQueueMessage(ctx context.Context, queueName string, messageID string) error
 	AcknowledgeMessage(ctx context.Context, queueName string, messageID string, state internal.State) error
@@ -116,35 +116,13 @@ func (as *storage) DeleteQueue(ctx context.Context, queueName string) error {
 	deleted := checker.Stop()
 	log.Println("deleted", deleted, "keys", "in", time.Since(start))
 
-	// txPipeline := as.redisClient.TxPipeline()
-	// // send DEL command to Redis to delete the queue
-	// err := txPipeline.Del(ctx, queueName).Err()
-	// if err != nil {
-	// 	return err
-	// }
-	// // send DEL command to Redis to delete the queue's metadata
-	// err = txPipeline.HDel(ctx, fmt.Sprintf("%s:meta", queueName)).Err()
-	// if err != nil {
-	// 	return err
-	// }
-
-	// // send DEL command to Redis to delete the message's metadata for this queue
-	// err = txPipeline.HDel(ctx, fmt.Sprintf("%s:*:meta", queueName)).Err()
-	// if err != nil {
-	// 	return err
-	// }
-	// _, err = txPipeline.Exec(ctx)
-	// if err != nil {
-	// 	return err
-	// }
 	return nil
 }
 
-func (as *storage) CreateQueueMessage(ctx context.Context, queueName string, message internal.QueueMessageInfo) error {
+func (as *storage) CreateQueueMessage(ctx context.Context, queueName string, message *chronoqueue.Message) error {
 
 	queueKeys := []string{queueName, fmt.Sprintf("%s:meta", queueName)}
 	// Check if Queue exists
-	// exists, err := as.redisClient.ZCount(ctx, queueName, "-inf", "+inf").Result()
 	exists, err := as.redisClient.Exists(ctx, queueKeys...).Result()
 	if err != nil {
 		log.Println("Failed to add message to Queue members. err: ", err)
@@ -157,16 +135,16 @@ func (as *storage) CreateQueueMessage(ctx context.Context, queueName string, mes
 		return err
 	}
 
-	if message.InvisibilityDuration == 0 {
-		message.InvisibilityDuration = time.Now().Add(0).UnixNano() / int64(time.Millisecond)
-		message.State = internal.State(2)
+	if message.Metadata.InvisibilityDuration == 0 {
+		message.Metadata.InvisibilityDuration = time.Now().Add(0).UnixNano() / int64(time.Millisecond)
+		message.Metadata.State = chronoqueue.Message_Metadata_PENDING
 	}
 	txPipeline := as.redisClient.TxPipeline()
 	// Calculate the message's deadline as a Unix timestamp based on priority
 	deadline := time.Now().Add(time.Duration(message.Priority)).UnixNano() / int64(time.Millisecond)
 	addMemberResult, err := txPipeline.ZAdd(ctx, queueName, redis.Z{
 		Score:  float64(deadline),
-		Member: message.MessageID,
+		Member: message.MessageId,
 	}).Result()
 	if err != nil {
 		log.Println("Failed to add message to Queue members. err: ", err)
@@ -174,8 +152,19 @@ func (as *storage) CreateQueueMessage(ctx context.Context, queueName string, mes
 	}
 	log.Println("Successfully added message to Queue members. result: ", addMemberResult)
 
-	// create metadata for non exclusive queue
-	metaResult, err := txPipeline.HSet(ctx, fmt.Sprintf("%s:%s:meta", queueName, message.MessageID), message).Result()
+	// Create a proto message marshaller
+	m := protojson.MarshalOptions{
+		EmitUnpopulated: true,
+	}
+
+	messageMetadataByte, _ := m.Marshal(message.Metadata)
+	if err != nil {
+		log.Println("Failed to marshal queue's meta. Err: ", err)
+		return err
+	}
+
+	// create metadata for message
+	metaResult, err := txPipeline.HSet(ctx, fmt.Sprintf("%s:%s:meta", queueName, message.MessageId), "metadata", string(messageMetadataByte)).Result()
 	if err != nil {
 		log.Println("Failed to create message's metadata. Err: ", err)
 		return err

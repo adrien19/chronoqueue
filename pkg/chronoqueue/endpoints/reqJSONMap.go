@@ -45,9 +45,17 @@ type CreateQueueResponse struct {
 }
 
 type PostMessageRequest struct {
-	QueueName string                    `json:"queueName"`
-	Message   internal.QueueMessageInfo `json:"message"`
+	Request *pb_chronoqueue.PostMessageRequest
 }
+
+type PostMessageResponse struct {
+	Request *pb_chronoqueue.PostMessageResponse
+}
+
+// type PostMessageRequest struct {
+// 	QueueName string                    `json:"queueName"`
+// 	Message   internal.QueueMessageInfo `json:"message"`
+// }
 
 type GetNextMessageRequest struct {
 	QueueName     string `json:"queueName"`

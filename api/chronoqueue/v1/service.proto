@@ -57,7 +57,7 @@ message Message {
             ERRORED = 6;
         }
         Metadata.State state = 2;
-        optional int64 invisibility_duration = 3;
+        int64 invisibility_duration = 3;
         int32 attempts_left = 4;
         optional int64 lease_duration = 5;
         optional int64 lease_expiry = 6;

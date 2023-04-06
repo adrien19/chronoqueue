@@ -175,23 +175,26 @@ func decodeGRPCDeleteQueueResponse(_ context.Context, grpcReply interface{}) (in
 
 func decodeGRPCPostMessageRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*chronoqueue.PostMessageRequest)
-	messageInfo := internal.QueueMessageInfo{
-		MessageID:            req.Message.MessageId,
-		Payload:              req.Message.Metadata.Payload.AsMap(),
-		Priority:             req.Message.Priority,
-		State:                internal.State(req.Message.Metadata.State),
-		InvisibilityDuration: *req.Message.Metadata.InvisibilityDuration,
-		AttemptsLeft:         req.Message.Metadata.AttemptsLeft,
-		LeaseExpiry:          *req.Message.Metadata.LeaseExpiry,
-	}
-	return endpoints.PostMessageRequest{QueueName: req.QueueName, Message: messageInfo}, nil
+	// messageInfo := internal.QueueMessageInfo{
+	// 	MessageID:            req.Message.MessageId,
+	// 	Payload:              req.Message.Metadata.Payload.AsMap(),
+	// 	Priority:             req.Message.Priority,
+	// 	State:                internal.State(req.Message.Metadata.State),
+	// 	InvisibilityDuration: *req.Message.Metadata.InvisibilityDuration,
+	// 	AttemptsLeft:         req.Message.Metadata.AttemptsLeft,
+	// 	LeaseExpiry:          *req.Message.Metadata.LeaseExpiry,
+	// }
+	return endpoints.PostMessageRequest{Request: &chronoqueue.PostMessageRequest{
+		QueueName: req.QueueName,
+		Message:   req.Message,
+	}}, nil
 }
 
 func decodeGRPCPostMessageResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
 	if grpcReply == nil {
-		return &chronoqueue.PostMessageResponse{}, util.ErrUnknown
+		return &chronoqueue.PostMessageResponse{}, nil
 	}
-	_ = grpcReply.(endpoints.ErrorResponse)
+	_ = grpcReply.(endpoints.PostMessageResponse)
 	return &chronoqueue.PostMessageResponse{}, nil
 }
 
@@ -211,7 +214,7 @@ func decodeGRPCGetNextMessageResponse(_ context.Context, grpcReply interface{}) 
 		Metadata: &chronoqueue.Message_Metadata{
 			Payload:              payloadpb,
 			State:                chronoqueue.Message_Metadata_State(reply.Message.State),
-			InvisibilityDuration: &reply.Message.InvisibilityDuration,
+			InvisibilityDuration: reply.Message.InvisibilityDuration,
 			AttemptsLeft:         reply.Message.AttemptsLeft,
 			LeaseDuration:        &reply.Message.LeaseDuration,
 			LeaseExpiry:          &reply.Message.LeaseExpiry,
@@ -269,7 +272,7 @@ func decodeGRPCPeekQueueMessagesResponse(_ context.Context, grpcReply interface{
 			Metadata: &chronoqueue.Message_Metadata{
 				Payload:              payloadpb,
 				State:                chronoqueue.Message_Metadata_State(message.State),
-				InvisibilityDuration: &message.InvisibilityDuration,
+				InvisibilityDuration: message.InvisibilityDuration,
 				AttemptsLeft:         message.AttemptsLeft,
 				LeaseDuration:        &message.LeaseDuration,
 				LeaseExpiry:          &message.LeaseExpiry,
