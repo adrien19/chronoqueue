@@ -176,28 +176,28 @@ func decodeGRPCPostMessageResponse(_ context.Context, grpcReply interface{}) (in
 
 func decodeGRPCGetNextMessageRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*chronoqueue.GetNextMessageRequest)
-	return endpoints.GetNextMessageRequest{QueueName: req.QueueName, LeaseDuration: int64(req.LeaseDuration)}, nil
+	return req, nil
 }
 
 func decodeGRPCGetNextMessageResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
-	reply := grpcReply.(endpoints.GetNextMessageResponse)
-	payloadpb, err := structpb.NewStruct(reply.Message.Payload)
-	if err != nil {
-		return nil, err
-	}
-	queueMessage := chronoqueue.Message{
-		MessageId: reply.Message.MessageID,
-		Metadata: &chronoqueue.Message_Metadata{
-			Payload:              payloadpb,
-			State:                chronoqueue.Message_Metadata_State(reply.Message.State),
-			InvisibilityDuration: reply.Message.InvisibilityDuration,
-			AttemptsLeft:         reply.Message.AttemptsLeft,
-			LeaseDuration:        &reply.Message.LeaseDuration,
-			LeaseExpiry:          &reply.Message.LeaseExpiry,
-		},
-		Priority: reply.Message.Priority,
-	}
-	return &chronoqueue.GetNextMessageResponse{Message: &queueMessage}, nil
+	reply := grpcReply.(*chronoqueue.GetNextMessageResponse)
+	// payloadpb, err := structpb.NewStruct(reply.Message.Payload)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// queueMessage := chronoqueue.Message{
+	// 	MessageId: reply.Message.MessageID,
+	// 	Metadata: &chronoqueue.Message_Metadata{
+	// 		Payload:              payloadpb,
+	// 		State:                chronoqueue.Message_Metadata_State(reply.Message.State),
+	// 		InvisibilityDuration: reply.Message.InvisibilityDuration,
+	// 		AttemptsLeft:         reply.Message.AttemptsLeft,
+	// 		LeaseDuration:        &reply.Message.LeaseDuration,
+	// 		LeaseExpiry:          &reply.Message.LeaseExpiry,
+	// 	},
+	// 	Priority: reply.Message.Priority,
+	// }
+	return reply, nil
 }
 
 func decodeGRPCAcknowledgeMessageRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {

@@ -6,20 +6,6 @@ import (
 	"github.com/adrien19/chronoqueue/internal"
 )
 
-// type PostMessageRequest struct {
-// 	QueueName string                    `json:"queueName"`
-// 	Message   internal.QueueMessageInfo `json:"message"`
-// }
-
-type GetNextMessageRequest struct {
-	QueueName     string `json:"queueName"`
-	LeaseDuration int64  `json:"leaseDuration,omitempty"`
-}
-
-type GetNextMessageResponse struct {
-	Message internal.QueueMessageInfo `json:"message"`
-}
-
 type AcknowledgeMessageRequest struct {
 	QueueName string         `json:"queueName"`
 	MessageID string         `json:"messageID"`

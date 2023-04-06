@@ -67,13 +67,17 @@ func MakePostMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 
 func MakeGetNextMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(GetNextMessageRequest)
+		req := request.(*pb.GetNextMessageRequest)
 		message, err := svc.GetNextMessage(ctx, req.QueueName, req.LeaseDuration)
 		if err != nil {
-			return GetNextMessageResponse{}, err
+			return &pb.GetNextMessageResponse{
+				Message: nil,
+			}, err
 		}
 
-		return GetNextMessageResponse{Message: message}, nil
+		return &pb.GetNextMessageResponse{
+			Message: message,
+		}, nil
 	}
 }
 
@@ -156,13 +160,15 @@ func (s *Set) PostMessage(ctx context.Context, queueName string, message *pb.Mes
 	return nil
 }
 
-func (s *Set) GetNextMessage(ctx context.Context, queueName string, leaseDuration int64) (GetNextMessageResponse, error) {
-	resp, err := s.GetNextMessageEndpoint(ctx, GetNextMessageRequest{QueueName: queueName, LeaseDuration: leaseDuration})
+func (s *Set) GetNextMessage(ctx context.Context, queueName string, leaseDuration int64) (*pb.GetNextMessageResponse, error) {
+	resp, err := s.GetNextMessageEndpoint(ctx, &pb.GetNextMessageRequest{QueueName: queueName, LeaseDuration: leaseDuration})
 	if err != nil {
-		return GetNextMessageResponse{}, err
+		return &pb.GetNextMessageResponse{
+			Message: nil,
+		}, err
 	}
-	messageResp := resp.(GetNextMessageResponse)
-	return GetNextMessageResponse{Message: messageResp.Message}, nil
+	messageResp := resp.(*pb.GetNextMessageResponse)
+	return messageResp, nil
 
 }
 

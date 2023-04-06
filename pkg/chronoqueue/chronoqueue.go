@@ -30,7 +30,7 @@ func (cs *chronoqueueService) PostMessage(ctx context.Context, queueName string,
 	return cs.storage.CreateQueueMessage(ctx, queueName, message)
 }
 
-func (cs *chronoqueueService) GetNextMessage(ctx context.Context, queueName string, leaseDuration int64) (internal.QueueMessageInfo, error) {
+func (cs *chronoqueueService) GetNextMessage(ctx context.Context, queueName string, leaseDuration int64) (*chronoqueue.Message, error) {
 	return cs.storage.GetQueueMessage(ctx, queueName, leaseDuration)
 }
 

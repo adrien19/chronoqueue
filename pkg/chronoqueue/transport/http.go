@@ -93,12 +93,12 @@ func decodeHTTPPostMessageRequest(_ context.Context, r *http.Request) (interface
 }
 
 func decodeHTTPGetNextMessageRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req endpoints.GetNextMessageRequest
+	var req chronoqueue.GetNextMessageRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
 	}
-	return req, nil
+	return &req, nil
 }
 
 func decodeHTTPAcknowledgeMessageRequest(_ context.Context, r *http.Request) (interface{}, error) {
