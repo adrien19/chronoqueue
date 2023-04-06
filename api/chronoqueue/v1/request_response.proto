@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package chronoqueue.api.chronoqueueservice.v1;
+
+option go_package = "github.com/adrien19/chronoqueue/api/chronoqueueservice/v1;chronoqueueservice";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// Create queue
+message CreateQueueRequest {
+    Queue queue = 1;
+}
+message CreateQueueResponse {}
+
+// Delete queue by name
+message DeleteQueueRequest {
+    string name = 1;
+}
+message DeleteQueueResponse {}
+
+// Post a message to the queue 
+message PostMessageRequest{
+    string queue_name = 1;
+    Message message = 2;
+}
+message PostMessageResponse{}
+
+
+message Message {
+    string message_id = 1;
+    int64 priority = 2;
+    message Metadata {
+        // payload should be a json or any
+        google.protobuf.Struct payload = 1;
+        enum State {
+            UNDEFINED = 0;
+            INVISIBLE = 1;
+            PENDING = 2;
+            RUNNING = 3;
+            COMPLETED = 4;
+            CANCELED = 5;
+            ERRORED = 6;
+        }
+        Metadata.State state = 2;
+        optional int64 invisibility_duration = 3;
+        int32 attempts_left = 4;
+        optional int64 lease_duration = 5;
+        optional int64 lease_expiry = 6;
+    }
+    Message.Metadata metadata = 3;
+}
+
+
+// Get the next message on the queue
+message GetNextMessageRequest{
+    string queue_name = 1;
+    int64 lease_duration = 2;
+}
+message GetNextMessageResponse{
+    Message message = 1;
+}
+
+// Acknowledge the message on the queue
+message AcknowledgeMessageRequest{
+    string queue_name = 1;
+    string message_id = 2;
+    Message.Metadata.State state = 3;
+}
+message AcknowledgeMessageResponse{}
+
+// Renew lease period of a message
+message RenewMessageLeaseRequest{
+    string queue_name = 1;
+    string message_id = 2;
+    int64 lease_duration = 3;
+}
+message RenewMessageLeaseResponse{}
+
+// View pending messages on a queueu
+message PeekQueueMessagesRequest{
+    string queue_name = 1;
+    int64 limit = 2;
+    message PriorityRange {
+        int64 min = 1;
+        int64 max = 2;
+    }
+    optional PeekQueueMessagesRequest.PriorityRange priority_range = 3;
+}
+message PeekQueueMessagesResponse{
+    repeated Message messages = 1;
+}
+
+// vew the state of a given queue
+message GetQueueStateRequest{
+    string queue_name = 1;
+}
+message GetQueueStateResponse{
+    int32 invisible_messages_count = 1;
+    int32 pending_messages_count = 2;
+    int32 running_messages_count = 3;
+    int32 completed_messages_count = 4;
+    int32 canceled_messages_count = 5;
+    int32 errored_messages_count = 6;
+    google.protobuf.Timestamp earliest_deadline = 7;
+}
+
+message Queue {
+    string name = 1;
+    message Options {
+        enum Type {
+            SIMPLE = 0;
+            EXCLUSIVE = 1;
+        }
+        Options.Type type = 1;
+        int32 dequeue_attempts = 2;
+        int64 lease_duration = 3;
+        optional string exclusivity_key = 4;
+        optional int64 invisibility_duration = 5;
+    }
+    Queue.Options metadata = 2;
+}
