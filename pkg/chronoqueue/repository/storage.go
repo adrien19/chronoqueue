@@ -22,7 +22,7 @@ type Storage interface {
 	DeleteQueueMessage(ctx context.Context, queueName string, messageID string) error
 	AcknowledgeMessage(ctx context.Context, queueName string, messageID string, state internal.State) error
 	RenewMessageLease(ctx context.Context, queueName string, leaseDuration int64, messageID string) error
-	PeekQueueMessages(ctx context.Context, queueName string, limit int64, priorityRange internal.PriorityRange) ([]internal.QueueMessageInfo, error)
+	PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error)
 	GetQueueState(ctx context.Context, queueName string) (internal.QueueStateInfo, error)
 }
 
@@ -333,44 +333,51 @@ func (as *storage) RenewMessageLease(ctx context.Context, queueName string, leas
 	return nil
 }
 
-func (as *storage) PeekQueueMessages(ctx context.Context, queueName string, limit int64, priorityRange internal.PriorityRange) ([]internal.QueueMessageInfo, error) {
+func (as *storage) PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error) {
 	// Get the member IDs of the messages in the sorted set with scores up to the current time.
 	min := "-inf"
 	max := strconv.FormatInt(time.Now().Unix(), 10)
-	if (priorityRange != internal.PriorityRange{}) {
-		min = strconv.FormatInt(priorityRange.Min, 10)
-		max = strconv.FormatInt(priorityRange.Max, 10)
+	if request.PriorityRange != nil {
+		min = strconv.FormatInt(request.PriorityRange.GetMin(), 10)
+		max = strconv.FormatInt(request.PriorityRange.GetMax(), 10)
 	}
-	memberIDs, err := as.redisClient.ZRangeByScore(ctx, queueName, &redis.ZRangeBy{
+	memberIDs, err := as.redisClient.ZRangeByScore(ctx, request.GetQueueName(), &redis.ZRangeBy{
 		Min:    min,
 		Max:    max,
 		Offset: 0,
-		Count:  limit,
+		Count:  request.GetLimit(),
 	}).Result()
 	if err != nil {
-		return []internal.QueueMessageInfo{}, err
+		return &chronoqueue.PeekQueueMessagesResponse{}, err
 	}
 
-	messages := []internal.QueueMessageInfo{}
+	messages := []*chronoqueue.Message{}
 	// Get the messages' values using their member IDs.
 	for _, memberID := range memberIDs {
 		if len(memberID) == 0 {
 			continue
 		}
-		metaResult, err := as.redisClient.HGetAll(ctx, fmt.Sprintf("%s:%s:meta", queueName, memberID)).Result()
+		metaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), memberID), "metadata").Result()
 		if err != nil {
 			log.Println("Failed to serialize message's metadata", err)
 			return nil, err
 		}
-		message, err := internal.UnMarshalRedisMessageInfo(metaResult)
+		var meta chronoqueue.Message_Metadata
+		err = protojson.Unmarshal([]byte(metaResult), &meta)
+		// message, err := internal.UnMarshalRedisMessageInfo(metaResult)
 		if err != nil {
 			log.Println("Failed to serialize message's metadata", err)
 			return nil, err
 		}
-		messages = append(messages, message)
+
+		messages = append(messages, &chronoqueue.Message{
+			MessageId: memberID,
+			Priority:  0,
+			Metadata:  &meta,
+		})
 
 	}
-	return messages, nil
+	return &chronoqueue.PeekQueueMessagesResponse{Messages: messages}, nil
 }
 
 func (as *storage) GetQueueState(ctx context.Context, queueName string) (internal.QueueStateInfo, error) {

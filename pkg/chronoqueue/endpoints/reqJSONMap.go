@@ -18,16 +18,6 @@ type RenewMessageLeaseRequest struct {
 	LeaseDuration int64  `json:"leaseDuration"`
 }
 
-type PeekQueueMessagesRequest struct {
-	QueueName     string                 `json:"queueName"`
-	Limit         int64                  `json:"limit"`
-	PriorityRange internal.PriorityRange `json:"priorityRange,omitempty"`
-}
-
-type PeekQueueMessagesResponse struct {
-	Messages []internal.QueueMessageInfo `json:"messages"`
-}
-
 type GetQueueStateRequest struct {
 	QueueName string `json:"queueName"`
 }

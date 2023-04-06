@@ -40,8 +40,8 @@ func (cs *chronoqueueService) AcknowledgeMessage(ctx context.Context, queueName 
 func (cs *chronoqueueService) RenewMessageLease(ctx context.Context, queueName string, leaseDuration int64, messageID string) error {
 	return cs.storage.RenewMessageLease(ctx, queueName, leaseDuration, messageID)
 }
-func (cs *chronoqueueService) PeekQueueMessages(ctx context.Context, queueName string, limit int64, priorityRange internal.PriorityRange) ([]internal.QueueMessageInfo, error) {
-	return cs.storage.PeekQueueMessages(ctx, queueName, limit, priorityRange)
+func (cs *chronoqueueService) PeekQueueMessages(ctx context.Context, requestData *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error) {
+	return cs.storage.PeekQueueMessages(ctx, requestData)
 }
 func (cs *chronoqueueService) GetQueueState(ctx context.Context, queueName string) (internal.QueueStateInfo, error) {
 	return cs.storage.GetQueueState(ctx, queueName)

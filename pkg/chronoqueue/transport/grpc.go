@@ -8,7 +8,6 @@ import (
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
 	grpctransport "github.com/go-kit/kit/transport/grpc"
-	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -181,22 +180,6 @@ func decodeGRPCGetNextMessageRequest(_ context.Context, grpcReq interface{}) (in
 
 func decodeGRPCGetNextMessageResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
 	reply := grpcReply.(*chronoqueue.GetNextMessageResponse)
-	// payloadpb, err := structpb.NewStruct(reply.Message.Payload)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// queueMessage := chronoqueue.Message{
-	// 	MessageId: reply.Message.MessageID,
-	// 	Metadata: &chronoqueue.Message_Metadata{
-	// 		Payload:              payloadpb,
-	// 		State:                chronoqueue.Message_Metadata_State(reply.Message.State),
-	// 		InvisibilityDuration: reply.Message.InvisibilityDuration,
-	// 		AttemptsLeft:         reply.Message.AttemptsLeft,
-	// 		LeaseDuration:        &reply.Message.LeaseDuration,
-	// 		LeaseExpiry:          &reply.Message.LeaseExpiry,
-	// 	},
-	// 	Priority: reply.Message.Priority,
-	// }
 	return reply, nil
 }
 
@@ -228,36 +211,12 @@ func decodeGRPCRenewMessageLeaseResponse(_ context.Context, grpcReply interface{
 
 func decodeGRPCPeekQueueMessagesRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*chronoqueue.PeekQueueMessagesRequest)
-	priorityRange := internal.PriorityRange{
-		Min: req.PriorityRange.Min,
-		Max: req.PriorityRange.Max,
-	}
-	return endpoints.PeekQueueMessagesRequest{QueueName: req.QueueName, Limit: req.Limit, PriorityRange: priorityRange}, nil
+	return req, nil
 }
 
 func decodeGRPCPeekQueueMessagesResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
-	reply := grpcReply.(endpoints.PeekQueueMessagesResponse)
-	messages := []*chronoqueue.Message{}
-	for _, message := range reply.Messages {
-		payloadpb, err := structpb.NewStruct(message.Payload)
-		if err != nil {
-			return nil, err
-		}
-		queueMessage := chronoqueue.Message{
-			MessageId: message.MessageID,
-			Metadata: &chronoqueue.Message_Metadata{
-				Payload:              payloadpb,
-				State:                chronoqueue.Message_Metadata_State(message.State),
-				InvisibilityDuration: message.InvisibilityDuration,
-				AttemptsLeft:         message.AttemptsLeft,
-				LeaseDuration:        &message.LeaseDuration,
-				LeaseExpiry:          &message.LeaseExpiry,
-			},
-			Priority: message.Priority,
-		}
-		messages = append(messages, &queueMessage)
-	}
-	return &chronoqueue.PeekQueueMessagesResponse{Messages: messages}, nil
+	reply := grpcReply.(*chronoqueue.PeekQueueMessagesResponse)
+	return reply, nil
 }
 
 func decodeGRPCGetQueueStateRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {

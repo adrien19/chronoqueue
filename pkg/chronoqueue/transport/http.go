@@ -124,12 +124,12 @@ func decodeHTTPRenewMessageLeaseRequest(ctx context.Context, r *http.Request) (i
 }
 
 func decodeHTTPGetPeekQueueMessagesRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req endpoints.PeekQueueMessagesRequest
+	var req chronoqueue.PeekQueueMessagesRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
 	}
-	return req, nil
+	return &req, nil
 }
 
 func decodeHTTPGetQueueStateRequest(_ context.Context, r *http.Request) (interface{}, error) {

@@ -106,13 +106,13 @@ func MakeRenewMessageLeaseEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 
 func MakePeekQueueMessagesEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(PeekQueueMessagesRequest)
-		messages, err := svc.PeekQueueMessages(ctx, req.QueueName, req.Limit, req.PriorityRange)
+		req := request.(*pb.PeekQueueMessagesRequest)
+		messages, err := svc.PeekQueueMessages(ctx, req)
 		if err != nil {
-			return PeekQueueMessagesResponse{}, err
+			return &pb.PeekQueueMessagesResponse{}, err
 		}
 
-		return PeekQueueMessagesResponse{Messages: messages}, nil
+		return messages, nil
 	}
 }
 
@@ -188,16 +188,13 @@ func (s *Set) RenewMessageLease(ctx context.Context, queueName string, leaseDura
 	return nil
 }
 
-func (s *Set) PeekQueueMessages(ctx context.Context, queueName string) (PeekQueueMessagesResponse, error) {
+func (s *Set) PeekQueueMessages(ctx context.Context, queueName string) (*pb.PeekQueueMessagesResponse, error) {
 	resp, err := s.PeekQueueMessagesEndpoint(ctx, queueName)
 	if err != nil {
-		return PeekQueueMessagesResponse{}, err
+		return &pb.PeekQueueMessagesResponse{}, err
 	}
-	messagesResp := resp.(PeekQueueMessagesResponse)
-	if messagesResp.Messages == nil {
-		return PeekQueueMessagesResponse{}, nil
-	}
-	return PeekQueueMessagesResponse{Messages: messagesResp.Messages}, nil
+	messagesResp := resp.(*pb.PeekQueueMessagesResponse)
+	return messagesResp, nil
 
 }
 
