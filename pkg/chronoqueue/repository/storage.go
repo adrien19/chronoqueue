@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
-	"github.com/adrien19/chronoqueue/internal"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -45,7 +44,7 @@ func (as *storage) CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue
 	log.Println("RECEIVED QUEUE INFO: ", queueInfo)
 
 	// Check if Queue already exists
-	exists, err := txPipeline.Exists(ctx, queueInfo.Name, fmt.Sprintf("%s:meta", queueInfo.Name)).Result()
+	exists, err := txPipeline.Exists(ctx, queueInfo.Name, fmt.Sprintf("%s:meta", queueInfo.GetName())).Result()
 	if err != nil {
 		log.Println("Failed to check queue existance. err: ", err)
 		return err
@@ -56,7 +55,7 @@ func (as *storage) CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue
 		return nil
 	}
 
-	createResult, err := txPipeline.ZAdd(ctx, queueInfo.Name, redis.Z{}).Result()
+	createResult, err := txPipeline.ZAdd(ctx, queueInfo.GetName(), redis.Z{}).Result()
 	if err != nil {
 		log.Println("Failed to create queue. Err: ", err)
 		return err
@@ -66,17 +65,17 @@ func (as *storage) CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue
 		EmitUnpopulated: true,
 	}
 
-	queueMetadataByte, _ := m.Marshal(queueInfo.Metadata)
+	queueMetadataByte, _ := m.Marshal(queueInfo.GetMetadata())
 	if err != nil {
 		log.Println("Failed to marshal queue's meta. Err: ", err)
 		return err
 	}
 
-	if string(queueInfo.Metadata.Type) == string(internal.Exclusive) {
-		if queueInfo.Metadata.ExclusivityKey == "" {
+	if queueInfo.Metadata.GetType() == chronoqueue.Queue_Options_EXCLUSIVE {
+		if queueInfo.Metadata.GetExclusivityKey() == "" {
 			return errors.New("exclusivity key missing for an EXCLUSIVE queue type")
 		} else {
-			metaResult, err := txPipeline.HSet(ctx, fmt.Sprintf("%s:meta", queueInfo.Name), "metadata", string(queueMetadataByte)).Result()
+			metaResult, err := txPipeline.HSet(ctx, fmt.Sprintf("%s:meta", queueInfo.GetName()), "metadata", string(queueMetadataByte)).Result()
 			if err != nil {
 				log.Println("Failed to create exclusive queue's meta. Err: ", err)
 				return err
@@ -84,7 +83,7 @@ func (as *storage) CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue
 			log.Println("Successfully created metadata for Queue. result: ", metaResult)
 		}
 	} else {
-		metaResult, err := txPipeline.HSet(ctx, fmt.Sprintf("%s:meta", queueInfo.Name), "metadata", string(queueMetadataByte)).Result()
+		metaResult, err := txPipeline.HSet(ctx, fmt.Sprintf("%s:meta", queueInfo.GetName()), "metadata", string(queueMetadataByte)).Result()
 		if err != nil {
 			log.Println("Failed to create non exclusive queue's meta. Err: ", err)
 			return err

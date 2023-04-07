@@ -13,7 +13,6 @@ COPY cmd/chronoqueue cmd/chronoqueue
 COPY config config
 # COPY internal/interceptors internal/interceptors
 COPY internal/util internal/util
-COPY internal/chronoqueue.go internal/
 COPY internal/config.go internal/
 COPY pkg/chronoqueue pkg/chronoqueue
 
