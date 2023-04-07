@@ -133,7 +133,7 @@ func (g *grpcServer) GetQueueState(ctx context.Context, r *chronoqueue.GetQueueS
 
 func decodeGRPCCreateQueueRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*chronoqueue.CreateQueueRequest)
-	return req.Queue, nil
+	return req, nil
 }
 
 func decodeGRPCCreateQueueResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {

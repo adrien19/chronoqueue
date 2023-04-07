@@ -62,7 +62,7 @@ func NewHTTPHandler(ep endpoints.Set) http.Handler {
 }
 
 func decodeHTTPCreateQueueRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.Queue
+	var req chronoqueue.CreateQueueRequest
 	if r.ContentLength == 0 {
 		logger.Log("Get request with no body")
 		return &req, nil
@@ -75,12 +75,12 @@ func decodeHTTPCreateQueueRequest(_ context.Context, r *http.Request) (interface
 }
 
 func decodeHTTPDeleteQueueRequest(ctx context.Context, r *http.Request) (interface{}, error) {
-	var req string
+	var req chronoqueue.DeleteQueueRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
 	}
-	return req, nil
+	return &req, nil
 }
 
 func decodeHTTPPostMessageRequest(_ context.Context, r *http.Request) (interface{}, error) {

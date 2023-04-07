@@ -34,12 +34,12 @@ func NewEndpointSet(svc chronoqueue.Service) Set {
 
 func MakeCreateQueueEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.Queue)
-		err = svc.CreateQueue(ctx, req)
+		req := request.(*pb.CreateQueueRequest)
+		createQResp, err := svc.CreateQueue(ctx, req)
 		if err != nil {
-			return nil, err
+			return &pb.CreateQueueResponse{}, err
 		}
-		return nil, nil
+		return createQResp, nil
 	}
 }
 
@@ -68,16 +68,14 @@ func MakePostMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 func MakeGetNextMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.GetNextMessageRequest)
-		message, err := svc.GetNextMessage(ctx, req.QueueName, req.LeaseDuration)
+		messageResp, err := svc.GetNextMessage(ctx, req)
 		if err != nil {
 			return &pb.GetNextMessageResponse{
 				Message: nil,
 			}, err
 		}
 
-		return &pb.GetNextMessageResponse{
-			Message: message,
-		}, nil
+		return messageResp, nil
 	}
 }
 

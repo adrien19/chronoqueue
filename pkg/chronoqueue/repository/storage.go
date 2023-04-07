@@ -15,10 +15,10 @@ import (
 )
 
 type Storage interface {
-	CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue) error
+	CreateQueue(ctx context.Context, request *chronoqueue.CreateQueueRequest) (*chronoqueue.CreateQueueResponse, error)
 	DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error)
 	CreateQueueMessage(ctx context.Context, request *chronoqueue.PostMessageRequest) (*chronoqueue.PostMessageResponse, error)
-	GetQueueMessage(ctx context.Context, queueName string, leaseDuration int64) (*chronoqueue.Message, error)
+	GetQueueMessage(ctx context.Context, request *chronoqueue.GetNextMessageRequest) (*chronoqueue.GetNextMessageResponse, error)
 	DeleteQueueMessage(ctx context.Context, queueName string, messageID string) error
 	AcknowledgeMessage(ctx context.Context, request *chronoqueue.AcknowledgeMessageRequest) (*chronoqueue.AcknowledgeMessageResponse, error)
 	RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error)
@@ -38,27 +38,28 @@ func NewQueueStorage(redisClient *redis.Client) Storage {
 	return storage
 }
 
-func (as *storage) CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue) error {
+func (as *storage) CreateQueue(ctx context.Context, request *chronoqueue.CreateQueueRequest) (*chronoqueue.CreateQueueResponse, error) {
 	txPipeline := as.redisClient.TxPipeline()
 
-	log.Println("RECEIVED QUEUE INFO: ", queueInfo)
+	log.Println("RECEIVED QUEUE INFO: ", request.GetQueue())
 
+	queueInfo := request.GetQueue()
 	// Check if Queue already exists
 	exists, err := txPipeline.Exists(ctx, queueInfo.Name, fmt.Sprintf("%s:meta", queueInfo.GetName())).Result()
 	if err != nil {
 		log.Println("Failed to check queue existance. err: ", err)
-		return err
+		return &chronoqueue.CreateQueueResponse{}, err
 	}
 	if exists >= 2 {
 		err := errors.New("queue alread exist")
 		log.Println("Failed to add message to Queue members. err: ", err)
-		return nil
+		return &chronoqueue.CreateQueueResponse{}, err
 	}
 
 	createResult, err := txPipeline.ZAdd(ctx, queueInfo.GetName(), redis.Z{}).Result()
 	if err != nil {
 		log.Println("Failed to create queue. Err: ", err)
-		return err
+		return &chronoqueue.CreateQueueResponse{}, err
 	}
 	log.Println("Successfully created Queue. result: ", createResult)
 	m := protojson.MarshalOptions{
@@ -68,17 +69,17 @@ func (as *storage) CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue
 	queueMetadataByte, _ := m.Marshal(queueInfo.GetMetadata())
 	if err != nil {
 		log.Println("Failed to marshal queue's meta. Err: ", err)
-		return err
+		return &chronoqueue.CreateQueueResponse{}, err
 	}
 
 	if queueInfo.Metadata.GetType() == chronoqueue.Queue_Options_EXCLUSIVE {
 		if queueInfo.Metadata.GetExclusivityKey() == "" {
-			return errors.New("exclusivity key missing for an EXCLUSIVE queue type")
+			return &chronoqueue.CreateQueueResponse{}, errors.New("exclusivity key missing for an EXCLUSIVE queue type")
 		} else {
 			metaResult, err := txPipeline.HSet(ctx, fmt.Sprintf("%s:meta", queueInfo.GetName()), "metadata", string(queueMetadataByte)).Result()
 			if err != nil {
 				log.Println("Failed to create exclusive queue's meta. Err: ", err)
-				return err
+				return &chronoqueue.CreateQueueResponse{}, err
 			}
 			log.Println("Successfully created metadata for Queue. result: ", metaResult)
 		}
@@ -86,16 +87,16 @@ func (as *storage) CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue
 		metaResult, err := txPipeline.HSet(ctx, fmt.Sprintf("%s:meta", queueInfo.GetName()), "metadata", string(queueMetadataByte)).Result()
 		if err != nil {
 			log.Println("Failed to create non exclusive queue's meta. Err: ", err)
-			return err
+			return &chronoqueue.CreateQueueResponse{}, err
 		}
 		log.Println("Successfully created metadata for Queue. result: ", metaResult)
 	}
 	_, err = txPipeline.Exec(ctx)
 	if err != nil {
 		log.Println("Failed to create queue. error: ", err)
-		return err
+		return &chronoqueue.CreateQueueResponse{}, err
 	}
-	return nil
+	return &chronoqueue.CreateQueueResponse{}, nil
 }
 
 func (as *storage) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error) {
@@ -180,11 +181,11 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 	return &chronoqueue.PostMessageResponse{}, nil
 }
 
-func (as *storage) GetQueueMessage(ctx context.Context, queueName string, leaseDuration int64) (*chronoqueue.Message, error) {
+func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.GetNextMessageRequest) (*chronoqueue.GetNextMessageResponse, error) {
 
 	max := strconv.FormatInt(time.Now().UnixMilli(), 10)
 	// Acquire a lease for the next message in the queue
-	members, err := as.redisClient.ZRangeByScore(ctx, queueName, &redis.ZRangeBy{
+	members, err := as.redisClient.ZRangeByScore(ctx, request.GetQueueName(), &redis.ZRangeBy{
 		Min:    "-inf",
 		Max:    max,
 		Offset: 0,
@@ -192,12 +193,12 @@ func (as *storage) GetQueueMessage(ctx context.Context, queueName string, leaseD
 	}).Result()
 	if err != nil {
 		log.Println("Failed to get queue members. Err: ", err)
-		return &chronoqueue.Message{}, err
+		return &chronoqueue.GetNextMessageResponse{}, err
 	}
 	if len(members) == 0 {
 		log.Println("No messages found with a deadline before now")
 		// No message found with a deadline before now
-		return &chronoqueue.Message{}, err
+		return &chronoqueue.GetNextMessageResponse{}, err
 	}
 
 	// var msg internal.QueueMessageInfo
@@ -208,16 +209,16 @@ func (as *storage) GetQueueMessage(ctx context.Context, queueName string, leaseD
 			continue
 		}
 		// Get metadata for given member
-		metaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", queueName, member), "metadata").Result()
+		metaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), member), "metadata").Result()
 		if err != nil {
 			log.Println("Failed to get message's metadata. Err: ", err)
-			return &chronoqueue.Message{}, err
+			return &chronoqueue.GetNextMessageResponse{}, err
 		}
 		// Deserialize the message metadata
 		var meta chronoqueue.Message_Metadata
 		err = protojson.Unmarshal([]byte(metaResult), &meta)
 		if err != nil {
-			return &chronoqueue.Message{}, err
+			return &chronoqueue.GetNextMessageResponse{}, err
 		}
 		if meta.State == chronoqueue.Message_Metadata_PENDING {
 			message.MessageId = member
@@ -228,17 +229,17 @@ func (as *storage) GetQueueMessage(ctx context.Context, queueName string, leaseD
 	}
 	if message.MessageId == "" {
 		log.Println("No pending messages found with a deadline before now")
-		return &chronoqueue.Message{}, err
+		return &chronoqueue.GetNextMessageResponse{}, err
 	}
 
 	// Update the message's state to "Running" and restore the message
 	message.Metadata.State = chronoqueue.Message_Metadata_RUNNING
 	if message.Metadata.GetLeaseDuration() <= 0 {
 		// Get the default queue's lease duration
-		queueMetaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:meta", queueName), "metadata").Result()
+		queueMetaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:meta", request.GetQueueName()), "metadata").Result()
 		if err != nil {
 			log.Println("Failed to get queue's metadata. Err: ", err)
-			return &chronoqueue.Message{}, err
+			return &chronoqueue.GetNextMessageResponse{}, err
 		}
 		// convert to a json the message metadata
 		var queueMeta chronoqueue.Queue
@@ -246,7 +247,7 @@ func (as *storage) GetQueueMessage(ctx context.Context, queueName string, leaseD
 		// queueInfo, err := internal.UnMarshalRedisQueueInfo(queueMetaResult)
 		if err != nil {
 			log.Println("Failed to get deserialize queue's metadata. Err: ", err)
-			return &chronoqueue.Message{}, err
+			return &chronoqueue.GetNextMessageResponse{}, err
 		}
 		message.Metadata.LeaseDuration = &queueMeta.Metadata.LeaseDuration
 	}
@@ -262,18 +263,20 @@ func (as *storage) GetQueueMessage(ctx context.Context, queueName string, leaseD
 	messageMetadataByte, _ := m.Marshal(message.Metadata)
 	if err != nil {
 		log.Println("Failed to marshal queue's meta. Err: ", err)
-		return &chronoqueue.Message{}, err
+		return &chronoqueue.GetNextMessageResponse{}, err
 	}
 
-	err = as.redisClient.HSet(ctx, fmt.Sprintf("%s:%s:meta", queueName, message.MessageId), "metadata", string(messageMetadataByte)).Err()
+	err = as.redisClient.HSet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), message.MessageId), "metadata", string(messageMetadataByte)).Err()
 	if err != nil {
 		log.Println("Failed to save message's metadata", err)
-		return &chronoqueue.Message{}, err
+		return &chronoqueue.GetNextMessageResponse{}, err
 	}
 
 	log.Println("Successfully leased the message until: ", message.Metadata.GetLeaseExpiry())
 	// Return the deserialized message and lease expiry
-	return &message, nil
+	return &chronoqueue.GetNextMessageResponse{
+		Message: &message,
+	}, nil
 }
 
 func (as *storage) DeleteQueueMessage(ctx context.Context, queueName string, messageID string) error {

@@ -17,8 +17,8 @@ func NewChronoqueueService(storage repository.Storage) Service {
 	return &chronoqueueService{storage: storage}
 }
 
-func (cs *chronoqueueService) CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue) error {
-	return cs.storage.CreateQueue(ctx, queueInfo)
+func (cs *chronoqueueService) CreateQueue(ctx context.Context, request *chronoqueue.CreateQueueRequest) (*chronoqueue.CreateQueueResponse, error) {
+	return cs.storage.CreateQueue(ctx, request)
 }
 
 func (cs *chronoqueueService) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error) {
@@ -29,8 +29,8 @@ func (cs *chronoqueueService) PostMessage(ctx context.Context, request *chronoqu
 	return cs.storage.CreateQueueMessage(ctx, request)
 }
 
-func (cs *chronoqueueService) GetNextMessage(ctx context.Context, queueName string, leaseDuration int64) (*chronoqueue.Message, error) {
-	return cs.storage.GetQueueMessage(ctx, queueName, leaseDuration)
+func (cs *chronoqueueService) GetNextMessage(ctx context.Context, request *chronoqueue.GetNextMessageRequest) (*chronoqueue.GetNextMessageResponse, error) {
+	return cs.storage.GetQueueMessage(ctx, request)
 }
 
 func (cs *chronoqueueService) AcknowledgeMessage(ctx context.Context, request *chronoqueue.AcknowledgeMessageRequest) (*chronoqueue.AcknowledgeMessageResponse, error) {
