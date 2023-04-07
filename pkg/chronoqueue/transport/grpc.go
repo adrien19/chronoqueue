@@ -4,8 +4,6 @@ import (
 	"context"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
-	"github.com/adrien19/chronoqueue/internal"
-	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
 	grpctransport "github.com/go-kit/kit/transport/grpc"
 )
@@ -148,15 +146,15 @@ func decodeGRPCCreateQueueResponse(_ context.Context, grpcReply interface{}) (in
 
 func decodeGRPCDeleteQueueRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*chronoqueue.DeleteQueueRequest)
-	return endpoints.DeleteQueueRequest{QueueName: req.Name}, nil
+	return req, nil
 }
 
 func decodeGRPCDeleteQueueResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
 	if grpcReply == nil {
 		return &chronoqueue.DeleteQueueResponse{}, nil
 	}
-	_ = grpcReply.(endpoints.ErrorResponse)
-	return &chronoqueue.DeleteQueueResponse{}, nil
+	reply := grpcReply.(*chronoqueue.DeleteQueueResponse)
+	return reply, nil
 }
 
 func decodeGRPCPostMessageRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
@@ -184,15 +182,15 @@ func decodeGRPCGetNextMessageResponse(_ context.Context, grpcReply interface{}) 
 
 func decodeGRPCAcknowledgeMessageRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*chronoqueue.AcknowledgeMessageRequest)
-	return endpoints.AcknowledgeMessageRequest{QueueName: req.QueueName, MessageID: req.MessageId, State: internal.State(req.State)}, nil
+	return req, nil
 }
 
 func decodeGRPCAcknowledgeMessageResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
 	if grpcReply == nil {
-		return &chronoqueue.AcknowledgeMessageResponse{}, util.ErrUnknown
+		return &chronoqueue.AcknowledgeMessageResponse{}, nil
 	}
-	_ = grpcReply.(endpoints.ErrorResponse)
-	return &chronoqueue.AcknowledgeMessageResponse{}, nil
+	reply := grpcReply.(*chronoqueue.AcknowledgeMessageResponse)
+	return reply, nil
 }
 
 func decodeGRPCRenewMessageLeaseRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {

@@ -102,16 +102,16 @@ func decodeHTTPGetNextMessageRequest(_ context.Context, r *http.Request) (interf
 }
 
 func decodeHTTPAcknowledgeMessageRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req endpoints.AcknowledgeMessageRequest
+	var req chronoqueue.AcknowledgeMessageRequest
 	if r.ContentLength == 0 {
 		logger.Log("Get request with no body")
-		return req, nil
+		return &req, nil
 	}
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
 	}
-	return req, nil
+	return &req, nil
 }
 
 func decodeHTTPRenewMessageLeaseRequest(ctx context.Context, r *http.Request) (interface{}, error) {

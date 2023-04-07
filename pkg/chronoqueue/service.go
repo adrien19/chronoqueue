@@ -4,15 +4,14 @@ import (
 	"context"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
-	"github.com/adrien19/chronoqueue/internal"
 )
 
 type Service interface {
 	CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue) error
-	DeleteQueue(ctx context.Context, queueName string) error
+	DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error)
 	PostMessage(ctx context.Context, queueName string, message *chronoqueue.Message) error
 	GetNextMessage(ctx context.Context, queueName string, leaseDuration int64) (*chronoqueue.Message, error)
-	AcknowledgeMessage(ctx context.Context, queueName string, messageID string, state internal.State) error
+	AcknowledgeMessage(ctx context.Context, request *chronoqueue.AcknowledgeMessageRequest) (*chronoqueue.AcknowledgeMessageResponse, error)
 	RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error)
 	PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error)
 	GetQueueState(ctx context.Context, request *chronoqueue.GetQueueStateRequest) (*chronoqueue.GetQueueStateResponse, error)

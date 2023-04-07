@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
-	"github.com/adrien19/chronoqueue/internal"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/repository"
 	"github.com/go-kit/log"
 )
@@ -22,8 +21,8 @@ func (cs *chronoqueueService) CreateQueue(ctx context.Context, queueInfo *chrono
 	return cs.storage.CreateQueue(ctx, queueInfo)
 }
 
-func (cs *chronoqueueService) DeleteQueue(ctx context.Context, queueName string) error {
-	return cs.storage.DeleteQueue(ctx, queueName)
+func (cs *chronoqueueService) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error) {
+	return cs.storage.DeleteQueue(ctx, request)
 }
 
 func (cs *chronoqueueService) PostMessage(ctx context.Context, queueName string, message *chronoqueue.Message) error {
@@ -34,8 +33,8 @@ func (cs *chronoqueueService) GetNextMessage(ctx context.Context, queueName stri
 	return cs.storage.GetQueueMessage(ctx, queueName, leaseDuration)
 }
 
-func (cs *chronoqueueService) AcknowledgeMessage(ctx context.Context, queueName string, messageID string, state internal.State) error {
-	return cs.storage.AcknowledgeMessage(ctx, queueName, messageID, state)
+func (cs *chronoqueueService) AcknowledgeMessage(ctx context.Context, request *chronoqueue.AcknowledgeMessageRequest) (*chronoqueue.AcknowledgeMessageResponse, error) {
+	return cs.storage.AcknowledgeMessage(ctx, request)
 }
 func (cs *chronoqueueService) RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error) {
 	return cs.storage.RenewMessageLease(ctx, request)

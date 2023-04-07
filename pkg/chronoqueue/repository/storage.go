@@ -17,11 +17,11 @@ import (
 
 type Storage interface {
 	CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue) error
-	DeleteQueue(ctx context.Context, queueName string) error
+	DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error)
 	CreateQueueMessage(ctx context.Context, queueName string, message *chronoqueue.Message) error
 	GetQueueMessage(ctx context.Context, queueName string, leaseDuration int64) (*chronoqueue.Message, error)
 	DeleteQueueMessage(ctx context.Context, queueName string, messageID string) error
-	AcknowledgeMessage(ctx context.Context, queueName string, messageID string, state internal.State) error
+	AcknowledgeMessage(ctx context.Context, request *chronoqueue.AcknowledgeMessageRequest) (*chronoqueue.AcknowledgeMessageResponse, error)
 	RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error)
 	PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error)
 	GetQueueState(ctx context.Context, request *chronoqueue.GetQueueStateRequest) (*chronoqueue.GetQueueStateResponse, error)
@@ -99,25 +99,25 @@ func (as *storage) CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue
 	return nil
 }
 
-func (as *storage) DeleteQueue(ctx context.Context, queueName string) error {
+func (as *storage) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error) {
 
 	checker := NewKeyChecker(as.redisClient, 100)
 
 	start := time.Now()
 	checker.Start(ctx)
 
-	iter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("%s*", queueName), 0).Iterator()
+	iter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("%s*", request.GetName()), 0).Iterator()
 	for iter.Next(ctx) {
 		checker.Add(iter.Val())
 	}
 	if err := iter.Err(); err != nil {
-		return err
+		return &chronoqueue.DeleteQueueResponse{}, err
 	}
 
 	deleted := checker.Stop()
 	log.Println("deleted", deleted, "keys", "in", time.Since(start))
 
-	return nil
+	return &chronoqueue.DeleteQueueResponse{}, nil
 }
 
 func (as *storage) CreateQueueMessage(ctx context.Context, queueName string, message *chronoqueue.Message) error {
@@ -284,28 +284,38 @@ func (as *storage) DeleteQueueMessage(ctx context.Context, queueName string, mes
 	return nil
 }
 
-func (as *storage) AcknowledgeMessage(ctx context.Context, queueName string, messageID string, state internal.State) error {
+func (as *storage) AcknowledgeMessage(ctx context.Context, request *chronoqueue.AcknowledgeMessageRequest) (*chronoqueue.AcknowledgeMessageResponse, error) {
 	// Get metadata for given member
-	metaResult, err := as.redisClient.HGetAll(ctx, fmt.Sprintf("%s:%s:meta", queueName, messageID)).Result()
+	metaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), request.GetMessageId()), "metadata").Result()
 	if err != nil {
 		log.Println("Failed to get message's metadata. Err: ", err)
-		return err
+		return &chronoqueue.AcknowledgeMessageResponse{}, err
 	}
 	// Deserialize the message metadata
-	foundMsg, err := internal.UnMarshalRedisMessageInfo(metaResult)
+	var meta chronoqueue.Message_Metadata
+	err = protojson.Unmarshal([]byte(metaResult), &meta)
 	if err != nil {
-		log.Println("Failed to deserialize message's metadata")
-		return err
+		return &chronoqueue.AcknowledgeMessageResponse{}, err
 	}
 	// Set the message state to passed in state
-	foundMsg.State = state
-	setResult, err := as.redisClient.HSet(ctx, fmt.Sprintf("%s:%s:meta", queueName, messageID), foundMsg).Result()
+	meta.State = request.State
+
+	// Create a proto message's metadata marshaller
+	m := protojson.MarshalOptions{
+		EmitUnpopulated: true,
+	}
+	messageMetadataByte, _ := m.Marshal(&meta)
+	if err != nil {
+		log.Println("Failed to marshal queue's meta. Err: ", err)
+		return &chronoqueue.AcknowledgeMessageResponse{}, err
+	}
+	setResult, err := as.redisClient.HSet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), request.GetMessageId()), "metadata", string(messageMetadataByte)).Result()
 	if err != nil {
 		log.Println("Failed to get message's metadata. Err: ", err)
-		return err
+		return &chronoqueue.AcknowledgeMessageResponse{}, err
 	}
 	log.Println("Successfully saved the message metadata: ", setResult)
-	return nil
+	return &chronoqueue.AcknowledgeMessageResponse{}, nil
 }
 
 func (as *storage) RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error) {

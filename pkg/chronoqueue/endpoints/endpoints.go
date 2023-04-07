@@ -45,12 +45,12 @@ func MakeCreateQueueEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 
 func MakeDeleteQueueEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(DeleteQueueRequest)
-		err = svc.DeleteQueue(ctx, req.QueueName)
+		req := request.(*pb.DeleteQueueRequest)
+		delResp, err := svc.DeleteQueue(ctx, req)
 		if err != nil {
-			return nil, err
+			return &pb.DeleteQueueResponse{}, err
 		}
-		return nil, err
+		return delResp, err
 	}
 }
 
@@ -83,12 +83,12 @@ func MakeGetNextMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 
 func MakeAcknowledgeMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(AcknowledgeMessageRequest)
-		err = svc.AcknowledgeMessage(ctx, req.QueueName, req.MessageID, req.State)
+		req := request.(*pb.AcknowledgeMessageRequest)
+		ackResp, err := svc.AcknowledgeMessage(ctx, req)
 		if err != nil {
-			return nil, err
+			return &pb.AcknowledgeMessageResponse{}, err
 		}
-		return nil, nil
+		return ackResp, nil
 	}
 }
 
@@ -164,12 +164,13 @@ func (s *Set) GetNextMessage(ctx context.Context, queueName string, leaseDuratio
 
 }
 
-func (s *Set) AcknowledgeMessage(ctx context.Context, queueName string, messageID string) error {
-	_, err := s.AcknowledgeMessageEndpoint(ctx, AcknowledgeMessageRequest{QueueName: queueName, MessageID: messageID})
+func (s *Set) AcknowledgeMessage(ctx context.Context, request *pb.AcknowledgeMessageRequest) (*pb.AcknowledgeMessageResponse, error) {
+	resp, err := s.AcknowledgeMessageEndpoint(ctx, request)
 	if err != nil {
-		return err
+		return &pb.AcknowledgeMessageResponse{}, err
 	}
-	return nil
+	ackResp := resp.(*pb.AcknowledgeMessageResponse)
+	return ackResp, nil
 }
 
 func (s *Set) RenewMessageLease(ctx context.Context, request *pb.RenewMessageLeaseRequest) (*pb.RenewMessageLeaseResponse, error) {
