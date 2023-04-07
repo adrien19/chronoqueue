@@ -3,13 +3,11 @@ package client
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"time"
 
 	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -51,20 +49,12 @@ const (
 // ChronoQueueClient is a client to call ChronoQueue RPC
 type ChronoQueueClient struct {
 	service pb_chronoqueue.ChronoQueueClient
-	conn    *grpc.ClientConn
 }
 
 // NewChronoQueueClient returns a new ChronoQueue client
-func NewChronoQueueClient(host string, port string) (*ChronoQueueClient, error) {
-	// Set up a connection to server.
-	connectionString := fmt.Sprintf("%s:%s", host, port)
-	conn, err := grpc.Dial(connectionString, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		log.Println("Failed to connect to server - err: ", err)
-		return nil, err
-	}
+func NewChronoQueueClient(conn *grpc.ClientConn) *ChronoQueueClient {
 	service := pb_chronoqueue.NewChronoQueueClient(conn)
-	return &ChronoQueueClient{service: service, conn: conn}, nil
+	return &ChronoQueueClient{service: service}
 }
 
 // CreateQueue create a queue and returns empty response
