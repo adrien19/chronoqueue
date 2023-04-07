@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
-	"github.com/adrien19/chronoqueue/internal"
 
 	// interceptors "github.com/adrien19/chronoqueue/internal/interceptors/grpc"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue"
@@ -22,7 +22,6 @@ import (
 	"github.com/oklog/oklog/pkg/group"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
-	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -33,6 +32,9 @@ const (
 	defaultAuthSvcPort       = "5006"
 	defaultActionSvcHostname = "0.0.0.0"
 	defaultActionSvcPort     = "7000"
+	defaultRedisHost         = "0.0.0.0"
+	defaultRedisPort         = "6379"
+	defaultRedisDB           = "0"
 )
 
 // func gRPCAccessibleRoles() map[string][]bool {
@@ -75,14 +77,7 @@ func main() {
 	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 
-	// set up config variables
-	configs, err := getConfigs("config/config.yml")
-	if err != nil {
-		panic(err)
-	}
-
-	// setup Redis store
-	redisConnectionString := fmt.Sprintf("%s:%s", configs.Redis.Dns, configs.Redis.Port)
+	redisConnectionString := fmt.Sprintf("%s:%s", envString("REDIS_HOST", defaultRedisHost), envString("REDIS_PORT", defaultRedisPort))
 	var ctx = context.Background()
 
 	redisClient, err := setupRedis(ctx, redisConnectionString)
@@ -183,9 +178,10 @@ func setupRedis(ctx context.Context, connectionString string) (*redis.Client, er
 	if len(dsn) == 0 {
 		dsn = "localhost:6379"
 	}
+	db, _ := strconv.ParseInt(envString("REDIS_DB", defaultRedisDB), 10, 0)
 	redisClient = redis.NewClient(&redis.Options{
 		Addr: dsn, //redis port
-		DB:   0,   // use default DB
+		DB:   int(db),
 	})
 	_, err := redisClient.Ping(ctx).Result()
 	if err != nil {
@@ -193,22 +189,4 @@ func setupRedis(ctx context.Context, connectionString string) (*redis.Client, er
 	}
 
 	return redisClient, nil
-}
-
-func getConfigs(filePath string) (internal.Config, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return internal.Config{}, err
-	}
-
-	defer file.Close()
-
-	var cfg internal.Config
-	decoder := yaml.NewDecoder(file)
-	err = decoder.Decode(&cfg)
-	if err != nil {
-		return internal.Config{}, err
-	}
-
-	return cfg, nil
 }

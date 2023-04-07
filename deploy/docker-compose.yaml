@@ -11,6 +11,7 @@ services:
     environment:
       - HOST=chronoqueue_container
       - AUTH_SERVICE_HOST=authentication
+      - REDIS_HOST=cachesvc_container
     depends_on:
       - cachesvc
       # - authenticationsvc

@@ -8,12 +8,8 @@ WORKDIR /go/src/chronoqueuesvc
 # Copy the service code
 COPY api api
 COPY cmd/chronoqueue cmd/chronoqueue
-# COPY cmd/client cmd/client
-# COPY cmd/database cmd/database
-COPY config config
-# COPY internal/interceptors internal/interceptors
+# COPY client client
 COPY internal/util internal/util
-COPY internal/config.go internal/
 COPY pkg/chronoqueue pkg/chronoqueue
 
 COPY go.mod go.sum ./
@@ -32,7 +28,6 @@ WORKDIR /
 # Copy just the binary from the base image
 RUN mkdir ./config
 COPY --from=base /go/src/chronoqueuesvc/chronoqueue .
-COPY --from=base /go/src/chronoqueuesvc/config/config.yml ./config/
 
 # just an indication that this port will be exposed by this container
 EXPOSE 9000 9001
