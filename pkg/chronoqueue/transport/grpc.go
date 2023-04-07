@@ -197,15 +197,15 @@ func decodeGRPCAcknowledgeMessageResponse(_ context.Context, grpcReply interface
 
 func decodeGRPCRenewMessageLeaseRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*chronoqueue.RenewMessageLeaseRequest)
-	return endpoints.RenewMessageLeaseRequest{QueueName: req.QueueName, MessageID: req.MessageId, LeaseDuration: req.LeaseDuration}, nil
+	return req, nil
 }
 
 func decodeGRPCRenewMessageLeaseResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
 	if grpcReply == nil {
-		return &chronoqueue.RenewMessageLeaseResponse{}, util.ErrUnknown
+		return &chronoqueue.RenewMessageLeaseResponse{}, nil
 	}
-	_ = grpcReply.(endpoints.ErrorResponse)
-	return &chronoqueue.RenewMessageLeaseResponse{}, nil
+	reply := grpcReply.(*chronoqueue.RenewMessageLeaseResponse)
+	return reply, nil
 }
 
 func decodeGRPCPeekQueueMessagesRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {

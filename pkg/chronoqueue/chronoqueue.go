@@ -37,8 +37,8 @@ func (cs *chronoqueueService) GetNextMessage(ctx context.Context, queueName stri
 func (cs *chronoqueueService) AcknowledgeMessage(ctx context.Context, queueName string, messageID string, state internal.State) error {
 	return cs.storage.AcknowledgeMessage(ctx, queueName, messageID, state)
 }
-func (cs *chronoqueueService) RenewMessageLease(ctx context.Context, queueName string, leaseDuration int64, messageID string) error {
-	return cs.storage.RenewMessageLease(ctx, queueName, leaseDuration, messageID)
+func (cs *chronoqueueService) RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error) {
+	return cs.storage.RenewMessageLease(ctx, request)
 }
 func (cs *chronoqueueService) PeekQueueMessages(ctx context.Context, requestData *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error) {
 	return cs.storage.PeekQueueMessages(ctx, requestData)

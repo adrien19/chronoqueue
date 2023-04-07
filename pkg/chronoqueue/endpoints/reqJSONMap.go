@@ -10,12 +10,6 @@ type AcknowledgeMessageRequest struct {
 	State     internal.State `json:"state"`
 }
 
-type RenewMessageLeaseRequest struct {
-	QueueName     string `json:"queueName"`
-	MessageID     string `json:"messageID"`
-	LeaseDuration int64  `json:"leaseDuration"`
-}
-
 type DeleteQueueRequest struct {
 	QueueName string `json:"queueName"`
 }

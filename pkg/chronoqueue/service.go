@@ -13,7 +13,7 @@ type Service interface {
 	PostMessage(ctx context.Context, queueName string, message *chronoqueue.Message) error
 	GetNextMessage(ctx context.Context, queueName string, leaseDuration int64) (*chronoqueue.Message, error)
 	AcknowledgeMessage(ctx context.Context, queueName string, messageID string, state internal.State) error
-	RenewMessageLease(ctx context.Context, queueName string, leaseDuration int64, messageID string) error
+	RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error)
 	PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error)
 	GetQueueState(ctx context.Context, request *chronoqueue.GetQueueStateRequest) (*chronoqueue.GetQueueStateResponse, error)
 }

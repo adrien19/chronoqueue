@@ -22,7 +22,7 @@ type Storage interface {
 	GetQueueMessage(ctx context.Context, queueName string, leaseDuration int64) (*chronoqueue.Message, error)
 	DeleteQueueMessage(ctx context.Context, queueName string, messageID string) error
 	AcknowledgeMessage(ctx context.Context, queueName string, messageID string, state internal.State) error
-	RenewMessageLease(ctx context.Context, queueName string, leaseDuration int64, messageID string) error
+	RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error)
 	PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error)
 	GetQueueState(ctx context.Context, request *chronoqueue.GetQueueStateRequest) (*chronoqueue.GetQueueStateResponse, error)
 }
@@ -308,30 +308,41 @@ func (as *storage) AcknowledgeMessage(ctx context.Context, queueName string, mes
 	return nil
 }
 
-func (as *storage) RenewMessageLease(ctx context.Context, queueName string, leaseDuration int64, messageID string) error {
+func (as *storage) RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error) {
 	// Get metadata for given member
-	metaResult, err := as.redisClient.HGetAll(ctx, fmt.Sprintf("%s:%s:meta", queueName, messageID)).Result()
+	metaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), request.GetMessageId()), "metadata").Result()
 	if err != nil {
 		log.Println("Failed to get message's metadata. Err: ", err)
-		return err
+		return &chronoqueue.RenewMessageLeaseResponse{}, err
 	}
 	// Deserialize the message metadata
-	leasedMsg, err := internal.UnMarshalRedisMessageInfo(metaResult)
+	var meta chronoqueue.Message_Metadata
+	err = protojson.Unmarshal([]byte(metaResult), &meta)
 	if err != nil {
-		log.Println("Failed to deserialize message's metadata")
-		return err
+		return &chronoqueue.RenewMessageLeaseResponse{}, err
 	}
+	leaseDuration := request.GetLeaseDuration()
+	meta.LeaseDuration = &leaseDuration
 
-	leasedMsg.LeaseDuration = leaseDuration
 	// calculate the new expiry date and it to the message metadata
-	leasedMsg.LeaseExpiry = time.Now().Add(time.Duration(leasedMsg.LeaseDuration)).UnixNano() / int64(time.Millisecond)
-	setResult, err := as.redisClient.HSet(ctx, fmt.Sprintf("%s:%s:meta", queueName, messageID), leasedMsg).Result()
+	expireDate := time.Now().Add(time.Duration(meta.GetLeaseDuration())).UnixNano() / int64(time.Millisecond)
+	meta.LeaseExpiry = &expireDate
+	// Create a proto message's metadata marshaller
+	m := protojson.MarshalOptions{
+		EmitUnpopulated: true,
+	}
+	messageMetadataByte, _ := m.Marshal(&meta)
+	if err != nil {
+		log.Println("Failed to marshal queue's meta. Err: ", err)
+		return &chronoqueue.RenewMessageLeaseResponse{}, err
+	}
+	setResult, err := as.redisClient.HSet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), request.GetMessageId()), "metadata", string(messageMetadataByte)).Result()
 	if err != nil {
 		log.Println("Failed to get message's metadata. Err: ", err)
-		return err
+		return &chronoqueue.RenewMessageLeaseResponse{}, err
 	}
 	log.Println("Successfully saved the message metadata: ", setResult)
-	return nil
+	return &chronoqueue.RenewMessageLeaseResponse{}, err
 }
 
 func (as *storage) PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error) {

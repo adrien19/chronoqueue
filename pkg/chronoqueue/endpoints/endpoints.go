@@ -94,13 +94,13 @@ func MakeAcknowledgeMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 
 func MakeRenewMessageLeaseEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(RenewMessageLeaseRequest)
-		err = svc.RenewMessageLease(ctx, req.QueueName, req.LeaseDuration, req.MessageID)
+		req := request.(*pb.RenewMessageLeaseRequest)
+		reply, err := svc.RenewMessageLease(ctx, req)
 		if err != nil {
-			return nil, err
+			return &pb.RenewMessageLeaseResponse{}, err
 		}
 
-		return nil, nil
+		return reply, nil
 	}
 }
 
@@ -172,12 +172,13 @@ func (s *Set) AcknowledgeMessage(ctx context.Context, queueName string, messageI
 	return nil
 }
 
-func (s *Set) RenewMessageLease(ctx context.Context, queueName string, leaseDuration int64, messageID string) error {
-	_, err := s.RenewMessageLeaseEndpoint(ctx, RenewMessageLeaseRequest{QueueName: queueName, LeaseDuration: leaseDuration})
+func (s *Set) RenewMessageLease(ctx context.Context, request *pb.RenewMessageLeaseRequest) (*pb.RenewMessageLeaseResponse, error) {
+	resp, err := s.RenewMessageLeaseEndpoint(ctx, request)
 	if err != nil {
-		return err
+		return &pb.RenewMessageLeaseResponse{}, err
 	}
-	return nil
+	renewLeaseResp := resp.(*pb.RenewMessageLeaseResponse)
+	return renewLeaseResp, nil
 }
 
 func (s *Set) PeekQueueMessages(ctx context.Context, queueName string) (*pb.PeekQueueMessagesResponse, error) {
