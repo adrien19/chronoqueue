@@ -25,8 +25,8 @@ func (cs *chronoqueueService) DeleteQueue(ctx context.Context, request *chronoqu
 	return cs.storage.DeleteQueue(ctx, request)
 }
 
-func (cs *chronoqueueService) PostMessage(ctx context.Context, queueName string, message *chronoqueue.Message) error {
-	return cs.storage.CreateQueueMessage(ctx, queueName, message)
+func (cs *chronoqueueService) PostMessage(ctx context.Context, request *chronoqueue.PostMessageRequest) (*chronoqueue.PostMessageResponse, error) {
+	return cs.storage.CreateQueueMessage(ctx, request)
 }
 
 func (cs *chronoqueueService) GetNextMessage(ctx context.Context, queueName string, leaseDuration int64) (*chronoqueue.Message, error) {

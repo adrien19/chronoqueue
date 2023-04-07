@@ -57,11 +57,11 @@ func MakeDeleteQueueEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 func MakePostMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.PostMessageRequest)
-		err = svc.PostMessage(ctx, req.QueueName, req.Message)
+		postMResp, err := svc.PostMessage(ctx, req)
 		if err != nil {
-			return nil, err
+			return &pb.PostMessageResponse{}, err
 		}
-		return nil, nil
+		return postMResp, nil
 	}
 }
 

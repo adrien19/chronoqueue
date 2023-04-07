@@ -17,7 +17,7 @@ import (
 type Storage interface {
 	CreateQueue(ctx context.Context, queueInfo *chronoqueue.Queue) error
 	DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error)
-	CreateQueueMessage(ctx context.Context, queueName string, message *chronoqueue.Message) error
+	CreateQueueMessage(ctx context.Context, request *chronoqueue.PostMessageRequest) (*chronoqueue.PostMessageResponse, error)
 	GetQueueMessage(ctx context.Context, queueName string, leaseDuration int64) (*chronoqueue.Message, error)
 	DeleteQueueMessage(ctx context.Context, queueName string, messageID string) error
 	AcknowledgeMessage(ctx context.Context, request *chronoqueue.AcknowledgeMessageRequest) (*chronoqueue.AcknowledgeMessageResponse, error)
@@ -119,36 +119,37 @@ func (as *storage) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQ
 	return &chronoqueue.DeleteQueueResponse{}, nil
 }
 
-func (as *storage) CreateQueueMessage(ctx context.Context, queueName string, message *chronoqueue.Message) error {
+func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.PostMessageRequest) (*chronoqueue.PostMessageResponse, error) {
 
-	queueKeys := []string{queueName, fmt.Sprintf("%s:meta", queueName)}
+	queueKeys := []string{request.GetQueueName(), fmt.Sprintf("%s:meta", request.GetQueueName())}
 	// Check if Queue exists
 	exists, err := as.redisClient.Exists(ctx, queueKeys...).Result()
 	if err != nil {
 		log.Println("Failed to add message to Queue members. err: ", err)
-		return err
+		return &chronoqueue.PostMessageResponse{}, err
 	}
 	log.Println("Found exists ==> ", exists)
 	if exists < 1 {
 		err := errors.New("message's queue does not exist")
 		log.Println("Failed to add message to Queue members. err: ", err)
-		return err
+		return &chronoqueue.PostMessageResponse{}, err
 	}
 
-	if message.Metadata.InvisibilityDuration == 0 {
-		message.Metadata.InvisibilityDuration = time.Now().Add(0).UnixNano() / int64(time.Millisecond)
+	message := request.GetMessage()
+	if message.GetMetadata().GetInvisibilityDuration() == 0 {
 		message.Metadata.State = chronoqueue.Message_Metadata_PENDING
 	}
+
 	txPipeline := as.redisClient.TxPipeline()
 	// Calculate the message's deadline as a Unix timestamp based on priority
 	deadline := time.Now().Add(time.Duration(message.Priority)).UnixNano() / int64(time.Millisecond)
-	addMemberResult, err := txPipeline.ZAdd(ctx, queueName, redis.Z{
+	addMemberResult, err := txPipeline.ZAdd(ctx, request.GetQueueName(), redis.Z{
 		Score:  float64(deadline),
 		Member: message.MessageId,
 	}).Result()
 	if err != nil {
 		log.Println("Failed to add message to Queue members. err: ", err)
-		return err
+		return &chronoqueue.PostMessageResponse{}, err
 	}
 	log.Println("Successfully added message to Queue members. result: ", addMemberResult)
 
@@ -160,23 +161,23 @@ func (as *storage) CreateQueueMessage(ctx context.Context, queueName string, mes
 	messageMetadataByte, _ := m.Marshal(message.Metadata)
 	if err != nil {
 		log.Println("Failed to marshal queue's meta. Err: ", err)
-		return err
+		return &chronoqueue.PostMessageResponse{}, err
 	}
 
 	// create metadata for message
-	metaResult, err := txPipeline.HSet(ctx, fmt.Sprintf("%s:%s:meta", queueName, message.MessageId), "metadata", string(messageMetadataByte)).Result()
+	metaResult, err := txPipeline.HSet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), message.MessageId), "metadata", string(messageMetadataByte)).Result()
 	if err != nil {
 		log.Println("Failed to create message's metadata. Err: ", err)
-		return err
+		return &chronoqueue.PostMessageResponse{}, err
 	}
 
 	_, err = txPipeline.Exec(ctx)
 	if err != nil {
 		log.Println("Failed to execute redis pipe command")
-		return err
+		return &chronoqueue.PostMessageResponse{}, err
 	}
 	log.Println("Successfully created metadata for message. result: ", metaResult)
-	return nil
+	return &chronoqueue.PostMessageResponse{}, nil
 }
 
 func (as *storage) GetQueueMessage(ctx context.Context, queueName string, leaseDuration int64) (*chronoqueue.Message, error) {
