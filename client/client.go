@@ -9,7 +9,6 @@ import (
 	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type (
@@ -23,12 +22,17 @@ type (
 		Type                 int32  `json:"type,omitempty"`
 	}
 	MessageOptions struct {
-		Payload              map[string]interface{} `json:"payload,omitempty"`
-		AttemptsLeft         int32                  `json:"attemptsLeft,omitempty"`
-		InvisibilityDuration int64                  `json:"invisibilityDuration,omitempty"`
-		LeaseDuration        int64                  `json:"leaseDuration,omitempty"`
-		LeaseExpiry          int64                  `json:"leaseExpiry,omitempty"`
-		State                State                  `json:"state,omitempty"`
+		// Payload              map[string]interface{} `json:"payload,omitempty"`
+		Payload              Payload `json:"payload,omitempty"`
+		AttemptsLeft         int32   `json:"attemptsLeft,omitempty"`
+		InvisibilityDuration int64   `json:"invisibilityDuration,omitempty"`
+		LeaseDuration        int64   `json:"leaseDuration,omitempty"`
+		LeaseExpiry          int64   `json:"leaseExpiry,omitempty"`
+		State                State   `json:"state,omitempty"`
+	}
+	Payload struct {
+		Metadata map[string][]byte `json:"metadata,omitempty"`
+		Data     []byte            `json:"data,omitempty"`
 	}
 	TimeRangeOption struct {
 		Min int64 `json:"min,omitempty"`
@@ -95,26 +99,23 @@ func (client *ChronoQueueClient) DeleteQueue(name string) (*pb_chronoqueue.Delet
 }
 
 // PostMessage create adds a message to the queue and returns empty response
+// Note: Payload is an opaque struct containing "metadata" and "data" fields.
+//
+//	The "data" field can be anything coverted in []byte.
+//	The "metadata" field is a map[string][]byte that can be used to describe the data.
 func (client *ChronoQueueClient) PostMessage(queue string, messageId string, messageOptions MessageOptions) (*pb_chronoqueue.PostMessageResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	var payload structpb.Struct
-	payloadBytes, err := json.Marshal(messageOptions.Payload)
-	if err != nil {
-		return &pb_chronoqueue.PostMessageResponse{}, err
-	}
-	err = protojson.Unmarshal(payloadBytes, &payload)
-	if err != nil {
-		log.Println("Failed to deserialize payload - err: ", err)
-		return &pb_chronoqueue.PostMessageResponse{}, err
-	}
 
 	req := &pb_chronoqueue.PostMessageRequest{
 		QueueName: queue,
 		Message: &pb_chronoqueue.Message{
 			MessageId: messageId,
 			Metadata: &pb_chronoqueue.Message_Metadata{
-				Payload:              &payload,
+				Payload: &pb_chronoqueue.Payload{
+					Metadata: messageOptions.Payload.Metadata,
+					Data:     messageOptions.Payload.Data,
+				},
 				AttemptsLeft:         messageOptions.AttemptsLeft,
 				LeaseDuration:        &messageOptions.LeaseDuration,
 				LeaseExpiry:          &messageOptions.LeaseExpiry,
