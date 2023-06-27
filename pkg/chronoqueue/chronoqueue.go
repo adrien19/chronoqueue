@@ -2,11 +2,9 @@ package chronoqueue
 
 import (
 	"context"
-	"os"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/repository"
-	"github.com/go-kit/log"
 )
 
 type chronoqueueService struct {
@@ -44,11 +42,4 @@ func (cs *chronoqueueService) PeekQueueMessages(ctx context.Context, requestData
 }
 func (cs *chronoqueueService) GetQueueState(ctx context.Context, request *chronoqueue.GetQueueStateRequest) (*chronoqueue.GetQueueStateResponse, error) {
 	return cs.storage.GetQueueState(ctx, request)
-}
-
-var logger log.Logger
-
-func init() {
-	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 }

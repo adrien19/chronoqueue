@@ -12,7 +12,6 @@ import (
 
 	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 
-	// interceptors "github.com/adrien19/chronoqueue/internal/interceptors/grpc"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/repository"
@@ -37,36 +36,6 @@ const (
 	defaultRedisDB           = "0"
 )
 
-// func gRPCAccessibleRoles() map[string][]bool {
-// 	const chronoqueueServicePath = "/pb.ChonoQueue/"
-
-// 	return map[string][]bool{
-// 		chronoqueueServicePath + "CreateQueue":        {true},
-// 		chronoqueueServicePath + "DeleteQueue":        {true},
-// 		chronoqueueServicePath + "PostMessage":        {true},
-// 		chronoqueueServicePath + "GetNextMessage":     {true},
-// 		chronoqueueServicePath + "AcknowledgeMessage": {true},
-// 		chronoqueueServicePath + "RenewMessageLease":  {true},
-// 		chronoqueueServicePath + "PeekQueueMessages":  {true},
-// 		chronoqueueServicePath + "GetQueueState":      {true},
-// 	}
-// }
-
-// func httpAccessibleRoles() map[string][]bool {
-// 	const chronoqueueServicePath = "/"
-
-// 	return map[string][]bool{
-// 		chronoqueueServicePath + "queue/createqueue":        {true},
-// 		chronoqueueServicePath + "queue/deletequeue":        {true},
-// 		chronoqueueServicePath + "queue/postmessage":        {true},
-// 		chronoqueueServicePath + "queue/getnextmessage":     {true},
-// 		chronoqueueServicePath + "queue/acknowledgemessage": {true},
-// 		chronoqueueServicePath + "queue/renewmessagelease":  {true},
-// 		chronoqueueServicePath + "queue/peekqueuemessages":  {true},
-// 		chronoqueueServicePath + "queue/getqueuestate":      {true},
-// 	}
-// }
-
 func main() {
 	var (
 		logger   log.Logger
@@ -84,15 +53,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	// // Set up a connection to Authentication server.
-	// authSvcConnectionString := fmt.Sprintf("%s:%s", envString("AUTH_SERVICE_HOST", defaultAuthSvcHostname), envString("AUTH_SERVICE_PORT", defaultAuthSvcPort))
-	// conn, err := grpc.Dial(authSvcConnectionString, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// defer conn.Close()
-	// authClient := client.NewAuthClient(conn)
 
 	var (
 		database    = repository.NewQueueStorage(redisClient)
@@ -126,16 +86,11 @@ func main() {
 		}
 		g.Add(func() error {
 			logger.Log("transport", "gRPC", "addr", grpcAddr)
-			// we add the Go Kit gRPC Interceptor to our gRPC service as it is used by
-			// the here demonstrated zipkin tracing middleware.
-			// authInterceptor := interceptors.NewAuthInterceptor(authClient, gRPCAccessibleRoles())
 
 			baseServer := grpc.NewServer(grpc.ChainUnaryInterceptor(
 				kitgrpc.Interceptor,
-				// authInterceptor.Unary(),
 			))
 
-			// baseServer := grpc.NewServer(grpc.UnaryInterceptor(kitgrpc.Interceptor))
 			pb_chronoqueue.RegisterChronoQueueServer(baseServer, grpcServer)
 			return baseServer.Serve(grpcListener)
 		}, func(error) {
