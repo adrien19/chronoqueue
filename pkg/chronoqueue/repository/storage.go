@@ -44,6 +44,9 @@ func (as *storage) CreateQueue(ctx context.Context, request *chronoqueue.CreateQ
 	log.Println("RECEIVED QUEUE INFO: ", request.GetQueue())
 
 	queueInfo := request.GetQueue()
+	if queueInfo == nil || queueInfo.GetName() == "" {
+		return &chronoqueue.CreateQueueResponse{}, errors.New("error: queue information missing")
+	}
 	// Check if Queue already exists
 	exists, err := txPipeline.Exists(ctx, queueInfo.Name, fmt.Sprintf("%s:meta", queueInfo.GetName())).Result()
 	if err != nil {
@@ -101,6 +104,9 @@ func (as *storage) CreateQueue(ctx context.Context, request *chronoqueue.CreateQ
 
 func (as *storage) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error) {
 
+	if request == nil || request.GetName() == "" {
+		return &chronoqueue.DeleteQueueResponse{}, errors.New("error: queue information missing")
+	}
 	checker := NewKeyChecker(as.redisClient, 100)
 
 	start := time.Now()
@@ -129,7 +135,7 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 		log.Println("Failed to add message to Queue members. err: ", err)
 		return &chronoqueue.PostMessageResponse{}, err
 	}
-	log.Println("Found exists ==> ", exists)
+	log.Println("Queue exististance check return: ", exists)
 	if exists < 1 {
 		err := errors.New("message's queue does not exist")
 		log.Println("Failed to add message to Queue members. err: ", err)
@@ -137,6 +143,10 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 	}
 
 	message := request.GetMessage()
+	if message == nil || message.GetMessageId() == "" {
+		err := errors.New("invalid message input")
+		return &chronoqueue.PostMessageResponse{}, err
+	}
 	if message.GetMetadata().GetInvisibilityDuration() == 0 {
 		message.Metadata.State = chronoqueue.Message_Metadata_PENDING
 	}
@@ -146,7 +156,7 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 	deadline := time.Now().Add(time.Duration(message.Priority)).UnixNano() / int64(time.Millisecond)
 	addMemberResult, err := txPipeline.ZAdd(ctx, request.GetQueueName(), redis.Z{
 		Score:  float64(deadline),
-		Member: message.MessageId,
+		Member: message.GetMessageId(),
 	}).Result()
 	if err != nil {
 		log.Println("Failed to add message to Queue members. err: ", err)
@@ -235,21 +245,27 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.Get
 	// Update the message's state to "Running" and restore the message
 	message.Metadata.State = chronoqueue.Message_Metadata_RUNNING
 	if message.Metadata.GetLeaseDuration() <= 0 {
-		// Get the default queue's lease duration
-		queueMetaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:meta", request.GetQueueName()), "metadata").Result()
-		if err != nil {
-			log.Println("Failed to get queue's metadata. Err: ", err)
-			return &chronoqueue.GetNextMessageResponse{}, err
+		if request.LeaseDuration > 0 {
+			message_lease := request.GetLeaseDuration()
+			message.Metadata.LeaseDuration = &message_lease
+		} else {
+
+			// Get the default queue's lease duration
+			queueMetaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:meta", request.GetQueueName()), "metadata").Result()
+			if err != nil {
+				log.Println("Failed to get queue's metadata. Err: ", err)
+				return &chronoqueue.GetNextMessageResponse{}, err
+			}
+			// convert to a json the message metadata
+			var queueMeta chronoqueue.Queue
+			err = protojson.Unmarshal([]byte(queueMetaResult), &queueMeta)
+			// queueInfo, err := internal.UnMarshalRedisQueueInfo(queueMetaResult)
+			if err != nil {
+				log.Println("Failed to get deserialize queue's metadata. Err: ", err)
+				return &chronoqueue.GetNextMessageResponse{}, err
+			}
+			message.Metadata.LeaseDuration = &queueMeta.Metadata.LeaseDuration
 		}
-		// convert to a json the message metadata
-		var queueMeta chronoqueue.Queue
-		err = protojson.Unmarshal([]byte(queueMetaResult), &queueMeta)
-		// queueInfo, err := internal.UnMarshalRedisQueueInfo(queueMetaResult)
-		if err != nil {
-			log.Println("Failed to get deserialize queue's metadata. Err: ", err)
-			return &chronoqueue.GetNextMessageResponse{}, err
-		}
-		message.Metadata.LeaseDuration = &queueMeta.Metadata.LeaseDuration
 	}
 
 	// Add lease expiry data to the message metadata
@@ -361,7 +377,7 @@ func (as *storage) RenewMessageLease(ctx context.Context, request *chronoqueue.R
 func (as *storage) PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error) {
 	// Get the member IDs of the messages in the sorted set with scores up to the current time.
 	min := "-inf"
-	max := strconv.FormatInt(time.Now().Unix(), 10)
+	max := "+inf" //:= strconv.FormatInt(time.Now().Unix(), 10)
 	if request.PriorityRange != nil {
 		min = strconv.FormatInt(request.PriorityRange.GetMin(), 10)
 		max = strconv.FormatInt(request.PriorityRange.GetMax(), 10)
