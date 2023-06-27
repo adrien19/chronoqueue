@@ -7,10 +7,8 @@ require (
 	github.com/go-kit/log v0.2.1
 	github.com/oklog/oklog v0.3.2
 	github.com/redis/go-redis/v9 v9.0.3
-	github.com/sirupsen/logrus v1.9.0
 	google.golang.org/grpc v1.54.0
 	google.golang.org/protobuf v1.30.0
-	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (

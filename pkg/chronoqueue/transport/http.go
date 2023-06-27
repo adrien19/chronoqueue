@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"os"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
 
 	httptransport "github.com/go-kit/kit/transport/http"
-	"github.com/go-kit/log"
 )
 
 func NewHTTPHandler(ep endpoints.Set) http.Handler {
@@ -64,7 +62,6 @@ func NewHTTPHandler(ep endpoints.Set) http.Handler {
 func decodeHTTPCreateQueueRequest(_ context.Context, r *http.Request) (interface{}, error) {
 	var req chronoqueue.CreateQueueRequest
 	if r.ContentLength == 0 {
-		logger.Log("Get request with no body")
 		return &req, nil
 	}
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -104,7 +101,6 @@ func decodeHTTPGetNextMessageRequest(_ context.Context, r *http.Request) (interf
 func decodeHTTPAcknowledgeMessageRequest(_ context.Context, r *http.Request) (interface{}, error) {
 	var req chronoqueue.AcknowledgeMessageRequest
 	if r.ContentLength == 0 {
-		logger.Log("Get request with no body")
 		return &req, nil
 	}
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -162,11 +158,4 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"error": err.Error(),
 	})
-}
-
-var logger log.Logger
-
-func init() {
-	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 }
