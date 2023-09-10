@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -18,18 +17,6 @@ func handleError(err error, msg string) (*chronoqueue.GetNextMessageResponse, er
 	log.Println(msg, err)
 	return &chronoqueue.GetNextMessageResponse{}, err
 }
-
-// func getMessageMetadata(ctx context.Context, redisClient *redis.Client, queueName, member string) (*chronoqueue.Message_Metadata, error) {
-// 	metaResult, err := redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", queueName, member), "metadata").Result()
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	var meta chronoqueue.Message_Metadata
-// 	if err = protojson.Unmarshal([]byte(metaResult), &meta); err != nil {
-// 		return nil, err
-// 	}
-// 	return &meta, nil
-// }
 
 // Fetches and deserializes the message metadata from Redis.
 func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, messageID string) (*chronoqueue.Message_Metadata, error) {
@@ -59,38 +46,6 @@ func (as *storage) getQueueMetadata(ctx context.Context, queueName string) (*chr
 		return nil, err
 	}
 	return &queueMeta, nil
-}
-
-func (as *storage) validateExclusivity(queueMeta *chronoqueue.Queue_Options, exclusivityKey string) error {
-	if queueMeta.GetType() == chronoqueue.Queue_Options_EXCLUSIVE && exclusivityKey == "" {
-		return errors.New("error: queue requires an exclusive key")
-	}
-
-	if queueMeta.GetExclusivityKey() != exclusivityKey {
-		return errors.New("error: provided exclusive key is not valid for the request queue")
-	}
-	return nil
-}
-
-func (as *storage) getNextPendingMessage(ctx context.Context, queueName string, members []string) (*chronoqueue.Message, error) {
-	for _, member := range members {
-		if len(member) == 0 {
-			continue
-		}
-		meta, err := as.fetchMessageMetadata(ctx, queueName, member)
-		if err != nil {
-			log.Println("===>> Error occurred: ", err)
-			return nil, err
-		}
-		if meta.State == chronoqueue.Message_Metadata_PENDING {
-			return &chronoqueue.Message{
-				MessageId: member,
-				Priority:  0,
-				Metadata:  meta,
-			}, nil
-		}
-	}
-	return nil, nil
 }
 
 func (as *storage) updateMessageStateAndLease(message *chronoqueue.Message, request *chronoqueue.GetNextMessageRequest, queueMeta *chronoqueue.Queue_Options) {

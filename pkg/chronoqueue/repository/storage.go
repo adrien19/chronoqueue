@@ -64,48 +64,6 @@ func (as *storage) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQ
 	return &chronoqueue.DeleteQueueResponse{}, nil
 }
 
-func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.GetNextMessageRequest) (*chronoqueue.GetNextMessageResponse, error) {
-	queueMeta, err := as.getQueueMetadata(ctx, request.GetQueueName())
-	if err != nil {
-		return handleError(err, "Failed to get queue's metadata. Err: ")
-	}
-
-	// if err := as.validateExclusivity(queueMeta, request.GetExclusivityKey()); err != nil {
-	// 	return handleError(err, "Failed to validate exclusivity. Err: ")
-	// }
-
-	members, err := as.fetchQueueMembersBeforeNow(ctx, request.GetQueueName())
-	if err != nil {
-		return handleError(err, "Failed to get queue members. Err: ")
-	}
-	if len(members) == 0 {
-		log.Println("No messages found with a deadline before now")
-		return &chronoqueue.GetNextMessageResponse{}, nil
-	}
-
-	message, err := as.getNextPendingMessage(ctx, request.GetQueueName(), members)
-	if err != nil {
-		log.Println("Error getting Next Pending Messsage for: ", queueMeta.Type)
-		return handleError(err, "Failed to get next pending message. Err: ")
-	}
-	if message == nil {
-		log.Println("No pending messages found with a deadline before now")
-		return &chronoqueue.GetNextMessageResponse{}, nil
-	}
-
-	// Update the message's state to "Running" and restore the message
-	as.updateMessageStateAndLease(message, request, queueMeta)
-
-	if err := as.saveMessageWithMetadata(ctx, request.GetQueueName(), message); err != nil {
-		return handleError(err, "Failed to save message's metadata. Err: ")
-	}
-
-	log.Println("Successfully leased the message until: ", message.Metadata.GetLeaseExpiry())
-	return &chronoqueue.GetNextMessageResponse{
-		Message: message,
-	}, nil
-}
-
 func (as *storage) DeleteQueueMessage(ctx context.Context, queueName string, messageID string) error {
 	_, err := as.redisClient.Del(ctx, messageID).Result()
 	if err != nil {
