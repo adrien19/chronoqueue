@@ -112,43 +112,6 @@ func (as *storage) DeleteQueueMessage(ctx context.Context, queueName string, mes
 	return nil
 }
 
-func (as *storage) RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error) {
-	// Get metadata for given member
-	metaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), request.GetMessageId()), "metadata").Result()
-	if err != nil {
-		log.Println("Failed to get message's metadata. Err: ", err)
-		return &chronoqueue.RenewMessageLeaseResponse{}, err
-	}
-	// Deserialize the message metadata
-	var meta chronoqueue.Message_Metadata
-	err = protojson.Unmarshal([]byte(metaResult), &meta)
-	if err != nil {
-		return &chronoqueue.RenewMessageLeaseResponse{}, err
-	}
-	leaseDuration := request.GetLeaseDuration()
-	meta.LeaseDuration = &leaseDuration
-
-	// calculate the new expiry date and it to the message metadata
-	expireDate := time.Now().Add(time.Duration(meta.GetLeaseDuration())).UnixNano() / int64(time.Millisecond)
-	meta.LeaseExpiry = &expireDate
-	// Create a proto message's metadata marshaller
-	m := protojson.MarshalOptions{
-		EmitUnpopulated: true,
-	}
-	messageMetadataByte, _ := m.Marshal(&meta)
-	if err != nil {
-		log.Println("Failed to marshal queue's meta. Err: ", err)
-		return &chronoqueue.RenewMessageLeaseResponse{}, err
-	}
-	setResult, err := as.redisClient.HSet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), request.GetMessageId()), "metadata", string(messageMetadataByte)).Result()
-	if err != nil {
-		log.Println("Failed to get message's metadata. Err: ", err)
-		return &chronoqueue.RenewMessageLeaseResponse{}, err
-	}
-	log.Println("Successfully saved the message metadata: ", setResult)
-	return &chronoqueue.RenewMessageLeaseResponse{}, err
-}
-
 func (as *storage) PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error) {
 	// Get the member IDs of the messages in the sorted set with scores up to the current time.
 	min := "-inf"
