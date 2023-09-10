@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -12,10 +13,14 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-// Error handling helper
-func handleError(err error, msg string) (*chronoqueue.GetNextMessageResponse, error) {
-	log.Println(msg, err)
-	return &chronoqueue.GetNextMessageResponse{}, err
+type ChronoHandlerFunc func(ctx context.Context, req interface{}) (interface{}, error)
+
+func ErrorHandler(defaultResp interface{}, msg string) ChronoHandlerFunc {
+	return func(ctx context.Context, req interface{}) (interface{}, error) {
+		resp, err := defaultResp, errors.New(msg)
+		log.Println(msg, err)
+		return resp, err
+	}
 }
 
 // Fetches and deserializes the message metadata from Redis.

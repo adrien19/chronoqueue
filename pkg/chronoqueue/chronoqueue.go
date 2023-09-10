@@ -2,8 +2,10 @@ package chronoqueue
 
 import (
 	"context"
+	"errors"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/repository"
 )
 
@@ -28,7 +30,23 @@ func (cs *chronoqueueService) PostMessage(ctx context.Context, request *chronoqu
 }
 
 func (cs *chronoqueueService) GetNextMessage(ctx context.Context, request *chronoqueue.GetNextMessageRequest) (*chronoqueue.GetNextMessageResponse, error) {
-	return cs.storage.GetQueueMessage(ctx, request)
+	// Create an adapter around GetQueueMessage
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		// Type assert the request to its specific type
+		specificReq, ok := req.(*chronoqueue.GetNextMessageRequest)
+		if !ok {
+			return nil, errors.New("invalid request type")
+		}
+
+		// Call the specific function
+		return cs.storage.GetQueueMessage(ctx, specificReq)
+	}
+	// Wrap the handler with ErrorHandler
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.GetNextMessageResponse{})
+	// return cs.storage.GetQueueMessage(ctx, request)
+	// Now use the wrapped function
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.GetNextMessageResponse), err
 }
 
 func (cs *chronoqueueService) AcknowledgeMessage(ctx context.Context, request *chronoqueue.AcknowledgeMessageRequest) (*chronoqueue.AcknowledgeMessageResponse, error) {

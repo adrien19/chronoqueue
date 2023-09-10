@@ -27,6 +27,7 @@ require (
 	github.com/go-redsync/redsync/v4 v4.9.4
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/oklog/run v1.1.0 // indirect
+	github.com/sirupsen/logrus v1.9.3
 	golang.org/x/net v0.8.0 // indirect
 	golang.org/x/sys v0.6.0 // indirect
 	golang.org/x/text v0.8.0 // indirect

@@ -3,9 +3,9 @@ package repository
 import (
 	"context"
 	"errors"
-	"log"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
 )
 
 func (as *storage) validateExclusivity(queueMeta *chronoqueue.Queue_Options, exclusivityKey string) error {
@@ -26,7 +26,9 @@ func (as *storage) getNextPendingMessage(ctx context.Context, queueName string, 
 		}
 		meta, err := as.fetchMessageMetadata(ctx, queueName, member)
 		if err != nil {
-			log.Println("===>> Error occurred: ", err)
+			util.ErrorWithFields("Failed to fetch message metadata", map[string]interface{}{
+				"error": err,
+			})
 			return nil, err
 		}
 		if meta.State == chronoqueue.Message_Metadata_PENDING {
@@ -43,7 +45,7 @@ func (as *storage) getNextPendingMessage(ctx context.Context, queueName string, 
 func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.GetNextMessageRequest) (*chronoqueue.GetNextMessageResponse, error) {
 	queueMeta, err := as.getQueueMetadata(ctx, request.GetQueueName())
 	if err != nil {
-		return handleError(err, "Failed to get queue's metadata. Err: ")
+		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, err, "Failed to get queue's metadata.")
 	}
 
 	// if err := as.validateExclusivity(queueMeta, request.GetExclusivityKey()); err != nil {
@@ -52,20 +54,19 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.Get
 
 	members, err := as.fetchQueueMembersBeforeNow(ctx, request.GetQueueName())
 	if err != nil {
-		return handleError(err, "Failed to get queue members. Err: ")
+		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, err, "Failed to get queue members.")
 	}
 	if len(members) == 0 {
-		log.Println("No messages found with a deadline before now")
+		util.Info("No messages found with a deadline before now")
 		return &chronoqueue.GetNextMessageResponse{}, nil
 	}
 
 	message, err := as.getNextPendingMessage(ctx, request.GetQueueName(), members)
 	if err != nil {
-		log.Println("Error getting Next Pending Messsage for: ", queueMeta.Type)
-		return handleError(err, "Failed to get next pending message. Err: ")
+		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, err, "Failed to get next pending message.")
 	}
 	if message == nil {
-		log.Println("No pending messages found with a deadline before now")
+		util.Info("No pending messages found with a deadline before now")
 		return &chronoqueue.GetNextMessageResponse{}, nil
 	}
 
@@ -73,10 +74,12 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.Get
 	as.updateMessageStateAndLease(message, request, queueMeta)
 
 	if err := as.saveMessageWithMetadata(ctx, request.GetQueueName(), message); err != nil {
-		return handleError(err, "Failed to save message's metadata. Err: ")
+		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, err, "Failed to save message's metadata.")
 	}
 
-	log.Println("Successfully leased the message until: ", message.Metadata.GetLeaseExpiry())
+	util.InfoWithFields("Successfully leased the message:", map[string]interface{}{
+		"lease expiry": message.Metadata.GetLeaseExpiry(),
+	})
 	return &chronoqueue.GetNextMessageResponse{
 		Message: message,
 	}, nil
