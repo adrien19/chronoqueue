@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/go-redsync/redsync/v4"
+	"github.com/go-redsync/redsync/v4/redis/goredis/v9"
 	"github.com/redis/go-redis/v9"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Storage interface {
@@ -27,10 +27,13 @@ type Storage interface {
 
 type storage struct {
 	redisClient *redis.Client
+	rs          *redsync.Redsync
 }
 
 func NewQueueStorage(redisClient *redis.Client) Storage {
-	storage := &storage{redisClient: redisClient}
+	pool := goredis.NewPool(redisClient)
+	rs := redsync.New(pool)
+	storage := &storage{redisClient: redisClient, rs: rs}
 	ctx := context.Background()
 
 	go storage.RunLuaScripts(ctx)
@@ -109,80 +112,6 @@ func (as *storage) DeleteQueueMessage(ctx context.Context, queueName string, mes
 		return err
 	}
 	return nil
-}
-
-func (as *storage) GetQueueState(ctx context.Context, request *chronoqueue.GetQueueStateRequest) (*chronoqueue.GetQueueStateResponse, error) {
-	membersWithScores, err := as.redisClient.ZRangeByScoreWithScores(ctx, request.GetQueueName(), &redis.ZRangeBy{
-		Min:    "-inf",
-		Max:    "+inf",
-		Offset: 0,
-	}).Result()
-	if err != nil {
-		return &chronoqueue.GetQueueStateResponse{}, err
-	}
-	// convert timefloat to time.
-	// Assumes the first element of array is empty string member
-	earliestDeadline := time.Unix(0, int64(membersWithScores[1].Score)*int64(time.Millisecond))
-
-	invisibleMessagesCount := 0
-	pendingMessagesCount := 0
-	runningMessagesCount := 0
-	completedMessagesCount := 0
-	canceledMessagesCount := 0
-	erroredMessagesCount := 0
-
-	// Get the messages' values using their member IDs.
-	for _, memberID := range membersWithScores {
-		if len(memberID.Member.(string)) == 0 {
-			continue
-		}
-		metaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), memberID.Member), "metadata").Result()
-		if err != nil {
-			return &chronoqueue.GetQueueStateResponse{}, err
-		}
-		// Deserialize the message metadata
-		var meta chronoqueue.Message_Metadata
-		err = protojson.Unmarshal([]byte(metaResult), &meta)
-		if err != nil {
-			log.Println("Failed to serialize message's metadata", err)
-			return &chronoqueue.GetQueueStateResponse{}, err
-		}
-
-		switch meta.GetState() {
-		case chronoqueue.Message_Metadata_INVISIBLE:
-			invisibleMessagesCount += 1
-		case chronoqueue.Message_Metadata_PENDING:
-			pendingMessagesCount += 1
-		case chronoqueue.Message_Metadata_RUNNING:
-			runningMessagesCount += 1
-		case chronoqueue.Message_Metadata_COMPLETED:
-			completedMessagesCount += 1
-		case chronoqueue.Message_Metadata_CANCELED:
-			canceledMessagesCount += 1
-		case chronoqueue.Message_Metadata_ERRORED:
-			erroredMessagesCount += 1
-		default:
-			continue
-		}
-	}
-
-	log.Println("====>> Queue State: ",
-		"invisibleMessagesCount: ", invisibleMessagesCount,
-		"pendingMessagesCount: ", pendingMessagesCount,
-		"runningMessagesCount: ", runningMessagesCount,
-		"completedMessagesCount: ", completedMessagesCount,
-		"canceledMessagesCount: ", canceledMessagesCount,
-		"erroredMessagesCount: ", erroredMessagesCount,
-		"earliestDeadline: ", earliestDeadline)
-	return &chronoqueue.GetQueueStateResponse{
-		InvisibleMessagesCount: int32(invisibleMessagesCount),
-		PendingMessagesCount:   int32(pendingMessagesCount),
-		RunningMessagesCount:   int32(runningMessagesCount),
-		CompletedMessagesCount: int32(completedMessagesCount),
-		CanceledMessagesCount:  int32(canceledMessagesCount),
-		ErroredMessagesCount:   int32(erroredMessagesCount),
-		EarliestDeadline:       timestamppb.New(earliestDeadline),
-	}, nil
 }
 
 func (as *storage) RunLuaScripts(ctx context.Context) {
