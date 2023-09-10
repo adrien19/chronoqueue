@@ -192,106 +192,44 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 }
 
 func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.GetNextMessageRequest) (*chronoqueue.GetNextMessageResponse, error) {
-
-	max := strconv.FormatInt(time.Now().UnixMilli(), 10)
-	// Acquire a lease for the next message in the queue
-	members, err := as.redisClient.ZRangeByScore(ctx, request.GetQueueName(), &redis.ZRangeBy{
-		Min:    "-inf",
-		Max:    max,
-		Offset: 0,
-		Count:  10,
-	}).Result()
+	queueMeta, err := as.getQueueMetadata(ctx, request.GetQueueName())
 	if err != nil {
-		log.Println("Failed to get queue members. Err: ", err)
-		return &chronoqueue.GetNextMessageResponse{}, err
+		return handleError(err, "Failed to get queue's metadata. Err: ")
+	}
+
+	// if err := as.validateExclusivity(queueMeta, request.GetExclusivityKey()); err != nil {
+	// 	return handleError(err, "Failed to validate exclusivity. Err: ")
+	// }
+
+	members, err := as.fetchQueueMembersBeforeNow(ctx, request.GetQueueName())
+	if err != nil {
+		return handleError(err, "Failed to get queue members. Err: ")
 	}
 	if len(members) == 0 {
 		log.Println("No messages found with a deadline before now")
-		// No message found with a deadline before now
-		return &chronoqueue.GetNextMessageResponse{}, err
+		return &chronoqueue.GetNextMessageResponse{}, nil
 	}
 
-	// var msg internal.QueueMessageInfo
-	message := chronoqueue.Message{}
-	// Get the messages metadata from hash and find the next pending message
-	for _, member := range members {
-		if len(member) == 0 {
-			continue
-		}
-		// Get metadata for given member
-		metaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), member), "metadata").Result()
-		if err != nil {
-			log.Println("Failed to get message's metadata. Err: ", err)
-			return &chronoqueue.GetNextMessageResponse{}, err
-		}
-		// Deserialize the message metadata
-		var meta chronoqueue.Message_Metadata
-		err = protojson.Unmarshal([]byte(metaResult), &meta)
-		if err != nil {
-			return &chronoqueue.GetNextMessageResponse{}, err
-		}
-		if meta.State == chronoqueue.Message_Metadata_PENDING {
-			message.MessageId = member
-			message.Priority = 0
-			message.Metadata = &meta
-			break
-		}
+	message, err := as.getNextPendingMessage(ctx, request.GetQueueName(), members)
+	if err != nil {
+		log.Println("Error getting Next Pending Messsage for: ", queueMeta.Type)
+		return handleError(err, "Failed to get next pending message. Err: ")
 	}
-	if message.MessageId == "" {
+	if message == nil {
 		log.Println("No pending messages found with a deadline before now")
-		return &chronoqueue.GetNextMessageResponse{}, err
+		return &chronoqueue.GetNextMessageResponse{}, nil
 	}
 
 	// Update the message's state to "Running" and restore the message
-	message.Metadata.State = chronoqueue.Message_Metadata_RUNNING
-	if message.Metadata.GetLeaseDuration() <= 0 {
-		if request.LeaseDuration > 0 {
-			message_lease := request.GetLeaseDuration()
-			message.Metadata.LeaseDuration = &message_lease
-		} else {
+	as.updateMessageStateAndLease(message, request, queueMeta)
 
-			// Get the default queue's lease duration
-			queueMetaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:meta", request.GetQueueName()), "metadata").Result()
-			if err != nil {
-				log.Println("Failed to get queue's metadata. Err: ", err)
-				return &chronoqueue.GetNextMessageResponse{}, err
-			}
-			// convert to a json the message metadata
-			var queueMeta chronoqueue.Queue
-			err = protojson.Unmarshal([]byte(queueMetaResult), &queueMeta)
-			// queueInfo, err := internal.UnMarshalRedisQueueInfo(queueMetaResult)
-			if err != nil {
-				log.Println("Failed to get deserialize queue's metadata. Err: ", err)
-				return &chronoqueue.GetNextMessageResponse{}, err
-			}
-			message.Metadata.LeaseDuration = &queueMeta.Metadata.LeaseDuration
-		}
-	}
-
-	// Add lease expiry data to the message metadata
-	expireDate := time.Now().Add(time.Duration(message.Metadata.GetLeaseDuration())).UnixNano() / int64(time.Millisecond)
-	message.Metadata.LeaseExpiry = &expireDate
-
-	// Create a proto message's metadata marshaller
-	m := protojson.MarshalOptions{
-		EmitUnpopulated: true,
-	}
-	messageMetadataByte, _ := m.Marshal(message.Metadata)
-	if err != nil {
-		log.Println("Failed to marshal queue's meta. Err: ", err)
-		return &chronoqueue.GetNextMessageResponse{}, err
-	}
-
-	err = as.redisClient.HSet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), message.MessageId), "metadata", string(messageMetadataByte)).Err()
-	if err != nil {
-		log.Println("Failed to save message's metadata", err)
-		return &chronoqueue.GetNextMessageResponse{}, err
+	if err := as.saveMessageMetadata(ctx, request.GetQueueName(), message); err != nil {
+		return handleError(err, "Failed to save message's metadata. Err: ")
 	}
 
 	log.Println("Successfully leased the message until: ", message.Metadata.GetLeaseExpiry())
-	// Return the deserialized message and lease expiry
 	return &chronoqueue.GetNextMessageResponse{
-		Message: &message,
+		Message: message,
 	}, nil
 }
 
