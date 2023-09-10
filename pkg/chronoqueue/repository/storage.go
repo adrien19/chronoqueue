@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strconv"
 	"time"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
@@ -110,52 +109,6 @@ func (as *storage) DeleteQueueMessage(ctx context.Context, queueName string, mes
 		return err
 	}
 	return nil
-}
-
-func (as *storage) PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error) {
-	// Get the member IDs of the messages in the sorted set with scores up to the current time.
-	min := "-inf"
-	max := "+inf" //:= strconv.FormatInt(time.Now().Unix(), 10)
-	if request.PriorityRange != nil {
-		min = strconv.FormatInt(request.PriorityRange.GetMin(), 10)
-		max = strconv.FormatInt(request.PriorityRange.GetMax(), 10)
-	}
-	memberIDs, err := as.redisClient.ZRangeByScore(ctx, request.GetQueueName(), &redis.ZRangeBy{
-		Min:    min,
-		Max:    max,
-		Offset: 0,
-		Count:  request.GetLimit(),
-	}).Result()
-	if err != nil {
-		return &chronoqueue.PeekQueueMessagesResponse{}, err
-	}
-
-	messages := []*chronoqueue.Message{}
-	// Get the messages' values using their member IDs.
-	for _, memberID := range memberIDs {
-		if len(memberID) == 0 {
-			continue
-		}
-		metaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), memberID), "metadata").Result()
-		if err != nil {
-			log.Println("Failed to serialize message's metadata", err)
-			return nil, err
-		}
-		var meta chronoqueue.Message_Metadata
-		err = protojson.Unmarshal([]byte(metaResult), &meta)
-		if err != nil {
-			log.Println("Failed to serialize message's metadata", err)
-			return nil, err
-		}
-
-		messages = append(messages, &chronoqueue.Message{
-			MessageId: memberID,
-			Priority:  0,
-			Metadata:  &meta,
-		})
-
-	}
-	return &chronoqueue.PeekQueueMessagesResponse{Messages: messages}, nil
 }
 
 func (as *storage) GetQueueState(ctx context.Context, request *chronoqueue.GetQueueStateRequest) (*chronoqueue.GetQueueStateResponse, error) {
