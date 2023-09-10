@@ -94,7 +94,7 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.Get
 	// Update the message's state to "Running" and restore the message
 	as.updateMessageStateAndLease(message, request, queueMeta)
 
-	if err := as.saveMessageMetadata(ctx, request.GetQueueName(), message); err != nil {
+	if err := as.saveMessageWithMetadata(ctx, request.GetQueueName(), message); err != nil {
 		return handleError(err, "Failed to save message's metadata. Err: ")
 	}
 
@@ -110,40 +110,6 @@ func (as *storage) DeleteQueueMessage(ctx context.Context, queueName string, mes
 		return err
 	}
 	return nil
-}
-
-func (as *storage) AcknowledgeMessage(ctx context.Context, request *chronoqueue.AcknowledgeMessageRequest) (*chronoqueue.AcknowledgeMessageResponse, error) {
-	// Get metadata for given member
-	metaResult, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), request.GetMessageId()), "metadata").Result()
-	if err != nil {
-		log.Println("Failed to get message's metadata. Err: ", err)
-		return &chronoqueue.AcknowledgeMessageResponse{}, err
-	}
-	// Deserialize the message metadata
-	var meta chronoqueue.Message_Metadata
-	err = protojson.Unmarshal([]byte(metaResult), &meta)
-	if err != nil {
-		return &chronoqueue.AcknowledgeMessageResponse{}, err
-	}
-	// Set the message state to passed in state
-	meta.State = request.State
-
-	// Create a proto message's metadata marshaller
-	m := protojson.MarshalOptions{
-		EmitUnpopulated: true,
-	}
-	messageMetadataByte, _ := m.Marshal(&meta)
-	if err != nil {
-		log.Println("Failed to marshal queue's meta. Err: ", err)
-		return &chronoqueue.AcknowledgeMessageResponse{}, err
-	}
-	setResult, err := as.redisClient.HSet(ctx, fmt.Sprintf("%s:%s:meta", request.GetQueueName(), request.GetMessageId()), "metadata", string(messageMetadataByte)).Result()
-	if err != nil {
-		log.Println("Failed to get message's metadata. Err: ", err)
-		return &chronoqueue.AcknowledgeMessageResponse{}, err
-	}
-	log.Println("Successfully saved the message metadata: ", setResult)
-	return &chronoqueue.AcknowledgeMessageResponse{}, nil
 }
 
 func (as *storage) RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error) {

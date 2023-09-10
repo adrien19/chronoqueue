@@ -19,15 +19,32 @@ func handleError(err error, msg string) (*chronoqueue.GetNextMessageResponse, er
 	return &chronoqueue.GetNextMessageResponse{}, err
 }
 
-func getMessageMetadata(ctx context.Context, redisClient *redis.Client, queueName, member string) (*chronoqueue.Message_Metadata, error) {
-	metaResult, err := redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", queueName, member), "metadata").Result()
+// func getMessageMetadata(ctx context.Context, redisClient *redis.Client, queueName, member string) (*chronoqueue.Message_Metadata, error) {
+// 	metaResult, err := redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", queueName, member), "metadata").Result()
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	var meta chronoqueue.Message_Metadata
+// 	if err = protojson.Unmarshal([]byte(metaResult), &meta); err != nil {
+// 		return nil, err
+// 	}
+// 	return &meta, nil
+// }
+
+// Fetches and deserializes the message metadata from Redis.
+func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, messageID string) (*chronoqueue.Message_Metadata, error) {
+	key := fmt.Sprintf("%s:%s:meta", queueName, messageID)
+	result, err := as.redisClient.HGet(ctx, key, "metadata").Result()
 	if err != nil {
 		return nil, err
 	}
+
 	var meta chronoqueue.Message_Metadata
-	if err = protojson.Unmarshal([]byte(metaResult), &meta); err != nil {
+	err = protojson.Unmarshal([]byte(result), &meta)
+	if err != nil {
 		return nil, err
 	}
+
 	return &meta, nil
 }
 
@@ -60,7 +77,7 @@ func (as *storage) getNextPendingMessage(ctx context.Context, queueName string, 
 		if len(member) == 0 {
 			continue
 		}
-		meta, err := getMessageMetadata(ctx, as.redisClient, queueName, member)
+		meta, err := as.fetchMessageMetadata(ctx, queueName, member)
 		if err != nil {
 			log.Println("===>> Error occurred: ", err)
 			return nil, err
@@ -92,7 +109,7 @@ func (as *storage) updateMessageStateAndLease(message *chronoqueue.Message, requ
 	message.Metadata.LeaseExpiry = &expireDate
 }
 
-func (as *storage) saveMessageMetadata(ctx context.Context, queueName string, message *chronoqueue.Message) error {
+func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string, message *chronoqueue.Message) error {
 	// Create a proto message's metadata marshaller
 	m := protojson.MarshalOptions{
 		EmitUnpopulated: true,
