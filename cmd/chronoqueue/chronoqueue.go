@@ -24,95 +24,110 @@ import (
 )
 
 const (
-	defaultGRPCPort          = "9000"
-	defaultHTTPPort          = "9001"
-	defaultHostname          = "localhost"
-	defaultAuthSvcHostname   = "0.0.0.0"
-	defaultAuthSvcPort       = "5006"
-	defaultActionSvcHostname = "0.0.0.0"
-	defaultActionSvcPort     = "7000"
-	defaultRedisHost         = "0.0.0.0"
-	defaultRedisPort         = "6379"
-	defaultRedisDB           = "0"
+	defaultGRPCPort  = "9000"
+	defaultHTTPPort  = "9001"
+	defaultHostname  = "0.0.0.0"
+	defaultRedisHost = "0.0.0.0"
+	defaultRedisPort = "6379"
+	defaultRedisDB   = "0"
 )
 
 func main() {
-	var (
-		logger   log.Logger
-		httpAddr = net.JoinHostPort(envString("HOST", defaultHostname), envString("HTTP_PORT", defaultHTTPPort))
-		grpcAddr = net.JoinHostPort(envString("HOST", defaultHostname), envString("GRPC_PORT", defaultGRPCPort))
-	)
+	logger := initializeLogger()
+	httpAddr, grpcAddr, redisConnectionString := getConfigsFromEnv()
 
-	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	redisClient := initializeRedis(context.Background(), redisConnectionString, logger)
 
+	database := repository.NewQueueStorage(redisClient)
+	service := chronoqueue.NewChronoqueueService(database)
+	eps := endpoints.NewEndpointSet(service)
+	httpHandler := transport.NewHTTPHandler(eps)
+	grpcServer := transport.NewGRPCServer(eps)
+
+	startServers(httpAddr, grpcAddr, httpHandler, grpcServer, logger)
+}
+
+func initializeLogger() log.Logger {
+	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+	return log.With(logger, "ts", log.DefaultTimestampUTC)
+}
+
+func getConfigsFromEnv() (string, string, string) {
+	httpAddr := net.JoinHostPort(envString("HOST", defaultHostname), envString("HTTP_PORT", defaultHTTPPort))
+	grpcAddr := net.JoinHostPort(envString("HOST", defaultHostname), envString("GRPC_PORT", defaultGRPCPort))
 	redisConnectionString := fmt.Sprintf("%s:%s", envString("REDIS_HOST", defaultRedisHost), envString("REDIS_PORT", defaultRedisPort))
-	var ctx = context.Background()
+	return httpAddr, grpcAddr, redisConnectionString
+}
 
-	redisClient, err := setupRedis(ctx, redisConnectionString)
+func initializeRedis(ctx context.Context, connectionString string, logger log.Logger) *redis.Client {
+	dsn := connectionString
+	if dsn == "" {
+		dsn = "localhost:6379"
+	}
+	db, _ := strconv.ParseInt(envString("REDIS_DB", defaultRedisDB), 10, 0)
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: dsn,
+		DB:   int(db),
+	})
+	_, err := redisClient.Ping(ctx).Result()
 	if err != nil {
-		panic(err)
+		logger.Log("could not connect to redis", err)
+		os.Exit(1)
 	}
+	return redisClient
+}
 
-	var (
-		database    = repository.NewQueueStorage(redisClient)
-		service     = chronoqueue.NewChronoqueueService(database)
-		eps         = endpoints.NewEndpointSet(service)
-		httpHandler = transport.NewHTTPHandler(eps)
-		grpcServer  = transport.NewGRPCServer(eps)
-	)
-
+func startServers(httpAddr, grpcAddr string, httpHandler http.Handler, grpcServer pb_chronoqueue.ChronoQueueServer, logger log.Logger) {
 	var g group.Group
-	{
-		// The HTTP listener mounts the Go kit HTTP handler we created.
-		httpListener, err := net.Listen("tcp", httpAddr)
-		if err != nil {
-			logger.Log("transport", "HTTP", "during", "Listen", "err", err)
-			os.Exit(1)
-		}
-		g.Add(func() error {
-			logger.Log("transport", "HTTP", "addr", httpAddr)
-			return http.Serve(httpListener, httpHandler)
-		}, func(error) {
-			httpListener.Close()
-		})
-	}
-	{
-		// The gRPC listener mounts the Go kit gRPC server we created.
-		grpcListener, err := net.Listen("tcp", grpcAddr)
-		if err != nil {
-			logger.Log("transport", "gRPC", "during", "Listen", "err", err)
-			os.Exit(1)
-		}
-		g.Add(func() error {
-			logger.Log("transport", "gRPC", "addr", grpcAddr)
+	initHTTPServer(&g, httpAddr, httpHandler, logger)
+	initGRPCServer(&g, grpcAddr, grpcServer, logger)
+	waitForTermination(&g, logger)
+}
 
-			baseServer := grpc.NewServer(grpc.ChainUnaryInterceptor(
-				kitgrpc.Interceptor,
-			))
+func initHTTPServer(g *group.Group, addr string, handler http.Handler, logger log.Logger) {
+	httpListener, err := net.Listen("tcp", addr)
+	if err != nil {
+		logger.Log("transport", "HTTP", "during", "Listen", "err", err)
+		os.Exit(1)
+	}
+	g.Add(func() error {
+		logger.Log("transport", "HTTP", "addr", addr)
+		return http.Serve(httpListener, handler)
+	}, func(error) {
+		httpListener.Close()
+	})
+}
 
-			pb_chronoqueue.RegisterChronoQueueServer(baseServer, grpcServer)
-			return baseServer.Serve(grpcListener)
-		}, func(error) {
-			grpcListener.Close()
-		})
+func initGRPCServer(g *group.Group, addr string, server pb_chronoqueue.ChronoQueueServer, logger log.Logger) {
+	grpcListener, err := net.Listen("tcp", addr)
+	if err != nil {
+		logger.Log("transport", "gRPC", "during", "Listen", "err", err)
+		os.Exit(1)
 	}
-	{
-		// This function just sits and waits for ctrl-C.
-		cancelInterrupt := make(chan struct{})
-		g.Add(func() error {
-			c := make(chan os.Signal, 1)
-			signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-			select {
-			case sig := <-c:
-				return fmt.Errorf("received signal %s", sig)
-			case <-cancelInterrupt:
-				return nil
-			}
-		}, func(error) {
-			close(cancelInterrupt)
-		})
-	}
+	g.Add(func() error {
+		logger.Log("transport", "gRPC", "addr", addr)
+		baseServer := grpc.NewServer(grpc.ChainUnaryInterceptor(kitgrpc.Interceptor))
+		pb_chronoqueue.RegisterChronoQueueServer(baseServer, server)
+		return baseServer.Serve(grpcListener)
+	}, func(error) {
+		grpcListener.Close()
+	})
+}
+
+func waitForTermination(g *group.Group, logger log.Logger) {
+	cancelInterrupt := make(chan struct{})
+	g.Add(func() error {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+		select {
+		case sig := <-c:
+			return fmt.Errorf("received signal %s", sig)
+		case <-cancelInterrupt:
+			return nil
+		}
+	}, func(error) {
+		close(cancelInterrupt)
+	})
 	logger.Log("exit", g.Run())
 }
 
@@ -122,26 +137,4 @@ func envString(env, fallback string) string {
 		return fallback
 	}
 	return e
-}
-
-func setupRedis(ctx context.Context, connectionString string) (*redis.Client, error) {
-
-	var redisClient *redis.Client
-
-	//Initializing redis
-	dsn := connectionString
-	if len(dsn) == 0 {
-		dsn = "localhost:6379"
-	}
-	db, _ := strconv.ParseInt(envString("REDIS_DB", defaultRedisDB), 10, 0)
-	redisClient = redis.NewClient(&redis.Options{
-		Addr: dsn, //redis port
-		DB:   int(db),
-	})
-	_, err := redisClient.Ping(ctx).Result()
-	if err != nil {
-		panic(err)
-	}
-
-	return redisClient, nil
 }
