@@ -35,12 +35,6 @@ func NewQueueStorage(redisClient *redis.Client) Storage {
 	pool := goredis.NewPool(redisClient)
 	rs := redsync.New(pool)
 	storage := &storage{redisClient: redisClient, rs: rs}
-	// ctx := context.Background()
-
-	// go storage.RunLuaScripts(ctx)
-	// Start running the scripts
-	// go storage.RunLuaScript(ctx, invisibleToPending, 1*time.Minute)
-	// go storage.RunLuaScript(ctx, runningToPending, 30*time.Second) // runs this script every 30 seconds
 
 	// Create a buffered channel for tasks
 	tasks := make(chan Task, 10)
@@ -101,33 +95,15 @@ func (as *storage) worker(ctx context.Context, tasks chan Task) {
 			now := time.Now().UnixNano() / int64(time.Millisecond)
 			err := task.Script.Run(ctx, as.redisClient, nil, now).Err()
 			if err != nil && err.Error() != "redis: nil" {
-				log.Printf("Failed to run the script: %v\n", err)
+				// log.Printf("Failed to run the script: %v\n", err)
+				util.ErrorWithFields("Failed to run the script", map[string]interface{}{
+					"error": err,
+				})
 			}
 			// Re-schedule the task
 			time.AfterFunc(task.Interval, func() { tasks <- task })
 		case <-ctx.Done():
 			return
-		}
-	}
-}
-
-func (as *storage) RunLuaScript(ctx context.Context, script *redis.Script, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			now := time.Now().UnixNano() / int64(time.Millisecond)
-			err := script.Run(ctx, as.redisClient, nil, now).Err()
-			if err != nil && err.Error() != "redis: nil" {
-				util.ErrorWithFields("Failed to run the script", map[string]interface{}{
-					"error": err,
-				})
-				// TODO: decide whether to panic or just log the error
-				// panic(err)
-			}
 		}
 	}
 }
