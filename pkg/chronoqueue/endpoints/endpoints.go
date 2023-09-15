@@ -35,33 +35,21 @@ func NewEndpointSet(svc chronoqueue.Service) Set {
 func MakeCreateQueueEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.CreateQueueRequest)
-		createQResp, err := svc.CreateQueue(ctx, req)
-		if err != nil {
-			return &pb.CreateQueueResponse{}, err
-		}
-		return createQResp, nil
+		return svc.CreateQueue(ctx, req)
 	}
 }
 
 func MakeDeleteQueueEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.DeleteQueueRequest)
-		delResp, err := svc.DeleteQueue(ctx, req)
-		if err != nil {
-			return &pb.DeleteQueueResponse{}, err
-		}
-		return delResp, err
+		return svc.DeleteQueue(ctx, req)
 	}
 }
 
 func MakePostMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.PostMessageRequest)
-		postMResp, err := svc.PostMessage(ctx, req)
-		if err != nil {
-			return &pb.PostMessageResponse{}, err
-		}
-		return postMResp, nil
+		return svc.PostMessage(ctx, req)
 	}
 }
 
@@ -75,72 +63,44 @@ func MakeGetNextMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 func MakeAcknowledgeMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.AcknowledgeMessageRequest)
-		ackResp, err := svc.AcknowledgeMessage(ctx, req)
-		if err != nil {
-			return &pb.AcknowledgeMessageResponse{}, err
-		}
-		return ackResp, nil
+		return svc.AcknowledgeMessage(ctx, req)
 	}
 }
 
 func MakeRenewMessageLeaseEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.RenewMessageLeaseRequest)
-		reply, err := svc.RenewMessageLease(ctx, req)
-		if err != nil {
-			return &pb.RenewMessageLeaseResponse{}, err
-		}
-
-		return reply, nil
+		return svc.RenewMessageLease(ctx, req)
 	}
 }
 
 func MakePeekQueueMessagesEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.PeekQueueMessagesRequest)
-		messages, err := svc.PeekQueueMessages(ctx, req)
-		if err != nil {
-			return &pb.PeekQueueMessagesResponse{}, err
-		}
-
-		return messages, nil
+		return svc.PeekQueueMessages(ctx, req)
 	}
 }
 
 func MakeGetQueueStateEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.GetQueueStateRequest)
-		state, err := svc.GetQueueState(ctx, req)
-		if err != nil {
-			return &pb.GetQueueStateResponse{}, err
-		}
-
-		return state, nil
+		return svc.GetQueueState(ctx, req)
 	}
 }
 
 func (s *Set) CreateQueue(ctx context.Context, queueInfo *pb.Queue) error {
 	_, err := s.CreateQueueEndpoint(ctx, queueInfo)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (s *Set) DeleteQueue(ctx context.Context, queueName string) error {
 	_, err := s.DeleteQueueEndpoint(ctx, queueName)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (s *Set) PostMessage(ctx context.Context, queueName string, message *pb.Message) error {
 	_, err := s.PostMessageEndpoint(ctx, &pb.PostMessageRequest{QueueName: queueName, Message: message})
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (s *Set) GetNextMessage(ctx context.Context, queueName string, leaseDuration int64) (*pb.GetNextMessageResponse, error) {
