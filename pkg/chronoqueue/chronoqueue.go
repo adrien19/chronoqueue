@@ -18,15 +18,45 @@ func NewChronoqueueService(storage repository.Storage) Service {
 }
 
 func (cs *chronoqueueService) CreateQueue(ctx context.Context, request *chronoqueue.CreateQueueRequest) (*chronoqueue.CreateQueueResponse, error) {
-	return cs.storage.CreateQueue(ctx, request)
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		specificReq, ok := req.(*chronoqueue.CreateQueueRequest)
+		if !ok {
+			return nil, errors.New("invalid request type for creating a queue")
+		}
+		return cs.storage.CreateQueue(ctx, specificReq)
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.CreateQueueResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.CreateQueueResponse), err
 }
 
 func (cs *chronoqueueService) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error) {
-	return cs.storage.DeleteQueue(ctx, request)
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		specificReq, ok := req.(*chronoqueue.DeleteQueueRequest)
+		if !ok {
+			return nil, errors.New("invalid request type for removing a queue")
+		}
+		return cs.storage.DeleteQueue(ctx, specificReq)
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.DeleteQueueResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.DeleteQueueResponse), err
 }
 
 func (cs *chronoqueueService) PostMessage(ctx context.Context, request *chronoqueue.PostMessageRequest) (*chronoqueue.PostMessageResponse, error) {
-	return cs.storage.CreateQueueMessage(ctx, request)
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		specificReq, ok := req.(*chronoqueue.PostMessageRequest)
+		if !ok {
+			return nil, errors.New("invalid request type for peeking queue's messages")
+		}
+		return cs.storage.CreateQueueMessage(ctx, specificReq)
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.PostMessageResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.PostMessageResponse), err
 }
 
 func (cs *chronoqueueService) GetNextMessage(ctx context.Context, request *chronoqueue.GetNextMessageRequest) (*chronoqueue.GetNextMessageResponse, error) {
@@ -35,7 +65,7 @@ func (cs *chronoqueueService) GetNextMessage(ctx context.Context, request *chron
 		// Type assert the request to its specific type
 		specificReq, ok := req.(*chronoqueue.GetNextMessageRequest)
 		if !ok {
-			return nil, errors.New("invalid request type")
+			return nil, errors.New("invalid request type for getting next message")
 		}
 
 		// Call the specific function
@@ -50,14 +80,54 @@ func (cs *chronoqueueService) GetNextMessage(ctx context.Context, request *chron
 }
 
 func (cs *chronoqueueService) AcknowledgeMessage(ctx context.Context, request *chronoqueue.AcknowledgeMessageRequest) (*chronoqueue.AcknowledgeMessageResponse, error) {
-	return cs.storage.AcknowledgeMessage(ctx, request)
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		specificReq, ok := req.(*chronoqueue.AcknowledgeMessageRequest)
+		if !ok {
+			return nil, errors.New("invalid request type for acknowledging message request")
+		}
+		return cs.storage.AcknowledgeMessage(ctx, specificReq)
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.AcknowledgeMessageResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.AcknowledgeMessageResponse), err
 }
 func (cs *chronoqueueService) RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error) {
-	return cs.storage.RenewMessageLease(ctx, request)
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		specificReq, ok := req.(*chronoqueue.RenewMessageLeaseRequest)
+		if !ok {
+			return nil, errors.New("invalid request type for renewing message lease")
+		}
+		return cs.storage.RenewMessageLease(ctx, specificReq)
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.RenewMessageLeaseResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.RenewMessageLeaseResponse), err
 }
-func (cs *chronoqueueService) PeekQueueMessages(ctx context.Context, requestData *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error) {
-	return cs.storage.PeekQueueMessages(ctx, requestData)
+func (cs *chronoqueueService) PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error) {
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		specificReq, ok := req.(*chronoqueue.PeekQueueMessagesRequest)
+		if !ok {
+			return nil, errors.New("invalid request type for peeking queue's messages")
+		}
+		return cs.storage.PeekQueueMessages(ctx, specificReq)
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.PeekQueueMessagesResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.PeekQueueMessagesResponse), err
 }
 func (cs *chronoqueueService) GetQueueState(ctx context.Context, request *chronoqueue.GetQueueStateRequest) (*chronoqueue.GetQueueStateResponse, error) {
-	return cs.storage.GetQueueState(ctx, request)
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		specificReq, ok := req.(*chronoqueue.GetQueueStateRequest)
+		if !ok {
+			return nil, errors.New("invalid request type for peeking queue's messages")
+		}
+		return cs.storage.GetQueueState(ctx, specificReq)
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.GetQueueStateResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.GetQueueStateResponse), err
 }
