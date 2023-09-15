@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"net/http"
@@ -21,6 +23,7 @@ import (
 	"github.com/oklog/oklog/pkg/group"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -44,7 +47,9 @@ func main() {
 	httpHandler := transport.NewHTTPHandler(eps)
 	grpcServer := transport.NewGRPCServer(eps)
 
-	startServers(httpAddr, grpcAddr, httpHandler, grpcServer, logger)
+	tlsConfig := getTLSConfigIfEnabled(logger) // This returns a tls.Config if mTLS is enabled, otherwise nil
+
+	startServers(httpAddr, grpcAddr, httpHandler, grpcServer, tlsConfig, logger)
 }
 
 func initializeLogger() log.Logger {
@@ -77,19 +82,51 @@ func initializeRedis(ctx context.Context, connectionString string, logger log.Lo
 	return redisClient
 }
 
-func startServers(httpAddr, grpcAddr string, httpHandler http.Handler, grpcServer pb_chronoqueue.ChronoQueueServer, logger log.Logger) {
+func startServers(httpAddr, grpcAddr string, httpHandler http.Handler, grpcServer pb_chronoqueue.ChronoQueueServer, tlsConfig *tls.Config, logger log.Logger) {
 	var g group.Group
-	initHTTPServer(&g, httpAddr, httpHandler, logger)
-	initGRPCServer(&g, grpcAddr, grpcServer, logger)
+	initHTTPServer(&g, httpAddr, httpHandler, tlsConfig, logger)
+	initGRPCServer(&g, grpcAddr, grpcServer, tlsConfig, logger)
 	waitForTermination(&g, logger)
 }
 
-func initHTTPServer(g *group.Group, addr string, handler http.Handler, logger log.Logger) {
+func getTLSConfigIfEnabled(logger log.Logger) *tls.Config {
+	tlsEnabled := envString("CHRONOQUEUE_TLS_ENABLED", "false") == "true"
+	if !tlsEnabled {
+		return nil
+	}
+
+	cert, err := tls.LoadX509KeyPair("server.crt", "server.key")
+	if err != nil {
+		logger.Log("msg", "Failed to load server.crt/server.key", "err", err)
+		os.Exit(1)
+	}
+
+	caCert, err := os.ReadFile("ca.crt")
+	if err != nil {
+		logger.Log("msg", "Failed to read ca.crt", "err", err)
+		os.Exit(1)
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    caCertPool,
+	}
+}
+
+func initHTTPServer(g *group.Group, addr string, handler http.Handler, tlsConfig *tls.Config, logger log.Logger) {
 	httpListener, err := net.Listen("tcp", addr)
 	if err != nil {
 		logger.Log("transport", "HTTP", "during", "Listen", "err", err)
 		os.Exit(1)
 	}
+
+	if tlsConfig != nil {
+		httpListener = tls.NewListener(httpListener, tlsConfig)
+	}
+
 	g.Add(func() error {
 		logger.Log("transport", "HTTP", "addr", addr)
 		return http.Serve(httpListener, handler)
@@ -98,16 +135,24 @@ func initHTTPServer(g *group.Group, addr string, handler http.Handler, logger lo
 	})
 }
 
-func initGRPCServer(g *group.Group, addr string, server pb_chronoqueue.ChronoQueueServer, logger log.Logger) {
+func initGRPCServer(g *group.Group, addr string, server pb_chronoqueue.ChronoQueueServer, tlsConfig *tls.Config, logger log.Logger) {
 	grpcListener, err := net.Listen("tcp", addr)
 	if err != nil {
 		logger.Log("transport", "gRPC", "during", "Listen", "err", err)
 		os.Exit(1)
 	}
+
+	var opts []grpc.ServerOption
+	opts = append(opts, grpc.ChainUnaryInterceptor(kitgrpc.Interceptor))
+	if tlsConfig != nil {
+		creds := credentials.NewTLS(tlsConfig)
+		opts = append(opts, grpc.Creds(creds))
+	}
+	baseServer := grpc.NewServer(opts...)
+
+	pb_chronoqueue.RegisterChronoQueueServer(baseServer, server)
 	g.Add(func() error {
 		logger.Log("transport", "gRPC", "addr", addr)
-		baseServer := grpc.NewServer(grpc.ChainUnaryInterceptor(kitgrpc.Interceptor))
-		pb_chronoqueue.RegisterChronoQueueServer(baseServer, server)
 		return baseServer.Serve(grpcListener)
 	}, func(error) {
 		grpcListener.Close()
