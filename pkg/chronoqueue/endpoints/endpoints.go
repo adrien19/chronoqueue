@@ -68,14 +68,7 @@ func MakePostMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 func MakeGetNextMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.GetNextMessageRequest)
-		messageResp, err := svc.GetNextMessage(ctx, req)
-		if err != nil {
-			return &pb.GetNextMessageResponse{
-				Message: nil,
-			}, err
-		}
-
-		return messageResp, nil
+		return svc.GetNextMessage(ctx, req)
 	}
 }
 
