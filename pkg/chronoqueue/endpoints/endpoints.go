@@ -88,19 +88,28 @@ func MakeGetQueueStateEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	}
 }
 
-func (s *Set) CreateQueue(ctx context.Context, queueInfo *pb.Queue) error {
-	_, err := s.CreateQueueEndpoint(ctx, queueInfo)
-	return err
+func (s *Set) CreateQueue(ctx context.Context, queueInfo *pb.Queue) (*pb.CreateQueueResponse, error) {
+	resp, err := s.CreateQueueEndpoint(ctx, queueInfo)
+	if err != nil {
+		return &pb.CreateQueueResponse{}, err
+	}
+	return resp.(*pb.CreateQueueResponse), err
 }
 
-func (s *Set) DeleteQueue(ctx context.Context, queueName string) error {
-	_, err := s.DeleteQueueEndpoint(ctx, queueName)
-	return err
+func (s *Set) DeleteQueue(ctx context.Context, queueName string) (*pb.DeleteQueueResponse, error) {
+	resp, err := s.DeleteQueueEndpoint(ctx, queueName)
+	if err != nil {
+		return &pb.DeleteQueueResponse{}, err
+	}
+	return resp.(*pb.DeleteQueueResponse), err
 }
 
-func (s *Set) PostMessage(ctx context.Context, queueName string, message *pb.Message) error {
-	_, err := s.PostMessageEndpoint(ctx, &pb.PostMessageRequest{QueueName: queueName, Message: message})
-	return err
+func (s *Set) PostMessage(ctx context.Context, queueName string, message *pb.Message) (*pb.PostMessageResponse, error) {
+	resp, err := s.PostMessageEndpoint(ctx, &pb.PostMessageRequest{QueueName: queueName, Message: message})
+	if err != nil {
+		return &pb.PostMessageResponse{}, err
+	}
+	return resp.(*pb.PostMessageResponse), err
 }
 
 func (s *Set) GetNextMessage(ctx context.Context, queueName string, leaseDuration int64) (*pb.GetNextMessageResponse, error) {
