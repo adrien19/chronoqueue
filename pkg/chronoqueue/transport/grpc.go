@@ -137,11 +137,8 @@ func decodeGRPCCreateQueueRequest(_ context.Context, grpcReq interface{}) (inter
 }
 
 func decodeGRPCCreateQueueResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
-	if grpcReply == nil {
-		return &chronoqueue.CreateQueueResponse{}, nil
-	}
-	_ = grpcReply.(*chronoqueue.CreateQueueResponse)
-	return &chronoqueue.CreateQueueResponse{}, nil
+	reply := grpcReply.(*chronoqueue.CreateQueueResponse)
+	return reply, nil
 }
 
 func decodeGRPCDeleteQueueRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
@@ -150,9 +147,6 @@ func decodeGRPCDeleteQueueRequest(_ context.Context, grpcReq interface{}) (inter
 }
 
 func decodeGRPCDeleteQueueResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
-	if grpcReply == nil {
-		return &chronoqueue.DeleteQueueResponse{}, nil
-	}
 	reply := grpcReply.(*chronoqueue.DeleteQueueResponse)
 	return reply, nil
 }
@@ -163,11 +157,8 @@ func decodeGRPCPostMessageRequest(_ context.Context, grpcReq interface{}) (inter
 }
 
 func decodeGRPCPostMessageResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
-	if grpcReply == nil {
-		return &chronoqueue.PostMessageResponse{}, nil
-	}
-	_ = grpcReply.(*chronoqueue.PostMessageResponse)
-	return &chronoqueue.PostMessageResponse{}, nil
+	reply := grpcReply.(*chronoqueue.PostMessageResponse)
+	return reply, nil
 }
 
 func decodeGRPCGetNextMessageRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
@@ -186,9 +177,6 @@ func decodeGRPCAcknowledgeMessageRequest(_ context.Context, grpcReq interface{})
 }
 
 func decodeGRPCAcknowledgeMessageResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
-	if grpcReply == nil {
-		return &chronoqueue.AcknowledgeMessageResponse{}, nil
-	}
 	reply := grpcReply.(*chronoqueue.AcknowledgeMessageResponse)
 	return reply, nil
 }
@@ -199,9 +187,6 @@ func decodeGRPCRenewMessageLeaseRequest(_ context.Context, grpcReq interface{}) 
 }
 
 func decodeGRPCRenewMessageLeaseResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
-	if grpcReply == nil {
-		return &chronoqueue.RenewMessageLeaseResponse{}, nil
-	}
 	reply := grpcReply.(*chronoqueue.RenewMessageLeaseResponse)
 	return reply, nil
 }
