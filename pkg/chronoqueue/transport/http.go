@@ -139,13 +139,12 @@ func decodeHTTPGetQueueStateRequest(_ context.Context, r *http.Request) (interfa
 
 func encodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(error); ok && e != nil {
-		encodeError(ctx, e, w)
-		return nil
+		return encodeError(ctx, e, w)
 	}
 	return json.NewEncoder(w).Encode(response)
 }
 
-func encodeError(_ context.Context, err error, w http.ResponseWriter) {
+func encodeError(_ context.Context, err error, w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	switch err {
 	case util.ErrUnknown:
@@ -155,7 +154,7 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	return json.NewEncoder(w).Encode(map[string]interface{}{
 		"error": err.Error(),
 	})
 }
