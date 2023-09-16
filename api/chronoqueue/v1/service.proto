@@ -7,7 +7,7 @@ option go_package = "github.com/adrien19/chronoqueue/api/chronoqueue/v1;chronoqu
 // import "chronoqueueservice/v1/request_response.proto";
 
 import "google/protobuf/timestamp.proto";
-// import "google/protobuf/struct.proto";
+import "google/protobuf/struct.proto";
 
 service ChronoQueue {
     rpc CreateQueue (CreateQueueRequest) returns (CreateQueueResponse);
@@ -40,9 +40,13 @@ message PostMessageRequest{
 }
 message PostMessageResponse{}
 
+// message Payload {
+//     map<string, bytes> metadata = 1;
+//     bytes data = 2;
+// }
 message Payload {
-    map<string, bytes> metadata = 1;
-    bytes data = 2;
+    map<string, google.protobuf.Value> metadata = 1;
+    google.protobuf.Struct data = 2;
 }
 
 message Message {

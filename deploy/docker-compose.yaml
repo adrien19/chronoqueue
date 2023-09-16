@@ -15,7 +15,7 @@ services:
       - SERVER_CERT_PATH=/secrets/server.crt
       - SERVER_KEY_PATH=/secrets/server.key
       - CA_CERT_PATH=/secrets/ca.crt
-      - CHRONOQUEUE_TLS_ENABLED=true
+      - CHRONOQUEUE_TLS_ENABLED=false
     depends_on:
       - cachesvc
       # - authenticationsvc

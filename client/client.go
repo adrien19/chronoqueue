@@ -7,6 +7,7 @@ import (
 	"time"
 
 	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	structpb "github.com/golang/protobuf/ptypes/struct"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -31,8 +32,8 @@ type (
 		State                State   `json:"state,omitempty"`
 	}
 	Payload struct {
-		Metadata map[string][]byte `json:"metadata,omitempty"`
-		Data     []byte            `json:"data,omitempty"`
+		Metadata map[string]*structpb.Value `json:"metadata,omitempty"`
+		Data     *structpb.Struct           `json:"data,omitempty"`
 	}
 	TimeRangeOption struct {
 		Min int64 `json:"min,omitempty"`
