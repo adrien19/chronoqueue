@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -23,7 +24,10 @@ import (
 	"github.com/oklog/oklog/pkg/group"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -95,13 +99,18 @@ func getTLSConfigIfEnabled(logger log.Logger) *tls.Config {
 		return nil
 	}
 
-	cert, err := tls.LoadX509KeyPair("server.crt", "server.key")
+	// Fetch paths from environment variables or use defaults
+	serverCertPath := envString("SERVER_CERT_PATH", "server.crt")
+	serverKeyPath := envString("SERVER_KEY_PATH", "server.key")
+	caCertPath := envString("CA_CERT_PATH", "ca.crt")
+
+	cert, err := tls.LoadX509KeyPair(serverCertPath, serverKeyPath)
 	if err != nil {
 		logger.Log("msg", "Failed to load server.crt/server.key", "err", err)
 		os.Exit(1)
 	}
 
-	caCert, err := os.ReadFile("ca.crt")
+	caCert, err := os.ReadFile(caCertPath)
 	if err != nil {
 		logger.Log("msg", "Failed to read ca.crt", "err", err)
 		os.Exit(1)
@@ -116,6 +125,55 @@ func getTLSConfigIfEnabled(logger log.Logger) *tls.Config {
 	}
 }
 
+func clientCertMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
+			http.Error(w, "No client certificate provided", http.StatusUnauthorized)
+			return
+		}
+
+		seenDNs := make(map[string]bool)
+
+		// Iterate through the chain of client's certificates
+		for _, clientCert := range r.TLS.PeerCertificates {
+			// 1. Check if the certificate is X.509v3
+			if clientCert.Version != 3 {
+				http.Error(w, "Certificate is not X.509v3", http.StatusForbidden)
+				return
+			}
+
+			// 2. For client certificates, check key usage
+			if (clientCert.KeyUsage & x509.KeyUsageDigitalSignature) == 0 {
+				http.Error(w, "Client certificate key usage does not include digital signature", http.StatusForbidden)
+				return
+			}
+
+			// 3. For CA certificates, check key usage
+			if clientCert.IsCA && (clientCert.KeyUsage&x509.KeyUsageCertSign) == 0 {
+				http.Error(w, "CA certificate key usage does not include certificate signing", http.StatusForbidden)
+				return
+			}
+
+			// 4. Check weak signature algorithms
+			if clientCert.SignatureAlgorithm == x509.SHA1WithRSA || clientCert.SignatureAlgorithm == x509.MD5WithRSA {
+				http.Error(w, "Certificate uses a weak signature algorithm", http.StatusForbidden)
+				return
+			}
+
+			// 5. Check Distinguished Name uniqueness
+			dn := clientCert.Subject.String()
+			if _, exists := seenDNs[dn]; exists {
+				http.Error(w, "Multiple certificates in the chain have the same distinguished name", http.StatusForbidden)
+				return
+			}
+			seenDNs[dn] = true
+		}
+
+		// If all checks pass, call the next handler
+		next.ServeHTTP(w, r)
+	})
+}
+
 func initHTTPServer(g *group.Group, addr string, handler http.Handler, tlsConfig *tls.Config, logger log.Logger) {
 	httpListener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -125,6 +183,7 @@ func initHTTPServer(g *group.Group, addr string, handler http.Handler, tlsConfig
 
 	if tlsConfig != nil {
 		httpListener = tls.NewListener(httpListener, tlsConfig)
+		handler = clientCertMiddleware(handler)
 	}
 
 	g.Add(func() error {
@@ -133,6 +192,72 @@ func initHTTPServer(g *group.Group, addr string, handler http.Handler, tlsConfig
 	}, func(error) {
 		httpListener.Close()
 	})
+}
+
+func customVerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+	if len(verifiedChains) == 0 || len(verifiedChains[0]) == 0 {
+		return errors.New("could not obtain client certificate")
+	}
+	// Iterate through each presented chain
+	for _, chain := range verifiedChains {
+		for _, cert := range chain {
+			// 1. Check if the certificate is X.509v3
+			if cert.Version != 3 {
+				return errors.New("certificate is not X.509v3")
+			}
+
+			// 3. For CA certificates
+			if cert.IsCA {
+				// Check the key usage includes the required constraints
+				if (cert.KeyUsage & x509.KeyUsageCertSign) == 0 {
+					return errors.New("CA certificate key usage does not include certificate signing")
+				}
+			} else {
+				// 2. For client certificates
+				// Check the key usage includes Digital Signature
+				if (cert.KeyUsage & x509.KeyUsageDigitalSignature) == 0 {
+					return errors.New("client certificate key usage does not include digital signature")
+				}
+			}
+
+			// 4. & 5. Check signature algorithms
+			if cert.SignatureAlgorithm == x509.SHA1WithRSA || cert.SignatureAlgorithm == x509.MD5WithRSA {
+				return errors.New("certificate uses weak signature algorithm")
+			}
+
+			// 5. Check each certificate in the chain has a unique Distinguished Name (for end-entity certs)
+			for _, otherCert := range chain {
+				if otherCert != cert && otherCert.Subject.String() == cert.Subject.String() {
+					return errors.New("multiple certificates in the chain have the same distinguished name")
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func verifyPeerCertificateInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	peer, ok := peer.FromContext(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "no peer found")
+	}
+
+	tlsAuth, ok := peer.AuthInfo.(credentials.TLSInfo)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "unexpected peer transport credentials")
+	}
+
+	if len(tlsAuth.State.VerifiedChains) == 0 || len(tlsAuth.State.VerifiedChains[0]) == 0 {
+		return nil, status.Error(codes.Unauthenticated, "could not obtain client certificate")
+	}
+
+	err := customVerifyPeerCertificate(nil, tlsAuth.State.VerifiedChains)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, err.Error())
+	}
+
+	return handler(ctx, req)
 }
 
 func initGRPCServer(g *group.Group, addr string, server pb_chronoqueue.ChronoQueueServer, tlsConfig *tls.Config, logger log.Logger) {
@@ -144,6 +269,7 @@ func initGRPCServer(g *group.Group, addr string, server pb_chronoqueue.ChronoQue
 
 	var opts []grpc.ServerOption
 	opts = append(opts, grpc.ChainUnaryInterceptor(kitgrpc.Interceptor))
+	opts = append(opts, grpc.ChainUnaryInterceptor(verifyPeerCertificateInterceptor))
 	if tlsConfig != nil {
 		creds := credentials.NewTLS(tlsConfig)
 		opts = append(opts, grpc.Creds(creds))

@@ -12,11 +12,17 @@ services:
       - HOST=chronoqueue_container
       - AUTH_SERVICE_HOST=authentication
       - REDIS_HOST=cachesvc_container
+      - SERVER_CERT_PATH=/secrets/server.crt
+      - SERVER_KEY_PATH=/secrets/server.key
+      - CA_CERT_PATH=/secrets/ca.crt
+      - CHRONOQUEUE_TLS_ENABLED=true
     depends_on:
       - cachesvc
       # - authenticationsvc
     networks:
       - chronoqueue_network
+    volumes: 
+      - ../certs:/secrets
     ports:
       - "9000:9000"
       - "9001:9001"

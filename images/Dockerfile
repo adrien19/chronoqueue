@@ -27,6 +27,7 @@ WORKDIR /
 
 # Copy just the binary from the base image
 RUN mkdir ./config
+RUN mkdir /secrets
 COPY --from=base /go/src/chronoqueuesvc/chronoqueue .
 
 # just an indication that this port will be exposed by this container
