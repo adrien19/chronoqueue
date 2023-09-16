@@ -6,7 +6,9 @@ import (
 	"strconv"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/codes"
 )
 
 // Fetches message IDs from the sorted set in Redis based on the priority range.
@@ -29,14 +31,17 @@ func (as *storage) PeekQueueMessages(ctx context.Context, request *chronoqueue.P
 	queueName := request.GetQueueName()
 	messageIDs, err := as.fetchMessageIDs(ctx, queueName, request.PriorityRange, request.GetLimit())
 	if err != nil {
-		return nil, fmt.Errorf("error fetching message IDs: %v", err)
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error while fetching message IDs")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	messages := make([]*chronoqueue.Message, len(messageIDs))
 	for i, messageID := range messageIDs {
 		metadata, err := as.fetchMessageMetadata(ctx, queueName, messageID)
 		if err != nil {
-			return nil, fmt.Errorf("error fetching metadata for message %s: %v", messageID, err)
+			msg := fmt.Sprintf("error fetching metadata for message %s", messageID)
+			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, msg)
+			return nil, chronoErr.GRPCStatus()
 		}
 
 		messages[i] = &chronoqueue.Message{

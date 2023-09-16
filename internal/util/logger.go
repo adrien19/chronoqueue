@@ -3,10 +3,13 @@ package util
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -25,8 +28,15 @@ const (
 )
 
 // Define a custom error type
+// type ChronoError struct {
+// 	Level   ErrorLevel
+// 	Message string
+// 	Err     error
+// }
+
 type ChronoError struct {
 	Level   ErrorLevel
+	Code    codes.Code // gRPC status code
 	Message string
 	Err     error
 }
@@ -35,9 +45,27 @@ func (ce *ChronoError) Error() string {
 	return ce.Err.Error()
 }
 
-func NewChronoError(level ErrorLevel, err error, msg string) *ChronoError {
+// Convert the ChronoError to a gRPC status error
+func (e *ChronoError) GRPCStatus() error {
+	errMsg := e.Message
+	if e.Err != nil {
+		errMsg = fmt.Sprintf("%s: %s", e.Message, e.Err.Error())
+	}
+	return status.Errorf(e.Code, errMsg)
+}
+
+// func NewChronoError(level ErrorLevel, err error, msg string) *ChronoError {
+// 	return &ChronoError{
+// 		Level:   level,
+// 		Err:     err,
+// 		Message: msg,
+// 	}
+// }
+
+func NewChronoError(level ErrorLevel, code codes.Code, err error, msg string) *ChronoError {
 	return &ChronoError{
 		Level:   level,
+		Code:    code,
 		Err:     err,
 		Message: msg,
 	}

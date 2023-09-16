@@ -6,7 +6,9 @@ import (
 	"fmt"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -31,7 +33,9 @@ func (as *storage) setQueueMetadata(ctx context.Context, queueInfo *chronoqueue.
 func (as *storage) CreateQueue(ctx context.Context, request *chronoqueue.CreateQueueRequest) (*chronoqueue.CreateQueueResponse, error) {
 	queueInfo := request.GetQueue()
 	if queueInfo == nil || queueInfo.GetName() == "" {
-		return nil, errors.New("error: queue information missing")
+		err := errors.New("invalid input: queue name required")
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Invalid input provided")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	exists, err := as.checkQueueExistence(ctx, queueInfo.GetName())
@@ -39,27 +43,32 @@ func (as *storage) CreateQueue(ctx context.Context, request *chronoqueue.CreateQ
 		return nil, err
 	}
 	if exists {
-		return nil, errors.New("queue already exists")
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.AlreadyExists, err, "Queue already exists")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	txPipeline := as.redisClient.TxPipeline()
 	_, err = txPipeline.ZAdd(ctx, queueInfo.GetName(), redis.Z{}).Result()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create queue. error: %v", err)
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating queue")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	if queueInfo.Metadata.GetType() == chronoqueue.Queue_Options_EXCLUSIVE && queueInfo.Metadata.GetExclusivityKey() == "" {
-		return nil, errors.New("exclusivity key missing for an EXCLUSIVE queue type")
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Exclusivity key missing for an EXCLUSIVE queue type")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	err = as.setQueueMetadata(ctx, queueInfo)
 	if err != nil {
-		return nil, fmt.Errorf("failed to set queue metadata. error: %v", err)
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating queue metadata")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	_, err = txPipeline.Exec(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create queue in transaction. error: %v", err)
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating executing pipeline transaction")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	return &chronoqueue.CreateQueueResponse{}, nil

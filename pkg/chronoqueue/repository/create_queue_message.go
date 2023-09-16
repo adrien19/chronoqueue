@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -25,15 +27,19 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 
 	// Basic input validation
 	if queueName == "" || message == nil || message.GetMessageId() == "" {
-		return nil, errors.New("invalid input: missing required fields")
+		err := errors.New("invalid input: queue name and message ID required")
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Invalid input provided")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	exists, err := as.checkQueueExistence(ctx, queueName)
 	if err != nil {
-		return nil, fmt.Errorf("error checking queue existence: %v", err)
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while checking queue existence")
+		return nil, chronoErr.GRPCStatus()
 	}
 	if !exists {
-		return nil, errors.New("message's queue does not exist")
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Message's queue does not exist")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	// Set the message state if InvisibilityDuration is zero
@@ -53,24 +59,28 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 		Member: message.GetMessageId(),
 	}).Result()
 	if err != nil {
-		return nil, fmt.Errorf("error adding message to queue: %v", err)
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while adding message to queue")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	// Serialize the message metadata and store
 	messageMetadataByte, err := as.serializeMessageMetadata(message.Metadata)
 	if err != nil {
-		return nil, fmt.Errorf("error serializing message metadata: %v", err)
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while serializing message metadata")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	_, err = txPipeline.HSet(ctx, fmt.Sprintf("%s:%s:meta", queueName, message.MessageId), "metadata", string(messageMetadataByte)).Result()
 	if err != nil {
-		return nil, fmt.Errorf("error storing message metadata: %v", err)
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while saving message metadata")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	// Commit the transaction
 	_, err = txPipeline.Exec(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("error executing redis pipeline: %v", err)
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while executing redis pipeline")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	return &chronoqueue.PostMessageResponse{}, nil

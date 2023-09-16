@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -16,7 +18,8 @@ func (as *storage) GetQueueState(ctx context.Context, request *chronoqueue.GetQu
 
 	// Try to acquire the lock
 	if err := mutex.Lock(); err != nil {
-		return nil, fmt.Errorf("Failed to acquire lock: %v", err)
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
+		return nil, chronoErr.GRPCStatus()
 	}
 	defer mutex.Unlock()
 
@@ -45,7 +48,9 @@ func (as *storage) GetQueueState(ctx context.Context, request *chronoqueue.GetQu
 
 		metadata, err := as.fetchMessageMetadata(ctx, request.GetQueueName(), member.Member.(string))
 		if err != nil {
-			return nil, fmt.Errorf("error fetching metadata for message %s: %v", member.Member.(string), err)
+			msg := fmt.Sprintf("Unexpected error occured while fetching metadata for message %s", member.Member.(string))
+			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, msg)
+			return nil, chronoErr.GRPCStatus()
 		}
 
 		stateCounts[metadata.GetState()] += 1

@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -30,12 +32,15 @@ func (as *storage) AcknowledgeMessage(ctx context.Context, request *chronoqueue.
 
 	// Basic validation
 	if queueName == "" || messageID == "" {
-		return nil, errors.New("invalid input: missing required fields")
+		err := errors.New("invalid input: queue name and message ID required")
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Invalid input provided")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	metadata, err := as.fetchMessageMetadata(ctx, queueName, messageID)
 	if err != nil {
-		return nil, fmt.Errorf("error fetching message metadata: %v", err)
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while fetching message metadata")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	// Update the message state
@@ -44,7 +49,8 @@ func (as *storage) AcknowledgeMessage(ctx context.Context, request *chronoqueue.
 	// Save the updated metadata
 	err = as.saveMessageMetadata(ctx, queueName, messageID, metadata)
 	if err != nil {
-		return nil, fmt.Errorf("error saving updated message metadata: %v", err)
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while saving updated message metadata")
+		return nil, chronoErr.GRPCStatus()
 	}
 
 	return &chronoqueue.AcknowledgeMessageResponse{}, nil

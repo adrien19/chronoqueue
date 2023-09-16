@@ -6,6 +6,7 @@ import (
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
+	"google.golang.org/grpc/codes"
 )
 
 func (as *storage) validateExclusivity(queueMeta *chronoqueue.Queue_Options, exclusivityKey string) error {
@@ -45,7 +46,7 @@ func (as *storage) getNextPendingMessage(ctx context.Context, queueName string, 
 func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.GetNextMessageRequest) (*chronoqueue.GetNextMessageResponse, error) {
 	queueMeta, err := as.getQueueMetadata(ctx, request.GetQueueName())
 	if err != nil {
-		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, err, "Failed to get queue's metadata.")
+		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Failed to get queue's metadata.").GRPCStatus()
 	}
 
 	// if err := as.validateExclusivity(queueMeta, request.GetExclusivityKey()); err != nil {
@@ -54,7 +55,7 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.Get
 
 	members, err := as.fetchQueueMembersBeforeNow(ctx, request.GetQueueName())
 	if err != nil {
-		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, err, "Failed to get queue members.")
+		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Failed to get queue members.").GRPCStatus()
 	}
 	if len(members) == 0 {
 		util.Info("No messages found with a deadline before now")
@@ -63,7 +64,7 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.Get
 
 	message, err := as.getNextPendingMessage(ctx, request.GetQueueName(), members)
 	if err != nil {
-		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, err, "Failed to get next pending message.")
+		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to get next pending message.").GRPCStatus()
 	}
 	if message == nil {
 		util.Info("No pending messages found with a deadline before now")
@@ -74,7 +75,7 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.Get
 	as.updateMessageStateAndLease(message, request, queueMeta)
 
 	if err := as.saveMessageWithMetadata(ctx, request.GetQueueName(), message); err != nil {
-		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, err, "Failed to save message's metadata.")
+		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to save message's metadata.").GRPCStatus()
 	}
 
 	util.InfoWithFields("Successfully leased the message:", map[string]interface{}{
