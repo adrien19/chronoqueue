@@ -269,8 +269,8 @@ func initGRPCServer(g *group.Group, addr string, server pb_chronoqueue.ChronoQue
 
 	var opts []grpc.ServerOption
 	opts = append(opts, grpc.ChainUnaryInterceptor(kitgrpc.Interceptor))
-	opts = append(opts, grpc.ChainUnaryInterceptor(verifyPeerCertificateInterceptor))
 	if tlsConfig != nil {
+		opts = append(opts, grpc.ChainUnaryInterceptor(verifyPeerCertificateInterceptor))
 		creds := credentials.NewTLS(tlsConfig)
 		opts = append(opts, grpc.Creds(creds))
 	}
