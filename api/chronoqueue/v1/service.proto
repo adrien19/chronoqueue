@@ -80,6 +80,7 @@ message Message {
 message GetNextMessageRequest{
     string queue_name = 1;
     int64 lease_duration = 2;
+    string exclusivity_key = 3;
 }
 message GetNextMessageResponse{
     Message message = 1;

@@ -49,9 +49,9 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.Get
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Failed to get queue's metadata.").GRPCStatus()
 	}
 
-	// if err := as.validateExclusivity(queueMeta, request.GetExclusivityKey()); err != nil {
-	// 	return handleError(err, "Failed to validate exclusivity. Err: ")
-	// }
+	if err := as.validateExclusivity(queueMeta, request.GetExclusivityKey()); err != nil {
+		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Error occured while validating the exclusivity key.").GRPCStatus()
+	}
 
 	members, err := as.fetchQueueMembersBeforeNow(ctx, request.GetQueueName())
 	if err != nil {
