@@ -78,8 +78,14 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.Get
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to save message's metadata.").GRPCStatus()
 	}
 
+	err = as.decryptMessageMetadataPayload(message.Metadata)
+	if err != nil {
+		return nil, err
+	}
+
 	util.InfoWithFields("Successfully leased the message:", map[string]interface{}{
 		"lease expiry": message.Metadata.GetLeaseExpiry(),
+		"message Id":   message.GetMessageId(),
 	})
 	return &chronoqueue.GetNextMessageResponse{
 		Message: message,

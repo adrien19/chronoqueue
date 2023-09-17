@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -23,6 +24,32 @@ func ErrorHandler(defaultResp interface{}, msg string) ChronoHandlerFunc {
 	}
 }
 
+func (as *storage) decryptMessageMetadataPayload(metadata *chronoqueue.Message_Metadata) error {
+	// Fetch the base64-encoded values from metadata
+	base64EncryptedPayload := metadata.Payload.Metadata["encryptedPayload"].GetStringValue()
+	base64Nonce := metadata.Payload.Metadata["nonce"].GetStringValue()
+
+	if base64EncryptedPayload == "" || base64Nonce == "" {
+		util.WarnWithFields("Metadata with no fields: ", map[string]interface{}{
+			"base64EncryptedPayload": base64EncryptedPayload,
+			"base64Nonce":            base64Nonce,
+			"meta":                   metadata.Payload,
+		})
+		return errors.New("encryptedPayload or nonce not found in metadata")
+	}
+
+	decryptedPayloadBytes, err := util.DecryptPayload(base64EncryptedPayload, base64Nonce)
+	if err != nil {
+		return err
+	}
+
+	err = protojson.Unmarshal([]byte(decryptedPayloadBytes), metadata.Payload)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // Fetches and deserializes the message metadata from Redis.
 func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, messageID string) (*chronoqueue.Message_Metadata, error) {
 	key := fmt.Sprintf("%s:%s:meta", queueName, messageID)
@@ -33,6 +60,11 @@ func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, m
 
 	var meta chronoqueue.Message_Metadata
 	err = protojson.Unmarshal([]byte(result), &meta)
+	if err != nil {
+		return nil, err
+	}
+
+	err = as.decryptMessageMetadataPayload(&meta)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +106,12 @@ func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string
 	m := protojson.MarshalOptions{
 		EmitUnpopulated: true,
 	}
+
+	err := as.encryptMetadataPayload(message.Metadata)
+	if err != nil {
+		return err
+	}
+
 	messageMetadataByte, err := m.Marshal(message.Metadata)
 	if err != nil {
 		return err

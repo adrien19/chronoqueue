@@ -25,6 +25,12 @@ const (
 
 // Updates and saves the message metadata in Redis.
 func (as *storage) saveMessageMetadata(ctx context.Context, queueName string, messageID string, metadata *chronoqueue.Message_Metadata) error {
+
+	err := as.encryptMetadataPayload(metadata)
+	if err != nil {
+		return err
+	}
+
 	m := protojson.MarshalOptions{
 		EmitUnpopulated: true,
 	}

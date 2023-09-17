@@ -11,6 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // Serialize the message metadata into JSON
@@ -19,6 +20,43 @@ func (as *storage) serializeMessageMetadata(metadata *chronoqueue.Message_Metada
 		EmitUnpopulated: true,
 	}
 	return m.Marshal(metadata)
+}
+
+// Serialize the metadata payload into JSON
+func (as *storage) serializeMetadataPayload(payload *chronoqueue.Payload) ([]byte, error) {
+	m := protojson.MarshalOptions{
+		EmitUnpopulated: true,
+	}
+	return m.Marshal(payload)
+}
+
+// Serialize the metadata payload into JSON
+func (as *storage) encryptMetadataPayload(metadata *chronoqueue.Message_Metadata) error {
+	// Get the payload data from the message
+	payloadData, err := as.serializeMetadataPayload(metadata.Payload)
+	if err != nil {
+		return err
+	}
+
+	// Encrypt the payload data
+	encryptedPayload, nonce, err := util.EncryptPayload(payloadData)
+	if err != nil {
+		return err
+	}
+
+	if encryptedPayload != "" && nonce != "" {
+		metadata.Payload = &chronoqueue.Payload{}
+		metadata.Payload.Metadata = make(map[string]*structpb.Value)
+	}
+
+	// Update to the metadata field of Payload
+	metadata.Payload.Metadata["encryptedPayload"] = structpb.NewStringValue(encryptedPayload)
+	metadata.Payload.Metadata["nonce"] = structpb.NewStringValue(nonce)
+
+	if metadata.Payload.Metadata["encryptedPayload"].GetStringValue() == "" || metadata.Payload.Metadata["nonce"].GetStringValue() == "" {
+		return errors.New("failed to updated encryptedPayload or nonce in metadata")
+	}
+	return nil
 }
 
 func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.PostMessageRequest) (*chronoqueue.PostMessageResponse, error) {
@@ -39,6 +77,12 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 	}
 	if !exists {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Message's queue does not exist")
+		return nil, chronoErr.GRPCStatus()
+	}
+
+	err = as.encryptMetadataPayload(message.Metadata)
+	if err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while encrypting message payload")
 		return nil, chronoErr.GRPCStatus()
 	}
 
