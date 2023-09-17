@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
 	grpctransport "github.com/go-kit/kit/transport/grpc"
 )
@@ -83,7 +84,12 @@ func (g *grpcServer) DeleteQueue(ctx context.Context, r *chronoqueue.DeleteQueue
 }
 
 func (g *grpcServer) PostMessage(ctx context.Context, r *chronoqueue.PostMessageRequest) (*chronoqueue.PostMessageResponse, error) {
-	_, _, err := g.postMessage.ServeGRPC(ctx, r)
+	// Validate the size of a message based on simple estimations.
+	err := util.ValidateMessageSize(r.Message)
+	if err != nil {
+		return &chronoqueue.PostMessageResponse{}, err
+	}
+	_, _, err = g.postMessage.ServeGRPC(ctx, r)
 	if err != nil {
 		return &chronoqueue.PostMessageResponse{}, err
 	}

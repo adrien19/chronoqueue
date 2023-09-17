@@ -86,6 +86,11 @@ func decodeHTTPPostMessageRequest(_ context.Context, r *http.Request) (interface
 	if err != nil {
 		return nil, err
 	}
+	// Validate the size of a message based on simple estimations.
+	err = util.ValidateMessageSize(req.Message)
+	if err != nil {
+		return nil, err
+	}
 	return &req, nil
 }
 
