@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
@@ -45,7 +46,9 @@ func main() {
 
 	redisClient := initializeRedis(context.Background(), redisConnectionString, logger)
 
-	database := repository.NewQueueStorage(redisClient)
+	encryptionKeyManager := initializeEncryptionKeyManager(logger)
+
+	database := repository.NewQueueStorage(redisClient, encryptionKeyManager)
 	service := chronoqueue.NewChronoqueueService(database)
 	eps := endpoints.NewEndpointSet(service)
 	httpHandler := transport.NewHTTPHandler(eps)
@@ -84,6 +87,15 @@ func initializeRedis(ctx context.Context, connectionString string, logger log.Lo
 		os.Exit(1)
 	}
 	return redisClient
+}
+
+func initializeEncryptionKeyManager(logger log.Logger) *keymanager.EncryptionKeyManager {
+	KeyManager, err := keymanager.NewEncryptionKeyManager()
+	if err != nil {
+		logger.Log("msg", "Failed to initialize encryption key manager", "err", err)
+		os.Exit(1)
+	}
+	return KeyManager
 }
 
 func startServers(httpAddr, grpcAddr string, httpHandler http.Handler, grpcServer pb_chronoqueue.ChronoQueueServer, tlsConfig *tls.Config, logger log.Logger) {

@@ -9,7 +9,7 @@ WORKDIR /go/src/chronoqueuesvc
 COPY api api
 COPY cmd/chronoqueue cmd/chronoqueue
 # COPY client client
-COPY internal/util internal/util
+COPY internal internal
 COPY pkg/chronoqueue pkg/chronoqueue
 
 COPY go.mod go.sum ./

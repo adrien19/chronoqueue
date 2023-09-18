@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/alicebob/miniredis"
 	"github.com/redis/go-redis/v9"
 )
@@ -37,7 +38,8 @@ func teardown() {
 
 func TestNewQueueStorage(t *testing.T) {
 	type args struct {
-		redisClient *redis.Client
+		redisClient          *redis.Client
+		encryptionKeyManager *keymanager.EncryptionKeyManager
 	}
 	tests := []struct {
 		name string
@@ -48,7 +50,7 @@ func TestNewQueueStorage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NewQueueStorage(tt.args.redisClient); !reflect.DeepEqual(got, tt.want) {
+			if got := NewQueueStorage(tt.args.redisClient, tt.args.encryptionKeyManager); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NewQueueStorage() = %v, want %v", got, tt.want)
 			}
 		})

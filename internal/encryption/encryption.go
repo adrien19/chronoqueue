@@ -1,4 +1,4 @@
-package util
+package encryption
 
 import (
 	"crypto/aes"
@@ -7,14 +7,18 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+
+	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 )
 
 // Encryption utility function
-func EncryptPayload(payload []byte) (string, string, error) {
-	// TODO: Fetch the encryption key from your key management setup
-	key := []byte("your-encryption-key-here") // This is just a placeholder.
+func EncryptPayload(payload []byte, keyManager *keymanager.EncryptionKeyManager) (string, string, error) {
+	encryptionKey, err := keyManager.GetEncryptionKey()
+	if err != nil {
+		return "", "", err
+	}
 
-	block, err := aes.NewCipher(key)
+	block, err := aes.NewCipher(encryptionKey)
 	if err != nil {
 		return "", "", err
 	}
@@ -40,11 +44,13 @@ func EncryptPayload(payload []byte) (string, string, error) {
 }
 
 // Decryption utility function
-func DecryptPayload(base64Ciphertext string, base64Nonce string) ([]byte, error) {
-	// TODO: Fetch the encryption key from your key management setup
-	key := []byte("your-encryption-key-here") // This is just a placeholder.
+func DecryptPayload(base64Ciphertext string, base64Nonce string, keyManager *keymanager.EncryptionKeyManager) ([]byte, error) {
+	encryptionKey, err := keyManager.GetEncryptionKey()
+	if err != nil {
+		return nil, err
+	}
 
-	block, err := aes.NewCipher(key)
+	block, err := aes.NewCipher(encryptionKey)
 	if err != nil {
 		return nil, err
 	}

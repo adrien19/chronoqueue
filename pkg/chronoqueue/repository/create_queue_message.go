@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/encryption"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
@@ -32,6 +33,9 @@ func (as *storage) serializeMetadataPayload(payload *chronoqueue.Payload) ([]byt
 
 // Serialize the metadata payload into JSON
 func (as *storage) encryptMetadataPayload(metadata *chronoqueue.Message_Metadata) error {
+	if !as.encryptionKeyManager.Enabled {
+		return nil
+	}
 	// Get the payload data from the message
 	payloadData, err := as.serializeMetadataPayload(metadata.Payload)
 	if err != nil {
@@ -39,7 +43,7 @@ func (as *storage) encryptMetadataPayload(metadata *chronoqueue.Message_Metadata
 	}
 
 	// Encrypt the payload data
-	encryptedPayload, nonce, err := util.EncryptPayload(payloadData)
+	encryptedPayload, nonce, err := encryption.EncryptPayload(payloadData, as.encryptionKeyManager)
 	if err != nil {
 		return err
 	}

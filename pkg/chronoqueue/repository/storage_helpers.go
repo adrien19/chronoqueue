@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/encryption"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -29,8 +30,19 @@ func (as *storage) decryptMessageMetadataPayload(metadata *chronoqueue.Message_M
 	base64EncryptedPayload := metadata.Payload.Metadata["encryptedPayload"].GetStringValue()
 	base64Nonce := metadata.Payload.Metadata["nonce"].GetStringValue()
 
+	if !as.encryptionKeyManager.Enabled {
+		if base64EncryptedPayload != "" || base64Nonce != "" {
+			util.WarnWithFields("Metadata with no fields: ", map[string]interface{}{
+				"base64EncryptedPayload": base64EncryptedPayload,
+				"base64Nonce":            base64Nonce,
+				"meta":                   metadata.Payload,
+			})
+			return errors.New("encrypted payload found but encryption not enabled")
+		}
+		return nil
+	}
 	if base64EncryptedPayload == "" || base64Nonce == "" {
-		util.WarnWithFields("Metadata with no fields: ", map[string]interface{}{
+		util.WarnWithFields("Metadata with no encrypted payload: ", map[string]interface{}{
 			"base64EncryptedPayload": base64EncryptedPayload,
 			"base64Nonce":            base64Nonce,
 			"meta":                   metadata.Payload,
@@ -38,7 +50,7 @@ func (as *storage) decryptMessageMetadataPayload(metadata *chronoqueue.Message_M
 		return errors.New("encryptedPayload or nonce not found in metadata")
 	}
 
-	decryptedPayloadBytes, err := util.DecryptPayload(base64EncryptedPayload, base64Nonce)
+	decryptedPayloadBytes, err := encryption.DecryptPayload(base64EncryptedPayload, base64Nonce, as.encryptionKeyManager)
 	if err != nil {
 		return err
 	}

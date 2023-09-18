@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/go-redsync/redsync/v4"
 	"github.com/go-redsync/redsync/v4/redis/goredis/v9"
@@ -27,14 +28,19 @@ type Storage interface {
 }
 
 type storage struct {
-	redisClient *redis.Client
-	rs          *redsync.Redsync
+	redisClient          *redis.Client
+	rs                   *redsync.Redsync
+	encryptionKeyManager *keymanager.EncryptionKeyManager
 }
 
-func NewQueueStorage(redisClient *redis.Client) Storage {
+func NewQueueStorage(redisClient *redis.Client, encryptionKeyManager *keymanager.EncryptionKeyManager) Storage {
 	pool := goredis.NewPool(redisClient)
 	rs := redsync.New(pool)
-	storage := &storage{redisClient: redisClient, rs: rs}
+	storage := &storage{
+		redisClient:          redisClient,
+		rs:                   rs,
+		encryptionKeyManager: encryptionKeyManager,
+	}
 
 	// Create a buffered channel for tasks
 	tasks := make(chan Task, 10)

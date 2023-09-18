@@ -16,6 +16,9 @@ services:
       - SERVER_KEY_PATH=/secrets/server.key
       - CA_CERT_PATH=/secrets/ca.crt
       - CHRONOQUEUE_TLS_ENABLED=true
+      - ENABLE_ENCRYPTION=true
+      - ENCRYPTION_KEY_SOURCE_TYPE=LOCAL
+      - ENCRYPTION_KEY=0123456789abcdef0123456789abcdef
     depends_on:
       - cachesvc
       # - authenticationsvc
