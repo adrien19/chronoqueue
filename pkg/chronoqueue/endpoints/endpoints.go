@@ -9,26 +9,28 @@ import (
 )
 
 type Set struct {
-	CreateQueueEndpoint        endpoint.Endpoint
-	DeleteQueueEndpoint        endpoint.Endpoint
-	PostMessageEndpoint        endpoint.Endpoint
-	GetNextMessageEndpoint     endpoint.Endpoint
-	AcknowledgeMessageEndpoint endpoint.Endpoint
-	RenewMessageLeaseEndpoint  endpoint.Endpoint
-	PeekQueueMessagesEndpoint  endpoint.Endpoint
-	GetQueueStateEndpoint      endpoint.Endpoint
+	CreateQueueEndpoint          endpoint.Endpoint
+	DeleteQueueEndpoint          endpoint.Endpoint
+	PostMessageEndpoint          endpoint.Endpoint
+	GetNextMessageEndpoint       endpoint.Endpoint
+	AcknowledgeMessageEndpoint   endpoint.Endpoint
+	RenewMessageLeaseEndpoint    endpoint.Endpoint
+	PeekQueueMessagesEndpoint    endpoint.Endpoint
+	GetQueueStateEndpoint        endpoint.Endpoint
+	SendMessageHeartBeatEndpoint endpoint.Endpoint
 }
 
 func NewEndpointSet(svc chronoqueue.Service) Set {
 	return Set{
-		CreateQueueEndpoint:        MakeCreateQueueEndpoint(svc),
-		DeleteQueueEndpoint:        MakeDeleteQueueEndpoint(svc),
-		PostMessageEndpoint:        MakePostMessageEndpoint(svc),
-		GetNextMessageEndpoint:     MakeGetNextMessageEndpoint(svc),
-		AcknowledgeMessageEndpoint: MakeAcknowledgeMessageEndpoint(svc),
-		RenewMessageLeaseEndpoint:  MakeRenewMessageLeaseEndpoint(svc),
-		PeekQueueMessagesEndpoint:  MakePeekQueueMessagesEndpoint(svc),
-		GetQueueStateEndpoint:      MakeGetQueueStateEndpoint(svc),
+		CreateQueueEndpoint:          MakeCreateQueueEndpoint(svc),
+		DeleteQueueEndpoint:          MakeDeleteQueueEndpoint(svc),
+		PostMessageEndpoint:          MakePostMessageEndpoint(svc),
+		GetNextMessageEndpoint:       MakeGetNextMessageEndpoint(svc),
+		AcknowledgeMessageEndpoint:   MakeAcknowledgeMessageEndpoint(svc),
+		RenewMessageLeaseEndpoint:    MakeRenewMessageLeaseEndpoint(svc),
+		PeekQueueMessagesEndpoint:    MakePeekQueueMessagesEndpoint(svc),
+		GetQueueStateEndpoint:        MakeGetQueueStateEndpoint(svc),
+		SendMessageHeartBeatEndpoint: MakeSendMessageHeartBeatEndpoint(svc),
 	}
 }
 
@@ -85,6 +87,13 @@ func MakeGetQueueStateEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.GetQueueStateRequest)
 		return svc.GetQueueState(ctx, req)
+	}
+}
+
+func MakeSendMessageHeartBeatEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(*pb.SendMessageHeartBeatRequest)
+		return svc.SendMessageHeartBeat(ctx, req)
 	}
 }
 
@@ -158,6 +167,17 @@ func (s *Set) GetQueueState(ctx context.Context, queueName string) (*pb.GetQueue
 		return &pb.GetQueueStateResponse{}, err
 	}
 	stateResp := resp.(*pb.GetQueueStateResponse)
+
+	return stateResp, nil
+
+}
+
+func (s *Set) SendMessageHeartBeat(ctx context.Context, queueName string) (*pb.SendMessageHeartBeatResponse, error) {
+	resp, err := s.GetQueueStateEndpoint(ctx, queueName)
+	if err != nil {
+		return &pb.SendMessageHeartBeatResponse{}, err
+	}
+	stateResp := resp.(*pb.SendMessageHeartBeatResponse)
 
 	return stateResp, nil
 

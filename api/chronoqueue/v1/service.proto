@@ -18,6 +18,7 @@ service ChronoQueue {
     rpc RenewMessageLease (RenewMessageLeaseRequest) returns (RenewMessageLeaseResponse);
     rpc PeekQueueMessages (PeekQueueMessagesRequest) returns (PeekQueueMessagesResponse);
     rpc GetQueueState (GetQueueStateRequest) returns (GetQueueStateResponse);
+    rpc SendMessageHeartBeat(SendMessageHeartBeatRequest) returns (SendMessageHeartBeatResponse);
 }
 
 
@@ -146,3 +147,11 @@ message Queue {
     Queue.Options metadata = 2;
 }
 
+
+message SendMessageHeartBeatRequest {
+    string queue_name = 1;
+    string message_id = 2;
+}
+message SendMessageHeartBeatResponse {
+    int64 remaining_time = 1;
+}

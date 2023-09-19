@@ -55,6 +55,11 @@ func NewHTTPHandler(ep endpoints.Set) http.Handler {
 		decodeHTTPGetQueueStateRequest,
 		encodeResponse,
 	))
+	m.Handle("/queue/sendMessageHeartBeat", httptransport.NewServer(
+		ep.SendMessageHeartBeatEndpoint,
+		decodeHTTPSendMessageHeartBeatRequest,
+		encodeResponse,
+	))
 
 	return m
 }
@@ -135,6 +140,15 @@ func decodeHTTPGetPeekQueueMessagesRequest(_ context.Context, r *http.Request) (
 
 func decodeHTTPGetQueueStateRequest(_ context.Context, r *http.Request) (interface{}, error) {
 	var req chronoqueue.GetQueueStateRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
+func decodeHTTPSendMessageHeartBeatRequest(_ context.Context, r *http.Request) (interface{}, error) {
+	var req chronoqueue.SendMessageHeartBeatRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err

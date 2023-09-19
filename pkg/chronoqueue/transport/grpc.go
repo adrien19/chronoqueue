@@ -16,9 +16,10 @@ type grpcServer struct {
 	getNextMessage     grpctransport.Handler
 	acknowledgeMessage grpctransport.Handler
 
-	renewMessageLease grpctransport.Handler
-	peekQueueMessages grpctransport.Handler
-	getQueueState     grpctransport.Handler
+	renewMessageLease    grpctransport.Handler
+	peekQueueMessages    grpctransport.Handler
+	getQueueState        grpctransport.Handler
+	sendMessageHeartBeat grpctransport.Handler
 	chronoqueue.UnimplementedChronoQueueServer
 }
 
@@ -63,6 +64,11 @@ func NewGRPCServer(ep endpoints.Set) chronoqueue.ChronoQueueServer {
 			ep.GetQueueStateEndpoint,
 			decodeGRPCGetQueueStateRequest,
 			decodeGRPCGetQueueStateResponse,
+		),
+		sendMessageHeartBeat: grpctransport.NewServer(
+			ep.SendMessageHeartBeatEndpoint,
+			decodeGRPCSendMessageHeartBeatRequest,
+			decodeGRPCSendMessageHeartBeatResponse,
 		),
 	}
 }
@@ -135,6 +141,14 @@ func (g *grpcServer) GetQueueState(ctx context.Context, r *chronoqueue.GetQueueS
 		return nil, err
 	}
 	return rep.(*chronoqueue.GetQueueStateResponse), nil
+}
+
+func (g *grpcServer) SendMessageHeartBeat(ctx context.Context, r *chronoqueue.SendMessageHeartBeatRequest) (*chronoqueue.SendMessageHeartBeatResponse, error) {
+	_, rep, err := g.sendMessageHeartBeat.ServeGRPC(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	return rep.(*chronoqueue.SendMessageHeartBeatResponse), nil
 }
 
 func decodeGRPCCreateQueueRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
@@ -214,5 +228,15 @@ func decodeGRPCGetQueueStateRequest(_ context.Context, grpcReq interface{}) (int
 
 func decodeGRPCGetQueueStateResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
 	reply := grpcReply.(*chronoqueue.GetQueueStateResponse)
+	return reply, nil
+}
+
+func decodeGRPCSendMessageHeartBeatRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
+	req := grpcReq.(*chronoqueue.SendMessageHeartBeatRequest)
+	return req, nil
+}
+
+func decodeGRPCSendMessageHeartBeatResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*chronoqueue.SendMessageHeartBeatResponse)
 	return reply, nil
 }

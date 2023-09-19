@@ -131,3 +131,17 @@ func (cs *chronoqueueService) GetQueueState(ctx context.Context, request *chrono
 	resp, err := wrappedHandler(ctx, request)
 	return resp.(*chronoqueue.GetQueueStateResponse), err
 }
+
+func (cs *chronoqueueService) SendMessageHeartBeat(ctx context.Context, request *chronoqueue.SendMessageHeartBeatRequest) (*chronoqueue.SendMessageHeartBeatResponse, error) {
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		specificReq, ok := req.(*chronoqueue.SendMessageHeartBeatRequest)
+		if !ok {
+			return nil, errors.New("invalid request type for sending message's heartbeat")
+		}
+		return cs.storage.SendMessageHeartBeat(ctx, specificReq)
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.SendMessageHeartBeatResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.SendMessageHeartBeatResponse), err
+}

@@ -26,6 +26,7 @@ type ChronoQueueClient interface {
 	RenewMessageLease(ctx context.Context, in *RenewMessageLeaseRequest, opts ...grpc.CallOption) (*RenewMessageLeaseResponse, error)
 	PeekQueueMessages(ctx context.Context, in *PeekQueueMessagesRequest, opts ...grpc.CallOption) (*PeekQueueMessagesResponse, error)
 	GetQueueState(ctx context.Context, in *GetQueueStateRequest, opts ...grpc.CallOption) (*GetQueueStateResponse, error)
+	SendMessageHeartBeat(ctx context.Context, in *SendMessageHeartBeatRequest, opts ...grpc.CallOption) (*SendMessageHeartBeatResponse, error)
 }
 
 type chronoQueueClient struct {
@@ -108,6 +109,15 @@ func (c *chronoQueueClient) GetQueueState(ctx context.Context, in *GetQueueState
 	return out, nil
 }
 
+func (c *chronoQueueClient) SendMessageHeartBeat(ctx context.Context, in *SendMessageHeartBeatRequest, opts ...grpc.CallOption) (*SendMessageHeartBeatResponse, error) {
+	out := new(SendMessageHeartBeatResponse)
+	err := c.cc.Invoke(ctx, "/chronoqueue.api.chronoqueue.v1.ChronoQueue/SendMessageHeartBeat", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChronoQueueServer is the server API for ChronoQueue service.
 // All implementations must embed UnimplementedChronoQueueServer
 // for forward compatibility
@@ -120,6 +130,7 @@ type ChronoQueueServer interface {
 	RenewMessageLease(context.Context, *RenewMessageLeaseRequest) (*RenewMessageLeaseResponse, error)
 	PeekQueueMessages(context.Context, *PeekQueueMessagesRequest) (*PeekQueueMessagesResponse, error)
 	GetQueueState(context.Context, *GetQueueStateRequest) (*GetQueueStateResponse, error)
+	SendMessageHeartBeat(context.Context, *SendMessageHeartBeatRequest) (*SendMessageHeartBeatResponse, error)
 	mustEmbedUnimplementedChronoQueueServer()
 }
 
@@ -150,6 +161,9 @@ func (UnimplementedChronoQueueServer) PeekQueueMessages(context.Context, *PeekQu
 }
 func (UnimplementedChronoQueueServer) GetQueueState(context.Context, *GetQueueStateRequest) (*GetQueueStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetQueueState not implemented")
+}
+func (UnimplementedChronoQueueServer) SendMessageHeartBeat(context.Context, *SendMessageHeartBeatRequest) (*SendMessageHeartBeatResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendMessageHeartBeat not implemented")
 }
 func (UnimplementedChronoQueueServer) mustEmbedUnimplementedChronoQueueServer() {}
 
@@ -308,6 +322,24 @@ func _ChronoQueue_GetQueueState_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChronoQueue_SendMessageHeartBeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendMessageHeartBeatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChronoQueueServer).SendMessageHeartBeat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/chronoqueue.api.chronoqueue.v1.ChronoQueue/SendMessageHeartBeat",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChronoQueueServer).SendMessageHeartBeat(ctx, req.(*SendMessageHeartBeatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChronoQueue_ServiceDesc is the grpc.ServiceDesc for ChronoQueue service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -346,6 +378,10 @@ var ChronoQueue_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetQueueState",
 			Handler:    _ChronoQueue_GetQueueState_Handler,
+		},
+		{
+			MethodName: "SendMessageHeartBeat",
+			Handler:    _ChronoQueue_SendMessageHeartBeat_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
