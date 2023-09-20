@@ -105,24 +105,24 @@ func (s *Set) CreateQueue(ctx context.Context, queueInfo *pb.Queue) (*pb.CreateQ
 	return resp.(*pb.CreateQueueResponse), err
 }
 
-func (s *Set) DeleteQueue(ctx context.Context, queueName string) (*pb.DeleteQueueResponse, error) {
-	resp, err := s.DeleteQueueEndpoint(ctx, queueName)
+func (s *Set) DeleteQueue(ctx context.Context, request *pb.DeleteQueueRequest) (*pb.DeleteQueueResponse, error) {
+	resp, err := s.DeleteQueueEndpoint(ctx, request)
 	if err != nil {
 		return &pb.DeleteQueueResponse{}, err
 	}
 	return resp.(*pb.DeleteQueueResponse), err
 }
 
-func (s *Set) PostMessage(ctx context.Context, queueName string, message *pb.Message) (*pb.PostMessageResponse, error) {
-	resp, err := s.PostMessageEndpoint(ctx, &pb.PostMessageRequest{QueueName: queueName, Message: message})
+func (s *Set) PostMessage(ctx context.Context, request *pb.PostMessageRequest) (*pb.PostMessageResponse, error) {
+	resp, err := s.PostMessageEndpoint(ctx, request)
 	if err != nil {
 		return &pb.PostMessageResponse{}, err
 	}
 	return resp.(*pb.PostMessageResponse), err
 }
 
-func (s *Set) GetNextMessage(ctx context.Context, queueName string, leaseDuration int64) (*pb.GetNextMessageResponse, error) {
-	resp, err := s.GetNextMessageEndpoint(ctx, &pb.GetNextMessageRequest{QueueName: queueName, LeaseDuration: leaseDuration})
+func (s *Set) GetNextMessage(ctx context.Context, request *pb.GetNextMessageRequest) (*pb.GetNextMessageResponse, error) {
+	resp, err := s.GetNextMessageEndpoint(ctx, request)
 	if err != nil {
 		return &pb.GetNextMessageResponse{
 			Message: nil,

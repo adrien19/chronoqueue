@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (as *storage) SendMessageHeartBeat(ctx context.Context, request *chronoqueue.SendMessageHeartBeatRequest) (*chronoqueue.SendMessageHeartBeatResponse, error) {
@@ -18,44 +19,18 @@ func (as *storage) SendMessageHeartBeat(ctx context.Context, request *chronoqueu
 	}
 	key := "heartbeat:" + request.GetQueueName() + ":" + request.GetMessageId()
 	// Set expiration time to 3x the lease duration
-	expiration := time.Duration(3 * meta.GetLeaseDuration())
+	expiration := time.Duration(3 * meta.GetLeaseDuration().AsDuration())
 	if expiration < time.Millisecond {
 		expiration = time.Millisecond
 	}
 
-	remaining_time := meta.GetLeaseExpiry() - time.Now().Unix()
+	// remaining_time := meta.GetLeaseExpiry() - time.Now().Unix()
+	// Calculate the remaining time
+	remainingSeconds := meta.GetLeaseExpiry() - time.Now().Unix()
+	remainingTimeDuration := durationpb.New(time.Duration(remainingSeconds) * time.Second)
 
 	_, err = as.redisClient.Set(context.Background(), key, time.Now().Unix(), expiration).Result()
 	return &chronoqueue.SendMessageHeartBeatResponse{
-		RemainingTime: remaining_time,
+		RemainingTime: remainingTimeDuration,
 	}, err
 }
-
-// func (as *storage) lastHeartbeat(queueName, messageID string) (time.Time, error) {
-// 	key := "heartbeat:" + queueName + ":" + messageID
-// 	result, err := as.redisClient.Get(context.Background(), key).Int64()
-// 	if err != nil {
-// 		return time.Time{}, err
-// 	}
-// 	return time.Unix(result, 0), nil
-// }
-
-// func (as *storage) StartLeaseExpiryChecker() {
-// 	ticker := time.NewTicker(1 * time.Minute)
-// 	defer ticker.Stop()
-
-// 	for range ticker.C {
-// 		// Check for each message if its last heartbeat + lease duration > current time
-// 		for _, msg := range allMessagesWithActiveLease {
-// 			lastHeartbeat, err := as.lastHeartbeat(msg.QueueName, msg.MessageId)
-// 			if err != nil {
-// 				// Handle error
-// 				continue
-// 			}
-// 			if time.Since(lastHeartbeat) > msg.LeaseDuration {
-// 				// This message's lease has expired due to lack of heartbeat.
-// 				// Handle lease expiry logic here.
-// 			}
-// 		}
-// 	}
-// }

@@ -67,7 +67,7 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.Get
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to get next pending message.").GRPCStatus()
 	}
 	if message == nil {
-		util.Info("No pending messages found with a deadline before now")
+		// util.Info("No pending messages found with a deadline before now")
 		return &chronoqueue.GetNextMessageResponse{}, nil
 	}
 

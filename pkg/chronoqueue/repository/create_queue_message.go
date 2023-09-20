@@ -91,7 +91,7 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 	}
 
 	// Set the message state if InvisibilityDuration is zero
-	if message.GetMetadata().GetInvisibilityDuration() == 0 {
+	if message.GetMetadata().GetInvisibilityDuration().AsDuration() == 0 {
 		message.Metadata.State = chronoqueue.Message_Metadata_PENDING
 	}
 

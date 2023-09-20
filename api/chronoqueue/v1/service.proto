@@ -8,6 +8,7 @@ option go_package = "github.com/adrien19/chronoqueue/api/chronoqueue/v1;chronoqu
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
+import "google/protobuf/duration.proto";
 
 service ChronoQueue {
     rpc CreateQueue (CreateQueueRequest) returns (CreateQueueResponse);
@@ -68,9 +69,9 @@ message Message {
             ERRORED = 6;
         }
         Metadata.State state = 2;
-        int64 invisibility_duration = 3;
+        google.protobuf.Duration invisibility_duration = 3;
         int32 attempts_left = 4;
-        optional int64 lease_duration = 5;
+        google.protobuf.Duration lease_duration = 5;
         optional int64 lease_expiry = 6;
     }
     Message.Metadata metadata = 3;
@@ -80,7 +81,7 @@ message Message {
 // Get the next message on the queue
 message GetNextMessageRequest{
     string queue_name = 1;
-    int64 lease_duration = 2;
+    google.protobuf.Duration lease_duration = 2;
     string exclusivity_key = 3;
 }
 message GetNextMessageResponse{
@@ -99,7 +100,7 @@ message AcknowledgeMessageResponse{}
 message RenewMessageLeaseRequest{
     string queue_name = 1;
     string message_id = 2;
-    int64 lease_duration = 3;
+    google.protobuf.Duration lease_duration = 3;
 }
 message RenewMessageLeaseResponse{}
 
@@ -140,9 +141,9 @@ message Queue {
         }
         Options.Type type = 1;
         int32 dequeue_attempts = 2;
-        int64 lease_duration = 3;
+        google.protobuf.Duration lease_duration = 3;
         string exclusivity_key = 4;
-        int64 invisibility_duration = 5;
+        google.protobuf.Duration invisibility_duration = 5;
     }
     Queue.Options metadata = 2;
 }
@@ -153,5 +154,5 @@ message SendMessageHeartBeatRequest {
     string message_id = 2;
 }
 message SendMessageHeartBeatResponse {
-    int64 remaining_time = 1;
+    google.protobuf.Duration remaining_time = 1;
 }

@@ -99,17 +99,16 @@ func (as *storage) getQueueMetadata(ctx context.Context, queueName string) (*chr
 
 func (as *storage) updateMessageStateAndLease(message *chronoqueue.Message, request *chronoqueue.GetNextMessageRequest, queueMeta *chronoqueue.Queue_Options) {
 	message.Metadata.State = chronoqueue.Message_Metadata_RUNNING
-	if message.Metadata.GetLeaseDuration() <= 0 {
-		if request.LeaseDuration > 0 {
-			message_lease := request.GetLeaseDuration()
-			message.Metadata.LeaseDuration = &message_lease
+	if message.Metadata.GetLeaseDuration().AsDuration() <= 0 {
+		if request.LeaseDuration.AsDuration() > 0 {
+			message.Metadata.LeaseDuration = request.GetLeaseDuration()
 		} else {
-			message.Metadata.LeaseDuration = &queueMeta.LeaseDuration
+			message.Metadata.LeaseDuration = queueMeta.LeaseDuration
 		}
 	}
 
 	// Add lease expiry data to the message metadata
-	expireDate := time.Now().Add(time.Duration(message.Metadata.GetLeaseDuration())).UnixNano() / int64(time.Millisecond)
+	expireDate := time.Now().Add(time.Duration(message.Metadata.GetLeaseDuration().AsDuration())).UnixNano() / int64(time.Millisecond)
 	message.Metadata.LeaseExpiry = &expireDate
 }
 

@@ -10,26 +10,27 @@ import (
 	structpb "github.com/golang/protobuf/ptypes/struct"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
 	State int32
 
 	QueueOptions struct {
-		DequeueAttempts      int32  `json:"dequeueAttempts,omitempty"`
-		ExclusivityKey       string `json:"exclusivityKey,omitempty"`
-		InvisibilityDuration int64  `json:"invisibilityDuration,omitempty"`
-		LeaseDuration        int64  `json:"leaseDuration,omitempty"`
-		Type                 int32  `json:"type,omitempty"`
+		DequeueAttempts      int32                `json:"dequeueAttempts,omitempty"`
+		ExclusivityKey       string               `json:"exclusivityKey,omitempty"`
+		InvisibilityDuration *durationpb.Duration `json:"invisibilityDuration,omitempty"`
+		LeaseDuration        *durationpb.Duration `json:"leaseDuration,omitempty"`
+		Type                 int32                `json:"type,omitempty"`
 	}
 	MessageOptions struct {
 		// Payload              map[string]interface{} `json:"payload,omitempty"`
-		Payload              Payload `json:"payload,omitempty"`
-		AttemptsLeft         int32   `json:"attemptsLeft,omitempty"`
-		InvisibilityDuration int64   `json:"invisibilityDuration,omitempty"`
-		LeaseDuration        int64   `json:"leaseDuration,omitempty"`
-		LeaseExpiry          int64   `json:"leaseExpiry,omitempty"`
-		State                State   `json:"state,omitempty"`
+		Payload              Payload              `json:"payload,omitempty"`
+		AttemptsLeft         int32                `json:"attemptsLeft,omitempty"`
+		InvisibilityDuration *durationpb.Duration `json:"invisibilityDuration,omitempty"`
+		LeaseDuration        *durationpb.Duration `json:"leaseDuration,omitempty"`
+		LeaseExpiry          int64                `json:"leaseExpiry,omitempty"`
+		State                State                `json:"state,omitempty"`
 	}
 	Payload struct {
 		Metadata map[string]*structpb.Value `json:"metadata,omitempty"`
@@ -118,7 +119,7 @@ func (client *ChronoQueueClient) PostMessage(queue string, messageId string, mes
 					Data:     messageOptions.Payload.Data,
 				},
 				AttemptsLeft:         messageOptions.AttemptsLeft,
-				LeaseDuration:        &messageOptions.LeaseDuration,
+				LeaseDuration:        messageOptions.LeaseDuration,
 				LeaseExpiry:          &messageOptions.LeaseExpiry,
 				InvisibilityDuration: messageOptions.InvisibilityDuration,
 				State:                pb_chronoqueue.Message_Metadata_State(messageOptions.State),
@@ -133,7 +134,7 @@ func (client *ChronoQueueClient) PostMessage(queue string, messageId string, mes
 }
 
 // GetNextMessage returns next message on a queue
-func (client *ChronoQueueClient) GetNextMessage(queue string, leaseDuration int64) (*pb_chronoqueue.GetNextMessageResponse, error) {
+func (client *ChronoQueueClient) GetNextMessage(queue string, leaseDuration *durationpb.Duration) (*pb_chronoqueue.GetNextMessageResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -183,7 +184,7 @@ func (client *ChronoQueueClient) GetQueueState(queue string) (*pb_chronoqueue.Ge
 }
 
 // RenewMessageLease updates a message's lease duration and returns empty response
-func (client *ChronoQueueClient) RenewMessageLease(queue string, messageId string, leaseDuration int64) (*pb_chronoqueue.RenewMessageLeaseResponse, error) {
+func (client *ChronoQueueClient) RenewMessageLease(queue string, messageId string, leaseDuration *durationpb.Duration) (*pb_chronoqueue.RenewMessageLeaseResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

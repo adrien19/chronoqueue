@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
 )
 
 func (as *storage) RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error) {
@@ -24,9 +25,9 @@ func (as *storage) RenewMessageLease(ctx context.Context, request *chronoqueue.R
 	}
 
 	// Update the lease duration and expiration time
-	leaseDuration := request.GetLeaseDuration()
-	metadata.LeaseDuration = &leaseDuration
-	expireDate := time.Now().Add(time.Duration(metadata.GetLeaseDuration())).UnixNano() / int64(time.Millisecond)
+	// leaseDuration := request.GetLeaseDuration()
+	metadata.LeaseDuration = request.GetLeaseDuration()
+	expireDate := time.Now().Add(time.Duration(metadata.GetLeaseDuration().AsDuration())).UnixNano() / int64(time.Millisecond)
 	metadata.LeaseExpiry = &expireDate
 
 	// Save the updated metadata
@@ -34,6 +35,10 @@ func (as *storage) RenewMessageLease(ctx context.Context, request *chronoqueue.R
 	if err != nil {
 		return nil, fmt.Errorf("error saving updated message metadata: %v", err)
 	}
+	util.InfoWithFields("Message successfully renewed lease", map[string]interface{}{
+		"message_id": messageID,
+		"new_expiry": metadata.GetLeaseExpiry(),
+	})
 
 	return &chronoqueue.RenewMessageLeaseResponse{}, nil
 }

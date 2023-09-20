@@ -10,6 +10,7 @@ import (
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/alicebob/miniredis"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 var redisServer *miniredis.Miniredis
@@ -293,7 +294,7 @@ func Test_storage_GetQueueMessage(t *testing.T) {
 				ctx: context.TODO(),
 				request: &chronoqueue.GetNextMessageRequest{
 					QueueName:     "test_queue",
-					LeaseDuration: int64(30 * time.Second),
+					LeaseDuration: durationpb.New(30 * time.Second),
 				},
 			},
 			want:    "test_message_id",
@@ -510,7 +511,7 @@ func Test_storage_RenewMessageLease(t *testing.T) {
 				request: &chronoqueue.RenewMessageLeaseRequest{
 					QueueName:     "test_queue",
 					MessageId:     "test_message_id",
-					LeaseDuration: int64(30 * time.Second),
+					LeaseDuration: durationpb.New(30 * time.Second),
 				},
 			},
 			want:    &chronoqueue.RenewMessageLeaseResponse{},

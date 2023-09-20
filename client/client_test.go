@@ -6,6 +6,7 @@ import (
 	"net"
 	"reflect"
 	"testing"
+	"time"
 
 	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 	"google.golang.org/grpc"
@@ -13,6 +14,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type mockChronoQueueServer struct {
@@ -196,7 +198,7 @@ func TestChronoQueueClient_GetNextMessage(t *testing.T) {
 
 	type args struct {
 		queue         string
-		leaseDuration int64
+		leaseDuration *durationpb.Duration
 	}
 	tests := []struct {
 		name    string
@@ -209,7 +211,7 @@ func TestChronoQueueClient_GetNextMessage(t *testing.T) {
 			name: "test successful get next message from a queue",
 			args: args{
 				queue:         "test_queue",
-				leaseDuration: 15,
+				leaseDuration: durationpb.New(time.Minute),
 			},
 			want: &pb_chronoqueue.GetNextMessageResponse{
 				Message: &pb_chronoqueue.Message{
@@ -321,7 +323,7 @@ func TestChronoQueueClient_RenewMessageLease(t *testing.T) {
 	type args struct {
 		queue         string
 		messageId     string
-		leaseDuration int64
+		leaseDuration *durationpb.Duration
 	}
 	tests := []struct {
 		name    string
