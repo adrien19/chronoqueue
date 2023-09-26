@@ -80,7 +80,7 @@ func (as *storage) AcknowledgeMessage(ctx context.Context, request *chronoqueue.
 
 	// Check if the state transition is allowed
 	if !isValidTransition(transitionState(metadata.State), transitionState(request.State)) {
-		err := errors.New("invalid input: requested state transition is not allowed")
+		err := fmt.Errorf("invalid input: requested state %v transition to %v is not allowed for message: %s", request.State, metadata.State, messageID)
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while changing message state")
 		return nil, chronoErr.GRPCStatus()
 	}
