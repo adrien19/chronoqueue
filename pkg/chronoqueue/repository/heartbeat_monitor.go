@@ -7,6 +7,7 @@ import (
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -45,13 +46,13 @@ func (as *storage) SendMessageHeartBeat(ctx context.Context, request *chronoqueu
 	}
 
 	// Calculate the remaining time
-	remainingSeconds := meta.GetLeaseExpiry() - time.Now().Unix()
+	remainingSeconds := meta.GetLeaseExpiry().AsTime().Unix() - time.Now().Unix()
 	thresholdSeconds := int64(float64(renewalDuration.Seconds()) * DefaultThresholdPercentage)
 
 	if remainingSeconds <= thresholdSeconds {
 		// If lease is about to expire within the threshold, renew the lease for another y seconds
-		newExpiry := time.Now().Add(renewalDuration).Unix()
-		meta.LeaseExpiry = &newExpiry
+		newExpiry := time.Now().Add(renewalDuration)
+		meta.LeaseExpiry = timestamppb.New(newExpiry)
 		meta.LeaseRenewalCount = meta.GetLeaseRenewalCount() + 1 // increase the renewal count
 		if err = as.saveMessageMetadata(ctx, request.GetQueueName(), request.GetMessageId(), meta); err != nil {
 			return nil, errors.New("failed to renew message lease")

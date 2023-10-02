@@ -13,6 +13,7 @@ import (
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type ChronoHandlerFunc func(ctx context.Context, req interface{}) (interface{}, error)
@@ -108,8 +109,8 @@ func (as *storage) updateMessageStateAndLease(message *chronoqueue.Message, requ
 	}
 
 	// Add lease expiry data to the message metadata
-	expireDate := time.Now().Add(time.Duration(message.Metadata.GetLeaseDuration().AsDuration())).Unix()
-	message.Metadata.LeaseExpiry = &expireDate
+	expireDate := time.Now().Add(time.Duration(message.Metadata.GetLeaseDuration().AsDuration()))
+	message.Metadata.LeaseExpiry = timestamppb.New(expireDate)
 }
 
 func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string, message *chronoqueue.Message) error {
