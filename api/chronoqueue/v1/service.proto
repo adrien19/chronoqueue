@@ -73,6 +73,9 @@ message Message {
         int32 attempts_left = 4;
         google.protobuf.Duration lease_duration = 5;
         optional int64 lease_expiry = 6;
+        int32 lease_renewal_count = 7;
+        int64 invisibility_expiry = 8;
+
     }
     Message.Metadata metadata = 3;
 }
@@ -155,4 +158,5 @@ message SendMessageHeartBeatRequest {
 }
 message SendMessageHeartBeatResponse {
     google.protobuf.Duration remaining_time = 1;
+    Message.Metadata.State state = 2;
 }

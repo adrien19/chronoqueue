@@ -108,7 +108,7 @@ func (as *storage) updateMessageStateAndLease(message *chronoqueue.Message, requ
 	}
 
 	// Add lease expiry data to the message metadata
-	expireDate := time.Now().Add(time.Duration(message.Metadata.GetLeaseDuration().AsDuration())).UnixNano() / int64(time.Millisecond)
+	expireDate := time.Now().Add(time.Duration(message.Metadata.GetLeaseDuration().AsDuration())).Unix()
 	message.Metadata.LeaseExpiry = &expireDate
 }
 

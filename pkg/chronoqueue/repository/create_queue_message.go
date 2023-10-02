@@ -95,6 +95,9 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 		message.Metadata.State = chronoqueue.Message_Metadata_PENDING
 	}
 
+	// Set the message invisibility expiry
+	message.Metadata.InvisibilityExpiry = time.Now().Add(message.Metadata.InvisibilityDuration.AsDuration()).Unix()
+
 	// Calculate the message's deadline
 	deadline := time.Now().Add(time.Duration(message.Priority)).UnixNano() / int64(time.Millisecond)
 

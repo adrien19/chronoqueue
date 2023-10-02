@@ -39,6 +39,7 @@ func teardown() {
 
 func TestNewQueueStorage(t *testing.T) {
 	type args struct {
+		ctx                  context.Context
 		redisClient          *redis.Client
 		encryptionKeyManager *keymanager.EncryptionKeyManager
 	}
@@ -51,7 +52,7 @@ func TestNewQueueStorage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NewQueueStorage(tt.args.redisClient, tt.args.encryptionKeyManager); !reflect.DeepEqual(got, tt.want) {
+			if got := NewQueueStorage(tt.args.ctx, tt.args.redisClient, tt.args.encryptionKeyManager); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NewQueueStorage() = %v, want %v", got, tt.want)
 			}
 		})

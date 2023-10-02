@@ -34,7 +34,7 @@ type storage struct {
 	encryptionKeyManager *keymanager.EncryptionKeyManager
 }
 
-func NewQueueStorage(redisClient *redis.Client, encryptionKeyManager *keymanager.EncryptionKeyManager) Storage {
+func NewQueueStorage(ctx context.Context, redisClient *redis.Client, encryptionKeyManager *keymanager.EncryptionKeyManager) Storage {
 	pool := goredis.NewPool(redisClient)
 	rs := redsync.New(pool)
 	storage := &storage{
@@ -47,13 +47,13 @@ func NewQueueStorage(redisClient *redis.Client, encryptionKeyManager *keymanager
 	tasks := make(chan Task, 10)
 
 	// Start worker goroutines
-	for i := 0; i < 5; i++ { // 5 workers
-		go storage.worker(context.Background(), tasks)
-	}
+	// for i := 0; i < 5; i++ { // 5 workers
+	go storage.worker(ctx, tasks)
+	// }
 
 	// Schedule the initial tasks
-	tasks <- Task{Script: invisibleToPending, Interval: 1 * time.Minute}
-	tasks <- Task{Script: runningToPending, Interval: 30 * time.Second}
+	tasks <- Task{Name: "invisibleToPending", Script: invisibleToPending, Interval: 2 * time.Second}
+	tasks <- Task{Name: "runningToPending", Script: runningToPending, Interval: 2 * time.Second}
 
 	return storage
 }
@@ -91,6 +91,7 @@ func (as *storage) DeleteQueueMessage(ctx context.Context, queueName string, mes
 }
 
 type Task struct {
+	Name     string
 	Script   *redis.Script
 	Interval time.Duration
 }
@@ -102,8 +103,8 @@ func (as *storage) worker(ctx context.Context, tasks chan Task) {
 			now := time.Now().UnixNano() / int64(time.Millisecond)
 			err := task.Script.Run(ctx, as.redisClient, nil, now).Err()
 			if err != nil && err.Error() != "redis: nil" {
-				// log.Printf("Failed to run the script: %v\n", err)
 				util.ErrorWithFields("Failed to run the script", map[string]interface{}{
+					"task":  task.Name,
 					"error": err,
 				})
 			}

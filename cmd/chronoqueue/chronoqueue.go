@@ -41,14 +41,17 @@ const (
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	logger := initializeLogger()
 	httpAddr, grpcAddr, redisConnectionString := getConfigsFromEnv()
 
-	redisClient := initializeRedis(context.Background(), redisConnectionString, logger)
+	redisClient := initializeRedis(ctx, redisConnectionString, logger)
 
 	encryptionKeyManager := initializeEncryptionKeyManager(logger)
 
-	database := repository.NewQueueStorage(redisClient, encryptionKeyManager)
+	database := repository.NewQueueStorage(ctx, redisClient, encryptionKeyManager)
 	service := chronoqueue.NewChronoqueueService(database)
 	eps := endpoints.NewEndpointSet(service)
 	httpHandler := transport.NewHTTPHandler(eps)
