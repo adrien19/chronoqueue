@@ -117,13 +117,8 @@ message GetQueueStateRequest{
     string queue_name = 1;
 }
 message GetQueueStateResponse{
-    int32 invisible_messages_count = 1;
-    int32 pending_messages_count = 2;
-    int32 running_messages_count = 3;
-    int32 completed_messages_count = 4;
-    int32 canceled_messages_count = 5;
-    int32 errored_messages_count = 6;
-    google.protobuf.Timestamp earliest_deadline = 7;
+    map<string, int32> state_counts = 1;
+    google.protobuf.Timestamp earliest_deadline = 2;
 }
 
 message Queue {

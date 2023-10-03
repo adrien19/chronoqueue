@@ -650,7 +650,7 @@ func Test_storage_GetQueueState(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    int32
+		want    map[string]int32
 		wantErr bool
 	}{
 		// TODO: Add more test cases.
@@ -662,7 +662,7 @@ func Test_storage_GetQueueState(t *testing.T) {
 					QueueName: "test_queue",
 				},
 			},
-			want:    1,
+			want:    map[string]int32{"PENDING": 1},
 			wantErr: false,
 		},
 	}
@@ -705,7 +705,7 @@ func Test_storage_GetQueueState(t *testing.T) {
 				t.Errorf("storage.GetQueueState() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got.PendingMessagesCount, tt.want) {
+			if !reflect.DeepEqual(got.StateCounts, tt.want) {
 				t.Errorf("storage.GetQueueState() = %v, want %v", got, tt.want)
 			}
 		})

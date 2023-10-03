@@ -39,7 +39,7 @@ func (as *storage) GetQueueState(ctx context.Context, request *chronoqueue.GetQu
 	// Assuming the first element of array is an empty string member
 	earliestDeadline := time.Unix(0, int64(membersWithScores[1].Score)*int64(time.Millisecond))
 
-	stateCounts := make(map[chronoqueue.Message_Metadata_State]int)
+	stateCounts := make(map[chronoqueue.Message_Metadata_State]int32)
 
 	for _, member := range membersWithScores {
 		if len(member.Member.(string)) == 0 {
@@ -57,12 +57,14 @@ func (as *storage) GetQueueState(ctx context.Context, request *chronoqueue.GetQu
 	}
 
 	return &chronoqueue.GetQueueStateResponse{
-		InvisibleMessagesCount: int32(stateCounts[chronoqueue.Message_Metadata_INVISIBLE]),
-		PendingMessagesCount:   int32(stateCounts[chronoqueue.Message_Metadata_PENDING]),
-		RunningMessagesCount:   int32(stateCounts[chronoqueue.Message_Metadata_RUNNING]),
-		CompletedMessagesCount: int32(stateCounts[chronoqueue.Message_Metadata_COMPLETED]),
-		CanceledMessagesCount:  int32(stateCounts[chronoqueue.Message_Metadata_CANCELED]),
-		ErroredMessagesCount:   int32(stateCounts[chronoqueue.Message_Metadata_ERRORED]),
-		EarliestDeadline:       timestamppb.New(earliestDeadline),
+		StateCounts: map[string]int32{
+			"INVISIBLE": stateCounts[chronoqueue.Message_Metadata_INVISIBLE],
+			"PENDING":   stateCounts[chronoqueue.Message_Metadata_PENDING],
+			"RUNNING":   stateCounts[chronoqueue.Message_Metadata_RUNNING],
+			"COMPLETED": stateCounts[chronoqueue.Message_Metadata_COMPLETED],
+			"CANCELED":  stateCounts[chronoqueue.Message_Metadata_CANCELED],
+			"ERRORED":   stateCounts[chronoqueue.Message_Metadata_ERRORED],
+		},
+		EarliestDeadline: timestamppb.New(earliestDeadline),
 	}, nil
 }
