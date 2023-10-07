@@ -8,7 +8,6 @@ import (
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func (as *storage) RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error) {
@@ -28,7 +27,7 @@ func (as *storage) RenewMessageLease(ctx context.Context, request *chronoqueue.R
 	// Update the lease duration and expiration time
 	metadata.LeaseDuration = request.GetLeaseDuration()
 	expireDate := time.Now().Add(time.Duration(metadata.GetLeaseDuration().AsDuration()))
-	metadata.LeaseExpiry = timestamppb.New(expireDate)
+	metadata.LeaseExpiry = expireDate.UnixNano() / int64(time.Millisecond)
 
 	// Save the updated metadata
 	err = as.saveMessageMetadata(ctx, queueName, messageID, metadata)

@@ -11,7 +11,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -26,13 +25,13 @@ type (
 	}
 	MessageOptions struct {
 		// Payload              map[string]interface{} `json:"payload,omitempty"`
-		Payload              Payload                `json:"payload,omitempty"`
-		AttemptsLeft         int32                  `json:"attemptsLeft,omitempty"`
-		InvisibilityDuration *durationpb.Duration   `json:"invisibilityDuration,omitempty"`
-		LeaseDuration        *durationpb.Duration   `json:"leaseDuration,omitempty"`
-		LeaseExpiry          *timestamppb.Timestamp `json:"leaseExpiry,omitempty"`
-		State                State                  `json:"state,omitempty"`
-		InvisibilityExpiry   *timestamppb.Timestamp `json:"invisibilityExpiry,omitempty"`
+		Payload              Payload              `json:"payload,omitempty"`
+		AttemptsLeft         int32                `json:"attemptsLeft,omitempty"`
+		InvisibilityDuration *durationpb.Duration `json:"invisibilityDuration,omitempty"`
+		LeaseDuration        *durationpb.Duration `json:"leaseDuration,omitempty"`
+		LeaseExpiry          int64                `json:"leaseExpiry,omitempty"`
+		State                State                `json:"state,omitempty"`
+		InvisibilityExpiry   int64                `json:"invisibilityExpiry,omitempty"`
 	}
 	Payload struct {
 		Metadata map[string]*structpb.Value `json:"metadata,omitempty"`

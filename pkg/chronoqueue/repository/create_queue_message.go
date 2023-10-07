@@ -13,7 +13,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Serialize the message metadata into JSON
@@ -98,7 +97,7 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 
 	// Set the message invisibility expiry
 	invisibity_expiry := time.Now().Add(message.Metadata.InvisibilityDuration.AsDuration())
-	message.Metadata.InvisibilityExpiry = timestamppb.New(invisibity_expiry)
+	message.Metadata.InvisibilityExpiry = invisibity_expiry.UnixNano() / int64(time.Millisecond)
 
 	// Calculate the message's deadline
 	deadline := time.Now().Add(time.Duration(message.Priority)).UnixNano() / int64(time.Millisecond)

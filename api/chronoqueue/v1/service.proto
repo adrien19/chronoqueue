@@ -63,9 +63,9 @@ message Message {
         google.protobuf.Duration invisibility_duration = 3;
         int32 attempts_left = 4;
         google.protobuf.Duration lease_duration = 5;
-        google.protobuf.Timestamp lease_expiry = 6;
+        int64 lease_expiry = 6;
         int32 lease_renewal_count = 7;
-        google.protobuf.Timestamp invisibility_expiry = 8;
+        int64 invisibility_expiry = 8;
 
     }
     Message.Metadata metadata = 3;

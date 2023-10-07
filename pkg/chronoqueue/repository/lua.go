@@ -25,7 +25,7 @@ for _, key in ipairs(keys) do
         local metadata = redis.call('hget', key, 'metadata')
         if metadata and string.match(metadata, "\"state\":\"INVISIBLE\"") then
             local metadataJson = cjson.decode(metadata)
-            local invisibilityExpiry_milliseconds = tonumber(metadataJson["invisibilityExpiry"] or 0) * 1000
+            local invisibilityExpiry_milliseconds = tonumber(metadataJson["invisibilityExpiry"] or 0)
             if invisibilityExpiry_milliseconds < current_time then
                 metadataJson["state"] = 'PENDING'
                 local updatedMetadata = cjson.encode(metadataJson)
@@ -57,7 +57,7 @@ for _, key in ipairs(keys) do
         local metadata = redis.call('hget', key, 'metadata')
         if metadata and string.match(metadata, "\"state\":\"RUNNING\"") then
             local metadataJson = cjson.decode(metadata)
-            local leaseExpiryMilliseconds = tonumber(metadataJson["leaseExpiry"] or 0) * 1000
+            local leaseExpiryMilliseconds = tonumber(metadataJson["leaseExpiry"] or 0)
             -- Buffer time in milliseconds
             local buffer_time_milliseconds = 2000
             if (leaseExpiryMilliseconds + buffer_time_milliseconds) < current_time then
