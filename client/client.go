@@ -3,12 +3,17 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
+	"math/rand"
 	"time"
 
 	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 	structpb "github.com/golang/protobuf/ptypes/struct"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -17,21 +22,20 @@ type (
 	State int32
 
 	QueueOptions struct {
-		DequeueAttempts      int32                `json:"dequeueAttempts,omitempty"`
-		ExclusivityKey       string               `json:"exclusivityKey,omitempty"`
-		InvisibilityDuration *durationpb.Duration `json:"invisibilityDuration,omitempty"`
-		LeaseDuration        *durationpb.Duration `json:"leaseDuration,omitempty"`
-		Type                 int32                `json:"type,omitempty"`
+		DequeueAttempts      int32  `json:"dequeueAttempts,omitempty"`
+		ExclusivityKey       string `json:"exclusivityKey,omitempty"`
+		InvisibilityDuration string `json:"invisibilityDuration,omitempty"`
+		LeaseDuration        string `json:"leaseDuration,omitempty"`
+		Type                 int32  `json:"type,omitempty"`
 	}
 	MessageOptions struct {
-		// Payload              map[string]interface{} `json:"payload,omitempty"`
-		Payload              Payload              `json:"payload,omitempty"`
-		AttemptsLeft         int32                `json:"attemptsLeft,omitempty"`
-		InvisibilityDuration *durationpb.Duration `json:"invisibilityDuration,omitempty"`
-		LeaseDuration        *durationpb.Duration `json:"leaseDuration,omitempty"`
-		LeaseExpiry          int64                `json:"leaseExpiry,omitempty"`
-		State                State                `json:"state,omitempty"`
-		InvisibilityExpiry   int64                `json:"invisibilityExpiry,omitempty"`
+		Payload              Payload `json:"payload,omitempty"`
+		AttemptsLeft         int32   `json:"attemptsLeft,omitempty"`
+		InvisibilityDuration string  `json:"invisibilityDuration,omitempty"`
+		LeaseDuration        string  `json:"leaseDuration,omitempty"`
+		LeaseExpiry          int64   `json:"leaseExpiry,omitempty"`
+		State                State   `json:"state,omitempty"`
+		InvisibilityExpiry   int64   `json:"invisibilityExpiry,omitempty"`
 	}
 	Payload struct {
 		Metadata map[string]*structpb.Value `json:"metadata,omitempty"`
@@ -41,6 +45,8 @@ type (
 		Min int64 `json:"min,omitempty"`
 		Max int64 `json:"max,omitempty"`
 	}
+
+	Connector func(address string, opts ClientOptions) (pb_chronoqueue.ChronoQueueClient, *grpc.ClientConn, error)
 )
 
 const (
@@ -53,21 +59,159 @@ const (
 	MESSAGE_ERRORED
 )
 
+const (
+	defaultTimeout                = 3 * time.Second
+	defaultHeartbeatInterval      = time.Second
+	defaultMaxHeartbeatRetryCount = 10
+)
+
+const (
+	DefaultMaxRetries          = 5
+	DefaultInitialBackoff      = 500 * time.Millisecond
+	DefaultMaxBackoff          = 60 * time.Second
+	DefaultMaxHeartBeatWorkers = 10
+)
+
+type ClientOptions struct {
+	MaxRetries          int
+	InitialBackoff      time.Duration
+	MaxBackoff          time.Duration
+	MaxHeartBeatWorkers int
+	TLSCredentials      credentials.TransportCredentials // Define as per your gRPC setup
+	Connector           Connector                        // User-provided Connector
+}
+
+type WorkItem struct {
+	ctx       context.Context
+	queue     string
+	messageID string
+}
+
 // ChronoQueueClient is a client to call ChronoQueue RPC
 type ChronoQueueClient struct {
-	service pb_chronoqueue.ChronoQueueClient
+	service   pb_chronoqueue.ChronoQueueClient
+	conn      *grpc.ClientConn
+	workChan  chan WorkItem
+	closeChan chan struct{}
+	opts      ClientOptions
 }
 
 // NewChronoQueueClient returns a new ChronoQueue client
-func NewChronoQueueClient(conn *grpc.ClientConn) *ChronoQueueClient {
-	service := pb_chronoqueue.NewChronoQueueClient(conn)
-	return &ChronoQueueClient{service: service}
+func NewChronoQueueClient(address string, opts ClientOptions) (*ChronoQueueClient, error) {
+	client := &ChronoQueueClient{
+		closeChan: make(chan struct{}),
+		opts:      checkDefaultClientOptions(opts),
+	}
+	client.workChan = make(chan WorkItem, client.opts.MaxHeartBeatWorkers)
+
+	// Use user-provided Connector if available, otherwise, use default
+	var connector Connector
+	if client.opts.Connector != nil {
+		connector = client.opts.Connector
+	} else {
+		connector = DefaultServerConnector // Use default connector
+	}
+
+	service, conn, err := connector(address, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	client.service = service
+	client.conn = conn
+
+	for i := 0; i < client.opts.MaxHeartBeatWorkers; i++ {
+		go client.heartbeatWorker()
+	}
+	return client, nil
+}
+
+func checkDefaultClientOptions(opts ClientOptions) ClientOptions {
+	if opts.MaxRetries == 0 {
+		opts.MaxRetries = DefaultMaxRetries
+	}
+	if opts.InitialBackoff == 0 {
+		opts.InitialBackoff = DefaultInitialBackoff
+	}
+	if opts.MaxBackoff == 0 {
+		opts.MaxBackoff = DefaultMaxBackoff
+	}
+	if opts.TLSCredentials == nil {
+		opts.TLSCredentials = nil // or an appropriate default TLS config
+	}
+	if opts.MaxHeartBeatWorkers == 0 {
+		opts.MaxHeartBeatWorkers = DefaultMaxHeartBeatWorkers
+	}
+	return opts
+}
+
+func DefaultServerConnector(address string, opts ClientOptions) (pb_chronoqueue.ChronoQueueClient, *grpc.ClientConn, error) {
+	backoff := opts.InitialBackoff
+	for i := 0; i < opts.MaxRetries; i++ {
+		// ...
+		var conn *grpc.ClientConn
+		var err error
+		if opts.TLSCredentials != nil {
+			conn, err = grpc.Dial(address, grpc.WithTransportCredentials(opts.TLSCredentials))
+		} else {
+			conn, err = grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		}
+
+		if err == nil {
+			return pb_chronoqueue.NewChronoQueueClient(conn), conn, nil
+		}
+
+		// Log or handle error, then retry
+		log.Printf("Failed to connect to %s: %v", address, err)
+
+		// Sleep for backoff duration, then increase backoff, adding jitter
+		time.Sleep(backoff + time.Duration(rand.Intn(100))*time.Millisecond)
+		backoff *= 2
+		if backoff > opts.MaxBackoff {
+			backoff = opts.MaxBackoff
+		}
+	}
+	return nil, nil, errors.New("max retry count reached. cannot connect to server")
+}
+
+func (client *ChronoQueueClient) heartbeatWorker() {
+	for workItem := range client.workChan {
+		// Perform work here, e.g., manage heartbeats
+		client.manageHeartbeats(workItem.ctx, workItem.queue, workItem.messageID)
+	}
+}
+
+func (client *ChronoQueueClient) setDefaultContextTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	_, ok := ctx.Deadline()
+	if !ok {
+		ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+		return ctx, cancel
+	}
+	return ctx, nil
+}
+
+func parseDurationToProto(durationStr string) (*durationpb.Duration, error) {
+	parsedDuration, err := time.ParseDuration(durationStr)
+	if err != nil {
+		return nil, err
+	}
+	return durationpb.New(parsedDuration), nil
 }
 
 // CreateQueue create a queue and returns empty response
-func (client *ChronoQueueClient) CreateQueue(name string, queueOptions QueueOptions) (*pb_chronoqueue.CreateQueueResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, queueOptions QueueOptions) (*pb_chronoqueue.CreateQueueResponse, error) {
+
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
+
+	leaseDuration, err := parseDurationToProto(queueOptions.LeaseDuration)
+	if err != nil {
+		return nil, fmt.Errorf("invalid lease duration: %v", err)
+	}
+	invisibilityDuration, err := parseDurationToProto(queueOptions.InvisibilityDuration)
+	if err != nil {
+		return nil, fmt.Errorf("invalid invisibility duration: %v", err)
+	}
 
 	req := &pb_chronoqueue.CreateQueueRequest{
 		Queue: &pb_chronoqueue.Queue{
@@ -75,9 +219,9 @@ func (client *ChronoQueueClient) CreateQueue(name string, queueOptions QueueOpti
 			Metadata: &pb_chronoqueue.Queue_Options{
 				Type:                 pb_chronoqueue.Queue_Options_Type(queueOptions.Type),
 				DequeueAttempts:      int32(queueOptions.DequeueAttempts),
-				LeaseDuration:        queueOptions.LeaseDuration,
+				LeaseDuration:        leaseDuration,
 				ExclusivityKey:       queueOptions.ExclusivityKey,
-				InvisibilityDuration: queueOptions.InvisibilityDuration,
+				InvisibilityDuration: invisibilityDuration,
 			},
 		},
 	}
@@ -89,8 +233,8 @@ func (client *ChronoQueueClient) CreateQueue(name string, queueOptions QueueOpti
 }
 
 // DeleteQueue deletes a queue and returns empty response
-func (client *ChronoQueueClient) DeleteQueue(name string) (*pb_chronoqueue.DeleteQueueResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (client *ChronoQueueClient) DeleteQueue(ctx context.Context, name string) (*pb_chronoqueue.DeleteQueueResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
 	req := &pb_chronoqueue.DeleteQueueRequest{Name: name}
@@ -102,13 +246,18 @@ func (client *ChronoQueueClient) DeleteQueue(name string) (*pb_chronoqueue.Delet
 }
 
 // PostMessage create adds a message to the queue and returns empty response
-// Note: Payload is an opaque struct containing "metadata" and "data" fields.
-//
-//	The "data" field can be anything coverted in []byte.
-//	The "metadata" field is a map[string][]byte that can be used to describe the data.
-func (client *ChronoQueueClient) PostMessage(queue string, messageId string, messageOptions MessageOptions) (*pb_chronoqueue.PostMessageResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, messageId string, messageOptions MessageOptions) (*pb_chronoqueue.PostMessageResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
+
+	leaseDuration, err := parseDurationToProto(messageOptions.LeaseDuration)
+	if err != nil {
+		return nil, fmt.Errorf("invalid lease duration: %v", err)
+	}
+	invisibilityDuration, err := parseDurationToProto(messageOptions.InvisibilityDuration)
+	if err != nil {
+		return nil, fmt.Errorf("invalid invisibility duration: %v", err)
+	}
 
 	req := &pb_chronoqueue.PostMessageRequest{
 		QueueName: queue,
@@ -120,92 +269,171 @@ func (client *ChronoQueueClient) PostMessage(queue string, messageId string, mes
 					Data:     messageOptions.Payload.Data,
 				},
 				AttemptsLeft:         messageOptions.AttemptsLeft,
-				LeaseDuration:        messageOptions.LeaseDuration,
+				LeaseDuration:        leaseDuration,
 				LeaseExpiry:          messageOptions.LeaseExpiry,
-				InvisibilityDuration: messageOptions.InvisibilityDuration,
+				InvisibilityDuration: invisibilityDuration,
 				State:                pb_chronoqueue.Message_Metadata_State(messageOptions.State),
 			},
 		},
 	}
 	res, err := client.service.PostMessage(ctx, req)
 	if err != nil {
-		return res, err
+		return nil, err
 	}
 	return res, nil
 }
 
+func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName string, messageId string) {
+
+	// Set up a ticker to send a heartbeat at regular intervals
+	ticker := time.NewTicker(defaultHeartbeatInterval)
+	defer ticker.Stop()
+
+	retryCount := 0 // Initialize retry counter
+
+	for {
+		select {
+		case <-ticker.C:
+
+			if retryCount >= defaultMaxHeartbeatRetryCount {
+				log.Printf("Max retry attempts reached for heartbeat of message: %s on queue: %s", messageId, queueName)
+				return // TODO: Or handle according to use-case: log, metric, alert, etc.
+			}
+
+			ctx, cancel := client.setDefaultContextTimeout(ctx)
+			defer cancel()
+
+			_, err := client.SendMessageHeartbeat(ctx, queueName, messageId)
+			if err != nil {
+				log.Printf("Error occurred in manageHeartbeats: %v", err)
+
+				// Increment retry counter
+				retryCount++
+
+				// Calculate exponential backoff time with jitter
+				backoffTime := (1 << retryCount) + rand.Intn(1000) // 2^retryCount + [0, 1000)ms jitter
+				log.Printf("Retrying in %d milliseconds...", backoffTime)
+
+				// Wait for backoff time before the next retry
+				time.Sleep(time.Duration(backoffTime) * time.Millisecond)
+
+				continue // Skip to the next iteration of the loop
+			}
+
+			// Reset retry counter upon successful heartbeat
+			retryCount = 0
+		case <-client.closeChan:
+			// client is closed, terminate the goroutine
+			return
+		case <-ctx.Done(): // Assuming client.ctx is a context that gets cancelled when processing is complete or an error occurs
+			// Stop sending heartbeats if the message processing is complete or an error occurred
+			return
+		}
+	}
+}
+
 // GetNextMessage returns next message on a queue
-func (client *ChronoQueueClient) GetNextMessage(queue string, leaseDuration *durationpb.Duration) (*pb_chronoqueue.GetNextMessageResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue string, leaseDuration *durationpb.Duration, enableHeartbeat bool) (*pb_chronoqueue.GetNextMessageResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
 	req := &pb_chronoqueue.GetNextMessageRequest{QueueName: queue, LeaseDuration: leaseDuration}
 	res, err := client.service.GetNextMessage(ctx, req)
 	if err != nil {
-		return res, err
+		return nil, err
+	}
+
+	if enableHeartbeat && res.Message != nil {
+		client.workChan <- WorkItem{
+			ctx:       ctx,
+			queue:     queue,
+			messageID: res.Message.MessageId,
+		}
 	}
 	return res, nil
 }
 
 // PeekQueueMessages returns messages on a queue that are in pending state
-func (client *ChronoQueueClient) PeekQueueMessages(queue string, limit int32, timeRange TimeRangeOption) (*pb_chronoqueue.PeekQueueMessagesResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (client *ChronoQueueClient) PeekQueueMessages(ctx context.Context, queue string, limit int32, timeRange TimeRangeOption) (*pb_chronoqueue.PeekQueueMessagesResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
 	var priorityRange pb_chronoqueue.PeekQueueMessagesRequest_PriorityRange
 	priorityRangeBytes, err := json.Marshal(timeRange)
 	if err != nil {
-		return &pb_chronoqueue.PeekQueueMessagesResponse{}, err
+		return nil, err
 	}
 	err = protojson.Unmarshal(priorityRangeBytes, &priorityRange)
 	if err != nil {
 		log.Println("Failed to deserialize priorityRange - err: ", err)
-		return &pb_chronoqueue.PeekQueueMessagesResponse{}, err
+		return nil, err
 	}
 
 	req := &pb_chronoqueue.PeekQueueMessagesRequest{QueueName: queue, PriorityRange: &priorityRange}
 	res, err := client.service.PeekQueueMessages(ctx, req)
 	if err != nil {
-		return res, err
+		return nil, err
 	}
 	return res, nil
 }
 
 // GetQueueState returns state of a queue
-func (client *ChronoQueueClient) GetQueueState(queue string) (*pb_chronoqueue.GetQueueStateResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (client *ChronoQueueClient) GetQueueState(ctx context.Context, queue string) (*pb_chronoqueue.GetQueueStateResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
 	req := &pb_chronoqueue.GetQueueStateRequest{QueueName: queue}
 	res, err := client.service.GetQueueState(ctx, req)
 	if err != nil {
-		return res, err
+		return nil, err
 	}
 	return res, nil
 }
 
 // RenewMessageLease updates a message's lease duration and returns empty response
-func (client *ChronoQueueClient) RenewMessageLease(queue string, messageId string, leaseDuration *durationpb.Duration) (*pb_chronoqueue.RenewMessageLeaseResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (client *ChronoQueueClient) RenewMessageLease(ctx context.Context, queue string, messageId string, leaseDuration *durationpb.Duration) (*pb_chronoqueue.RenewMessageLeaseResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
 	req := &pb_chronoqueue.RenewMessageLeaseRequest{QueueName: queue, MessageId: messageId, LeaseDuration: leaseDuration}
 	res, err := client.service.RenewMessageLease(ctx, req)
 	if err != nil {
-		return res, err
+		return nil, err
 	}
 	return res, nil
 }
 
 // AcknowledgeMessage updates state of a message and empty response
-func (client *ChronoQueueClient) AcknowledgeMessage(queue string, messageId string, state State) (*pb_chronoqueue.AcknowledgeMessageResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (client *ChronoQueueClient) AcknowledgeMessage(ctx context.Context, queue string, messageId string, state State) (*pb_chronoqueue.AcknowledgeMessageResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
 	req := &pb_chronoqueue.AcknowledgeMessageRequest{QueueName: queue, MessageId: messageId, State: pb_chronoqueue.Message_Metadata_State(state)}
 	res, err := client.service.AcknowledgeMessage(ctx, req)
 	if err != nil {
-		return res, err
+		return nil, err
 	}
 	return res, nil
+}
+
+// SendMessageHeartbeat sends a heartbeat for an in-flight message.
+func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queueName string, messageId string) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	req := &pb_chronoqueue.SendMessageHeartBeatRequest{
+		QueueName: queueName,
+		MessageId: messageId,
+	}
+	res, err := client.service.SendMessageHeartBeat(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func (client *ChronoQueueClient) Close() {
+	close(client.closeChan)
+	close(client.workChan)
+	client.conn.Close()
 }

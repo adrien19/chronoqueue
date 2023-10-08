@@ -6,7 +6,6 @@ import (
 	"net"
 	"reflect"
 	"testing"
-	"time"
 
 	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 	"google.golang.org/grpc"
@@ -39,6 +38,18 @@ func dialer() func(context.Context, string) (net.Conn, error) {
 	}
 }
 
+func testConnector(dialer func(context.Context, string) (net.Conn, error)) Connector {
+	return func(address string, opts ClientOptions) (pb_chronoqueue.ChronoQueueClient, *grpc.ClientConn, error) {
+		ctx := context.Background()
+		conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(dialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return nil, nil, err
+		}
+		client := pb_chronoqueue.NewChronoQueueClient(conn)
+		return client, conn, nil
+	}
+}
+
 func (*mockChronoQueueServer) CreateQueue(ctx context.Context, req *pb_chronoqueue.CreateQueueRequest) (*pb_chronoqueue.CreateQueueResponse, error) {
 	if req.Queue.GetName() == "" {
 		return &pb_chronoqueue.CreateQueueResponse{}, status.Errorf(codes.InvalidArgument, "cannot create queue with no name %v", req.Queue)
@@ -59,27 +70,201 @@ func (*mockChronoQueueServer) GetNextMessage(ctx context.Context, req *pb_chrono
 }
 
 func TestNewChronoQueueClient(t *testing.T) {
+	dialer := dialer()
+
 	type args struct {
-		conn *grpc.ClientConn
+		address string
+		opts    ClientOptions
 	}
 	tests := []struct {
-		name string
-		args args
-		want *ChronoQueueClient
+		name    string
+		args    args
+		want    *ChronoQueueClient
+		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Successful client creation",
+			args: args{
+				address: "bufnet",
+				opts: ClientOptions{
+					Connector: testConnector(dialer), // pass the testConnector
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Fail client creation with invalid address",
+			args: args{
+				address: "",
+				opts:    ClientOptions{},
+			},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NewChronoQueueClient(tt.args.conn); !reflect.DeepEqual(got, tt.want) {
+			got, err := NewChronoQueueClient(tt.args.address, tt.args.opts)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("NewChronoQueueClient() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NewChronoQueueClient() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestChronoQueueClient_CreateQueue(t *testing.T) {
+func Test_checkDefaultClientOptions(t *testing.T) {
 	type args struct {
+		opts ClientOptions
+	}
+	tests := []struct {
+		name string
+		args args
+		want ClientOptions
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := checkDefaultClientOptions(tt.args.opts); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("checkDefaultClientOptions() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDefaultServerConnector(t *testing.T) {
+	type args struct {
+		address string
+		opts    ClientOptions
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    pb_chronoqueue.ChronoQueueClient
+		want1   *grpc.ClientConn
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, got1, err := DefaultServerConnector(tt.args.address, tt.args.opts)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("DefaultServerConnector() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DefaultServerConnector() got = %v, want %v", got, tt.want)
+			}
+			if !reflect.DeepEqual(got1, tt.want1) {
+				t.Errorf("DefaultServerConnector() got1 = %v, want %v", got1, tt.want1)
+			}
+		})
+	}
+}
+
+func TestChronoQueueClient_heartbeatWorker(t *testing.T) {
+	type fields struct {
+		service   pb_chronoqueue.ChronoQueueClient
+		conn      *grpc.ClientConn
+		workChan  chan WorkItem
+		closeChan chan struct{}
+		opts      ClientOptions
+	}
+	tests := []struct {
+		name   string
+		fields fields
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &ChronoQueueClient{
+				service:   tt.fields.service,
+				conn:      tt.fields.conn,
+				workChan:  tt.fields.workChan,
+				closeChan: tt.fields.closeChan,
+				opts:      tt.fields.opts,
+			}
+			client.heartbeatWorker()
+		})
+	}
+}
+
+func TestChronoQueueClient_setDefaultContextTimeout(t *testing.T) {
+	type fields struct {
+		service   pb_chronoqueue.ChronoQueueClient
+		conn      *grpc.ClientConn
+		workChan  chan WorkItem
+		closeChan chan struct{}
+		opts      ClientOptions
+	}
+	type args struct {
+		ctx context.Context
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   context.Context
+		want1  context.CancelFunc
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &ChronoQueueClient{
+				service:   tt.fields.service,
+				conn:      tt.fields.conn,
+				workChan:  tt.fields.workChan,
+				closeChan: tt.fields.closeChan,
+				opts:      tt.fields.opts,
+			}
+			got, got1 := client.setDefaultContextTimeout(tt.args.ctx)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ChronoQueueClient.setDefaultContextTimeout() got = %v, want %v", got, tt.want)
+			}
+			if !reflect.DeepEqual(got1, tt.want1) {
+				t.Errorf("ChronoQueueClient.setDefaultContextTimeout() got1 = %v, want %v", got1, tt.want1)
+			}
+		})
+	}
+}
+
+func Test_parseDurationToProto(t *testing.T) {
+	type args struct {
+		durationStr string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *durationpb.Duration
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseDurationToProto(tt.args.durationStr)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseDurationToProto() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("parseDurationToProto() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestChronoQueueClient_CreateQueue(t *testing.T) {
+	dialer := dialer() // assuming dialer() is defined as in your previous code
+
+	type args struct {
+		ctx          context.Context
 		name         string
 		queueOptions QueueOptions
 	}
@@ -89,37 +274,49 @@ func TestChronoQueueClient_CreateQueue(t *testing.T) {
 		want    *pb_chronoqueue.CreateQueueResponse
 		wantErr bool
 	}{
-		// TODO: Add more test cases.
 		{
-			name: "Test successful queue creation",
+			name: "Successful Queue Creation",
 			args: args{
-				name:         "my_queue",
-				queueOptions: QueueOptions{},
+				ctx:  context.Background(),
+				name: "validQueueName",
+				queueOptions: QueueOptions{
+					LeaseDuration:        "15s",
+					InvisibilityDuration: "10s",
+				},
 			},
 			want:    &pb_chronoqueue.CreateQueueResponse{},
 			wantErr: false,
 		},
+		{
+			name: "Fail to Create Queue without Name",
+			args: args{
+				ctx:  context.Background(),
+				name: "",
+				queueOptions: QueueOptions{
+					LeaseDuration: "15s",
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
 	}
-
-	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "", grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithContextDialer(dialer()))
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
-
-	client := &ChronoQueueClient{
-		service: pb_chronoqueue.NewChronoQueueClient(conn),
-	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := client.CreateQueue(tt.args.name, tt.args.queueOptions)
+			opts := ClientOptions{
+				Connector: testConnector(dialer), // use testConnector with dialer
+			}
+			client, err := NewChronoQueueClient("bufnet", opts) // using "bufnet" as address, but it doesn't matter
+			if err != nil {
+				t.Fatalf("Failed to create client: %v", err)
+			}
+			defer client.Close()
+
+			got, err := client.CreateQueue(tt.args.ctx, tt.args.name, tt.args.queueOptions)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.CreateQueue() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got.String(), tt.want.String()) {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("ChronoQueueClient.CreateQueue() = %v, want %v", got, tt.want)
 			}
 		})
@@ -128,9 +325,14 @@ func TestChronoQueueClient_CreateQueue(t *testing.T) {
 
 func TestChronoQueueClient_DeleteQueue(t *testing.T) {
 	type fields struct {
-		service pb_chronoqueue.ChronoQueueClient
+		service   pb_chronoqueue.ChronoQueueClient
+		conn      *grpc.ClientConn
+		workChan  chan WorkItem
+		closeChan chan struct{}
+		opts      ClientOptions
 	}
 	type args struct {
+		ctx  context.Context
 		name string
 	}
 	tests := []struct {
@@ -145,9 +347,13 @@ func TestChronoQueueClient_DeleteQueue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := &ChronoQueueClient{
-				service: tt.fields.service,
+				service:   tt.fields.service,
+				conn:      tt.fields.conn,
+				workChan:  tt.fields.workChan,
+				closeChan: tt.fields.closeChan,
+				opts:      tt.fields.opts,
 			}
-			got, err := client.DeleteQueue(tt.args.name)
+			got, err := client.DeleteQueue(tt.args.ctx, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.DeleteQueue() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -161,9 +367,14 @@ func TestChronoQueueClient_DeleteQueue(t *testing.T) {
 
 func TestChronoQueueClient_PostMessage(t *testing.T) {
 	type fields struct {
-		service pb_chronoqueue.ChronoQueueClient
+		service   pb_chronoqueue.ChronoQueueClient
+		conn      *grpc.ClientConn
+		workChan  chan WorkItem
+		closeChan chan struct{}
+		opts      ClientOptions
 	}
 	type args struct {
+		ctx            context.Context
 		queue          string
 		messageId      string
 		messageOptions MessageOptions
@@ -180,9 +391,13 @@ func TestChronoQueueClient_PostMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := &ChronoQueueClient{
-				service: tt.fields.service,
+				service:   tt.fields.service,
+				conn:      tt.fields.conn,
+				workChan:  tt.fields.workChan,
+				closeChan: tt.fields.closeChan,
+				opts:      tt.fields.opts,
 			}
-			got, err := client.PostMessage(tt.args.queue, tt.args.messageId, tt.args.messageOptions)
+			got, err := client.PostMessage(tt.args.ctx, tt.args.queue, tt.args.messageId, tt.args.messageOptions)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.PostMessage() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -194,54 +409,78 @@ func TestChronoQueueClient_PostMessage(t *testing.T) {
 	}
 }
 
-func TestChronoQueueClient_GetNextMessage(t *testing.T) {
-
+func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
+	type fields struct {
+		service   pb_chronoqueue.ChronoQueueClient
+		conn      *grpc.ClientConn
+		workChan  chan WorkItem
+		closeChan chan struct{}
+		opts      ClientOptions
+	}
 	type args struct {
-		queue         string
-		leaseDuration *durationpb.Duration
+		ctx       context.Context
+		queueName string
+		messageId string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &ChronoQueueClient{
+				service:   tt.fields.service,
+				conn:      tt.fields.conn,
+				workChan:  tt.fields.workChan,
+				closeChan: tt.fields.closeChan,
+				opts:      tt.fields.opts,
+			}
+			client.manageHeartbeats(tt.args.ctx, tt.args.queueName, tt.args.messageId)
+		})
+	}
+}
+
+func TestChronoQueueClient_GetNextMessage(t *testing.T) {
+	type fields struct {
+		service   pb_chronoqueue.ChronoQueueClient
+		conn      *grpc.ClientConn
+		workChan  chan WorkItem
+		closeChan chan struct{}
+		opts      ClientOptions
+	}
+	type args struct {
+		ctx             context.Context
+		queue           string
+		leaseDuration   *durationpb.Duration
+		enableHeartbeat bool
 	}
 	tests := []struct {
 		name    string
+		fields  fields
 		args    args
 		want    *pb_chronoqueue.GetNextMessageResponse
 		wantErr bool
 	}{
-		// TODO: Add more test cases.
-		{
-			name: "test successful get next message from a queue",
-			args: args{
-				queue:         "test_queue",
-				leaseDuration: durationpb.New(time.Minute),
-			},
-			want: &pb_chronoqueue.GetNextMessageResponse{
-				Message: &pb_chronoqueue.Message{
-					MessageId: "test_message",
-					Metadata:  &pb_chronoqueue.Message_Metadata{},
-				},
-			},
-			wantErr: false,
-		},
+		// TODO: Add test cases.
 	}
-
-	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "", grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithContextDialer(dialer()))
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
-
-	client := &ChronoQueueClient{
-		service: pb_chronoqueue.NewChronoQueueClient(conn),
-	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := client.GetNextMessage(tt.args.queue, tt.args.leaseDuration)
+			client := &ChronoQueueClient{
+				service:   tt.fields.service,
+				conn:      tt.fields.conn,
+				workChan:  tt.fields.workChan,
+				closeChan: tt.fields.closeChan,
+				opts:      tt.fields.opts,
+			}
+			got, err := client.GetNextMessage(tt.args.ctx, tt.args.queue, tt.args.leaseDuration, tt.args.enableHeartbeat)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.GetNextMessage() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got.GetMessage(), tt.want.GetMessage()) {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("ChronoQueueClient.GetNextMessage() = %v, want %v", got, tt.want)
 			}
 		})
@@ -250,9 +489,14 @@ func TestChronoQueueClient_GetNextMessage(t *testing.T) {
 
 func TestChronoQueueClient_PeekQueueMessages(t *testing.T) {
 	type fields struct {
-		service pb_chronoqueue.ChronoQueueClient
+		service   pb_chronoqueue.ChronoQueueClient
+		conn      *grpc.ClientConn
+		workChan  chan WorkItem
+		closeChan chan struct{}
+		opts      ClientOptions
 	}
 	type args struct {
+		ctx       context.Context
 		queue     string
 		limit     int32
 		timeRange TimeRangeOption
@@ -269,9 +513,13 @@ func TestChronoQueueClient_PeekQueueMessages(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := &ChronoQueueClient{
-				service: tt.fields.service,
+				service:   tt.fields.service,
+				conn:      tt.fields.conn,
+				workChan:  tt.fields.workChan,
+				closeChan: tt.fields.closeChan,
+				opts:      tt.fields.opts,
 			}
-			got, err := client.PeekQueueMessages(tt.args.queue, tt.args.limit, tt.args.timeRange)
+			got, err := client.PeekQueueMessages(tt.args.ctx, tt.args.queue, tt.args.limit, tt.args.timeRange)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.PeekQueueMessages() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -285,9 +533,14 @@ func TestChronoQueueClient_PeekQueueMessages(t *testing.T) {
 
 func TestChronoQueueClient_GetQueueState(t *testing.T) {
 	type fields struct {
-		service pb_chronoqueue.ChronoQueueClient
+		service   pb_chronoqueue.ChronoQueueClient
+		conn      *grpc.ClientConn
+		workChan  chan WorkItem
+		closeChan chan struct{}
+		opts      ClientOptions
 	}
 	type args struct {
+		ctx   context.Context
 		queue string
 	}
 	tests := []struct {
@@ -302,9 +555,13 @@ func TestChronoQueueClient_GetQueueState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := &ChronoQueueClient{
-				service: tt.fields.service,
+				service:   tt.fields.service,
+				conn:      tt.fields.conn,
+				workChan:  tt.fields.workChan,
+				closeChan: tt.fields.closeChan,
+				opts:      tt.fields.opts,
 			}
-			got, err := client.GetQueueState(tt.args.queue)
+			got, err := client.GetQueueState(tt.args.ctx, tt.args.queue)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.GetQueueState() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -318,9 +575,14 @@ func TestChronoQueueClient_GetQueueState(t *testing.T) {
 
 func TestChronoQueueClient_RenewMessageLease(t *testing.T) {
 	type fields struct {
-		service pb_chronoqueue.ChronoQueueClient
+		service   pb_chronoqueue.ChronoQueueClient
+		conn      *grpc.ClientConn
+		workChan  chan WorkItem
+		closeChan chan struct{}
+		opts      ClientOptions
 	}
 	type args struct {
+		ctx           context.Context
 		queue         string
 		messageId     string
 		leaseDuration *durationpb.Duration
@@ -337,9 +599,13 @@ func TestChronoQueueClient_RenewMessageLease(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := &ChronoQueueClient{
-				service: tt.fields.service,
+				service:   tt.fields.service,
+				conn:      tt.fields.conn,
+				workChan:  tt.fields.workChan,
+				closeChan: tt.fields.closeChan,
+				opts:      tt.fields.opts,
 			}
-			got, err := client.RenewMessageLease(tt.args.queue, tt.args.messageId, tt.args.leaseDuration)
+			got, err := client.RenewMessageLease(tt.args.ctx, tt.args.queue, tt.args.messageId, tt.args.leaseDuration)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.RenewMessageLease() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -353,9 +619,14 @@ func TestChronoQueueClient_RenewMessageLease(t *testing.T) {
 
 func TestChronoQueueClient_AcknowledgeMessage(t *testing.T) {
 	type fields struct {
-		service pb_chronoqueue.ChronoQueueClient
+		service   pb_chronoqueue.ChronoQueueClient
+		conn      *grpc.ClientConn
+		workChan  chan WorkItem
+		closeChan chan struct{}
+		opts      ClientOptions
 	}
 	type args struct {
+		ctx       context.Context
 		queue     string
 		messageId string
 		state     State
@@ -372,9 +643,13 @@ func TestChronoQueueClient_AcknowledgeMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := &ChronoQueueClient{
-				service: tt.fields.service,
+				service:   tt.fields.service,
+				conn:      tt.fields.conn,
+				workChan:  tt.fields.workChan,
+				closeChan: tt.fields.closeChan,
+				opts:      tt.fields.opts,
 			}
-			got, err := client.AcknowledgeMessage(tt.args.queue, tt.args.messageId, tt.args.state)
+			got, err := client.AcknowledgeMessage(tt.args.ctx, tt.args.queue, tt.args.messageId, tt.args.state)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.AcknowledgeMessage() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -382,6 +657,77 @@ func TestChronoQueueClient_AcknowledgeMessage(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("ChronoQueueClient.AcknowledgeMessage() = %v, want %v", got, tt.want)
 			}
+		})
+	}
+}
+
+func TestChronoQueueClient_SendMessageHeartbeat(t *testing.T) {
+	type fields struct {
+		service   pb_chronoqueue.ChronoQueueClient
+		conn      *grpc.ClientConn
+		workChan  chan WorkItem
+		closeChan chan struct{}
+		opts      ClientOptions
+	}
+	type args struct {
+		ctx       context.Context
+		queueName string
+		messageId string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *pb_chronoqueue.SendMessageHeartBeatResponse
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &ChronoQueueClient{
+				service:   tt.fields.service,
+				conn:      tt.fields.conn,
+				workChan:  tt.fields.workChan,
+				closeChan: tt.fields.closeChan,
+				opts:      tt.fields.opts,
+			}
+			got, err := client.SendMessageHeartbeat(tt.args.ctx, tt.args.queueName, tt.args.messageId)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ChronoQueueClient.SendMessageHeartbeat() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ChronoQueueClient.SendMessageHeartbeat() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestChronoQueueClient_Close(t *testing.T) {
+	type fields struct {
+		service   pb_chronoqueue.ChronoQueueClient
+		conn      *grpc.ClientConn
+		workChan  chan WorkItem
+		closeChan chan struct{}
+		opts      ClientOptions
+	}
+	tests := []struct {
+		name   string
+		fields fields
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &ChronoQueueClient{
+				service:   tt.fields.service,
+				conn:      tt.fields.conn,
+				workChan:  tt.fields.workChan,
+				closeChan: tt.fields.closeChan,
+				opts:      tt.fields.opts,
+			}
+			client.Close()
 		})
 	}
 }
