@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"sync"
 	"time"
 
 	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
@@ -96,6 +97,8 @@ type ChronoQueueClient struct {
 	conn      *grpc.ClientConn
 	workChan  chan WorkItem
 	closeChan chan struct{}
+	closed    bool
+	mu        sync.Mutex
 	opts      ClientOptions
 }
 
@@ -103,6 +106,8 @@ type ChronoQueueClient struct {
 func NewChronoQueueClient(address string, opts ClientOptions) (*ChronoQueueClient, error) {
 	client := &ChronoQueueClient{
 		closeChan: make(chan struct{}),
+		closed:    false,
+		mu:        sync.Mutex{},
 		opts:      checkDefaultClientOptions(opts),
 	}
 	client.workChan = make(chan WorkItem, client.opts.MaxHeartBeatWorkers)
@@ -345,11 +350,15 @@ func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName
 }
 
 // GetNextMessage returns next message on a queue
-func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue string, leaseDuration *durationpb.Duration, enableHeartbeat bool) (*pb_chronoqueue.GetNextMessageResponse, error) {
+func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue string, leaseDuration string, enableHeartbeat bool) (*pb_chronoqueue.GetNextMessageResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
-	req := &pb_chronoqueue.GetNextMessageRequest{QueueName: queue, LeaseDuration: leaseDuration}
+	leaseDurationpb, err := parseDurationToProto(leaseDuration)
+	if err != nil {
+		return nil, err
+	}
+	req := &pb_chronoqueue.GetNextMessageRequest{QueueName: queue, LeaseDuration: leaseDurationpb}
 	res, err := client.service.GetNextMessage(ctx, req)
 	if err != nil {
 		return nil, err
@@ -403,11 +412,15 @@ func (client *ChronoQueueClient) GetQueueState(ctx context.Context, queue string
 }
 
 // RenewMessageLease updates a message's lease duration and returns empty response
-func (client *ChronoQueueClient) RenewMessageLease(ctx context.Context, queue string, messageId string, leaseDuration *durationpb.Duration) (*pb_chronoqueue.RenewMessageLeaseResponse, error) {
+func (client *ChronoQueueClient) RenewMessageLease(ctx context.Context, queue string, messageId string, leaseDuration string) (*pb_chronoqueue.RenewMessageLeaseResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
-	req := &pb_chronoqueue.RenewMessageLeaseRequest{QueueName: queue, MessageId: messageId, LeaseDuration: leaseDuration}
+	leaseDurationpb, err := parseDurationToProto(leaseDuration)
+	if err != nil {
+		return nil, err
+	}
+	req := &pb_chronoqueue.RenewMessageLeaseRequest{QueueName: queue, MessageId: messageId, LeaseDuration: leaseDurationpb}
 	res, err := client.service.RenewMessageLease(ctx, req)
 	if err != nil {
 		return nil, err
@@ -448,7 +461,13 @@ func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queue
 }
 
 func (client *ChronoQueueClient) Close() {
-	close(client.closeChan)
-	close(client.workChan)
-	client.conn.Close()
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	if !client.closed {
+		close(client.closeChan)
+		close(client.workChan)
+		client.conn.Close()
+		client.closed = true
+	}
 }
