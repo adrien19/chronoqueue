@@ -2,10 +2,12 @@ package client
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net"
 	"reflect"
 	"testing"
+	"time"
 
 	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
 	"google.golang.org/grpc"
@@ -13,6 +15,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -55,6 +58,33 @@ func (*mockChronoQueueServer) CreateQueue(ctx context.Context, req *pb_chronoque
 		return &pb_chronoqueue.CreateQueueResponse{}, status.Errorf(codes.InvalidArgument, "cannot create queue with no name %v", req.Queue)
 	}
 	return &pb_chronoqueue.CreateQueueResponse{}, nil
+}
+
+func (*mockChronoQueueServer) DeleteQueue(ctx context.Context, req *pb_chronoqueue.DeleteQueueRequest) (*pb_chronoqueue.DeleteQueueResponse, error) {
+	if req.GetName() == "" {
+		return &pb_chronoqueue.DeleteQueueResponse{}, status.Errorf(codes.InvalidArgument, "cannot delete queue with no name %v", req.Name)
+	}
+	return &pb_chronoqueue.DeleteQueueResponse{}, nil
+}
+
+func (*mockChronoQueueServer) PostMessage(ctx context.Context, req *pb_chronoqueue.PostMessageRequest) (*pb_chronoqueue.PostMessageResponse, error) {
+	if req.GetQueueName() == "" {
+		return &pb_chronoqueue.PostMessageResponse{}, status.Errorf(codes.InvalidArgument, "cannot post message given queue with no name %v", req.GetQueueName())
+	}
+	if req.Message.GetMessageId() == "" {
+		return &pb_chronoqueue.PostMessageResponse{}, status.Errorf(codes.InvalidArgument, "cannot post message with no message ID %v", req.Message.GetMessageId())
+	}
+	return &pb_chronoqueue.PostMessageResponse{}, nil
+}
+
+func (*mockChronoQueueServer) SendMessageHeartbeat(ctx context.Context, req *pb_chronoqueue.SendMessageHeartBeatRequest) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
+	if req.GetQueueName() == "" {
+		return &pb_chronoqueue.SendMessageHeartBeatResponse{}, status.Errorf(codes.InvalidArgument, "cannot send heartbeat given queue with no name %v", req.GetQueueName())
+	}
+	if req.GetMessageId() == "" {
+		return &pb_chronoqueue.SendMessageHeartBeatResponse{}, status.Errorf(codes.InvalidArgument, "cannot post message with no message ID %v", req.GetMessageId())
+	}
+	return &pb_chronoqueue.SendMessageHeartBeatResponse{}, nil
 }
 
 func (*mockChronoQueueServer) GetNextMessage(ctx context.Context, req *pb_chronoqueue.GetNextMessageRequest) (*pb_chronoqueue.GetNextMessageResponse, error) {
@@ -103,13 +133,10 @@ func TestNewChronoQueueClient(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := NewChronoQueueClient(tt.args.address, tt.args.opts)
+			_, err := NewChronoQueueClient(tt.args.address, tt.args.opts)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("NewChronoQueueClient() error = %v, wantErr %v", err, tt.wantErr)
 				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewChronoQueueClient() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -124,7 +151,40 @@ func Test_checkDefaultClientOptions(t *testing.T) {
 		args args
 		want ClientOptions
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Default values when empty options provided",
+			args: args{
+				opts: ClientOptions{},
+			},
+			want: ClientOptions{
+				MaxRetries:             5,
+				InitialBackoff:         time.Millisecond * 500,
+				MaxBackoff:             time.Second * 60,
+				MaxHeartBeatWorkers:    10,
+				DefaultRPCTimeout:      time.Second * 3,
+				MaxHeartbeatRetryCount: 10,
+			},
+		},
+		{
+			name: "Custom values are preserved",
+			args: args{
+				opts: ClientOptions{
+					MaxRetries:             3,
+					InitialBackoff:         time.Second * 2,
+					MaxBackoff:             time.Second * 2,
+					MaxHeartBeatWorkers:    5,
+					MaxHeartbeatRetryCount: 3,
+				},
+			},
+			want: ClientOptions{
+				MaxRetries:             3,
+				InitialBackoff:         time.Second * 2,
+				MaxBackoff:             time.Second * 2,
+				MaxHeartBeatWorkers:    5,
+				DefaultRPCTimeout:      time.Second * 3,
+				MaxHeartbeatRetryCount: 3,
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -147,7 +207,16 @@ func TestDefaultServerConnector(t *testing.T) {
 		want1   *grpc.ClientConn
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Invalid address",
+			args: args{
+				address: "",
+				opts:    ClientOptions{},
+			},
+			want:    nil,
+			want1:   nil,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -212,7 +281,17 @@ func TestChronoQueueClient_setDefaultContextTimeout(t *testing.T) {
 		want   context.Context
 		want1  context.CancelFunc
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Setting default context timeout",
+			fields: fields{
+				opts: ClientOptions{
+					DefaultRPCTimeout: time.Second * 5,
+				},
+			},
+			args: args{
+				ctx: context.Background(),
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -223,12 +302,9 @@ func TestChronoQueueClient_setDefaultContextTimeout(t *testing.T) {
 				closeChan: tt.fields.closeChan,
 				opts:      tt.fields.opts,
 			}
-			got, got1 := client.setDefaultContextTimeout(tt.args.ctx)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ChronoQueueClient.setDefaultContextTimeout() got = %v, want %v", got, tt.want)
-			}
-			if !reflect.DeepEqual(got1, tt.want1) {
-				t.Errorf("ChronoQueueClient.setDefaultContextTimeout() got1 = %v, want %v", got1, tt.want1)
+			got, _ := client.setDefaultContextTimeout(tt.args.ctx)
+			if _, ok := got.Deadline(); !ok {
+				t.Errorf("ChronoQueueClient.setDefaultContextTimeout() ok = %v, want %v", ok, true)
 			}
 		})
 	}
@@ -244,7 +320,22 @@ func Test_parseDurationToProto(t *testing.T) {
 		want    *durationpb.Duration
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Valid duration string",
+			args: args{
+				durationStr: "5s",
+			},
+			want:    durationpb.New(5 * time.Second),
+			wantErr: false,
+		},
+		{
+			name: "Invalid duration string",
+			args: args{
+				durationStr: "invalidDuration",
+			},
+			want:    nil,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -261,7 +352,7 @@ func Test_parseDurationToProto(t *testing.T) {
 }
 
 func TestChronoQueueClient_CreateQueue(t *testing.T) {
-	dialer := dialer() // assuming dialer() is defined as in your previous code
+	dialer := dialer()
 
 	type args struct {
 		ctx          context.Context
@@ -293,7 +384,8 @@ func TestChronoQueueClient_CreateQueue(t *testing.T) {
 				ctx:  context.Background(),
 				name: "",
 				queueOptions: QueueOptions{
-					LeaseDuration: "15s",
+					LeaseDuration:        "15s",
+					InvisibilityDuration: "10s",
 				},
 			},
 			want:    nil,
@@ -316,7 +408,7 @@ func TestChronoQueueClient_CreateQueue(t *testing.T) {
 				t.Errorf("ChronoQueueClient.CreateQueue() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+			if !proto.Equal(got, tt.want) {
 				t.Errorf("ChronoQueueClient.CreateQueue() = %v, want %v", got, tt.want)
 			}
 		})
@@ -324,41 +416,63 @@ func TestChronoQueueClient_CreateQueue(t *testing.T) {
 }
 
 func TestChronoQueueClient_DeleteQueue(t *testing.T) {
-	type fields struct {
-		service   pb_chronoqueue.ChronoQueueClient
-		conn      *grpc.ClientConn
-		workChan  chan WorkItem
-		closeChan chan struct{}
-		opts      ClientOptions
-	}
+	dialer := dialer()
+
 	type args struct {
-		ctx  context.Context
-		name string
+		ctx          context.Context
+		name         string
+		queueOptions QueueOptions
 	}
 	tests := []struct {
 		name    string
-		fields  fields
 		args    args
 		want    *pb_chronoqueue.DeleteQueueResponse
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Successful Queue Deletion",
+			args: args{
+				ctx:  context.Background(),
+				name: "validQueueName",
+				queueOptions: QueueOptions{
+					LeaseDuration:        "15s",
+					InvisibilityDuration: "10s",
+				},
+			},
+			want:    &pb_chronoqueue.DeleteQueueResponse{},
+			wantErr: false, // since method DeleteQueue not implemented!
+		},
+		{
+			name: "Unsuccessful deletion due to invalid queue name",
+			args: args{
+				ctx:  context.Background(),
+				name: "",
+				queueOptions: QueueOptions{
+					LeaseDuration:        "15s",
+					InvisibilityDuration: "10s",
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := &ChronoQueueClient{
-				service:   tt.fields.service,
-				conn:      tt.fields.conn,
-				workChan:  tt.fields.workChan,
-				closeChan: tt.fields.closeChan,
-				opts:      tt.fields.opts,
+			opts := ClientOptions{
+				Connector: testConnector(dialer), // use testConnector with dialer
 			}
+			client, err := NewChronoQueueClient("bufnet", opts) // using "bufnet" as address, but it doesn't matter
+			if err != nil {
+				t.Fatalf("Failed to create client: %v", err)
+			}
+			defer client.Close()
+
 			got, err := client.DeleteQueue(tt.args.ctx, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.DeleteQueue() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+			if !proto.Equal(got, tt.want) {
 				t.Errorf("ChronoQueueClient.DeleteQueue() = %v, want %v", got, tt.want)
 			}
 		})
@@ -366,13 +480,8 @@ func TestChronoQueueClient_DeleteQueue(t *testing.T) {
 }
 
 func TestChronoQueueClient_PostMessage(t *testing.T) {
-	type fields struct {
-		service   pb_chronoqueue.ChronoQueueClient
-		conn      *grpc.ClientConn
-		workChan  chan WorkItem
-		closeChan chan struct{}
-		opts      ClientOptions
-	}
+	dialer := dialer()
+
 	type args struct {
 		ctx            context.Context
 		queue          string
@@ -381,64 +490,323 @@ func TestChronoQueueClient_PostMessage(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		fields  fields
 		args    args
 		want    *pb_chronoqueue.PostMessageResponse
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Successful Message Posting",
+			args: args{
+				ctx:       context.Background(),
+				queue:     "validQueueName",
+				messageId: "validMessageId",
+				messageOptions: MessageOptions{
+					// Your message options here.
+					LeaseDuration: "3s",
+				},
+			},
+			want:    &pb_chronoqueue.PostMessageResponse{}, // Update based on your actual response.
+			wantErr: false,
+		},
+		{
+			name: "Failed Message Posting with Invalid Queue Name",
+			args: args{
+				ctx:       context.Background(),
+				queue:     "",
+				messageId: "validMessageId",
+				messageOptions: MessageOptions{
+					LeaseDuration:        "3s",
+					InvisibilityDuration: "0s",
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "Failed Message Posting with Invalid Message ID",
+			args: args{
+				ctx:       context.Background(),
+				queue:     "validQueueName",
+				messageId: "",
+				messageOptions: MessageOptions{
+					LeaseDuration:        "3s",
+					InvisibilityDuration: "0s",
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "Failed Message Posting with Invalid Delay Duration",
+			args: args{
+				ctx:       context.Background(),
+				queue:     "validQueueName",
+				messageId: "validMessageId",
+				messageOptions: MessageOptions{
+					LeaseDuration:        "invalidDuration",
+					InvisibilityDuration: "5m",
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "Failed Message Posting with Invalid Visibility Timeout",
+			args: args{
+				ctx:       context.Background(),
+				queue:     "validQueueName",
+				messageId: "validMessageId",
+				messageOptions: MessageOptions{
+					LeaseDuration:        "10s",
+					InvisibilityDuration: "invalidTimeout",
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := &ChronoQueueClient{
-				service:   tt.fields.service,
-				conn:      tt.fields.conn,
-				workChan:  tt.fields.workChan,
-				closeChan: tt.fields.closeChan,
-				opts:      tt.fields.opts,
+			opts := ClientOptions{
+				Connector: testConnector(dialer), // use testConnector with dialer
 			}
+			client, err := NewChronoQueueClient("bufnet", opts) // using "bufnet" as address, but it doesn't matter
+			if err != nil {
+				t.Fatalf("Failed to create client: %v", err)
+			}
+			defer client.Close()
+
 			got, err := client.PostMessage(tt.args.ctx, tt.args.queue, tt.args.messageId, tt.args.messageOptions)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.PostMessage() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+			if !proto.Equal(got, tt.want) {
 				t.Errorf("ChronoQueueClient.PostMessage() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
+// func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
+// 	dialer := dialer()
+
+// 	type args struct {
+// 		ctx       context.Context
+// 		queueName string
+// 		messageId string
+// 	}
+// 	tests := []struct {
+// 		name string
+// 		args args
+// 	}{
+// 		// TODO: Add test cases.
+// 	}
+// 	for _, tt := range tests {
+// 		t.Run(tt.name, func(t *testing.T) {
+// 			opts := ClientOptions{
+// 				Connector: testConnector(dialer), // use testConnector with dialer
+// 			}
+// 			client, err := NewChronoQueueClient("bufnet", opts) // using "bufnet" as address, but it doesn't matter
+// 			if err != nil {
+// 				t.Fatalf("Failed to create client: %v", err)
+// 			}
+// 			defer client.Close()
+
+// 			client.manageHeartbeats(tt.args.ctx, tt.args.queueName, tt.args.messageId)
+// 		})
+// 	}
+// }
+
 func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
+	dialer := dialer()
+
 	type fields struct {
-		service   pb_chronoqueue.ChronoQueueClient
-		conn      *grpc.ClientConn
-		workChan  chan WorkItem
-		closeChan chan struct{}
-		opts      ClientOptions
+		sendHeartbeatCallCounter int
+		retryCount               int
+		failedCalls              int
+		successfulCalls          int
 	}
+
 	type args struct {
 		ctx       context.Context
 		queueName string
 		messageId string
 	}
 	tests := []struct {
-		name   string
-		fields fields
-		args   args
+		name     string
+		args     args
+		fields   fields
+		setup    func(*fields, *ChronoQueueClient)
+		validate func(*testing.T, *fields, *ChronoQueueClient)
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Heartbeat Success",
+			args: args{
+				ctx:       context.Background(),
+				queueName: "validQueue",
+				messageId: "validMessageId",
+			},
+			fields: fields{
+				sendHeartbeatCallCounter: 0,
+				retryCount:               0,
+				failedCalls:              0,
+				successfulCalls:          0,
+			},
+			setup: func(f *fields, client *ChronoQueueClient) {
+				// Override SendMessageHeartbeat to always succeed
+				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
+					f.sendHeartbeatCallCounter++
+					return &pb_chronoqueue.SendMessageHeartBeatResponse{}, nil
+				}
+				client.opts.MaxHeartbeatRetryCount = 1
+			},
+			validate: func(t *testing.T, f *fields, client *ChronoQueueClient) {
+				// Validate that SendMessageHeartbeat was called
+				time.Sleep(time.Second)
+				if f.sendHeartbeatCallCounter == 0 {
+					t.Error("SendMessageHeartbeat was never called!")
+				}
+			},
+		},
+		{
+			name: "Heartbeat Fail with Retry",
+			args: args{
+				ctx:       context.Background(),
+				queueName: "validQueue",
+				messageId: "validMessageId",
+			},
+			fields: fields{
+				sendHeartbeatCallCounter: 0,
+				retryCount:               0,
+				failedCalls:              0,
+				successfulCalls:          0,
+			},
+			setup: func(f *fields, client *ChronoQueueClient) {
+				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
+					f.sendHeartbeatCallCounter++ // Increment call counter each time method is invoked
+
+					if f.retryCount == 0 {
+						f.failedCalls++ // Increment failed calls counter
+						f.retryCount++  // Increment retry counter
+						return nil, errors.New("forced error")
+					}
+
+					f.successfulCalls++ // Increment successful calls counter
+					return &pb_chronoqueue.SendMessageHeartBeatResponse{}, nil
+				}
+			},
+			validate: func(t *testing.T, f *fields, client *ChronoQueueClient) {
+				// Validate that SendMessageHeartbeat was called and recovered after a retry
+				time.Sleep(2 * time.Second)
+
+				// Validate that SendMessageHeartbeat was called, failed initially, but succeeded upon retry
+				if f.failedCalls != 1 {
+					t.Errorf("SendMessageHeartbeat did not fail as expected: got %v failures, want 1", f.failedCalls)
+				}
+				// time.Sleep(time.Second)
+				if f.successfulCalls != 1 {
+					t.Errorf("SendMessageHeartbeat did not succeed upon retry: got %v successes, want 1", f.successfulCalls)
+				}
+			},
+		},
+		{
+			name: "Max Retries Reached",
+			args: args{
+				ctx:       context.Background(),
+				queueName: "validQueue",
+				messageId: "validMessageId",
+			},
+			fields: fields{
+				sendHeartbeatCallCounter: 0,
+				retryCount:               0,
+				failedCalls:              0,
+				successfulCalls:          0,
+			},
+			setup: func(f *fields, client *ChronoQueueClient) {
+				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
+					f.sendHeartbeatCallCounter++
+					return nil, errors.New("forced error")
+				}
+				client.opts.MaxHeartbeatRetryCount = 1
+			},
+			validate: func(t *testing.T, f *fields, client *ChronoQueueClient) {
+				// Allow time for retries to occur
+				// Note: This sleep time might need to be adjusted based on actual behavior
+				time.Sleep(2 * time.Second)
+
+				// Validate that the call counter reached max retries
+				if f.sendHeartbeatCallCounter != client.opts.MaxHeartbeatRetryCount {
+					t.Errorf("Unexpected number of retries. Got: %d, Expected: %d", f.sendHeartbeatCallCounter, client.opts.MaxHeartbeatRetryCount)
+				}
+			},
+		},
+		{
+			name: "Context Cancellation",
+			args: args{
+				ctx:       context.TODO(), // To be canceled in validate
+				queueName: "validQueue",
+				messageId: "validMessageId",
+			},
+			fields: fields{
+				sendHeartbeatCallCounter: 0,
+				retryCount:               0,
+				failedCalls:              0,
+				successfulCalls:          0,
+			},
+			setup: func(f *fields, client *ChronoQueueClient) {
+				// Setup a call counter and ensure it is reset
+				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
+					f.sendHeartbeatCallCounter++
+					return &pb_chronoqueue.SendMessageHeartBeatResponse{}, nil
+				}
+			},
+			validate: func(t *testing.T, f *fields, client *ChronoQueueClient) {
+				// Allow for initial heartbeats
+				time.Sleep(200 * time.Millisecond)
+
+				// Cancel the context
+				client.closeChan <- struct{}{}
+
+				// Allow for any in-flight heartbeats to complete
+				time.Sleep(200 * time.Millisecond)
+
+				// Capture the call count after the context is cancelled
+				finalCallCount := f.sendHeartbeatCallCounter
+
+				// Allow more time to ensure no further heartbeats are sent
+				time.Sleep(500 * time.Millisecond)
+
+				// Validate that the call count did not increase after the context was cancelled
+				if f.sendHeartbeatCallCounter != finalCallCount {
+					t.Errorf("SendMessageHeartbeat was called after context cancellation. Final count: %d, Current count: %d", finalCallCount, f.sendHeartbeatCallCounter)
+				}
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := &ChronoQueueClient{
-				service:   tt.fields.service,
-				conn:      tt.fields.conn,
-				workChan:  tt.fields.workChan,
-				closeChan: tt.fields.closeChan,
-				opts:      tt.fields.opts,
+			opts := ClientOptions{
+				Connector: testConnector(dialer),
 			}
-			client.manageHeartbeats(tt.args.ctx, tt.args.queueName, tt.args.messageId)
+			client, err := NewChronoQueueClient("bufnet", opts)
+			if err != nil {
+				t.Fatalf("Failed to create client: %v", err)
+			}
+			defer client.Close()
+
+			// Setup client as per test case
+			tt.setup(&tt.fields, client)
+
+			// Use a separate goroutine as manageHeartbeats is blocking
+			go client.manageHeartbeats(tt.args.ctx, tt.args.queueName, tt.args.messageId)
+
+			// Add a small sleep to allow for asynchronous operations to execute
+			// Note: This might need to be adjusted based on actual behavior
+			time.Sleep(100 * time.Millisecond)
+
+			// Validate the scenario as per test case
+			tt.validate(t, &tt.fields, client)
 		})
 	}
 }

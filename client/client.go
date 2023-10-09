@@ -60,7 +60,7 @@ const (
 )
 
 const (
-	defaultTimeout                = 3 * time.Second
+	defaultRPCTimeout             = 3 * time.Second
 	defaultHeartbeatInterval      = time.Second
 	defaultMaxHeartbeatRetryCount = 10
 )
@@ -73,12 +73,15 @@ const (
 )
 
 type ClientOptions struct {
-	MaxRetries          int
-	InitialBackoff      time.Duration
-	MaxBackoff          time.Duration
-	MaxHeartBeatWorkers int
-	TLSCredentials      credentials.TransportCredentials // Define as per your gRPC setup
-	Connector           Connector                        // User-provided Connector
+	MaxRetries               int
+	InitialBackoff           time.Duration
+	MaxBackoff               time.Duration
+	MaxHeartBeatWorkers      int
+	DefaultRPCTimeout        time.Duration
+	TLSCredentials           credentials.TransportCredentials // Define as per your gRPC setup
+	Connector                Connector                        // User-provided Connector
+	MaxHeartbeatRetryCount   int
+	SendMessageHeartbeatFunc func(context.Context, string, string) (*pb_chronoqueue.SendMessageHeartBeatResponse, error)
 }
 
 type WorkItem struct {
@@ -142,6 +145,12 @@ func checkDefaultClientOptions(opts ClientOptions) ClientOptions {
 	if opts.MaxHeartBeatWorkers == 0 {
 		opts.MaxHeartBeatWorkers = DefaultMaxHeartBeatWorkers
 	}
+	if opts.DefaultRPCTimeout == 0 {
+		opts.DefaultRPCTimeout = defaultRPCTimeout
+	}
+	if opts.MaxHeartbeatRetryCount == 0 {
+		opts.MaxHeartbeatRetryCount = defaultMaxHeartbeatRetryCount
+	}
 	return opts
 }
 
@@ -184,13 +193,16 @@ func (client *ChronoQueueClient) heartbeatWorker() {
 func (client *ChronoQueueClient) setDefaultContextTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	_, ok := ctx.Deadline()
 	if !ok {
-		ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+		ctx, cancel := context.WithTimeout(ctx, client.opts.DefaultRPCTimeout)
 		return ctx, cancel
 	}
 	return ctx, nil
 }
 
 func parseDurationToProto(durationStr string) (*durationpb.Duration, error) {
+	if durationStr == "" {
+		return nil, nil
+	}
 	parsedDuration, err := time.ParseDuration(durationStr)
 	if err != nil {
 		return nil, err
@@ -227,7 +239,7 @@ func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, q
 	}
 	res, err := client.service.CreateQueue(ctx, req)
 	if err != nil {
-		return res, err
+		return nil, err
 	}
 	return res, nil
 }
@@ -295,7 +307,7 @@ func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName
 		select {
 		case <-ticker.C:
 
-			if retryCount >= defaultMaxHeartbeatRetryCount {
+			if retryCount >= client.opts.MaxHeartbeatRetryCount {
 				log.Printf("Max retry attempts reached for heartbeat of message: %s on queue: %s", messageId, queueName)
 				return // TODO: Or handle according to use-case: log, metric, alert, etc.
 			}
@@ -418,6 +430,9 @@ func (client *ChronoQueueClient) AcknowledgeMessage(ctx context.Context, queue s
 
 // SendMessageHeartbeat sends a heartbeat for an in-flight message.
 func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queueName string, messageId string) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
+	if client.opts.SendMessageHeartbeatFunc != nil {
+		return client.opts.SendMessageHeartbeatFunc(ctx, queueName, messageId)
+	}
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
