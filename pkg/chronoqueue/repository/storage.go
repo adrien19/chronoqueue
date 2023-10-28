@@ -13,6 +13,7 @@ import (
 	"github.com/go-redsync/redsync/v4"
 	"github.com/go-redsync/redsync/v4/redis/goredis/v9"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/codes"
 )
 
 type Storage interface {
@@ -59,6 +60,16 @@ func NewQueueStorage(ctx context.Context, redisClient *redis.Client, encryptionK
 }
 
 func (as *storage) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error) {
+
+	// Create or fetch the mutex for this specific queue
+	mutex := as.rs.NewMutex("mutex:" + request.GetName())
+
+	// Try to acquire the lock
+	if err := mutex.Lock(); err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
+		return nil, chronoErr.GRPCStatus()
+	}
+	defer mutex.Unlock()
 
 	if request == nil || request.GetName() == "" {
 		return &chronoqueue.DeleteQueueResponse{}, errors.New("error: queue information missing")
