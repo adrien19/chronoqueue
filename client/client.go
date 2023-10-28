@@ -25,15 +25,15 @@ type (
 	QueueOptions struct {
 		DequeueAttempts      int32  `json:"dequeueAttempts,omitempty"`
 		ExclusivityKey       string `json:"exclusivityKey,omitempty"`
-		InvisibilityDuration string `json:"invisibilityDuration,omitempty"`
-		LeaseDuration        string `json:"leaseDuration,omitempty"`
+		InvisibilityDuration string `json:"invisibilityDuration"`
+		LeaseDuration        string `json:"leaseDuration"`
 		Type                 int32  `json:"type,omitempty"`
 	}
 	MessageOptions struct {
 		Payload              Payload `json:"payload,omitempty"`
 		AttemptsLeft         int32   `json:"attemptsLeft,omitempty"`
-		InvisibilityDuration string  `json:"invisibilityDuration,omitempty"`
-		LeaseDuration        string  `json:"leaseDuration,omitempty"`
+		InvisibilityDuration string  `json:"invisibilityDuration"`
+		LeaseDuration        string  `json:"leaseDuration"`
 		LeaseExpiry          int64   `json:"leaseExpiry,omitempty"`
 		State                State   `json:"state,omitempty"`
 		InvisibilityExpiry   int64   `json:"invisibilityExpiry,omitempty"`
