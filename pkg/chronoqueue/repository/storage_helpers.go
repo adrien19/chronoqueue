@@ -12,6 +12,7 @@ import (
 	"github.com/adrien19/chronoqueue/internal/encryption"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -64,6 +65,21 @@ func (as *storage) decryptMessageMetadataPayload(metadata *chronoqueue.Message_M
 
 // Fetches and deserializes the message metadata from Redis.
 func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, messageID string) (*chronoqueue.Message_Metadata, error) {
+
+	messageMutex := as.rs.NewMutex("mutex:" + messageID)
+	// Try to acquire the lock
+	if err := messageMutex.Lock(); err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
+		return nil, chronoErr.GRPCStatus()
+	}
+
+	defer func() {
+		// Release the message lock
+		if ok, err := messageMutex.Unlock(); !ok || err != nil {
+			util.Error("Failed to release message lock", err)
+		}
+	}()
+
 	key := fmt.Sprintf("%s:%s:meta", queueName, messageID)
 	result, err := as.redisClient.HGet(ctx, key, "metadata").Result()
 	if err != nil {
@@ -113,6 +129,21 @@ func (as *storage) updateMessageStateAndLease(message *chronoqueue.Message, requ
 }
 
 func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string, message *chronoqueue.Message) error {
+
+	messageMutex := as.rs.NewMutex("mutex:" + message.MessageId)
+	// Try to acquire the lock
+	if err := messageMutex.Lock(); err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
+		return chronoErr.GRPCStatus()
+	}
+
+	defer func() {
+		// Release the message lock
+		if ok, err := messageMutex.Unlock(); !ok || err != nil {
+			util.Error("Failed to release message lock", err)
+		}
+	}()
+
 	// Create a proto message's metadata marshaller
 	m := protojson.MarshalOptions{
 		EmitUnpopulated: true,

@@ -14,14 +14,20 @@ import (
 
 func (as *storage) GetQueueState(ctx context.Context, request *chronoqueue.GetQueueStateRequest) (*chronoqueue.GetQueueStateResponse, error) {
 	// Create or fetch the mutex for this specific queue
-	mutex := as.rs.NewMutex("mutex:" + request.GetQueueName())
+	queueMutex := as.rs.NewMutex("mutex:" + request.GetQueueName())
 
 	// Try to acquire the lock
-	if err := mutex.Lock(); err != nil {
+	if err := queueMutex.Lock(); err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
 		return nil, chronoErr.GRPCStatus()
 	}
-	defer mutex.Unlock()
+
+	defer func() {
+		// Release the message lock
+		if ok, err := queueMutex.Unlock(); !ok || err != nil {
+			util.Error("Failed to release queue lock", err)
+		}
+	}()
 
 	// Now we can safely compute the queue state as before
 	membersWithScores, err := as.redisClient.ZRangeByScoreWithScores(ctx, request.GetQueueName(), &redis.ZRangeBy{

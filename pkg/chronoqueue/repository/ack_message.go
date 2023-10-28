@@ -26,6 +26,20 @@ const (
 // Updates and saves the message metadata in Redis.
 func (as *storage) saveMessageMetadata(ctx context.Context, queueName string, messageID string, metadata *chronoqueue.Message_Metadata) error {
 
+	messageMutex := as.rs.NewMutex("mutex:" + messageID)
+	// Try to acquire the lock
+	if err := messageMutex.Lock(); err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
+		return chronoErr.GRPCStatus()
+	}
+
+	defer func() {
+		// Release the message lock
+		if ok, err := messageMutex.Unlock(); !ok || err != nil {
+			util.Error("Failed to release message lock", err)
+		}
+	}()
+
 	err := as.encryptMetadataPayload(metadata)
 	if err != nil {
 		return err
@@ -71,20 +85,6 @@ func (as *storage) AcknowledgeMessage(ctx context.Context, request *chronoqueue.
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Invalid input provided")
 		return nil, chronoErr.GRPCStatus()
 	}
-
-	messageMutex := as.rs.NewMutex("message:" + messageID)
-	// Try to acquire the lock
-	if err := messageMutex.Lock(); err != nil {
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
-		return nil, chronoErr.GRPCStatus()
-	}
-
-	defer func() {
-		// Release the message lock
-		if ok, err := messageMutex.Unlock(); !ok || err != nil {
-			util.Error("Failed to release message lock", err)
-		}
-	}()
 
 	metadata, err := as.fetchMessageMetadata(ctx, queueName, messageID)
 	if err != nil {
