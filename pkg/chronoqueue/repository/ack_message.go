@@ -72,6 +72,20 @@ func (as *storage) AcknowledgeMessage(ctx context.Context, request *chronoqueue.
 		return nil, chronoErr.GRPCStatus()
 	}
 
+	messageMutex := as.rs.NewMutex("message:" + messageID)
+	// Try to acquire the lock
+	if err := messageMutex.Lock(); err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
+		return nil, chronoErr.GRPCStatus()
+	}
+
+	defer func() {
+		// Release the message lock
+		if ok, err := messageMutex.Unlock(); !ok || err != nil {
+			util.Error("Failed to release message lock", err)
+		}
+	}()
+
 	metadata, err := as.fetchMessageMetadata(ctx, queueName, messageID)
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while fetching message metadata")
