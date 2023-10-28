@@ -216,9 +216,9 @@ func Test_storage_CreateQueueMessage(t *testing.T) {
 					QueueName: "test_queue",
 					Message: &chronoqueue.Message{
 						MessageId: "test_message_id",
-						Priority:  time.Now().Unix(),
 						Metadata: &chronoqueue.Message_Metadata{
-							Payload: &chronoqueue.Payload{},
+							Payload:  &chronoqueue.Payload{},
+							Priority: time.Now().Unix(),
 						},
 					},
 				},
@@ -234,9 +234,9 @@ func Test_storage_CreateQueueMessage(t *testing.T) {
 					QueueName: "test_queue",
 					Message: &chronoqueue.Message{
 						// MessageId: "test_message_id",
-						Priority: time.Now().Unix(),
 						Metadata: &chronoqueue.Message_Metadata{
-							Payload: &chronoqueue.Payload{},
+							Payload:  &chronoqueue.Payload{},
+							Priority: time.Now().Unix(),
 						},
 					},
 				},
@@ -323,10 +323,10 @@ func Test_storage_GetQueueMessage(t *testing.T) {
 		QueueName: "test_queue",
 		Message: &chronoqueue.Message{
 			MessageId: "test_message_id",
-			Priority:  0,
 			Metadata: &chronoqueue.Message_Metadata{
-				Payload: &chronoqueue.Payload{},
-				State:   chronoqueue.Message_Metadata_PENDING,
+				Payload:  &chronoqueue.Payload{},
+				State:    chronoqueue.Message_Metadata_PENDING,
+				Priority: 0,
 			},
 		},
 	})
@@ -394,10 +394,10 @@ func Test_storage_DeleteQueueMessage(t *testing.T) {
 		QueueName: "test_queue",
 		Message: &chronoqueue.Message{
 			MessageId: "test_message_id",
-			Priority:  0,
 			Metadata: &chronoqueue.Message_Metadata{
-				Payload: &chronoqueue.Payload{},
-				State:   chronoqueue.Message_Metadata_PENDING,
+				Payload:  &chronoqueue.Payload{},
+				State:    chronoqueue.Message_Metadata_PENDING,
+				Priority: 0,
 			},
 		},
 	})
@@ -464,10 +464,10 @@ func Test_storage_AcknowledgeMessage(t *testing.T) {
 		QueueName: "test_queue",
 		Message: &chronoqueue.Message{
 			MessageId: "test_message_id",
-			Priority:  0,
 			Metadata: &chronoqueue.Message_Metadata{
-				Payload: &chronoqueue.Payload{},
-				State:   chronoqueue.Message_Metadata_PENDING,
+				Payload:  &chronoqueue.Payload{},
+				State:    chronoqueue.Message_Metadata_PENDING,
+				Priority: 0,
 			},
 		},
 	})
@@ -539,10 +539,10 @@ func Test_storage_RenewMessageLease(t *testing.T) {
 		QueueName: "test_queue",
 		Message: &chronoqueue.Message{
 			MessageId: "test_message_id",
-			Priority:  0,
 			Metadata: &chronoqueue.Message_Metadata{
-				Payload: &chronoqueue.Payload{},
-				State:   chronoqueue.Message_Metadata_PENDING,
+				Payload:  &chronoqueue.Payload{},
+				State:    chronoqueue.Message_Metadata_PENDING,
+				Priority: 0,
 			},
 		},
 	})
@@ -613,10 +613,10 @@ func Test_storage_PeekQueueMessages(t *testing.T) {
 		QueueName: "test_queue",
 		Message: &chronoqueue.Message{
 			MessageId: "test_message_id",
-			Priority:  time.Now().Unix(),
 			Metadata: &chronoqueue.Message_Metadata{
-				Payload: &chronoqueue.Payload{},
-				State:   chronoqueue.Message_Metadata_PENDING,
+				Payload:  &chronoqueue.Payload{},
+				State:    chronoqueue.Message_Metadata_PENDING,
+				Priority: time.Now().Unix(),
 			},
 		},
 	})
@@ -686,10 +686,10 @@ func Test_storage_GetQueueState(t *testing.T) {
 		QueueName: "test_queue",
 		Message: &chronoqueue.Message{
 			MessageId: "test_message_id",
-			Priority:  time.Now().Unix(),
 			Metadata: &chronoqueue.Message_Metadata{
-				Payload: &chronoqueue.Payload{},
-				State:   chronoqueue.Message_Metadata_PENDING,
+				Payload:  &chronoqueue.Payload{},
+				State:    chronoqueue.Message_Metadata_PENDING,
+				Priority: time.Now().Unix(),
 			},
 		},
 	})

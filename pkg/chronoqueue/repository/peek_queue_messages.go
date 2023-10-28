@@ -46,7 +46,6 @@ func (as *storage) PeekQueueMessages(ctx context.Context, request *chronoqueue.P
 
 		messages[i] = &chronoqueue.Message{
 			MessageId: messageID,
-			Priority:  0, // TODO: This seems to be hardcoded for now, should be updated.
 			Metadata:  metadata,
 		}
 	}

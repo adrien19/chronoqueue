@@ -47,7 +47,6 @@ message Payload {
 
 message Message {
     string message_id = 1;
-    int64 priority = 2;
     message Metadata {
         Payload payload = 1;
         enum State {
@@ -66,7 +65,7 @@ message Message {
         int64 lease_expiry = 6;
         int32 lease_renewal_count = 7;
         int64 invisibility_expiry = 8;
-
+        int64 priority = 9;
     }
     Message.Metadata metadata = 3;
 }

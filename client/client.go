@@ -37,6 +37,7 @@ type (
 		LeaseExpiry          int64   `json:"leaseExpiry,omitempty"`
 		State                State   `json:"state,omitempty"`
 		InvisibilityExpiry   int64   `json:"invisibilityExpiry,omitempty"`
+		Priority             int64   `json:"Priority,omitempty"`
 	}
 	Payload struct {
 		Metadata map[string]*structpb.Value `json:"metadata,omitempty"`
@@ -290,6 +291,7 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 				LeaseExpiry:          messageOptions.LeaseExpiry,
 				InvisibilityDuration: invisibilityDuration,
 				State:                pb_chronoqueue.Message_Metadata_State(messageOptions.State),
+				Priority:             messageOptions.Priority,
 			},
 		},
 	}

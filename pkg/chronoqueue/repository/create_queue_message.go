@@ -102,7 +102,7 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 	// Calculate the message's priority score
 	// The score is calculated as the current time plus the message's priority
 	// This ensures that messages with a higher priority are processed first
-	priorityScore := time.Now().UnixNano() + int64(message.GetPriority())
+	priorityScore := time.Now().UnixNano() + int64(message.Metadata.GetPriority())
 
 	// Generate a unique score for the message to ensure correct ordering for messages with the same priority
 	// We use the current time in nanoseconds as a tie-breaker

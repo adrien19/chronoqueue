@@ -35,7 +35,6 @@ func (as *storage) getNextPendingMessage(ctx context.Context, queueName string, 
 		if meta.State == chronoqueue.Message_Metadata_PENDING {
 			return &chronoqueue.Message{
 				MessageId: member,
-				Priority:  0,
 				Metadata:  meta,
 			}, nil
 		}
