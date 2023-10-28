@@ -15,6 +15,7 @@ import (
 func (as *storage) fetchMessageIDs(ctx context.Context, queueName string, priorityRange *chronoqueue.PeekQueueMessagesRequest_PriorityRange, limit int64) ([]string, error) {
 	min := "-inf"
 	max := "+inf"
+	// max := strconv.FormatInt(time.Now().UnixMilli(), 10)
 	if priorityRange != nil {
 		min = strconv.FormatInt(priorityRange.GetMin(), 10)
 		max = strconv.FormatInt(priorityRange.GetMax(), 10)

@@ -15,6 +15,11 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+const (
+	MaxPriority = 100
+	MinPriority = 0
+)
+
 // Serialize the message metadata into JSON
 func (as *storage) serializeMessageMetadata(metadata *chronoqueue.Message_Metadata) ([]byte, error) {
 	m := protojson.MarshalOptions{
@@ -99,21 +104,23 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 	invisibity_expiry := time.Now().Add(message.Metadata.InvisibilityDuration.AsDuration())
 	message.Metadata.InvisibilityExpiry = invisibity_expiry.UnixNano() / int64(time.Millisecond)
 
+	priority := message.Metadata.GetPriority()
+	if priority > MaxPriority {
+		priority = MaxPriority
+	} else if priority < 0 {
+		priority = MinPriority
+	}
 	// Calculate the message's priority score
 	// The score is calculated as the current time plus the message's priority
 	// This ensures that messages with a higher priority are processed first
-	priorityScore := time.Now().UnixNano() + int64(message.Metadata.GetPriority())
-
-	// Generate a unique score for the message to ensure correct ordering for messages with the same priority
-	// We use the current time in nanoseconds as a tie-breaker
-	uniqueScore := float64(priorityScore) + float64(time.Now().UnixNano())/float64(time.Second)
+	priorityScore := time.Now().Add(time.Duration(int64(MaxPriority-priority))).UnixNano() / int64(time.Millisecond)
 
 	// Begin transaction pipeline
 	txPipeline := as.redisClient.TxPipeline()
 
 	// Add the message to the queue
 	_, err = txPipeline.ZAdd(ctx, queueName, redis.Z{
-		Score:  float64(uniqueScore),
+		Score:  float64(priorityScore),
 		Member: message.GetMessageId(),
 	}).Result()
 	if err != nil {
