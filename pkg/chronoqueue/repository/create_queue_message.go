@@ -99,31 +99,21 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 	invisibity_expiry := time.Now().Add(message.Metadata.InvisibilityDuration.AsDuration())
 	message.Metadata.InvisibilityExpiry = invisibity_expiry.UnixNano() / int64(time.Millisecond)
 
-	// Calculate the message's deadline
-	deadline := time.Now().Add(time.Duration(message.Priority)).UnixNano() / int64(time.Millisecond)
+	// Calculate the message's priority score
+	// The score is calculated as the current time plus the message's priority
+	// This ensures that messages with a higher priority are processed first
+	priorityScore := time.Now().UnixNano() + int64(message.GetPriority())
 
-	// Create or fetch the mutex for this specific queue
-	queueMutex := as.rs.NewMutex("mutex:" + request.GetQueueName())
-
-	// Try to acquire the lock
-	if err := queueMutex.Lock(); err != nil {
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
-		return nil, chronoErr.GRPCStatus()
-	}
-
-	defer func() {
-		// Release the message lock
-		if ok, err := queueMutex.Unlock(); !ok || err != nil {
-			util.Error("Failed to release queue lock", err)
-		}
-	}()
+	// Generate a unique score for the message to ensure correct ordering for messages with the same priority
+	// We use the current time in nanoseconds as a tie-breaker
+	uniqueScore := float64(priorityScore) + float64(time.Now().UnixNano())/float64(time.Second)
 
 	// Begin transaction pipeline
 	txPipeline := as.redisClient.TxPipeline()
 
 	// Add the message to the queue
 	_, err = txPipeline.ZAdd(ctx, queueName, redis.Z{
-		Score:  float64(deadline),
+		Score:  float64(uniqueScore),
 		Member: message.GetMessageId(),
 	}).Result()
 	if err != nil {
