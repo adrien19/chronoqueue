@@ -17,7 +17,7 @@ func (as *storage) checkQueueExistence(ctx context.Context, queueName string) (b
 	return exists >= 2, err
 }
 
-func (as *storage) setQueueMetadata(ctx context.Context, queueInfo *chronoqueue.Queue) error {
+func (as *storage) setQueueMetadata(ctx context.Context, queueInfo *chronoqueue.Queue, txPipeline redis.Pipeliner) error {
 	m := protojson.MarshalOptions{
 		EmitUnpopulated: true,
 	}
@@ -26,7 +26,7 @@ func (as *storage) setQueueMetadata(ctx context.Context, queueInfo *chronoqueue.
 		return err
 	}
 
-	_, err = as.redisClient.HSet(ctx, fmt.Sprintf("%s:meta", queueInfo.GetName()), "metadata", string(queueMetadataByte)).Result()
+	_, err = txPipeline.HSet(ctx, fmt.Sprintf("%s:meta", queueInfo.GetName()), "metadata", string(queueMetadataByte)).Result()
 	return err
 }
 
@@ -59,7 +59,7 @@ func (as *storage) CreateQueue(ctx context.Context, request *chronoqueue.CreateQ
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	err = as.setQueueMetadata(ctx, queueInfo)
+	err = as.setQueueMetadata(ctx, queueInfo, txPipeline)
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating queue metadata")
 		return nil, chronoErr.GRPCStatus()
