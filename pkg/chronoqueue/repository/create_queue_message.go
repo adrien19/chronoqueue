@@ -102,6 +102,16 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 	// Calculate the message's deadline
 	deadline := time.Now().Add(time.Duration(message.Priority)).UnixNano() / int64(time.Millisecond)
 
+	// Create or fetch the mutex for this specific queue
+	mutex := as.rs.NewMutex("mutex:" + request.GetQueueName())
+
+	// Try to acquire the lock
+	if err := mutex.Lock(); err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
+		return nil, chronoErr.GRPCStatus()
+	}
+	defer mutex.Unlock()
+
 	// Begin transaction pipeline
 	txPipeline := as.redisClient.TxPipeline()
 
