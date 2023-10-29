@@ -55,9 +55,13 @@ func testConnector(dialer func(context.Context, string) (net.Conn, error)) Conne
 
 func (*mockChronoQueueServer) CreateQueue(ctx context.Context, req *pb_chronoqueue.CreateQueueRequest) (*pb_chronoqueue.CreateQueueResponse, error) {
 	if req.Queue.GetName() == "" {
-		return &pb_chronoqueue.CreateQueueResponse{}, status.Errorf(codes.InvalidArgument, "cannot create queue with no name %v", req.Queue)
+		return &pb_chronoqueue.CreateQueueResponse{
+			Success: false,
+		}, status.Errorf(codes.InvalidArgument, "cannot create queue with no name %v", req.Queue)
 	}
-	return &pb_chronoqueue.CreateQueueResponse{}, nil
+	return &pb_chronoqueue.CreateQueueResponse{
+		Success: true,
+	}, nil
 }
 
 func (*mockChronoQueueServer) DeleteQueue(ctx context.Context, req *pb_chronoqueue.DeleteQueueRequest) (*pb_chronoqueue.DeleteQueueResponse, error) {
@@ -452,7 +456,9 @@ func TestChronoQueueClient_CreateQueue(t *testing.T) {
 					InvisibilityDuration: "10s",
 				},
 			},
-			want:    &pb_chronoqueue.CreateQueueResponse{},
+			want: &pb_chronoqueue.CreateQueueResponse{
+				Success: true,
+			},
 			wantErr: false,
 		},
 		{

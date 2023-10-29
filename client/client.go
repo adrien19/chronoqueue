@@ -224,11 +224,11 @@ func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, q
 
 	leaseDuration, err := parseDurationToProto(queueOptions.LeaseDuration)
 	if err != nil {
-		return nil, fmt.Errorf("invalid lease duration: %v", err)
+		return &pb_chronoqueue.CreateQueueResponse{Success: false}, fmt.Errorf("invalid lease duration: %v", err)
 	}
 	invisibilityDuration, err := parseDurationToProto(queueOptions.InvisibilityDuration)
 	if err != nil {
-		return nil, fmt.Errorf("invalid invisibility duration: %v", err)
+		return &pb_chronoqueue.CreateQueueResponse{Success: false}, fmt.Errorf("invalid invisibility duration: %v", err)
 	}
 
 	req := &pb_chronoqueue.CreateQueueRequest{
@@ -245,7 +245,7 @@ func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, q
 	}
 	res, err := client.service.CreateQueue(ctx, req)
 	if err != nil {
-		return nil, err
+		return res, err
 	}
 	return res, nil
 }

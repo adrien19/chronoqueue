@@ -35,41 +35,57 @@ func (as *storage) CreateQueue(ctx context.Context, request *chronoqueue.CreateQ
 	if queueInfo == nil || queueInfo.GetName() == "" {
 		err := errors.New("invalid input: queue name required")
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Invalid input provided")
-		return nil, chronoErr.GRPCStatus()
+		return &chronoqueue.CreateQueueResponse{
+			Success: false,
+		}, chronoErr.GRPCStatus()
 	}
 
 	exists, err := as.checkQueueExistence(ctx, queueInfo.GetName())
 	if err != nil {
-		return nil, err
+		return &chronoqueue.CreateQueueResponse{
+			Success: false,
+		}, err
 	}
 	if exists {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.AlreadyExists, err, "Queue already exists")
-		return nil, chronoErr.GRPCStatus()
+		return &chronoqueue.CreateQueueResponse{
+			Success: false,
+		}, chronoErr.GRPCStatus()
 	}
 
 	txPipeline := as.redisClient.TxPipeline()
 	_, err = txPipeline.ZAdd(ctx, queueInfo.GetName(), redis.Z{}).Result()
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating queue")
-		return nil, chronoErr.GRPCStatus()
+		return &chronoqueue.CreateQueueResponse{
+			Success: false,
+		}, chronoErr.GRPCStatus()
 	}
 
 	if queueInfo.Metadata.GetType() == chronoqueue.Queue_Options_EXCLUSIVE && queueInfo.Metadata.GetExclusivityKey() == "" {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Exclusivity key missing for an EXCLUSIVE queue type")
-		return nil, chronoErr.GRPCStatus()
+		return &chronoqueue.CreateQueueResponse{
+			Success: false,
+		}, chronoErr.GRPCStatus()
 	}
 
 	err = as.setQueueMetadata(ctx, queueInfo, txPipeline)
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating queue metadata")
-		return nil, chronoErr.GRPCStatus()
+		return &chronoqueue.CreateQueueResponse{
+			Success: false,
+		}, chronoErr.GRPCStatus()
 	}
 
 	_, err = txPipeline.Exec(ctx)
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating executing pipeline transaction")
-		return nil, chronoErr.GRPCStatus()
+		return &chronoqueue.CreateQueueResponse{
+			Success: false,
+		}, chronoErr.GRPCStatus()
 	}
 
-	return &chronoqueue.CreateQueueResponse{}, nil
+	return &chronoqueue.CreateQueueResponse{
+		Success: true,
+	}, nil
 }

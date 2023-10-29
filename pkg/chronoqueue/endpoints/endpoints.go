@@ -100,7 +100,7 @@ func MakeSendMessageHeartBeatEndpoint(svc chronoqueue.Service) endpoint.Endpoint
 func (s *Set) CreateQueue(ctx context.Context, queueInfo *pb.Queue) (*pb.CreateQueueResponse, error) {
 	resp, err := s.CreateQueueEndpoint(ctx, queueInfo)
 	if err != nil {
-		return &pb.CreateQueueResponse{}, err
+		return resp.(*pb.CreateQueueResponse), err
 	}
 	return resp.(*pb.CreateQueueResponse), err
 }

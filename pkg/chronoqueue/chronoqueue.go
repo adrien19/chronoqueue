@@ -21,11 +21,11 @@ func (cs *chronoqueueService) CreateQueue(ctx context.Context, request *chronoqu
 	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
 		specificReq, ok := req.(*chronoqueue.CreateQueueRequest)
 		if !ok {
-			return nil, errors.New("invalid request type for creating a queue")
+			return &chronoqueue.CreateQueueResponse{Success: false}, errors.New("invalid request type for creating a queue")
 		}
 		return cs.storage.CreateQueue(ctx, specificReq)
 	}
-	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.CreateQueueResponse{})
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.CreateQueueResponse{Success: false})
 
 	resp, err := wrappedHandler(ctx, request)
 	return resp.(*chronoqueue.CreateQueueResponse), err

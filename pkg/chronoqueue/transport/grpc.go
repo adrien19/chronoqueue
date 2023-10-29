@@ -74,11 +74,11 @@ func NewGRPCServer(ep endpoints.Set) chronoqueue.ChronoQueueServer {
 }
 
 func (g *grpcServer) CreateQueue(ctx context.Context, r *chronoqueue.CreateQueueRequest) (*chronoqueue.CreateQueueResponse, error) {
-	_, _, err := g.createQueue.ServeGRPC(ctx, r)
+	_, resp, err := g.createQueue.ServeGRPC(ctx, r)
 	if err != nil {
-		return &chronoqueue.CreateQueueResponse{}, err
+		return &chronoqueue.CreateQueueResponse{Success: false}, err
 	}
-	return &chronoqueue.CreateQueueResponse{}, nil
+	return resp.(*chronoqueue.CreateQueueResponse), nil
 }
 
 func (g *grpcServer) DeleteQueue(ctx context.Context, r *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error) {

@@ -25,7 +25,9 @@ service ChronoQueue {
 message CreateQueueRequest {
     Queue queue = 1;
 }
-message CreateQueueResponse {}
+message CreateQueueResponse {
+    bool success = 1;
+}
 
 // Delete queue by name
 message DeleteQueueRequest {
