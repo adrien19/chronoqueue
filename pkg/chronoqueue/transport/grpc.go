@@ -119,12 +119,12 @@ func (g *grpcServer) AcknowledgeMessage(ctx context.Context, r *chronoqueue.Ackn
 }
 
 func (g *grpcServer) RenewMessageLease(ctx context.Context, r *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error) {
-	_, _, err := g.renewMessageLease.ServeGRPC(ctx, r)
-	if err != nil {
-		return &chronoqueue.RenewMessageLeaseResponse{}, err
+	_, resp, err := g.renewMessageLease.ServeGRPC(ctx, r)
+	if err != nil || resp == nil {
+		return nil, err
 	}
 
-	return &chronoqueue.RenewMessageLeaseResponse{}, nil
+	return resp.(*chronoqueue.RenewMessageLeaseResponse), nil
 }
 
 func (g *grpcServer) PeekQueueMessages(ctx context.Context, r *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error) {

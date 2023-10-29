@@ -160,7 +160,10 @@ func (*mockChronoQueueServer) RenewMessageLease(ctx context.Context, req *pb_chr
 	if req.GetMessageId() == "" {
 		return &pb_chronoqueue.RenewMessageLeaseResponse{}, status.Errorf(codes.InvalidArgument, "cannot renew message's lease with no message ID %v", req.GetMessageId())
 	}
-	return &pb_chronoqueue.RenewMessageLeaseResponse{}, nil
+	return &pb_chronoqueue.RenewMessageLeaseResponse{
+		RemainingTime: durationpb.New(30 * time.Second),
+		State:         pb_chronoqueue.Message_Metadata_RUNNING,
+	}, nil
 }
 
 func (*mockChronoQueueServer) AcknowledgeMessage(ctx context.Context, req *pb_chronoqueue.AcknowledgeMessageRequest) (*pb_chronoqueue.AcknowledgeMessageResponse, error) {
@@ -1148,7 +1151,10 @@ func TestChronoQueueClient_RenewMessageLease(t *testing.T) {
 				messageId:     "validMessageId",
 				leaseDuration: "30s",
 			},
-			want:    &pb_chronoqueue.RenewMessageLeaseResponse{},
+			want: &pb_chronoqueue.RenewMessageLeaseResponse{
+				RemainingTime: &durationpb.Duration{Seconds: 30},
+				State:         pb_chronoqueue.Message_Metadata_RUNNING,
+			},
 			wantErr: false,
 		},
 		{

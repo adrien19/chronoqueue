@@ -144,8 +144,8 @@ func (s *Set) AcknowledgeMessage(ctx context.Context, request *pb.AcknowledgeMes
 
 func (s *Set) RenewMessageLease(ctx context.Context, request *pb.RenewMessageLeaseRequest) (*pb.RenewMessageLeaseResponse, error) {
 	resp, err := s.RenewMessageLeaseEndpoint(ctx, request)
-	if err != nil {
-		return &pb.RenewMessageLeaseResponse{}, err
+	if err != nil || resp == nil {
+		return nil, err
 	}
 	renewLeaseResp := resp.(*pb.RenewMessageLeaseResponse)
 	return renewLeaseResp, nil

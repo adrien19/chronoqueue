@@ -425,7 +425,7 @@ func (client *ChronoQueueClient) RenewMessageLease(ctx context.Context, queue st
 	req := &pb_chronoqueue.RenewMessageLeaseRequest{QueueName: queue, MessageId: messageId, LeaseDuration: leaseDurationpb}
 	res, err := client.service.RenewMessageLease(ctx, req)
 	if err != nil {
-		return nil, err
+		return res, err
 	}
 	return res, nil
 }

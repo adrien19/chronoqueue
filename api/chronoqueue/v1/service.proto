@@ -103,7 +103,10 @@ message RenewMessageLeaseRequest{
     string message_id = 2;
     google.protobuf.Duration lease_duration = 3;
 }
-message RenewMessageLeaseResponse{}
+message RenewMessageLeaseResponse{
+    google.protobuf.Duration remaining_time = 1;
+    Message.Metadata.State state = 2;
+}
 
 // View pending messages on a queueu
 message PeekQueueMessagesRequest{
