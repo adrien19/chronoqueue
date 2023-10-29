@@ -148,5 +148,5 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	return &chronoqueue.PostMessageResponse{}, nil
+	return &chronoqueue.PostMessageResponse{Success: true}, nil
 }

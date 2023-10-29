@@ -42,7 +42,9 @@ message PostMessageRequest{
     string queue_name = 1;
     Message message = 2;
 }
-message PostMessageResponse{}
+message PostMessageResponse{
+    bool success = 1;
+}
 
 message Payload {
     map<string, google.protobuf.Value> metadata = 1;

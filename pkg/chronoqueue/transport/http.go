@@ -89,12 +89,12 @@ func decodeHTTPPostMessageRequest(_ context.Context, r *http.Request) (interface
 	var req chronoqueue.PostMessageRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		return nil, err
+		return &chronoqueue.PostMessageResponse{Success: false}, err
 	}
 	// Validate the size of a message based on simple estimations.
 	err = util.ValidateMessageSize(req.Message)
 	if err != nil {
-		return nil, err
+		return &chronoqueue.PostMessageResponse{Success: false}, err
 	}
 	return &req, nil
 }

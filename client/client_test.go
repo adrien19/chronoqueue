@@ -73,12 +73,12 @@ func (*mockChronoQueueServer) DeleteQueue(ctx context.Context, req *pb_chronoque
 
 func (*mockChronoQueueServer) PostMessage(ctx context.Context, req *pb_chronoqueue.PostMessageRequest) (*pb_chronoqueue.PostMessageResponse, error) {
 	if req.GetQueueName() == "" {
-		return &pb_chronoqueue.PostMessageResponse{}, status.Errorf(codes.InvalidArgument, "cannot post message given queue with no name %v", req.GetQueueName())
+		return &pb_chronoqueue.PostMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot post message given queue with no name %v", req.GetQueueName())
 	}
 	if req.Message.GetMessageId() == "" {
-		return &pb_chronoqueue.PostMessageResponse{}, status.Errorf(codes.InvalidArgument, "cannot post message with no message ID %v", req.Message.GetMessageId())
+		return &pb_chronoqueue.PostMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot post message with no message ID %v", req.Message.GetMessageId())
 	}
-	return &pb_chronoqueue.PostMessageResponse{}, nil
+	return &pb_chronoqueue.PostMessageResponse{Success: true}, nil
 }
 
 func (*mockChronoQueueServer) SendMessageHeartbeat(ctx context.Context, req *pb_chronoqueue.SendMessageHeartBeatRequest) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
@@ -590,7 +590,9 @@ func TestChronoQueueClient_PostMessage(t *testing.T) {
 					LeaseDuration: "3s",
 				},
 			},
-			want:    &pb_chronoqueue.PostMessageResponse{}, // Update based on your actual response.
+			want: &pb_chronoqueue.PostMessageResponse{
+				Success: true,
+			},
 			wantErr: false,
 		},
 		{

@@ -49,11 +49,11 @@ func (cs *chronoqueueService) PostMessage(ctx context.Context, request *chronoqu
 	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
 		specificReq, ok := req.(*chronoqueue.PostMessageRequest)
 		if !ok {
-			return nil, errors.New("invalid request type for peeking queue's messages")
+			return &chronoqueue.PostMessageResponse{Success: false}, errors.New("invalid request type for peeking queue's messages")
 		}
 		return cs.storage.CreateQueueMessage(ctx, specificReq)
 	}
-	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.PostMessageResponse{})
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.PostMessageResponse{Success: false})
 
 	resp, err := wrappedHandler(ctx, request)
 	return resp.(*chronoqueue.PostMessageResponse), err

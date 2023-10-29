@@ -270,11 +270,11 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 
 	leaseDuration, err := parseDurationToProto(messageOptions.LeaseDuration)
 	if err != nil {
-		return nil, fmt.Errorf("invalid lease duration: %v", err)
+		return &pb_chronoqueue.PostMessageResponse{Success: false}, fmt.Errorf("invalid lease duration: %v", err)
 	}
 	invisibilityDuration, err := parseDurationToProto(messageOptions.InvisibilityDuration)
 	if err != nil {
-		return nil, fmt.Errorf("invalid invisibility duration: %v", err)
+		return &pb_chronoqueue.PostMessageResponse{Success: false}, fmt.Errorf("invalid invisibility duration: %v", err)
 	}
 
 	req := &pb_chronoqueue.PostMessageRequest{
@@ -297,7 +297,7 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 	}
 	res, err := client.service.PostMessage(ctx, req)
 	if err != nil {
-		return nil, err
+		return res, err
 	}
 	return res, nil
 }

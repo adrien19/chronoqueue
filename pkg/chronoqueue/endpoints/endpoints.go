@@ -116,7 +116,7 @@ func (s *Set) DeleteQueue(ctx context.Context, request *pb.DeleteQueueRequest) (
 func (s *Set) PostMessage(ctx context.Context, request *pb.PostMessageRequest) (*pb.PostMessageResponse, error) {
 	resp, err := s.PostMessageEndpoint(ctx, request)
 	if err != nil {
-		return &pb.PostMessageResponse{}, err
+		return &pb.PostMessageResponse{Success: false}, err
 	}
 	return resp.(*pb.PostMessageResponse), err
 }

@@ -93,13 +93,13 @@ func (g *grpcServer) PostMessage(ctx context.Context, r *chronoqueue.PostMessage
 	// Validate the size of a message based on simple estimations.
 	err := util.ValidateMessageSize(r.Message)
 	if err != nil {
-		return &chronoqueue.PostMessageResponse{}, err
+		return &chronoqueue.PostMessageResponse{Success: false}, err
 	}
-	_, _, err = g.postMessage.ServeGRPC(ctx, r)
+	_, resp, err := g.postMessage.ServeGRPC(ctx, r)
 	if err != nil {
-		return &chronoqueue.PostMessageResponse{}, err
+		return &chronoqueue.PostMessageResponse{Success: false}, err
 	}
-	return &chronoqueue.PostMessageResponse{}, nil
+	return resp.(*chronoqueue.PostMessageResponse), nil
 }
 
 func (g *grpcServer) GetNextMessage(ctx context.Context, r *chronoqueue.GetNextMessageRequest) (*chronoqueue.GetNextMessageResponse, error) {
