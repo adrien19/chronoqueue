@@ -108,7 +108,7 @@ func (s *Set) CreateQueue(ctx context.Context, queueInfo *pb.Queue) (*pb.CreateQ
 func (s *Set) DeleteQueue(ctx context.Context, request *pb.DeleteQueueRequest) (*pb.DeleteQueueResponse, error) {
 	resp, err := s.DeleteQueueEndpoint(ctx, request)
 	if err != nil {
-		return &pb.DeleteQueueResponse{}, err
+		return &pb.DeleteQueueResponse{Success: false}, err
 	}
 	return resp.(*pb.DeleteQueueResponse), err
 }

@@ -80,7 +80,7 @@ func decodeHTTPDeleteQueueRequest(ctx context.Context, r *http.Request) (interfa
 	var req chronoqueue.DeleteQueueRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		return nil, err
+		return &chronoqueue.DeleteQueueResponse{Success: false}, err
 	}
 	return &req, nil
 }

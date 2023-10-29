@@ -35,11 +35,11 @@ func (cs *chronoqueueService) DeleteQueue(ctx context.Context, request *chronoqu
 	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
 		specificReq, ok := req.(*chronoqueue.DeleteQueueRequest)
 		if !ok {
-			return nil, errors.New("invalid request type for removing a queue")
+			return &chronoqueue.DeleteQueueResponse{Success: false}, errors.New("invalid request type for removing a queue")
 		}
 		return cs.storage.DeleteQueue(ctx, specificReq)
 	}
-	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.DeleteQueueResponse{})
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.DeleteQueueResponse{Success: false})
 
 	resp, err := wrappedHandler(ctx, request)
 	return resp.(*chronoqueue.DeleteQueueResponse), err

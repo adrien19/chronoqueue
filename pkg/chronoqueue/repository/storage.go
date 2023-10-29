@@ -67,7 +67,7 @@ func (as *storage) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQ
 	// Try to acquire the lock
 	if err := queueMutex.Lock(); err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
-		return nil, chronoErr.GRPCStatus()
+		return &chronoqueue.DeleteQueueResponse{Success: false}, chronoErr.GRPCStatus()
 	}
 
 	defer func() {
@@ -78,7 +78,7 @@ func (as *storage) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQ
 	}()
 
 	if request == nil || request.GetName() == "" {
-		return &chronoqueue.DeleteQueueResponse{}, errors.New("error: queue information missing")
+		return &chronoqueue.DeleteQueueResponse{Success: false}, errors.New("error: queue information missing")
 	}
 	checker := NewKeyChecker(as.redisClient, 100)
 
@@ -90,13 +90,13 @@ func (as *storage) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQ
 		checker.Add(iter.Val())
 	}
 	if err := iter.Err(); err != nil {
-		return &chronoqueue.DeleteQueueResponse{}, err
+		return &chronoqueue.DeleteQueueResponse{Success: false}, err
 	}
 
 	deleted := checker.Stop()
 	log.Println("deleted", deleted, "keys", "in", time.Since(start))
 
-	return &chronoqueue.DeleteQueueResponse{}, nil
+	return &chronoqueue.DeleteQueueResponse{Success: true}, nil
 }
 
 func (as *storage) DeleteQueueMessage(ctx context.Context, queueName string, messageID string) error {

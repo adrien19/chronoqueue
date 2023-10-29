@@ -33,7 +33,9 @@ message CreateQueueResponse {
 message DeleteQueueRequest {
     string name = 1;
 }
-message DeleteQueueResponse {}
+message DeleteQueueResponse {
+    bool success = 1;
+}
 
 // Post a message to the queue 
 message PostMessageRequest{

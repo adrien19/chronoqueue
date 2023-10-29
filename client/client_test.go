@@ -66,9 +66,9 @@ func (*mockChronoQueueServer) CreateQueue(ctx context.Context, req *pb_chronoque
 
 func (*mockChronoQueueServer) DeleteQueue(ctx context.Context, req *pb_chronoqueue.DeleteQueueRequest) (*pb_chronoqueue.DeleteQueueResponse, error) {
 	if req.GetName() == "" {
-		return &pb_chronoqueue.DeleteQueueResponse{}, status.Errorf(codes.InvalidArgument, "cannot delete queue with no name %v", req.Name)
+		return &pb_chronoqueue.DeleteQueueResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot delete queue with no name %v", req.Name)
 	}
-	return &pb_chronoqueue.DeleteQueueResponse{}, nil
+	return &pb_chronoqueue.DeleteQueueResponse{Success: true}, nil
 }
 
 func (*mockChronoQueueServer) PostMessage(ctx context.Context, req *pb_chronoqueue.PostMessageRequest) (*pb_chronoqueue.PostMessageResponse, error) {
@@ -522,8 +522,10 @@ func TestChronoQueueClient_DeleteQueue(t *testing.T) {
 					InvisibilityDuration: "10s",
 				},
 			},
-			want:    &pb_chronoqueue.DeleteQueueResponse{},
-			wantErr: false, // since method DeleteQueue not implemented!
+			want: &pb_chronoqueue.DeleteQueueResponse{
+				Success: true,
+			},
+			wantErr: false,
 		},
 		{
 			name: "Unsuccessful deletion due to invalid queue name",

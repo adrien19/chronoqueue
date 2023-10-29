@@ -82,11 +82,11 @@ func (g *grpcServer) CreateQueue(ctx context.Context, r *chronoqueue.CreateQueue
 }
 
 func (g *grpcServer) DeleteQueue(ctx context.Context, r *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error) {
-	_, _, err := g.deleteQueue.ServeGRPC(ctx, r)
+	_, resp, err := g.deleteQueue.ServeGRPC(ctx, r)
 	if err != nil {
-		return &chronoqueue.DeleteQueueResponse{}, err
+		return &chronoqueue.DeleteQueueResponse{Success: false}, err
 	}
-	return &chronoqueue.DeleteQueueResponse{}, nil
+	return resp.(*chronoqueue.DeleteQueueResponse), nil
 }
 
 func (g *grpcServer) PostMessage(ctx context.Context, r *chronoqueue.PostMessageRequest) (*chronoqueue.PostMessageResponse, error) {
