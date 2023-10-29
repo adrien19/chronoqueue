@@ -93,7 +93,9 @@ message AcknowledgeMessageRequest{
     string message_id = 2;
     Message.Metadata.State state = 3;
 }
-message AcknowledgeMessageResponse{}
+message AcknowledgeMessageResponse{
+    bool success = 1;
+}
 
 // Renew lease period of a message
 message RenewMessageLeaseRequest{

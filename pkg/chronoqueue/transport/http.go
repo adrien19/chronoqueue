@@ -115,7 +115,7 @@ func decodeHTTPAcknowledgeMessageRequest(_ context.Context, r *http.Request) (in
 	}
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		return nil, err
+		return &chronoqueue.AcknowledgeMessageResponse{Success: false}, err
 	}
 	return &req, nil
 }

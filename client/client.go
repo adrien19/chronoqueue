@@ -438,7 +438,7 @@ func (client *ChronoQueueClient) AcknowledgeMessage(ctx context.Context, queue s
 	req := &pb_chronoqueue.AcknowledgeMessageRequest{QueueName: queue, MessageId: messageId, State: pb_chronoqueue.Message_Metadata_State(state)}
 	res, err := client.service.AcknowledgeMessage(ctx, req)
 	if err != nil {
-		return nil, err
+		return res, err
 	}
 	return res, nil
 }

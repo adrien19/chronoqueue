@@ -83,11 +83,11 @@ func (cs *chronoqueueService) AcknowledgeMessage(ctx context.Context, request *c
 	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
 		specificReq, ok := req.(*chronoqueue.AcknowledgeMessageRequest)
 		if !ok {
-			return nil, errors.New("invalid request type for acknowledging message request")
+			return &chronoqueue.AcknowledgeMessageResponse{Success: false}, errors.New("invalid request type for acknowledging message request")
 		}
 		return cs.storage.AcknowledgeMessage(ctx, specificReq)
 	}
-	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.AcknowledgeMessageResponse{})
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.AcknowledgeMessageResponse{Success: false})
 
 	resp, err := wrappedHandler(ctx, request)
 	return resp.(*chronoqueue.AcknowledgeMessageResponse), err

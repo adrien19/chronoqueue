@@ -136,7 +136,7 @@ func (s *Set) GetNextMessage(ctx context.Context, request *pb.GetNextMessageRequ
 func (s *Set) AcknowledgeMessage(ctx context.Context, request *pb.AcknowledgeMessageRequest) (*pb.AcknowledgeMessageResponse, error) {
 	resp, err := s.AcknowledgeMessageEndpoint(ctx, request)
 	if err != nil {
-		return &pb.AcknowledgeMessageResponse{}, err
+		return &pb.AcknowledgeMessageResponse{Success: false}, err
 	}
 	ackResp := resp.(*pb.AcknowledgeMessageResponse)
 	return ackResp, nil

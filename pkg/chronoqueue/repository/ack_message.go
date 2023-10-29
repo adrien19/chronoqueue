@@ -108,5 +108,5 @@ func (as *storage) AcknowledgeMessage(ctx context.Context, request *chronoqueue.
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	return &chronoqueue.AcknowledgeMessageResponse{}, nil
+	return &chronoqueue.AcknowledgeMessageResponse{Success: true}, nil
 }

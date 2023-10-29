@@ -111,11 +111,11 @@ func (g *grpcServer) GetNextMessage(ctx context.Context, r *chronoqueue.GetNextM
 }
 
 func (g *grpcServer) AcknowledgeMessage(ctx context.Context, r *chronoqueue.AcknowledgeMessageRequest) (*chronoqueue.AcknowledgeMessageResponse, error) {
-	_, _, err := g.acknowledgeMessage.ServeGRPC(ctx, r)
+	_, resp, err := g.acknowledgeMessage.ServeGRPC(ctx, r)
 	if err != nil {
-		return &chronoqueue.AcknowledgeMessageResponse{}, err
+		return &chronoqueue.AcknowledgeMessageResponse{Success: false}, err
 	}
-	return &chronoqueue.AcknowledgeMessageResponse{}, nil
+	return resp.(*chronoqueue.AcknowledgeMessageResponse), nil
 }
 
 func (g *grpcServer) RenewMessageLease(ctx context.Context, r *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error) {

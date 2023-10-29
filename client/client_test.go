@@ -165,12 +165,12 @@ func (*mockChronoQueueServer) RenewMessageLease(ctx context.Context, req *pb_chr
 
 func (*mockChronoQueueServer) AcknowledgeMessage(ctx context.Context, req *pb_chronoqueue.AcknowledgeMessageRequest) (*pb_chronoqueue.AcknowledgeMessageResponse, error) {
 	if req.GetQueueName() == "" {
-		return &pb_chronoqueue.AcknowledgeMessageResponse{}, status.Errorf(codes.InvalidArgument, "cannot acknowledge message given queue with no name %v", req.GetQueueName())
+		return &pb_chronoqueue.AcknowledgeMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot acknowledge message given queue with no name %v", req.GetQueueName())
 	}
 	if req.GetMessageId() == "" {
-		return &pb_chronoqueue.AcknowledgeMessageResponse{}, status.Errorf(codes.InvalidArgument, "cannot acknowledge message with no message ID %v", req.GetMessageId())
+		return &pb_chronoqueue.AcknowledgeMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot acknowledge message with no message ID %v", req.GetMessageId())
 	}
-	return &pb_chronoqueue.AcknowledgeMessageResponse{}, nil
+	return &pb_chronoqueue.AcknowledgeMessageResponse{Success: true}, nil
 }
 
 func (*mockChronoQueueServer) SendMessageHeartBeat(ctx context.Context, req *pb_chronoqueue.SendMessageHeartBeatRequest) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
@@ -1211,7 +1211,7 @@ func TestChronoQueueClient_AcknowledgeMessage(t *testing.T) {
 				messageId: "validMessageId",
 				state:     3,
 			},
-			want:    &pb_chronoqueue.AcknowledgeMessageResponse{},
+			want:    &pb_chronoqueue.AcknowledgeMessageResponse{Success: true},
 			wantErr: false,
 		},
 		{
