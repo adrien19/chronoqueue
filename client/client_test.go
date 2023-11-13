@@ -186,6 +186,17 @@ func (*mockChronoQueueServer) SendMessageHeartBeat(ctx context.Context, req *pb_
 	return &pb_chronoqueue.SendMessageHeartBeatResponse{}, nil
 }
 
+func (*mockChronoQueueServer) ListQueues(ctx context.Context, req *pb_chronoqueue.ListQueuesRequest) (*pb_chronoqueue.ListQueuesResponse, error) {
+	return &pb_chronoqueue.ListQueuesResponse{
+		Queues: []*pb_chronoqueue.Queue{
+			{
+				Name:     "test_queue",
+				Metadata: &pb_chronoqueue.Queue_Options{},
+			},
+		},
+	}, nil
+}
+
 func TestNewChronoQueueClient(t *testing.T) {
 	dialer := dialer()
 
@@ -1310,6 +1321,59 @@ func TestChronoQueueClient_SendMessageHeartbeat(t *testing.T) {
 			}
 			if !proto.Equal(got, tt.want) {
 				t.Errorf("ChronoQueueClient.SendMessageHeartbeat() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestChronoQueueClient_ListQueues(t *testing.T) {
+	dialer := dialer()
+
+	type fields struct{}
+	type args struct {
+		ctx    context.Context
+		prefix string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *pb_chronoqueue.ListQueuesResponse
+		wantErr bool
+	}{
+		{
+			name: "Success Case",
+			args: args{
+				ctx:    context.Background(),
+				prefix: "",
+			},
+			want: &pb_chronoqueue.ListQueuesResponse{Queues: []*pb_chronoqueue.Queue{
+				{
+					Name:     "test_queue",
+					Metadata: &pb_chronoqueue.Queue_Options{},
+				},
+			}},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := ClientOptions{
+				Connector: testConnector(dialer), // use testConnector with dialer
+			}
+			client, err := NewChronoQueueClient("bufnet", opts) // using "bufnet" as address, but it doesn't matter
+			if err != nil {
+				t.Fatalf("Failed to create client: %v", err)
+			}
+			defer client.Close()
+
+			got, err := client.ListQueues(tt.args.ctx, tt.args.prefix)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ChronoQueueClient.ListQueues() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !proto.Equal(got, tt.want) {
+				t.Errorf("ChronoQueueClient.ListQueues() = %v, want %v", got, tt.want)
 			}
 		})
 	}

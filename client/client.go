@@ -462,6 +462,20 @@ func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queue
 	return res, nil
 }
 
+func (client *ChronoQueueClient) ListQueues(ctx context.Context, prefix string) (*pb_chronoqueue.ListQueuesResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	req := &pb_chronoqueue.ListQueuesRequest{
+		Prefix: prefix,
+	}
+	res, err := client.service.ListQueues(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 func (client *ChronoQueueClient) Close() {
 	client.mu.Lock()
 	defer client.mu.Unlock()
