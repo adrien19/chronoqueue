@@ -172,3 +172,22 @@ func (as *storage) fetchQueueMembersBeforeNow(ctx context.Context, queueName str
 		Count:  10,
 	}).Result()
 }
+
+func (as *storage) listQueuesMetadataIDs(ctx context.Context, prefix string, limit int64) ([]string, error) {
+	var queueMetadataIDs []string
+	var cursor uint64
+	var err error
+	queryStr := prefix + "*" + ":meta"
+	for {
+		var keys []string
+		keys, cursor, err = as.redisClient.Scan(ctx, cursor, queryStr, limit).Result()
+		if err != nil {
+			return nil, err
+		}
+		queueMetadataIDs = append(queueMetadataIDs, keys...)
+		if cursor == 0 {
+			break
+		}
+	}
+	return queueMetadataIDs, nil
+}

@@ -18,6 +18,7 @@ type Set struct {
 	PeekQueueMessagesEndpoint    endpoint.Endpoint
 	GetQueueStateEndpoint        endpoint.Endpoint
 	SendMessageHeartBeatEndpoint endpoint.Endpoint
+	ListQueuesEndpoint           endpoint.Endpoint
 }
 
 func NewEndpointSet(svc chronoqueue.Service) Set {
@@ -31,6 +32,7 @@ func NewEndpointSet(svc chronoqueue.Service) Set {
 		PeekQueueMessagesEndpoint:    MakePeekQueueMessagesEndpoint(svc),
 		GetQueueStateEndpoint:        MakeGetQueueStateEndpoint(svc),
 		SendMessageHeartBeatEndpoint: MakeSendMessageHeartBeatEndpoint(svc),
+		ListQueuesEndpoint:           MakeListQueuesEndpoint(svc),
 	}
 }
 
@@ -94,6 +96,13 @@ func MakeSendMessageHeartBeatEndpoint(svc chronoqueue.Service) endpoint.Endpoint
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.SendMessageHeartBeatRequest)
 		return svc.SendMessageHeartBeat(ctx, req)
+	}
+}
+
+func MakeListQueuesEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(*pb.ListQueuesRequest)
+		return svc.ListQueues(ctx, req)
 	}
 }
 
@@ -181,4 +190,13 @@ func (s *Set) SendMessageHeartBeat(ctx context.Context, queueName string) (*pb.S
 
 	return stateResp, nil
 
+}
+
+func (s *Set) ListQueues(ctx context.Context, request *pb.ListQueuesRequest) (*pb.ListQueuesResponse, error) {
+	resp, err := s.ListQueuesEndpoint(ctx, request)
+	if err != nil {
+		return &pb.ListQueuesResponse{}, err
+	}
+	listResp := resp.(*pb.ListQueuesResponse)
+	return listResp, nil
 }

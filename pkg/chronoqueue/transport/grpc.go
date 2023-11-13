@@ -20,6 +20,7 @@ type grpcServer struct {
 	peekQueueMessages    grpctransport.Handler
 	getQueueState        grpctransport.Handler
 	sendMessageHeartBeat grpctransport.Handler
+	listQueues           grpctransport.Handler
 	chronoqueue.UnimplementedChronoQueueServer
 }
 
@@ -69,6 +70,11 @@ func NewGRPCServer(ep endpoints.Set) chronoqueue.ChronoQueueServer {
 			ep.SendMessageHeartBeatEndpoint,
 			decodeGRPCSendMessageHeartBeatRequest,
 			decodeGRPCSendMessageHeartBeatResponse,
+		),
+		listQueues: grpctransport.NewServer(
+			ep.ListQueuesEndpoint,
+			decodeGRPCListQueuesRequest,
+			decodeGRPCListQueuesResponse,
 		),
 	}
 }
@@ -149,6 +155,14 @@ func (g *grpcServer) SendMessageHeartBeat(ctx context.Context, r *chronoqueue.Se
 		return nil, err
 	}
 	return rep.(*chronoqueue.SendMessageHeartBeatResponse), nil
+}
+
+func (g *grpcServer) ListQueues(ctx context.Context, r *chronoqueue.ListQueuesRequest) (*chronoqueue.ListQueuesResponse, error) {
+	_, rep, err := g.listQueues.ServeGRPC(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	return rep.(*chronoqueue.ListQueuesResponse), nil
 }
 
 func decodeGRPCCreateQueueRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
@@ -238,5 +252,15 @@ func decodeGRPCSendMessageHeartBeatRequest(_ context.Context, grpcReq interface{
 
 func decodeGRPCSendMessageHeartBeatResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
 	reply := grpcReply.(*chronoqueue.SendMessageHeartBeatResponse)
+	return reply, nil
+}
+
+func decodeGRPCListQueuesRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
+	req := grpcReq.(*chronoqueue.ListQueuesRequest)
+	return req, nil
+}
+
+func decodeGRPCListQueuesResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*chronoqueue.ListQueuesResponse)
 	return reply, nil
 }

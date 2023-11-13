@@ -145,3 +145,13 @@ func (cs *chronoqueueService) SendMessageHeartBeat(ctx context.Context, request 
 	resp, err := wrappedHandler(ctx, request)
 	return resp.(*chronoqueue.SendMessageHeartBeatResponse), err
 }
+
+func (cs *chronoqueueService) ListQueues(ctx context.Context, request *chronoqueue.ListQueuesRequest) (*chronoqueue.ListQueuesResponse, error) {
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return cs.storage.ListQueues(ctx, req.(*chronoqueue.ListQueuesRequest))
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.ListQueuesResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.ListQueuesResponse), err
+}

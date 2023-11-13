@@ -18,6 +18,7 @@ service ChronoQueue {
     rpc PeekQueueMessages (PeekQueueMessagesRequest) returns (PeekQueueMessagesResponse);
     rpc GetQueueState (GetQueueStateRequest) returns (GetQueueStateResponse);
     rpc SendMessageHeartBeat(SendMessageHeartBeatRequest) returns (SendMessageHeartBeatResponse);
+    rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse);
 }
 
 
@@ -155,4 +156,12 @@ message SendMessageHeartBeatRequest {
 message SendMessageHeartBeatResponse {
     google.protobuf.Duration remaining_time = 1;
     Message.Metadata.State state = 2;
+}
+
+message ListQueuesRequest {
+    string prefix = 1;
+}
+
+message ListQueuesResponse {
+    repeated Queue queues = 1;
 }
