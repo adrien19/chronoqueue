@@ -21,6 +21,9 @@ type grpcServer struct {
 	getQueueState        grpctransport.Handler
 	sendMessageHeartBeat grpctransport.Handler
 	listQueues           grpctransport.Handler
+
+	createSchedule grpctransport.Handler
+
 	chronoqueue.UnimplementedChronoQueueServer
 }
 
@@ -75,6 +78,11 @@ func NewGRPCServer(ep endpoints.Set) chronoqueue.ChronoQueueServer {
 			ep.ListQueuesEndpoint,
 			decodeGRPCListQueuesRequest,
 			decodeGRPCListQueuesResponse,
+		),
+		createSchedule: grpctransport.NewServer(
+			ep.CreateScheduleEndpoint,
+			decodeGRPCCreateScheduleRequest,
+			decodeGRPCCreateScheduleResponse,
 		),
 	}
 }
@@ -163,6 +171,14 @@ func (g *grpcServer) ListQueues(ctx context.Context, r *chronoqueue.ListQueuesRe
 		return nil, err
 	}
 	return rep.(*chronoqueue.ListQueuesResponse), nil
+}
+
+func (g *grpcServer) CreateSchedule(ctx context.Context, r *chronoqueue.CreateScheduleRequest) (*chronoqueue.CreateScheduleResponse, error) {
+	_, resp, err := g.createSchedule.ServeGRPC(ctx, r)
+	if err != nil {
+		return &chronoqueue.CreateScheduleResponse{Success: false}, err
+	}
+	return resp.(*chronoqueue.CreateScheduleResponse), nil
 }
 
 func decodeGRPCCreateQueueRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
@@ -262,5 +278,15 @@ func decodeGRPCListQueuesRequest(_ context.Context, grpcReq interface{}) (interf
 
 func decodeGRPCListQueuesResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
 	reply := grpcReply.(*chronoqueue.ListQueuesResponse)
+	return reply, nil
+}
+
+func decodeGRPCCreateScheduleRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
+	req := grpcReq.(*chronoqueue.CreateScheduleRequest)
+	return req, nil
+}
+
+func decodeGRPCCreateScheduleResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*chronoqueue.CreateScheduleResponse)
 	return reply, nil
 }

@@ -65,6 +65,11 @@ func NewHTTPHandler(ep endpoints.Set) http.Handler {
 		decodeHTTPListQueuesRequest,
 		encodeResponse,
 	))
+	m.Handle("/schedule/createSchedule", httptransport.NewServer(
+		ep.CreateScheduleEndpoint,
+		decodeHTTPCreateScheduleRequest,
+		encodeResponse,
+	))
 
 	return m
 }
@@ -163,6 +168,15 @@ func decodeHTTPSendMessageHeartBeatRequest(_ context.Context, r *http.Request) (
 
 func decodeHTTPListQueuesRequest(_ context.Context, r *http.Request) (interface{}, error) {
 	var req chronoqueue.ListQueuesRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
+func decodeHTTPCreateScheduleRequest(_ context.Context, r *http.Request) (interface{}, error) {
+	var req chronoqueue.CreateScheduleRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err

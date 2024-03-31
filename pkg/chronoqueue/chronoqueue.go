@@ -155,3 +155,73 @@ func (cs *chronoqueueService) ListQueues(ctx context.Context, request *chronoque
 	resp, err := wrappedHandler(ctx, request)
 	return resp.(*chronoqueue.ListQueuesResponse), err
 }
+
+func (cs *chronoqueueService) CreateSchedule(ctx context.Context, request *chronoqueue.CreateScheduleRequest) (*chronoqueue.CreateScheduleResponse, error) {
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return cs.storage.CreateSchedule(ctx, req.(*chronoqueue.CreateScheduleRequest))
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.CreateScheduleResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.CreateScheduleResponse), err
+}
+
+func (cs *chronoqueueService) DeleteSchedule(ctx context.Context, request *chronoqueue.DeleteScheduleRequest) (*chronoqueue.DeleteScheduleResponse, error) {
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return cs.storage.DeleteSchedule(ctx, req.(*chronoqueue.DeleteScheduleRequest))
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.DeleteScheduleResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.DeleteScheduleResponse), err
+}
+
+func (cs *chronoqueueService) GetSchedule(ctx context.Context, request *chronoqueue.GetScheduleRequest) (*chronoqueue.GetScheduleResponse, error) {
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return cs.storage.GetSchedule(ctx, req.(*chronoqueue.GetScheduleRequest))
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.GetScheduleResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.GetScheduleResponse), err
+}
+
+func (cs *chronoqueueService) ListSchedules(ctx context.Context, request *chronoqueue.ListSchedulesRequest) (*chronoqueue.ListSchedulesResponse, error) {
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return cs.storage.ListSchedules(ctx, req.(*chronoqueue.ListSchedulesRequest))
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.ListSchedulesResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.ListSchedulesResponse), err
+}
+
+func (cs *chronoqueueService) GetScheduleHistory(ctx context.Context, request *chronoqueue.GetScheduleHistoryRequest) (*chronoqueue.GetScheduleHistoryResponse, error) {
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return cs.storage.GetScheduleHistory(ctx, req.(*chronoqueue.GetScheduleHistoryRequest))
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.GetScheduleHistoryResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.GetScheduleHistoryResponse), err
+}
+
+func (cs *chronoqueueService) PauseSchedule(ctx context.Context, request *chronoqueue.PauseScheduleRequest) (*chronoqueue.PauseScheduleResponse, error) {
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return cs.storage.PauseSchedule(ctx, req.(*chronoqueue.PauseScheduleRequest))
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.PauseScheduleResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.PauseScheduleResponse), err
+}
+
+func (cs *chronoqueueService) ResumeSchedule(ctx context.Context, request *chronoqueue.ResumeScheduleRequest) (*chronoqueue.ResumeScheduleResponse, error) {
+	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return cs.storage.ResumeSchedule(ctx, req.(*chronoqueue.ResumeScheduleRequest))
+	}
+	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.ResumeScheduleResponse{})
+
+	resp, err := wrappedHandler(ctx, request)
+	return resp.(*chronoqueue.ResumeScheduleResponse), err
+}

@@ -19,6 +19,7 @@ type Set struct {
 	GetQueueStateEndpoint        endpoint.Endpoint
 	SendMessageHeartBeatEndpoint endpoint.Endpoint
 	ListQueuesEndpoint           endpoint.Endpoint
+	CreateScheduleEndpoint       endpoint.Endpoint
 }
 
 func NewEndpointSet(svc chronoqueue.Service) Set {
@@ -33,6 +34,7 @@ func NewEndpointSet(svc chronoqueue.Service) Set {
 		GetQueueStateEndpoint:        MakeGetQueueStateEndpoint(svc),
 		SendMessageHeartBeatEndpoint: MakeSendMessageHeartBeatEndpoint(svc),
 		ListQueuesEndpoint:           MakeListQueuesEndpoint(svc),
+		CreateScheduleEndpoint:       MakeCreateScheduleEndpoint(svc),
 	}
 }
 
@@ -103,6 +105,13 @@ func MakeListQueuesEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.ListQueuesRequest)
 		return svc.ListQueues(ctx, req)
+	}
+}
+
+func MakeCreateScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(*pb.CreateScheduleRequest)
+		return svc.CreateSchedule(ctx, req)
 	}
 }
 
@@ -199,4 +208,13 @@ func (s *Set) ListQueues(ctx context.Context, request *pb.ListQueuesRequest) (*p
 	}
 	listResp := resp.(*pb.ListQueuesResponse)
 	return listResp, nil
+}
+
+func (s *Set) CreateSchedule(ctx context.Context, request *pb.CreateScheduleRequest) (*pb.CreateScheduleResponse, error) {
+	resp, err := s.CreateScheduleEndpoint(ctx, request)
+	if err != nil {
+		return &pb.CreateScheduleResponse{Success: false}, err
+	}
+	createResp := resp.(*pb.CreateScheduleResponse)
+	return createResp, nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type ChronoHandlerFunc func(ctx context.Context, req interface{}) (interface{}, error)
@@ -100,17 +101,37 @@ func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, m
 	return &meta, nil
 }
 
+func (as *storage) getMetadata(ctx context.Context, key string, metadata interface{}) error {
+	metaResult, err := as.redisClient.HGet(ctx, key, "metadata").Result()
+	if err != nil {
+		return err
+	}
+	metaReflect, ok := metadata.(protoreflect.ProtoMessage)
+	if !ok {
+		return errors.New("metadata does not implement ProtoMessage")
+	}
+	if err = protojson.Unmarshal([]byte(metaResult), metaReflect); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (as *storage) getQueueMetadata(ctx context.Context, queueName string) (*chronoqueue.Queue_Options, error) {
 	queueMetaKey := fmt.Sprintf("%s:meta", queueName)
-	queueMetaResult, err := as.redisClient.HGet(ctx, queueMetaKey, "metadata").Result()
-	if err != nil {
-		return nil, err
-	}
 	var queueMeta chronoqueue.Queue_Options
-	if err = protojson.Unmarshal([]byte(queueMetaResult), &queueMeta); err != nil {
+	if err := as.getMetadata(ctx, queueMetaKey, &queueMeta); err != nil {
 		return nil, err
 	}
 	return &queueMeta, nil
+}
+
+func (as *storage) getScheduleMetadata(ctx context.Context, scheduleId string) (*chronoqueue.Schedule_Metadata, error) {
+	// scheduleMetaKey := fmt.Sprintf("%s:meta", scheduleId)
+	var scheduleMeta chronoqueue.Schedule_Metadata
+	if err := as.getMetadata(ctx, scheduleId, &scheduleMeta); err != nil {
+		return nil, err
+	}
+	return &scheduleMeta, nil
 }
 
 func (as *storage) updateMessageStateAndLease(message *chronoqueue.Message, request *chronoqueue.GetNextMessageRequest, queueMeta *chronoqueue.Queue_Options) {
@@ -173,21 +194,28 @@ func (as *storage) fetchQueueMembersBeforeNow(ctx context.Context, queueName str
 	}).Result()
 }
 
-func (as *storage) listQueuesMetadataIDs(ctx context.Context, prefix string, limit int64) ([]string, error) {
-	var queueMetadataIDs []string
+func (as *storage) listMetadataIDs(ctx context.Context, keyType string, prefix string, limit int64) ([]string, error) {
+	var metadataIDs []string
 	var cursor uint64
 	var err error
-	queryStr := prefix + "*" + ":meta"
+	queryStr := ""
+	if keyType == "queue" {
+		queryStr = "" + prefix + "*" + ":meta"
+	} else if keyType == "schedule" {
+		queryStr = "schedule" + prefix + "*" + ":meta"
+	} else {
+		return nil, errors.New("invalid key type: " + queryStr)
+	}
 	for {
 		var keys []string
 		keys, cursor, err = as.redisClient.Scan(ctx, cursor, queryStr, limit).Result()
 		if err != nil {
 			return nil, err
 		}
-		queueMetadataIDs = append(queueMetadataIDs, keys...)
+		metadataIDs = append(metadataIDs, keys...)
 		if cursor == 0 {
 			break
 		}
 	}
-	return queueMetadataIDs, nil
+	return metadataIDs, nil
 }

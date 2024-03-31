@@ -11,7 +11,7 @@ import (
 )
 
 func (as *storage) ListQueues(ctx context.Context, request *chronoqueue.ListQueuesRequest) (*chronoqueue.ListQueuesResponse, error) {
-	queueMetadataIDs, err := as.listQueuesMetadataIDs(ctx, request.GetPrefix(), 10)
+	queueMetadataIDs, err := as.listMetadataIDs(ctx, "queue", request.GetPrefix(), 10)
 	if err != nil {
 		return nil, err
 	}
@@ -21,7 +21,7 @@ func (as *storage) ListQueues(ctx context.Context, request *chronoqueue.ListQueu
 		queueID := strings.Split(queueMetadataID, ":")[0]
 		metadata, err := as.getQueueMetadata(ctx, queueID)
 		if err != nil {
-			msg := fmt.Sprintf("error fetching metadata for message %s", queueID)
+			msg := fmt.Sprintf("error fetching metadata for queue %s", queueID)
 			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, msg)
 			return nil, chronoErr.GRPCStatus()
 		}

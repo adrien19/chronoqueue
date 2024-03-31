@@ -38,6 +38,9 @@ func (as *storage) PeekQueueMessages(ctx context.Context, request *chronoqueue.P
 
 	messages := make([]*chronoqueue.Message, len(messageIDs))
 	for i, messageID := range messageIDs {
+		if messageID == "" {
+			continue
+		}
 		metadata, err := as.fetchMessageMetadata(ctx, queueName, messageID)
 		if err != nil {
 			msg := fmt.Sprintf("error fetching metadata for message %s", messageID)
