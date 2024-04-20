@@ -23,6 +23,7 @@ type grpcServer struct {
 	listQueues           grpctransport.Handler
 
 	createSchedule grpctransport.Handler
+	deleteSchedule grpctransport.Handler
 
 	chronoqueue.UnimplementedChronoQueueServer
 }
@@ -83,6 +84,11 @@ func NewGRPCServer(ep endpoints.Set) chronoqueue.ChronoQueueServer {
 			ep.CreateScheduleEndpoint,
 			decodeGRPCCreateScheduleRequest,
 			decodeGRPCCreateScheduleResponse,
+		),
+		deleteSchedule: grpctransport.NewServer(
+			ep.DeleteScheduleEndpoint,
+			decodeGRPCDeleteScheduleRequest,
+			decodeGRPCDeleteScheduleResponse,
 		),
 	}
 }
@@ -179,6 +185,14 @@ func (g *grpcServer) CreateSchedule(ctx context.Context, r *chronoqueue.CreateSc
 		return &chronoqueue.CreateScheduleResponse{Success: false}, err
 	}
 	return resp.(*chronoqueue.CreateScheduleResponse), nil
+}
+
+func (g *grpcServer) DeleteSchedule(ctx context.Context, r *chronoqueue.DeleteScheduleRequest) (*chronoqueue.DeleteScheduleResponse, error) {
+	_, resp, err := g.deleteSchedule.ServeGRPC(ctx, r)
+	if err != nil {
+		return &chronoqueue.DeleteScheduleResponse{Success: false}, err
+	}
+	return resp.(*chronoqueue.DeleteScheduleResponse), nil
 }
 
 func decodeGRPCCreateQueueRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
@@ -288,5 +302,15 @@ func decodeGRPCCreateScheduleRequest(_ context.Context, grpcReq interface{}) (in
 
 func decodeGRPCCreateScheduleResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
 	reply := grpcReply.(*chronoqueue.CreateScheduleResponse)
+	return reply, nil
+}
+
+func decodeGRPCDeleteScheduleRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
+	req := grpcReq.(*chronoqueue.DeleteScheduleRequest)
+	return req, nil
+}
+
+func decodeGRPCDeleteScheduleResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*chronoqueue.DeleteScheduleResponse)
 	return reply, nil
 }

@@ -128,18 +128,18 @@ func (as *storage) setScheduleMetadata(ctx context.Context, scheduleInfo *chrono
 
 func (as *storage) DeleteSchedule(ctx context.Context, request *chronoqueue.DeleteScheduleRequest) (*chronoqueue.DeleteScheduleResponse, error) {
 
-	// Create or fetch the mutex for this specific queue
-	queueMutex := as.rs.NewMutex("mutex:" + request.GetScheduleId())
+	// Create or fetch the mutex for this specific schedule
+	scheduleMutex := as.rs.NewMutex("mutex:" + request.GetScheduleId())
 
 	// Try to acquire the lock
-	if err := queueMutex.Lock(); err != nil {
+	if err := scheduleMutex.Lock(); err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
 		return &chronoqueue.DeleteScheduleResponse{Success: false}, chronoErr.GRPCStatus()
 	}
 
 	defer func() {
 		// Release the message lock
-		if ok, err := queueMutex.Unlock(); !ok || err != nil {
+		if ok, err := scheduleMutex.Unlock(); !ok || err != nil {
 			util.Error("Failed to release schedule lock", err)
 		}
 	}()
@@ -152,7 +152,7 @@ func (as *storage) DeleteSchedule(ctx context.Context, request *chronoqueue.Dele
 	start := time.Now()
 	checker.Start(ctx)
 
-	iter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("%s*", request.GetScheduleId()), 0).Iterator()
+	iter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("*%s*", request.GetScheduleId()), 0).Iterator()
 	for iter.Next(ctx) {
 		checker.Add(iter.Val())
 	}

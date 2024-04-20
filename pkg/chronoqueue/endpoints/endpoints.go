@@ -20,6 +20,7 @@ type Set struct {
 	SendMessageHeartBeatEndpoint endpoint.Endpoint
 	ListQueuesEndpoint           endpoint.Endpoint
 	CreateScheduleEndpoint       endpoint.Endpoint
+	DeleteScheduleEndpoint       endpoint.Endpoint
 }
 
 func NewEndpointSet(svc chronoqueue.Service) Set {
@@ -35,6 +36,7 @@ func NewEndpointSet(svc chronoqueue.Service) Set {
 		SendMessageHeartBeatEndpoint: MakeSendMessageHeartBeatEndpoint(svc),
 		ListQueuesEndpoint:           MakeListQueuesEndpoint(svc),
 		CreateScheduleEndpoint:       MakeCreateScheduleEndpoint(svc),
+		DeleteScheduleEndpoint:       MakeDeleteScheduleEndpoint(svc),
 	}
 }
 
@@ -112,6 +114,13 @@ func MakeCreateScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.CreateScheduleRequest)
 		return svc.CreateSchedule(ctx, req)
+	}
+}
+
+func MakeDeleteScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(*pb.DeleteScheduleRequest)
+		return svc.DeleteSchedule(ctx, req)
 	}
 }
 
@@ -217,4 +226,13 @@ func (s *Set) CreateSchedule(ctx context.Context, request *pb.CreateScheduleRequ
 	}
 	createResp := resp.(*pb.CreateScheduleResponse)
 	return createResp, nil
+}
+
+func (s *Set) DeleteSchedule(ctx context.Context, request *pb.DeleteScheduleRequest) (*pb.DeleteScheduleResponse, error) {
+	resp, err := s.DeleteScheduleEndpoint(ctx, request)
+	if err != nil {
+		return &pb.DeleteScheduleResponse{Success: false}, err
+	}
+	deleteResp := resp.(*pb.DeleteScheduleResponse)
+	return deleteResp, nil
 }

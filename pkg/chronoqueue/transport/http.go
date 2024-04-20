@@ -70,6 +70,11 @@ func NewHTTPHandler(ep endpoints.Set) http.Handler {
 		decodeHTTPCreateScheduleRequest,
 		encodeResponse,
 	))
+	m.Handle("/schedule/deleteSchedule", httptransport.NewServer(
+		ep.DeleteScheduleEndpoint,
+		decodeHTTPDeleteScheduleRequest,
+		encodeResponse,
+	))
 
 	return m
 }
@@ -180,6 +185,15 @@ func decodeHTTPCreateScheduleRequest(_ context.Context, r *http.Request) (interf
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
+	}
+	return &req, nil
+}
+
+func decodeHTTPDeleteScheduleRequest(_ context.Context, r *http.Request) (interface{}, error) {
+	var req chronoqueue.DeleteScheduleRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		return &chronoqueue.DeleteScheduleResponse{Success: false}, err
 	}
 	return &req, nil
 }

@@ -47,6 +47,15 @@ type (
 		Min int64 `json:"min,omitempty"`
 		Max int64 `json:"max,omitempty"`
 	}
+	ScheduleOptions struct {
+		Payload        Payload `json:"payload,omitempty"`
+		State          State   `json:"state,omitempty"`
+		CronSchedule   string  `json:"cronSchedule,omitempty"`
+		QueueName      string  `json:"queueName,omitempty"`
+		ExclusivityKey string  `json:"exclusivityKey,omitempty"`
+		MaxMessages    int64   `json:"maxMessages,omitempty"`
+		LeaseDuration  string  `json:"leaseDuration,omitempty"`
+	}
 
 	Connector func(address string, opts ClientOptions) (pb_chronoqueue.ChronoQueueClient, *grpc.ClientConn, error)
 )
@@ -462,6 +471,7 @@ func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queue
 	return res, nil
 }
 
+// ListQueues returns list of available queues.
 func (client *ChronoQueueClient) ListQueues(ctx context.Context, prefix string) (*pb_chronoqueue.ListQueuesResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
@@ -470,6 +480,54 @@ func (client *ChronoQueueClient) ListQueues(ctx context.Context, prefix string) 
 		Prefix: prefix,
 	}
 	res, err := client.service.ListQueues(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// CreateSchedule creates a schedule and returns an empty response
+func (client *ChronoQueueClient) CreateSchedule(ctx context.Context, scheduleId string, scheduleOptions ScheduleOptions) (*pb_chronoqueue.CreateScheduleResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	leaseDurationpb, err := parseDurationToProto(scheduleOptions.LeaseDuration)
+	if err != nil {
+		return nil, err
+	}
+	req := &pb_chronoqueue.CreateScheduleRequest{
+		Schedule: &pb_chronoqueue.Schedule{
+			ScheduleId: scheduleId,
+			Metadata: &pb_chronoqueue.Schedule_Metadata{
+				Payload: &pb_chronoqueue.Payload{
+					Metadata: scheduleOptions.Payload.Metadata,
+					Data:     scheduleOptions.Payload.Data,
+				},
+				State:          pb_chronoqueue.Schedule_Metadata_State(scheduleOptions.State),
+				CronSchedule:   scheduleOptions.CronSchedule,
+				QueueName:      scheduleOptions.QueueName,
+				ExclusivityKey: scheduleOptions.ExclusivityKey,
+				HasMaxMessages: scheduleOptions.MaxMessages > 0,
+				MaxMessages:    scheduleOptions.MaxMessages,
+				LeaseDuration:  leaseDurationpb,
+			},
+		},
+	}
+	res, err := client.service.CreateSchedule(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// DeleteSchedule deletes a schedule and returns an empty response
+func (client *ChronoQueueClient) DeleteSchedule(ctx context.Context, scheduleId string) (*pb_chronoqueue.DeleteScheduleResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+	req := &pb_chronoqueue.DeleteScheduleRequest{
+		ScheduleId: scheduleId,
+	}
+	res, err := client.service.DeleteSchedule(ctx, req)
 	if err != nil {
 		return nil, err
 	}
