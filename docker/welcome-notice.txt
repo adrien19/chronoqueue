@@ -1,0 +1,5 @@
+👋 Welcome to the ChronoQueue dev container! You are on our ChronoQueue Contributors image.
+It includes everything to build, run and test the github.com/adrien19/chronoqueue repository.
+
+
+
