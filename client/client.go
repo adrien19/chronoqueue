@@ -534,6 +534,78 @@ func (client *ChronoQueueClient) DeleteSchedule(ctx context.Context, scheduleId 
 	return res, nil
 }
 
+// GetSchedule returns a schedule
+func (client *ChronoQueueClient) GetSchedule(ctx context.Context, scheduleId string) (*pb_chronoqueue.GetScheduleResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+	req := &pb_chronoqueue.GetScheduleRequest{
+		ScheduleId: scheduleId,
+	}
+	res, err := client.service.GetSchedule(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// ListSchedules returns list of schedules
+func (client *ChronoQueueClient) ListSchedules(ctx context.Context, prefix string) (*pb_chronoqueue.ListSchedulesResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+	req := &pb_chronoqueue.ListSchedulesRequest{
+		Prefix: prefix,
+	}
+	res, err := client.service.ListSchedules(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// GetScheduleHistory returns the history of a schedule
+func (client *ChronoQueueClient) GetScheduleHistory(ctx context.Context, scheduleId string, limit int64) (*pb_chronoqueue.GetScheduleHistoryResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+	req := &pb_chronoqueue.GetScheduleHistoryRequest{
+		ScheduleId: scheduleId,
+		Limit:      limit,
+	}
+	res, err := client.service.GetScheduleHistory(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// PauseSchedule pauses a schedule
+func (client *ChronoQueueClient) PauseSchedule(ctx context.Context, scheduleId string) (*pb_chronoqueue.PauseScheduleResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+	req := &pb_chronoqueue.PauseScheduleRequest{
+		ScheduleId: scheduleId,
+	}
+	res, err := client.service.PauseSchedule(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// ResumeSchedule resumes a schedule
+func (client *ChronoQueueClient) ResumeSchedule(ctx context.Context, scheduleId string) (*pb_chronoqueue.ResumeScheduleResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+	req := &pb_chronoqueue.ResumeScheduleRequest{
+		ScheduleId: scheduleId,
+	}
+	res, err := client.service.ResumeSchedule(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// Close closes the client
 func (client *ChronoQueueClient) Close() {
 	client.mu.Lock()
 	defer client.mu.Unlock()

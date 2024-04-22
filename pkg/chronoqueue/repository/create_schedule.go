@@ -112,9 +112,14 @@ func (as *storage) setScheduleMetadata(ctx context.Context, scheduleInfo *chrono
 		EmitUnpopulated: true,
 	}
 
-	err := as.encryptScheduleMetadataPayload(scheduleInfo.Metadata)
-	if err != nil {
-		return err
+	if scheduleInfo.Metadata.Payload.Metadata["encryptedPayload"] == nil && scheduleInfo.Metadata.Payload.Metadata["nonce"] == nil {
+		util.InfoWithFields("Encrypting schedule metadata payload", map[string]interface{}{
+			"scheduleID": scheduleInfo.GetScheduleId(),
+		})
+		err := as.encryptScheduleMetadataPayload(scheduleInfo.Metadata)
+		if err != nil {
+			return err
+		}
 	}
 
 	scheduleMetadataByte, err := m.Marshal(scheduleInfo.GetMetadata())
@@ -122,7 +127,29 @@ func (as *storage) setScheduleMetadata(ctx context.Context, scheduleInfo *chrono
 		return err
 	}
 
+	util.InfoWithFields("Updating schedule metadata payload", map[string]interface{}{
+		"scheduleID": scheduleInfo.GetScheduleId(),
+		"metadata":   scheduleInfo.GetMetadata(),
+	})
 	_, err = txPipeline.HSet(ctx, fmt.Sprintf("schedule:%s:meta", scheduleInfo.GetScheduleId()), "metadata", string(scheduleMetadataByte)).Result()
+	return err
+}
+
+func (as *storage) setPausedScheduleMetadata(ctx context.Context, scheduleInfo *chronoqueue.Schedule) error {
+	m := protojson.MarshalOptions{
+		EmitUnpopulated: true,
+	}
+
+	scheduleMetadataByte, err := m.Marshal(scheduleInfo.GetMetadata())
+	if err != nil {
+		return err
+	}
+
+	util.InfoWithFields("Updating schedule metadata payload", map[string]interface{}{
+		"scheduleID": scheduleInfo.GetScheduleId(),
+		"metadata":   scheduleInfo.GetMetadata(),
+	})
+	_, err = as.redisClient.HSet(ctx, fmt.Sprintf("schedule:%s:meta", scheduleInfo.GetScheduleId()), "metadata", string(scheduleMetadataByte)).Result()
 	return err
 }
 
@@ -191,14 +218,14 @@ func (as *storage) GetSchedule(ctx context.Context, request *chronoqueue.GetSche
 }
 
 func (as *storage) ListSchedules(ctx context.Context, request *chronoqueue.ListSchedulesRequest) (*chronoqueue.ListSchedulesResponse, error) {
-	scheduleMetadataIDs, err := as.listMetadataIDs(ctx, "schedule", request.GetPrefix(), 10)
+	scheduleMetadataIDs, err := as.listMetadataIDs(ctx, "schedule", request.GetPrefix(), 100)
 	if err != nil {
 		return nil, err
 	}
 
 	schedules := make([]*chronoqueue.Schedule, len(scheduleMetadataIDs))
 	for i, scheduleMetadataID := range scheduleMetadataIDs {
-		scheduleID := strings.Split(scheduleMetadataID, ":")[0]
+		scheduleID := strings.Split(scheduleMetadataID, ":")[1]
 		metadata, err := as.getScheduleMetadata(ctx, scheduleID)
 		if err != nil {
 			msg := fmt.Sprintf("error fetching metadata for schedule %s", scheduleID)
@@ -217,12 +244,53 @@ func (as *storage) ListSchedules(ctx context.Context, request *chronoqueue.ListS
 	}, nil
 }
 
+func (as *storage) GetScheduleMessages(ctx context.Context, scheduleId string) ([]*chronoqueue.Message, error) {
+	if scheduleId == "" {
+		return nil, errors.New("error: must provide scheduleId")
+	}
+
+	// Retrieve messageIds from sorted list set in ascending order of timestamp
+	messageIds, err := as.redisClient.ZRange(ctx, scheduleId, 0, -1).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	// Remove the first index if it contains an empty member at score 0
+	if len(messageIds) > 0 && messageIds[0] == "" {
+		messageIds = messageIds[1:]
+	}
+
+	// Retrieve associated message's metadata for each messageId
+	messages := make([]*chronoqueue.Message, len(messageIds))
+	for i, messageInfo := range messageIds {
+		queueName := strings.Split(messageInfo, ":")[0]
+		messageId := strings.Split(messageInfo, ":")[1]
+		messageMetadata, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", queueName, messageId), "metadata").Result()
+		if err != nil {
+			return nil, err
+		}
+
+		var metadata chronoqueue.Message_Metadata
+		err = protojson.Unmarshal([]byte(messageMetadata), &metadata)
+		if err != nil {
+			return nil, err
+		}
+
+		messages[i] = &chronoqueue.Message{
+			MessageId: messageId,
+			Metadata:  &metadata,
+		}
+	}
+
+	return messages, nil
+}
+
 func (as *storage) GetScheduleHistory(ctx context.Context, request *chronoqueue.GetScheduleHistoryRequest) (*chronoqueue.GetScheduleHistoryResponse, error) {
 	if request == nil || request.GetScheduleId() == "" {
 		return nil, errors.New("error: schedule information missing")
 	}
 
-	scheduleMetadata, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:meta", request.GetScheduleId()), "metadata").Result()
+	scheduleMetadata, err := as.redisClient.HGet(ctx, fmt.Sprintf("schedule:%s:meta", request.GetScheduleId()), "metadata").Result()
 	if err != nil {
 		return nil, err
 	}
@@ -233,10 +301,15 @@ func (as *storage) GetScheduleHistory(ctx context.Context, request *chronoqueue.
 		return nil, err
 	}
 
+	scheduleMessages, err := as.GetScheduleMessages(ctx, request.GetScheduleId())
+	if err != nil {
+		return nil, err
+	}
+
 	return &chronoqueue.GetScheduleHistoryResponse{
 		ScheduleHistory: &chronoqueue.ScheduleHistory{
 			ScheduleId: request.GetScheduleId(),
-			Messages:   []*chronoqueue.Message{},
+			Messages:   scheduleMessages,
 			NextRun:    metadata.GetNextRun(),
 			LastRun:    metadata.GetLastRun(),
 			CreatedAt:  metadata.GetCreatedAt(),
@@ -249,6 +322,19 @@ func (as *storage) PauseSchedule(ctx context.Context, request *chronoqueue.Pause
 	if request == nil || request.GetScheduleId() == "" {
 		return nil, errors.New("error: schedule information missing")
 	}
+	// Create or fetch the mutex for this specific schedule
+	scheduleMutex := as.rs.NewMutex("mutex:" + "schedule" + request.GetScheduleId() + ":meta")
+	if err := scheduleMutex.Lock(); err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
+		return &chronoqueue.PauseScheduleResponse{Success: false}, chronoErr.GRPCStatus()
+	}
+
+	defer func() {
+		// Release the message lock
+		if ok, err := scheduleMutex.Unlock(); !ok || err != nil {
+			util.Error("Failed to release schedule lock", err)
+		}
+	}()
 
 	scheduleMetadata, err := as.getScheduleMetadata(ctx, request.GetScheduleId())
 	if err != nil {
@@ -259,10 +345,10 @@ func (as *storage) PauseSchedule(ctx context.Context, request *chronoqueue.Pause
 
 	scheduleMetadata.State = chronoqueue.Schedule_Metadata_PAUSED
 
-	err = as.setScheduleMetadata(ctx, &chronoqueue.Schedule{
+	err = as.setPausedScheduleMetadata(ctx, &chronoqueue.Schedule{
 		ScheduleId: request.GetScheduleId(),
 		Metadata:   scheduleMetadata,
-	}, as.redisClient.Pipeline())
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -277,6 +363,20 @@ func (as *storage) ResumeSchedule(ctx context.Context, request *chronoqueue.Resu
 		return nil, errors.New("error: schedule information missing")
 	}
 
+	// Create or fetch the mutex for this specific schedule
+	scheduleMutex := as.rs.NewMutex("mutex:" + "schedule" + request.GetScheduleId() + ":meta")
+	if err := scheduleMutex.Lock(); err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
+		return &chronoqueue.ResumeScheduleResponse{Success: false}, chronoErr.GRPCStatus()
+	}
+
+	defer func() {
+		// Release the message lock
+		if ok, err := scheduleMutex.Unlock(); !ok || err != nil {
+			util.Error("Failed to release schedule lock", err)
+		}
+	}()
+
 	scheduleMetadata, err := as.getScheduleMetadata(ctx, request.GetScheduleId())
 	if err != nil {
 		msg := fmt.Sprintf("error fetching metadata for schedule %s", request.GetScheduleId())
@@ -286,10 +386,10 @@ func (as *storage) ResumeSchedule(ctx context.Context, request *chronoqueue.Resu
 
 	scheduleMetadata.State = chronoqueue.Schedule_Metadata_SCHEDULED
 
-	err = as.setScheduleMetadata(ctx, &chronoqueue.Schedule{
+	err = as.setPausedScheduleMetadata(ctx, &chronoqueue.Schedule{
 		ScheduleId: request.GetScheduleId(),
 		Metadata:   scheduleMetadata,
-	}, as.redisClient.Pipeline())
+	})
 	if err != nil {
 		return nil, err
 	}

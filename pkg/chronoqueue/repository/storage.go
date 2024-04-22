@@ -251,10 +251,11 @@ func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, me
 			return err
 		}
 
+		messageInfo := fmt.Sprintf("%s:%s", queueID, randomID)
 		// Add the message to the queue
 		_, err = as.redisClient.ZAdd(ctx, scheduleID, redis.Z{
 			Score:  float64(priorityScore),
-			Member: randomID,
+			Member: messageInfo,
 		}).Result()
 		if err != nil {
 			return err
@@ -281,9 +282,11 @@ func (as *storage) updateAllCronSchedules(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			err = as.updateMessageCronSchedule(ctx, key, metadata)
-			if err != nil {
-				return err
+			if metadata.State == chronoqueue.Schedule_Metadata_SCHEDULED {
+				err = as.updateMessageCronSchedule(ctx, key, metadata)
+				if err != nil {
+					return err
+				}
 			}
 		}
 

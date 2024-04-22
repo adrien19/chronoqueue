@@ -8,6 +8,7 @@ import (
 	"github.com/go-kit/kit/endpoint"
 )
 
+// Add the new endpoints to the Set struct
 type Set struct {
 	CreateQueueEndpoint          endpoint.Endpoint
 	DeleteQueueEndpoint          endpoint.Endpoint
@@ -21,6 +22,11 @@ type Set struct {
 	ListQueuesEndpoint           endpoint.Endpoint
 	CreateScheduleEndpoint       endpoint.Endpoint
 	DeleteScheduleEndpoint       endpoint.Endpoint
+	GetScheduleEndpoint          endpoint.Endpoint
+	ListSchedulesEndpoint        endpoint.Endpoint
+	GetScheduleHistoryEndpoint   endpoint.Endpoint
+	PauseScheduleEndpoint        endpoint.Endpoint
+	ResumeScheduleEndpoint       endpoint.Endpoint
 }
 
 func NewEndpointSet(svc chronoqueue.Service) Set {
@@ -37,6 +43,11 @@ func NewEndpointSet(svc chronoqueue.Service) Set {
 		ListQueuesEndpoint:           MakeListQueuesEndpoint(svc),
 		CreateScheduleEndpoint:       MakeCreateScheduleEndpoint(svc),
 		DeleteScheduleEndpoint:       MakeDeleteScheduleEndpoint(svc),
+		GetScheduleEndpoint:          MakeGetScheduleEndpoint(svc),
+		ListSchedulesEndpoint:        MakeListSchedulesEndpoint(svc),
+		GetScheduleHistoryEndpoint:   MakeGetScheduleHistoryEndpoint(svc),
+		PauseScheduleEndpoint:        MakePauseScheduleEndpoint(svc),
+		ResumeScheduleEndpoint:       MakeResumeScheduleEndpoint(svc),
 	}
 }
 
@@ -121,6 +132,41 @@ func MakeDeleteScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*pb.DeleteScheduleRequest)
 		return svc.DeleteSchedule(ctx, req)
+	}
+}
+
+func MakeGetScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(*pb.GetScheduleRequest)
+		return svc.GetSchedule(ctx, req)
+	}
+}
+
+func MakeListSchedulesEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(*pb.ListSchedulesRequest)
+		return svc.ListSchedules(ctx, req)
+	}
+}
+
+func MakeGetScheduleHistoryEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(*pb.GetScheduleHistoryRequest)
+		return svc.GetScheduleHistory(ctx, req)
+	}
+}
+
+func MakePauseScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(*pb.PauseScheduleRequest)
+		return svc.PauseSchedule(ctx, req)
+	}
+}
+
+func MakeResumeScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(*pb.ResumeScheduleRequest)
+		return svc.ResumeSchedule(ctx, req)
 	}
 }
 
@@ -235,4 +281,49 @@ func (s *Set) DeleteSchedule(ctx context.Context, request *pb.DeleteScheduleRequ
 	}
 	deleteResp := resp.(*pb.DeleteScheduleResponse)
 	return deleteResp, nil
+}
+
+func (s *Set) GetSchedule(ctx context.Context, request *pb.GetScheduleRequest) (*pb.GetScheduleResponse, error) {
+	resp, err := s.GetScheduleEndpoint(ctx, request)
+	if err != nil {
+		return &pb.GetScheduleResponse{}, err
+	}
+	getResp := resp.(*pb.GetScheduleResponse)
+	return getResp, nil
+}
+
+func (s *Set) ListSchedules(ctx context.Context, request *pb.ListSchedulesRequest) (*pb.ListSchedulesResponse, error) {
+	resp, err := s.ListSchedulesEndpoint(ctx, request)
+	if err != nil {
+		return &pb.ListSchedulesResponse{}, err
+	}
+	listResp := resp.(*pb.ListSchedulesResponse)
+	return listResp, nil
+}
+
+func (s *Set) GetScheduleHistory(ctx context.Context, request *pb.GetScheduleHistoryRequest) (*pb.GetScheduleHistoryResponse, error) {
+	resp, err := s.GetScheduleHistoryEndpoint(ctx, request)
+	if err != nil {
+		return &pb.GetScheduleHistoryResponse{}, err
+	}
+	historyResp := resp.(*pb.GetScheduleHistoryResponse)
+	return historyResp, nil
+}
+
+func (s *Set) PauseSchedule(ctx context.Context, request *pb.PauseScheduleRequest) (*pb.PauseScheduleResponse, error) {
+	resp, err := s.PauseScheduleEndpoint(ctx, request)
+	if err != nil {
+		return &pb.PauseScheduleResponse{Success: false}, err
+	}
+	pauseResp := resp.(*pb.PauseScheduleResponse)
+	return pauseResp, nil
+}
+
+func (s *Set) ResumeSchedule(ctx context.Context, request *pb.ResumeScheduleRequest) (*pb.ResumeScheduleResponse, error) {
+	resp, err := s.ResumeScheduleEndpoint(ctx, request)
+	if err != nil {
+		return &pb.ResumeScheduleResponse{Success: false}, err
+	}
+	resumeResp := resp.(*pb.ResumeScheduleResponse)
+	return resumeResp, nil
 }

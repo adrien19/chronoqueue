@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
@@ -126,9 +127,12 @@ func (as *storage) getQueueMetadata(ctx context.Context, queueName string) (*chr
 }
 
 func (as *storage) getScheduleMetadata(ctx context.Context, scheduleId string) (*chronoqueue.Schedule_Metadata, error) {
-	// scheduleMetaKey := fmt.Sprintf("%s:meta", scheduleId)
+	scheduleMetaKey := scheduleId
+	if !strings.HasPrefix(scheduleId, "schedule:") || !strings.HasSuffix(scheduleId, ":meta") {
+		scheduleMetaKey = fmt.Sprintf("schedule:%s:meta", scheduleId)
+	}
 	var scheduleMeta chronoqueue.Schedule_Metadata
-	if err := as.getMetadata(ctx, scheduleId, &scheduleMeta); err != nil {
+	if err := as.getMetadata(ctx, scheduleMetaKey, &scheduleMeta); err != nil {
 		return nil, err
 	}
 	return &scheduleMeta, nil
@@ -200,9 +204,9 @@ func (as *storage) listMetadataIDs(ctx context.Context, keyType string, prefix s
 	var err error
 	queryStr := ""
 	if keyType == "queue" {
-		queryStr = "" + prefix + "*" + ":meta"
+		queryStr = prefix + "*" + ":meta"
 	} else if keyType == "schedule" {
-		queryStr = "schedule" + prefix + "*" + ":meta"
+		queryStr = "schedule:" + prefix + "*" + ":meta"
 	} else {
 		return nil, errors.New("invalid key type: " + queryStr)
 	}
