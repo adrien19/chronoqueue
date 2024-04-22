@@ -19,6 +19,13 @@ service ChronoQueue {
     rpc GetQueueState (GetQueueStateRequest) returns (GetQueueStateResponse);
     rpc SendMessageHeartBeat(SendMessageHeartBeatRequest) returns (SendMessageHeartBeatResponse);
     rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse);
+    rpc CreateSchedule (CreateScheduleRequest) returns (CreateScheduleResponse);
+    rpc DeleteSchedule (DeleteScheduleRequest) returns (DeleteScheduleResponse);
+    rpc PauseSchedule (PauseScheduleRequest) returns (PauseScheduleResponse);
+    rpc ResumeSchedule (ResumeScheduleRequest) returns (ResumeScheduleResponse);
+    rpc GetSchedule (GetScheduleRequest) returns (GetScheduleResponse);
+    rpc ListSchedules (ListSchedulesRequest) returns (ListSchedulesResponse);
+    rpc GetScheduleHistory (GetScheduleHistoryRequest) returns (GetScheduleHistoryResponse);
 }
 
 
@@ -57,13 +64,14 @@ message Message {
     message Metadata {
         Payload payload = 1;
         enum State {
-            UNDEFINED = 0;
+            WAITING_SCHEDULE = 0;
             INVISIBLE = 1;
             PENDING = 2;
             RUNNING = 3;
             COMPLETED = 4;
             CANCELED = 5;
             ERRORED = 6;
+            SCHEDULED = 7;
         }
         Metadata.State state = 2;
         google.protobuf.Duration invisibility_duration = 3;
@@ -73,10 +81,38 @@ message Message {
         int32 lease_renewal_count = 7;
         int64 invisibility_expiry = 8;
         int64 priority = 9;
+        string cron_schedule = 10;
     }
     Message.Metadata metadata = 3;
 }
 
+message Schedule {
+    string schedule_id = 1;
+    message Metadata {
+        Payload payload = 1;
+        enum State {
+            SCHEDULED = 0;
+            CANCELED = 1;
+            ERRORED = 2;
+            PAUSED = 3;
+        }
+        Schedule.Metadata.State state = 2;
+        string cron_schedule = 3;
+        string queue_name = 4;
+        repeated string message_ids = 5;
+        google.protobuf.Timestamp next_run = 6;
+        google.protobuf.Timestamp last_run = 7;
+        google.protobuf.Timestamp created_at = 8;
+        google.protobuf.Timestamp updated_at = 9;
+        string exclusivity_key = 10;
+        string state_message = 11;
+        int64 priority = 12;
+        bool has_max_messages = 13;
+        int64 max_messages = 14;
+        google.protobuf.Duration lease_duration = 15;
+    }
+    Schedule.Metadata metadata = 2;
+}
 
 // Get the next message on the queue
 message GetNextMessageRequest{
@@ -164,4 +200,70 @@ message ListQueuesRequest {
 
 message ListQueuesResponse {
     repeated Queue queues = 1;
+}
+
+message CreateScheduleRequest {
+    Schedule schedule = 1;
+}
+
+message CreateScheduleResponse {
+    bool success = 1;
+}
+
+message DeleteScheduleRequest {
+    string schedule_id = 1;
+}
+
+message DeleteScheduleResponse {
+    bool success = 1;
+}
+
+message PauseScheduleRequest {
+    string schedule_id = 1;
+}
+
+message PauseScheduleResponse {
+    bool success = 1;
+}
+
+message ResumeScheduleRequest {
+    string schedule_id = 1;
+}
+
+message ResumeScheduleResponse {
+    bool success = 1;
+}
+
+message GetScheduleRequest {
+    string schedule_id = 1;
+}
+
+message GetScheduleResponse {
+    Schedule schedule = 1;
+}
+
+message ListSchedulesRequest {
+    string prefix = 1;
+}
+
+message ListSchedulesResponse {
+    repeated Schedule schedules = 1;
+}
+
+message ScheduleHistory {
+    repeated Message messages = 1;
+    string schedule_id = 2;
+    google.protobuf.Timestamp next_run = 3;
+    google.protobuf.Timestamp last_run = 4;
+    google.protobuf.Timestamp created_at = 5;
+    google.protobuf.Timestamp updated_at = 6;
+}
+
+message GetScheduleHistoryRequest {
+    string schedule_id = 1;
+    int64 limit = 2;
+}
+
+message GetScheduleHistoryResponse {
+    ScheduleHistory schedule_history = 1;
 }

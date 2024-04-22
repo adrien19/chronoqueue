@@ -21,6 +21,15 @@ type grpcServer struct {
 	getQueueState        grpctransport.Handler
 	sendMessageHeartBeat grpctransport.Handler
 	listQueues           grpctransport.Handler
+
+	createSchedule     grpctransport.Handler
+	deleteSchedule     grpctransport.Handler
+	getSchedule        grpctransport.Handler
+	listSchedules      grpctransport.Handler
+	getScheduleHistory grpctransport.Handler
+	pauseSchedule      grpctransport.Handler
+	resumeSchedule     grpctransport.Handler
+
 	chronoqueue.UnimplementedChronoQueueServer
 }
 
@@ -75,6 +84,41 @@ func NewGRPCServer(ep endpoints.Set) chronoqueue.ChronoQueueServer {
 			ep.ListQueuesEndpoint,
 			decodeGRPCListQueuesRequest,
 			decodeGRPCListQueuesResponse,
+		),
+		createSchedule: grpctransport.NewServer(
+			ep.CreateScheduleEndpoint,
+			decodeGRPCCreateScheduleRequest,
+			decodeGRPCCreateScheduleResponse,
+		),
+		deleteSchedule: grpctransport.NewServer(
+			ep.DeleteScheduleEndpoint,
+			decodeGRPCDeleteScheduleRequest,
+			decodeGRPCDeleteScheduleResponse,
+		),
+		getSchedule: grpctransport.NewServer(
+			ep.GetScheduleEndpoint,
+			decodeGRPCGetScheduleRequest,
+			decodeGRPCGetScheduleResponse,
+		),
+		listSchedules: grpctransport.NewServer(
+			ep.ListSchedulesEndpoint,
+			decodeGRPCListSchedulesRequest,
+			decodeGRPCListSchedulesResponse,
+		),
+		getScheduleHistory: grpctransport.NewServer(
+			ep.GetScheduleHistoryEndpoint,
+			decodeGRPCGetScheduleHistoryRequest,
+			decodeGRPCGetScheduleHistoryResponse,
+		),
+		pauseSchedule: grpctransport.NewServer(
+			ep.PauseScheduleEndpoint,
+			decodeGRPCPauseScheduleRequest,
+			decodeGRPCPauseScheduleResponse,
+		),
+		resumeSchedule: grpctransport.NewServer(
+			ep.ResumeScheduleEndpoint,
+			decodeGRPCResumeScheduleRequest,
+			decodeGRPCResumeScheduleResponse,
 		),
 	}
 }
@@ -163,6 +207,62 @@ func (g *grpcServer) ListQueues(ctx context.Context, r *chronoqueue.ListQueuesRe
 		return nil, err
 	}
 	return rep.(*chronoqueue.ListQueuesResponse), nil
+}
+
+func (g *grpcServer) CreateSchedule(ctx context.Context, r *chronoqueue.CreateScheduleRequest) (*chronoqueue.CreateScheduleResponse, error) {
+	_, resp, err := g.createSchedule.ServeGRPC(ctx, r)
+	if err != nil {
+		return &chronoqueue.CreateScheduleResponse{Success: false}, err
+	}
+	return resp.(*chronoqueue.CreateScheduleResponse), nil
+}
+
+func (g *grpcServer) DeleteSchedule(ctx context.Context, r *chronoqueue.DeleteScheduleRequest) (*chronoqueue.DeleteScheduleResponse, error) {
+	_, resp, err := g.deleteSchedule.ServeGRPC(ctx, r)
+	if err != nil {
+		return &chronoqueue.DeleteScheduleResponse{Success: false}, err
+	}
+	return resp.(*chronoqueue.DeleteScheduleResponse), nil
+}
+
+func (g *grpcServer) GetSchedule(ctx context.Context, r *chronoqueue.GetScheduleRequest) (*chronoqueue.GetScheduleResponse, error) {
+	_, resp, err := g.getSchedule.ServeGRPC(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	return resp.(*chronoqueue.GetScheduleResponse), nil
+}
+
+func (g *grpcServer) ListSchedules(ctx context.Context, r *chronoqueue.ListSchedulesRequest) (*chronoqueue.ListSchedulesResponse, error) {
+	_, resp, err := g.listSchedules.ServeGRPC(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	return resp.(*chronoqueue.ListSchedulesResponse), nil
+}
+
+func (g *grpcServer) GetScheduleHistory(ctx context.Context, r *chronoqueue.GetScheduleHistoryRequest) (*chronoqueue.GetScheduleHistoryResponse, error) {
+	_, resp, err := g.getScheduleHistory.ServeGRPC(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	return resp.(*chronoqueue.GetScheduleHistoryResponse), nil
+}
+
+func (g *grpcServer) PauseSchedule(ctx context.Context, r *chronoqueue.PauseScheduleRequest) (*chronoqueue.PauseScheduleResponse, error) {
+	_, resp, err := g.pauseSchedule.ServeGRPC(ctx, r)
+	if err != nil {
+		return &chronoqueue.PauseScheduleResponse{Success: false}, err
+	}
+	return resp.(*chronoqueue.PauseScheduleResponse), nil
+}
+
+func (g *grpcServer) ResumeSchedule(ctx context.Context, r *chronoqueue.ResumeScheduleRequest) (*chronoqueue.ResumeScheduleResponse, error) {
+	_, resp, err := g.resumeSchedule.ServeGRPC(ctx, r)
+	if err != nil {
+		return &chronoqueue.ResumeScheduleResponse{Success: false}, err
+	}
+	return resp.(*chronoqueue.ResumeScheduleResponse), nil
 }
 
 func decodeGRPCCreateQueueRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
@@ -262,5 +362,75 @@ func decodeGRPCListQueuesRequest(_ context.Context, grpcReq interface{}) (interf
 
 func decodeGRPCListQueuesResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
 	reply := grpcReply.(*chronoqueue.ListQueuesResponse)
+	return reply, nil
+}
+
+func decodeGRPCCreateScheduleRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
+	req := grpcReq.(*chronoqueue.CreateScheduleRequest)
+	return req, nil
+}
+
+func decodeGRPCCreateScheduleResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*chronoqueue.CreateScheduleResponse)
+	return reply, nil
+}
+
+func decodeGRPCDeleteScheduleRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
+	req := grpcReq.(*chronoqueue.DeleteScheduleRequest)
+	return req, nil
+}
+
+func decodeGRPCDeleteScheduleResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*chronoqueue.DeleteScheduleResponse)
+	return reply, nil
+}
+
+func decodeGRPCGetScheduleRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
+	req := grpcReq.(*chronoqueue.GetScheduleRequest)
+	return req, nil
+}
+
+func decodeGRPCGetScheduleResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*chronoqueue.GetScheduleResponse)
+	return reply, nil
+}
+
+func decodeGRPCListSchedulesRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
+	req := grpcReq.(*chronoqueue.ListSchedulesRequest)
+	return req, nil
+}
+
+func decodeGRPCListSchedulesResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*chronoqueue.ListSchedulesResponse)
+	return reply, nil
+}
+
+func decodeGRPCGetScheduleHistoryRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
+	req := grpcReq.(*chronoqueue.GetScheduleHistoryRequest)
+	return req, nil
+}
+
+func decodeGRPCGetScheduleHistoryResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*chronoqueue.GetScheduleHistoryResponse)
+	return reply, nil
+}
+
+func decodeGRPCPauseScheduleRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
+	req := grpcReq.(*chronoqueue.PauseScheduleRequest)
+	return req, nil
+}
+
+func decodeGRPCPauseScheduleResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*chronoqueue.PauseScheduleResponse)
+	return reply, nil
+}
+
+func decodeGRPCResumeScheduleRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
+	req := grpcReq.(*chronoqueue.ResumeScheduleRequest)
+	return req, nil
+}
+
+func decodeGRPCResumeScheduleResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*chronoqueue.ResumeScheduleResponse)
 	return reply, nil
 }

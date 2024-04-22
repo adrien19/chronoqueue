@@ -28,6 +28,13 @@ type ChronoQueueClient interface {
 	GetQueueState(ctx context.Context, in *GetQueueStateRequest, opts ...grpc.CallOption) (*GetQueueStateResponse, error)
 	SendMessageHeartBeat(ctx context.Context, in *SendMessageHeartBeatRequest, opts ...grpc.CallOption) (*SendMessageHeartBeatResponse, error)
 	ListQueues(ctx context.Context, in *ListQueuesRequest, opts ...grpc.CallOption) (*ListQueuesResponse, error)
+	CreateSchedule(ctx context.Context, in *CreateScheduleRequest, opts ...grpc.CallOption) (*CreateScheduleResponse, error)
+	DeleteSchedule(ctx context.Context, in *DeleteScheduleRequest, opts ...grpc.CallOption) (*DeleteScheduleResponse, error)
+	PauseSchedule(ctx context.Context, in *PauseScheduleRequest, opts ...grpc.CallOption) (*PauseScheduleResponse, error)
+	ResumeSchedule(ctx context.Context, in *ResumeScheduleRequest, opts ...grpc.CallOption) (*ResumeScheduleResponse, error)
+	GetSchedule(ctx context.Context, in *GetScheduleRequest, opts ...grpc.CallOption) (*GetScheduleResponse, error)
+	ListSchedules(ctx context.Context, in *ListSchedulesRequest, opts ...grpc.CallOption) (*ListSchedulesResponse, error)
+	GetScheduleHistory(ctx context.Context, in *GetScheduleHistoryRequest, opts ...grpc.CallOption) (*GetScheduleHistoryResponse, error)
 }
 
 type chronoQueueClient struct {
@@ -128,6 +135,69 @@ func (c *chronoQueueClient) ListQueues(ctx context.Context, in *ListQueuesReques
 	return out, nil
 }
 
+func (c *chronoQueueClient) CreateSchedule(ctx context.Context, in *CreateScheduleRequest, opts ...grpc.CallOption) (*CreateScheduleResponse, error) {
+	out := new(CreateScheduleResponse)
+	err := c.cc.Invoke(ctx, "/chronoqueue.api.chronoqueue.v1.ChronoQueue/CreateSchedule", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chronoQueueClient) DeleteSchedule(ctx context.Context, in *DeleteScheduleRequest, opts ...grpc.CallOption) (*DeleteScheduleResponse, error) {
+	out := new(DeleteScheduleResponse)
+	err := c.cc.Invoke(ctx, "/chronoqueue.api.chronoqueue.v1.ChronoQueue/DeleteSchedule", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chronoQueueClient) PauseSchedule(ctx context.Context, in *PauseScheduleRequest, opts ...grpc.CallOption) (*PauseScheduleResponse, error) {
+	out := new(PauseScheduleResponse)
+	err := c.cc.Invoke(ctx, "/chronoqueue.api.chronoqueue.v1.ChronoQueue/PauseSchedule", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chronoQueueClient) ResumeSchedule(ctx context.Context, in *ResumeScheduleRequest, opts ...grpc.CallOption) (*ResumeScheduleResponse, error) {
+	out := new(ResumeScheduleResponse)
+	err := c.cc.Invoke(ctx, "/chronoqueue.api.chronoqueue.v1.ChronoQueue/ResumeSchedule", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chronoQueueClient) GetSchedule(ctx context.Context, in *GetScheduleRequest, opts ...grpc.CallOption) (*GetScheduleResponse, error) {
+	out := new(GetScheduleResponse)
+	err := c.cc.Invoke(ctx, "/chronoqueue.api.chronoqueue.v1.ChronoQueue/GetSchedule", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chronoQueueClient) ListSchedules(ctx context.Context, in *ListSchedulesRequest, opts ...grpc.CallOption) (*ListSchedulesResponse, error) {
+	out := new(ListSchedulesResponse)
+	err := c.cc.Invoke(ctx, "/chronoqueue.api.chronoqueue.v1.ChronoQueue/ListSchedules", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chronoQueueClient) GetScheduleHistory(ctx context.Context, in *GetScheduleHistoryRequest, opts ...grpc.CallOption) (*GetScheduleHistoryResponse, error) {
+	out := new(GetScheduleHistoryResponse)
+	err := c.cc.Invoke(ctx, "/chronoqueue.api.chronoqueue.v1.ChronoQueue/GetScheduleHistory", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChronoQueueServer is the server API for ChronoQueue service.
 // All implementations must embed UnimplementedChronoQueueServer
 // for forward compatibility
@@ -142,6 +212,13 @@ type ChronoQueueServer interface {
 	GetQueueState(context.Context, *GetQueueStateRequest) (*GetQueueStateResponse, error)
 	SendMessageHeartBeat(context.Context, *SendMessageHeartBeatRequest) (*SendMessageHeartBeatResponse, error)
 	ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error)
+	CreateSchedule(context.Context, *CreateScheduleRequest) (*CreateScheduleResponse, error)
+	DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error)
+	PauseSchedule(context.Context, *PauseScheduleRequest) (*PauseScheduleResponse, error)
+	ResumeSchedule(context.Context, *ResumeScheduleRequest) (*ResumeScheduleResponse, error)
+	GetSchedule(context.Context, *GetScheduleRequest) (*GetScheduleResponse, error)
+	ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error)
+	GetScheduleHistory(context.Context, *GetScheduleHistoryRequest) (*GetScheduleHistoryResponse, error)
 	mustEmbedUnimplementedChronoQueueServer()
 }
 
@@ -178,6 +255,27 @@ func (UnimplementedChronoQueueServer) SendMessageHeartBeat(context.Context, *Sen
 }
 func (UnimplementedChronoQueueServer) ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListQueues not implemented")
+}
+func (UnimplementedChronoQueueServer) CreateSchedule(context.Context, *CreateScheduleRequest) (*CreateScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateSchedule not implemented")
+}
+func (UnimplementedChronoQueueServer) DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteSchedule not implemented")
+}
+func (UnimplementedChronoQueueServer) PauseSchedule(context.Context, *PauseScheduleRequest) (*PauseScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PauseSchedule not implemented")
+}
+func (UnimplementedChronoQueueServer) ResumeSchedule(context.Context, *ResumeScheduleRequest) (*ResumeScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResumeSchedule not implemented")
+}
+func (UnimplementedChronoQueueServer) GetSchedule(context.Context, *GetScheduleRequest) (*GetScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSchedule not implemented")
+}
+func (UnimplementedChronoQueueServer) ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSchedules not implemented")
+}
+func (UnimplementedChronoQueueServer) GetScheduleHistory(context.Context, *GetScheduleHistoryRequest) (*GetScheduleHistoryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetScheduleHistory not implemented")
 }
 func (UnimplementedChronoQueueServer) mustEmbedUnimplementedChronoQueueServer() {}
 
@@ -372,6 +470,132 @@ func _ChronoQueue_ListQueues_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChronoQueue_CreateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChronoQueueServer).CreateSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/chronoqueue.api.chronoqueue.v1.ChronoQueue/CreateSchedule",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChronoQueueServer).CreateSchedule(ctx, req.(*CreateScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChronoQueue_DeleteSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChronoQueueServer).DeleteSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/chronoqueue.api.chronoqueue.v1.ChronoQueue/DeleteSchedule",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChronoQueueServer).DeleteSchedule(ctx, req.(*DeleteScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChronoQueue_PauseSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChronoQueueServer).PauseSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/chronoqueue.api.chronoqueue.v1.ChronoQueue/PauseSchedule",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChronoQueueServer).PauseSchedule(ctx, req.(*PauseScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChronoQueue_ResumeSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResumeScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChronoQueueServer).ResumeSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/chronoqueue.api.chronoqueue.v1.ChronoQueue/ResumeSchedule",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChronoQueueServer).ResumeSchedule(ctx, req.(*ResumeScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChronoQueue_GetSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChronoQueueServer).GetSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/chronoqueue.api.chronoqueue.v1.ChronoQueue/GetSchedule",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChronoQueueServer).GetSchedule(ctx, req.(*GetScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChronoQueue_ListSchedules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSchedulesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChronoQueueServer).ListSchedules(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/chronoqueue.api.chronoqueue.v1.ChronoQueue/ListSchedules",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChronoQueueServer).ListSchedules(ctx, req.(*ListSchedulesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChronoQueue_GetScheduleHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetScheduleHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChronoQueueServer).GetScheduleHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/chronoqueue.api.chronoqueue.v1.ChronoQueue/GetScheduleHistory",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChronoQueueServer).GetScheduleHistory(ctx, req.(*GetScheduleHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChronoQueue_ServiceDesc is the grpc.ServiceDesc for ChronoQueue service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -418,6 +642,34 @@ var ChronoQueue_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListQueues",
 			Handler:    _ChronoQueue_ListQueues_Handler,
+		},
+		{
+			MethodName: "CreateSchedule",
+			Handler:    _ChronoQueue_CreateSchedule_Handler,
+		},
+		{
+			MethodName: "DeleteSchedule",
+			Handler:    _ChronoQueue_DeleteSchedule_Handler,
+		},
+		{
+			MethodName: "PauseSchedule",
+			Handler:    _ChronoQueue_PauseSchedule_Handler,
+		},
+		{
+			MethodName: "ResumeSchedule",
+			Handler:    _ChronoQueue_ResumeSchedule_Handler,
+		},
+		{
+			MethodName: "GetSchedule",
+			Handler:    _ChronoQueue_GetSchedule_Handler,
+		},
+		{
+			MethodName: "ListSchedules",
+			Handler:    _ChronoQueue_ListSchedules_Handler,
+		},
+		{
+			MethodName: "GetScheduleHistory",
+			Handler:    _ChronoQueue_GetScheduleHistory_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

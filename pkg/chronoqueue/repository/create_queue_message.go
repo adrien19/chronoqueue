@@ -89,20 +89,19 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	err = as.encryptMetadataPayload(message.Metadata)
-	if err != nil {
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while encrypting message payload")
-		return nil, chronoErr.GRPCStatus()
-	}
-
-	// Set the message state if InvisibilityDuration is zero
-	if message.GetMetadata().GetInvisibilityDuration().AsDuration() == 0 {
-		message.Metadata.State = chronoqueue.Message_Metadata_PENDING
+	// avoid double encryption for schedule messages.
+	if message.Metadata.GetCronSchedule() == "" {
+		err = as.encryptMetadataPayload(message.Metadata)
+		if err != nil {
+			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while encrypting message payload")
+			return nil, chronoErr.GRPCStatus()
+		}
 	}
 
 	// Set the message invisibility expiry
 	invisibity_expiry := time.Now().Add(message.Metadata.InvisibilityDuration.AsDuration())
-	message.Metadata.InvisibilityExpiry = invisibity_expiry.UnixNano() / int64(time.Millisecond)
+	message.Metadata.InvisibilityExpiry = invisibity_expiry.UnixMilli()
+	message.Metadata.State = chronoqueue.Message_Metadata_INVISIBLE
 
 	priority := message.Metadata.GetPriority()
 	if priority > MaxPriority {
