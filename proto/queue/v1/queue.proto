@@ -1,0 +1,26 @@
+// ./chronoq/proto/queue/v1/queue.proto
+
+syntax = "proto3";
+
+package chronoqueue.api.queue.v1;
+
+import "google/protobuf/duration.proto";
+option go_package = "github.com/adrien19/chronoqueue/api/queue/v1;queue";
+
+enum QueueType {
+    SIMPLE = 0;
+    EXCLUSIVE = 1;
+}
+
+message QueueMetadata {
+    QueueType type = 1;
+    int32 dequeue_attempts = 2;
+    google.protobuf.Duration lease_duration = 3;
+    string exclusivity_key = 4;
+    google.protobuf.Duration invisibility_duration = 5;
+}
+
+message Queue {
+    string name = 1;
+    QueueMetadata metadata = 2;
+}

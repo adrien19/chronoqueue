@@ -1,0 +1,35 @@
+// ./proto/message/v1/message.proto
+
+syntax = "proto3";
+package chronoqueue.api.message.v1;
+
+option go_package = "github.com/adrien19/chronoqueue/api/message/v1;message";
+
+import "google/protobuf/duration.proto";
+import "proto/common/v1/common.proto";
+
+
+message Message {
+    string message_id = 1;
+    message Metadata {
+        chronoqueue.api.common.v1.Payload payload = 1;
+        enum State {
+            INVISIBLE = 0;
+            PENDING = 1;
+            RUNNING = 2;
+            COMPLETED = 3;
+            CANCELED = 4;
+            ERRORED = 5;
+        }
+        Metadata.State state = 2;
+        google.protobuf.Duration invisibility_duration = 3;
+        int32 attempts_left = 4;
+        google.protobuf.Duration lease_duration = 5;
+        int64 lease_expiry = 6;
+        int32 lease_renewal_count = 7;
+        int64 invisibility_expiry = 8;
+        int64 priority = 9;
+    }
+    Message.Metadata metadata = 3;
+}
+

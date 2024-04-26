@@ -1,0 +1,49 @@
+// ./proto/schedule/v1/schedule.proto
+
+syntax = "proto3";
+package chronoqueue.api.schedule.v1;
+
+option go_package = "github.com/adrien19/chronoqueue/api/schedule/v1;schedule";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "proto/common/v1/common.proto";
+import "proto/message/v1/message.proto";
+
+
+message Schedule {
+    string schedule_id = 1;
+    message Metadata {
+        chronoqueue.api.common.v1.Payload payload = 1;
+        enum State {
+            SCHEDULED = 0;
+            CANCELED = 1;
+            ERRORED = 2;
+            PAUSED = 3;
+        }
+        Schedule.Metadata.State state = 2;
+        string cron_schedule = 3;
+        string queue_name = 4;
+        repeated string message_ids = 5;
+        google.protobuf.Timestamp next_run = 6;
+        google.protobuf.Timestamp last_run = 7;
+        google.protobuf.Timestamp created_at = 8;
+        google.protobuf.Timestamp updated_at = 9;
+        string exclusivity_key = 10;
+        string state_message = 11;
+        int64 priority = 12;
+        bool has_max_messages = 13;
+        int64 max_messages = 14;
+        google.protobuf.Duration lease_duration = 15;
+    }
+    Schedule.Metadata metadata = 2;
+}
+
+message ScheduleHistory {
+    repeated chronoqueue.api.message.v1.Message messages = 1;
+    string schedule_id = 2;
+    google.protobuf.Timestamp next_run = 3;
+    google.protobuf.Timestamp last_run = 4;
+    google.protobuf.Timestamp created_at = 5;
+    google.protobuf.Timestamp updated_at = 6;
+}

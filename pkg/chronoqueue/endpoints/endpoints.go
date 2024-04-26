@@ -3,7 +3,7 @@ package endpoints
 import (
 	"context"
 
-	pb "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	pb "github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue"
 	"github.com/go-kit/kit/endpoint"
 )

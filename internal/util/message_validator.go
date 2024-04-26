@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
 )
 
 const MaxMessageSize = 150 * 1024 // 150 KB
