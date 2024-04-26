@@ -1,0 +1,28 @@
+// ./proto/queueservice/v1/request_response.proto
+
+syntax = "proto3";
+package chronoqueue.api.queueservice.v1;
+
+option go_package = "github.com/adrien19/chronoqueue/api/queueservice/v1;queueservice";
+
+import "proto/queueservice/v1/request_response.proto";
+
+service QueueService {
+    rpc CreateQueue (CreateQueueRequest) returns (CreateQueueResponse);
+    rpc DeleteQueue (DeleteQueueRequest) returns (DeleteQueueResponse);
+    rpc PostMessage (PostMessageRequest) returns (PostMessageResponse);
+    rpc GetNextMessage (GetNextMessageRequest) returns (GetNextMessageResponse);
+    rpc AcknowledgeMessage (AcknowledgeMessageRequest) returns (AcknowledgeMessageResponse);
+    rpc RenewMessageLease (RenewMessageLeaseRequest) returns (RenewMessageLeaseResponse);
+    rpc PeekQueueMessages (PeekQueueMessagesRequest) returns (PeekQueueMessagesResponse);
+    rpc GetQueueState (GetQueueStateRequest) returns (GetQueueStateResponse);
+    rpc SendMessageHeartBeat(SendMessageHeartBeatRequest) returns (SendMessageHeartBeatResponse);
+    rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse);
+    rpc CreateSchedule (CreateScheduleRequest) returns (CreateScheduleResponse);
+    rpc DeleteSchedule (DeleteScheduleRequest) returns (DeleteScheduleResponse);
+    rpc PauseSchedule (PauseScheduleRequest) returns (PauseScheduleResponse);
+    rpc ResumeSchedule (ResumeScheduleRequest) returns (ResumeScheduleResponse);
+    rpc GetSchedule (GetScheduleRequest) returns (GetScheduleResponse);
+    rpc ListSchedules (ListSchedulesRequest) returns (ListSchedulesResponse);
+    rpc GetScheduleHistory (GetScheduleHistoryRequest) returns (GetScheduleHistoryResponse);
+}

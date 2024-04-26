@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	pb_chronoqueue "github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"

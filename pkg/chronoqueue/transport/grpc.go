@@ -3,7 +3,7 @@ package transport
 import (
 	"context"
 
-	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
 	grpctransport "github.com/go-kit/kit/transport/grpc"

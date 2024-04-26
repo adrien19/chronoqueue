@@ -2,7 +2,6 @@
 
 ChronoQueue is queue management system designed to handle high-volume message processing with efficiency and reliability. It offers a priority-based messaging system, real-time monitoring, and flexible scheduling options, making it an ideal solution for complex asynchronous task management.
 
-
 ## Features
 
 - **Priority Queue Management:** ChronoQueue allows users to assign priorities to messages, ensuring that critical tasks are processed first. This feature is crucial for systems where task urgency varies significantly.
@@ -31,27 +30,32 @@ ChronoQueue is queue management system designed to handle high-volume message pr
 
 ### Installation
 
-#### Docker Compose Option:
+#### Docker Compose Option
 
 The easiest way to get started locally is to use [docker-compose](https://docs.docker.com/compose/). Simply:
 
 1. Clone the repository:
+
    ```bash
    git clone https://github.com/adrien19/chronoqueue.git
    ```
+
 2. Cd into deploy - `cd deploy` and run:
+
     ```bash
-    docker-compose up 
+    docker-compose up
     ```
 
-#### Run Server Option:
+#### Run Server Option
 
 1. Clone the repository:
+
    ```bash
    git clone https://github.com/adrien19/chronoqueue.git
    ```
 
 2. Install dependencies:
+
     ```bash
     # For Go server
     go mod tidy
@@ -65,6 +69,7 @@ The easiest way to get started locally is to use [docker-compose](https://docs.d
 3. Configure your environment (refer to the .env.example file for guidance).
 
 4. Start the ChronoQueue server:
+
     ```bash
     go run cmd/server/main.go
 

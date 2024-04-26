@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 

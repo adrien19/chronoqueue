@@ -1,0 +1,13 @@
+// ./proto/common/v1/common.proto
+
+syntax = "proto3";
+package chronoqueue.api.common.v1;
+
+import "google/protobuf/struct.proto";
+option go_package = "github.com/adrien19/chronoqueue/api/common/v1;common";
+
+
+message Payload {
+    map<string, google.protobuf.Value> metadata = 1;
+    google.protobuf.Struct data = 2;
+}

@@ -242,12 +242,22 @@ init-proto:
 # Target: gen-proto                                                            #
 ################################################################################
 PROTO_PREFIX:=github.com/adrien19/chronoqueue
+GRPC_PROTOS:=$(shell ls proto)
 
-GEN_PROTOS:= $(PROTOC) --go_out=. --go_opt=module=$(PROTO_PREFIX) --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,module=$(PROTO_PREFIX) ./api/chronoqueue/v1/*.proto
+# Generate archive files for each binary
+# $(1): the binary name to be archived
+define genProtoc
+.PHONY: gen-proto-$(1)
+gen-proto-$(1):
+	$(PROTOC) --go_out=. --go_opt=module=$(PROTO_PREFIX) --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,module=$(PROTO_PREFIX) ./proto/$(1)/v1/*.proto
+endef
+
+$(foreach ITEM,$(GRPC_PROTOS),$(eval $(call genProtoc,$(ITEM))))
+
+GEN_PROTOS:=$(foreach ITEM,$(GRPC_PROTOS),gen-proto-$(ITEM))
 
 .PHONY: gen-proto
-gen-proto: check-proto-version
-	$(GEN_PROTOS) && go mod tidy
+gen-proto: check-proto-version $(GEN_PROTOS) modtidy
 
 ################################################################################
 # Target: check-diff                                                           #

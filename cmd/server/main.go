@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"syscall"
 
-	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	pb_chronoqueue "github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue"

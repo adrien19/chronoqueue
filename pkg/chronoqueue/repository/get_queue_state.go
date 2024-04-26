@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"

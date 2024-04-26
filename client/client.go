@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	pb_chronoqueue "github.com/adrien19/chronoqueue/api/chronoqueue/v1"
+	pb_chronoqueue "github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
 	structpb "github.com/golang/protobuf/ptypes/struct"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

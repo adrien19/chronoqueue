@@ -1,0 +1,171 @@
+
+// ./proto/queueservice/v1/request_response.proto
+syntax = "proto3";
+
+package chronoqueue.api.queueservice.v1;
+
+option go_package = "github.com/adrien19/chronoqueue/api/queueservice/v1;queueservice";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+import "proto/queue/v1/queue.proto";
+import "proto/message/v1/message.proto";
+import "proto/schedule/v1/schedule.proto";
+
+// Create queue
+message CreateQueueRequest {
+    string name = 1;
+    // optional QueueMetadata metadata = 2;
+}
+message CreateQueueResponse {
+    bool success = 1;
+}
+
+// Delete queue by name
+message DeleteQueueRequest {
+    string name = 1;
+}
+message DeleteQueueResponse {
+    bool success = 1;
+}
+
+// Post a message to the queue
+message PostMessageRequest{
+    string queue_name = 1;
+    chronoqueue.api.message.v1.Message message = 2;
+}
+message PostMessageResponse{
+    bool success = 1;
+}
+
+
+
+// Get the next message on the queue
+message GetNextMessageRequest{
+    string queue_name = 1;
+    google.protobuf.Duration lease_duration = 2;
+    string exclusivity_key = 3;
+}
+message GetNextMessageResponse{
+    chronoqueue.api.message.v1.Message message = 1;
+}
+
+// Acknowledge the message on the queue
+message AcknowledgeMessageRequest{
+    string queue_name = 1;
+    string message_id = 2;
+    chronoqueue.api.message.v1.Message.Metadata.State state = 3;
+}
+message AcknowledgeMessageResponse{
+    bool success = 1;
+}
+
+// Renew lease period of a message
+message RenewMessageLeaseRequest{
+    string queue_name = 1;
+    string message_id = 2;
+    google.protobuf.Duration lease_duration = 3;
+}
+message RenewMessageLeaseResponse{
+    google.protobuf.Duration remaining_time = 1;
+    chronoqueue.api.message.v1.Message.Metadata.State state = 2;
+}
+
+// View pending messages on a queueu
+message PeekQueueMessagesRequest{
+    string queue_name = 1;
+    int64 limit = 2;
+    message PriorityRange {
+        int64 min = 1;
+        int64 max = 2;
+    }
+    optional PeekQueueMessagesRequest.PriorityRange priority_range = 3;
+}
+message PeekQueueMessagesResponse{
+    repeated chronoqueue.api.message.v1.Message messages = 1;
+}
+
+// vew the state of a given queue
+message GetQueueStateRequest{
+    string queue_name = 1;
+}
+message GetQueueStateResponse{
+    map<string, int32> state_counts = 1;
+    google.protobuf.Timestamp earliest_deadline = 2;
+}
+
+// send a heartbeat to the queue
+message SendMessageHeartBeatRequest {
+    string queue_name = 1;
+    string message_id = 2;
+}
+message SendMessageHeartBeatResponse {
+    google.protobuf.Duration remaining_time = 1;
+    chronoqueue.api.message.v1.Message.Metadata.State state = 2;
+}
+
+// List queues
+message ListQueuesRequest {
+    string prefix = 1;
+}
+message ListQueuesResponse {
+    repeated chronoqueue.api.queue.v1.Queue queues = 1;
+}
+
+// Create a schedule
+message CreateScheduleRequest {
+    chronoqueue.api.schedule.v1.Schedule schedule = 1;
+}
+message CreateScheduleResponse {
+    bool success = 1;
+}
+
+// Delete a schedule
+message DeleteScheduleRequest {
+    string schedule_id = 1;
+}
+message DeleteScheduleResponse {
+    bool success = 1;
+}
+
+// Pause a schedule
+message PauseScheduleRequest {
+    string schedule_id = 1;
+}
+message PauseScheduleResponse {
+    bool success = 1;
+}
+
+// Resume a schedule
+message ResumeScheduleRequest {
+    string schedule_id = 1;
+}
+message ResumeScheduleResponse {
+    bool success = 1;
+}
+
+// Get a schedule
+message GetScheduleRequest {
+    string schedule_id = 1;
+}
+message GetScheduleResponse {
+    chronoqueue.api.schedule.v1.Schedule schedule = 1;
+}
+
+// List schedules
+message ListSchedulesRequest {
+    string prefix = 1;
+}
+message ListSchedulesResponse {
+    repeated chronoqueue.api.schedule.v1.Schedule schedules = 1;
+}
+
+// Get schedule history
+message GetScheduleHistoryRequest {
+    string schedule_id = 1;
+    int64 limit = 2;
+}
+message GetScheduleHistoryResponse {
+    chronoqueue.api.schedule.v1.ScheduleHistory schedule_history = 1;
+}
