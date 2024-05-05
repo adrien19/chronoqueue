@@ -10,9 +10,11 @@ import (
 	"sync"
 	"time"
 
-	pb_chronoqueue "github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	pb_queue "github.com/adrien19/chronoqueue/api/queue/v1"
-	pb_queueservice "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	structpb "github.com/golang/protobuf/ptypes/struct"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -59,7 +61,7 @@ type (
 		LeaseDuration  string  `json:"leaseDuration,omitempty"`
 	}
 
-	Connector func(address string, opts ClientOptions) (pb_chronoqueue.ChronoQueueClient, *grpc.ClientConn, error)
+	Connector func(address string, opts ClientOptions) (queueservice_pb.QueueServiceClient, *grpc.ClientConn, error)
 )
 
 const (
@@ -94,7 +96,7 @@ type ClientOptions struct {
 	TLSCredentials           credentials.TransportCredentials // Define as per your gRPC setup
 	Connector                Connector                        // User-provided Connector
 	MaxHeartbeatRetryCount   int
-	SendMessageHeartbeatFunc func(context.Context, string, string) (*pb_chronoqueue.SendMessageHeartBeatResponse, error)
+	SendMessageHeartbeatFunc func(context.Context, string, string) (*queueservice_pb.SendMessageHeartBeatResponse, error)
 }
 
 type WorkItem struct {
@@ -105,7 +107,7 @@ type WorkItem struct {
 
 // ChronoQueueClient is a client to call ChronoQueue RPC
 type ChronoQueueClient struct {
-	service   pb_chronoqueue.ChronoQueueClient
+	service   queueservice_pb.QueueServiceClient
 	conn      *grpc.ClientConn
 	workChan  chan WorkItem
 	closeChan chan struct{}
@@ -171,7 +173,7 @@ func checkDefaultClientOptions(opts ClientOptions) ClientOptions {
 	return opts
 }
 
-func DefaultServerConnector(address string, opts ClientOptions) (pb_chronoqueue.ChronoQueueClient, *grpc.ClientConn, error) {
+func DefaultServerConnector(address string, opts ClientOptions) (queueservice_pb.QueueServiceClient, *grpc.ClientConn, error) {
 	backoff := opts.InitialBackoff
 	for i := 0; i < opts.MaxRetries; i++ {
 		// ...
@@ -184,7 +186,7 @@ func DefaultServerConnector(address string, opts ClientOptions) (pb_chronoqueue.
 		}
 
 		if err == nil {
-			return pb_chronoqueue.NewChronoQueueClient(conn), conn, nil
+			return queueservice_pb.NewQueueServiceClient(conn), conn, nil
 		}
 
 		// Log or handle error, then retry
@@ -228,21 +230,21 @@ func parseDurationToProto(durationStr string) (*durationpb.Duration, error) {
 }
 
 // CreateQueue create a queue and returns empty response
-func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, queueOptions QueueOptions) (*pb_chronoqueue.CreateQueueResponse, error) {
+func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, queueOptions QueueOptions) (*queueservice_pb.CreateQueueResponse, error) {
 
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
 	leaseDuration, err := parseDurationToProto(queueOptions.LeaseDuration)
 	if err != nil {
-		return &pb_chronoqueue.CreateQueueResponse{Success: false}, fmt.Errorf("invalid lease duration: %v", err)
+		return &queueservice_pb.CreateQueueResponse{Success: false}, fmt.Errorf("invalid lease duration: %v", err)
 	}
 	invisibilityDuration, err := parseDurationToProto(queueOptions.InvisibilityDuration)
 	if err != nil {
-		return &pb_chronoqueue.CreateQueueResponse{Success: false}, fmt.Errorf("invalid invisibility duration: %v", err)
+		return &queueservice_pb.CreateQueueResponse{Success: false}, fmt.Errorf("invalid invisibility duration: %v", err)
 	}
 
-	req := &pb_queueservice.CreateQueueRequest{
+	req := &queueservice_pb.CreateQueueRequest{
 		Name: name,
 		Metadata: &pb_queue.QueueMetadata{
 			Type:                 pb_queue.QueueType(queueOptions.Type),
@@ -260,11 +262,11 @@ func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, q
 }
 
 // DeleteQueue deletes a queue and returns empty response
-func (client *ChronoQueueClient) DeleteQueue(ctx context.Context, name string) (*pb_chronoqueue.DeleteQueueResponse, error) {
+func (client *ChronoQueueClient) DeleteQueue(ctx context.Context, name string) (*queueservice_pb.DeleteQueueResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
-	req := &pb_chronoqueue.DeleteQueueRequest{Name: name}
+	req := &queueservice_pb.DeleteQueueRequest{Name: name}
 	res, err := client.service.DeleteQueue(ctx, req)
 	if err != nil {
 		return res, err
@@ -273,7 +275,7 @@ func (client *ChronoQueueClient) DeleteQueue(ctx context.Context, name string) (
 }
 
 // PostMessage create adds a message to the queue and returns empty response
-func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, messageId string, messageOptions MessageOptions) (*pb_chronoqueue.PostMessageResponse, error) {
+func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, messageId string, messageOptions MessageOptions) (*queueservice_pb.PostMessageResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
@@ -286,12 +288,12 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 		return nil, fmt.Errorf("invalid invisibility duration: %v", err)
 	}
 
-	req := &pb_chronoqueue.PostMessageRequest{
+	req := &queueservice_pb.PostMessageRequest{
 		QueueName: queue,
-		Message: &pb_chronoqueue.Message{
+		Message: &message_pb.Message{
 			MessageId: messageId,
-			Metadata: &pb_chronoqueue.Message_Metadata{
-				Payload: &pb_chronoqueue.Payload{
+			Metadata: &message_pb.Message_Metadata{
+				Payload: &common_pb.Payload{
 					Metadata: messageOptions.Payload.Metadata,
 					Data:     messageOptions.Payload.Data,
 				},
@@ -299,7 +301,7 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 				LeaseDuration:        leaseDuration,
 				LeaseExpiry:          messageOptions.LeaseExpiry,
 				InvisibilityDuration: invisibilityDuration,
-				State:                pb_chronoqueue.Message_Metadata_State(messageOptions.State),
+				State:                message_pb.Message_Metadata_State(messageOptions.State),
 				Priority:             messageOptions.Priority,
 			},
 		},
@@ -361,7 +363,7 @@ func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName
 }
 
 // GetNextMessage returns next message on a queue
-func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue string, leaseDuration string, enableHeartbeat bool) (*pb_chronoqueue.GetNextMessageResponse, error) {
+func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue string, leaseDuration string, enableHeartbeat bool) (*queueservice_pb.GetNextMessageResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
@@ -369,7 +371,7 @@ func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue strin
 	if err != nil {
 		return nil, err
 	}
-	req := &pb_chronoqueue.GetNextMessageRequest{QueueName: queue, LeaseDuration: leaseDurationpb}
+	req := &queueservice_pb.GetNextMessageRequest{QueueName: queue, LeaseDuration: leaseDurationpb}
 	res, err := client.service.GetNextMessage(ctx, req)
 	if err != nil {
 		return nil, err
@@ -386,11 +388,11 @@ func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue strin
 }
 
 // PeekQueueMessages returns messages on a queue that are in pending state
-func (client *ChronoQueueClient) PeekQueueMessages(ctx context.Context, queue string, limit int32, timeRange TimeRangeOption) (*pb_chronoqueue.PeekQueueMessagesResponse, error) {
+func (client *ChronoQueueClient) PeekQueueMessages(ctx context.Context, queue string, limit int32, timeRange TimeRangeOption) (*queueservice_pb.PeekQueueMessagesResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
-	var priorityRange pb_chronoqueue.PeekQueueMessagesRequest_PriorityRange
+	var priorityRange queueservice_pb.PeekQueueMessagesRequest_PriorityRange
 	priorityRangeBytes, err := json.Marshal(timeRange)
 	if err != nil {
 		return nil, err
@@ -401,7 +403,7 @@ func (client *ChronoQueueClient) PeekQueueMessages(ctx context.Context, queue st
 		return nil, err
 	}
 
-	req := &pb_chronoqueue.PeekQueueMessagesRequest{QueueName: queue, PriorityRange: &priorityRange}
+	req := &queueservice_pb.PeekQueueMessagesRequest{QueueName: queue, PriorityRange: &priorityRange}
 	res, err := client.service.PeekQueueMessages(ctx, req)
 	if err != nil {
 		return nil, err
@@ -410,11 +412,11 @@ func (client *ChronoQueueClient) PeekQueueMessages(ctx context.Context, queue st
 }
 
 // GetQueueState returns state of a queue
-func (client *ChronoQueueClient) GetQueueState(ctx context.Context, queue string) (*pb_chronoqueue.GetQueueStateResponse, error) {
+func (client *ChronoQueueClient) GetQueueState(ctx context.Context, queue string) (*queueservice_pb.GetQueueStateResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
-	req := &pb_chronoqueue.GetQueueStateRequest{QueueName: queue}
+	req := &queueservice_pb.GetQueueStateRequest{QueueName: queue}
 	res, err := client.service.GetQueueState(ctx, req)
 	if err != nil {
 		return nil, err
@@ -423,7 +425,7 @@ func (client *ChronoQueueClient) GetQueueState(ctx context.Context, queue string
 }
 
 // RenewMessageLease updates a message's lease duration and returns empty response
-func (client *ChronoQueueClient) RenewMessageLease(ctx context.Context, queue string, messageId string, leaseDuration string) (*pb_chronoqueue.RenewMessageLeaseResponse, error) {
+func (client *ChronoQueueClient) RenewMessageLease(ctx context.Context, queue string, messageId string, leaseDuration string) (*queueservice_pb.RenewMessageLeaseResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
@@ -431,7 +433,7 @@ func (client *ChronoQueueClient) RenewMessageLease(ctx context.Context, queue st
 	if err != nil {
 		return nil, err
 	}
-	req := &pb_chronoqueue.RenewMessageLeaseRequest{QueueName: queue, MessageId: messageId, LeaseDuration: leaseDurationpb}
+	req := &queueservice_pb.RenewMessageLeaseRequest{QueueName: queue, MessageId: messageId, LeaseDuration: leaseDurationpb}
 	res, err := client.service.RenewMessageLease(ctx, req)
 	if err != nil {
 		return res, err
@@ -440,11 +442,11 @@ func (client *ChronoQueueClient) RenewMessageLease(ctx context.Context, queue st
 }
 
 // AcknowledgeMessage updates state of a message and empty response
-func (client *ChronoQueueClient) AcknowledgeMessage(ctx context.Context, queue string, messageId string, state State) (*pb_chronoqueue.AcknowledgeMessageResponse, error) {
+func (client *ChronoQueueClient) AcknowledgeMessage(ctx context.Context, queue string, messageId string, state State) (*queueservice_pb.AcknowledgeMessageResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
-	req := &pb_chronoqueue.AcknowledgeMessageRequest{QueueName: queue, MessageId: messageId, State: pb_chronoqueue.Message_Metadata_State(state)}
+	req := &queueservice_pb.AcknowledgeMessageRequest{QueueName: queue, MessageId: messageId, State: message_pb.Message_Metadata_State(state)}
 	res, err := client.service.AcknowledgeMessage(ctx, req)
 	if err != nil {
 		return res, err
@@ -453,14 +455,14 @@ func (client *ChronoQueueClient) AcknowledgeMessage(ctx context.Context, queue s
 }
 
 // SendMessageHeartbeat sends a heartbeat for an in-flight message.
-func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queueName string, messageId string) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
+func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queueName string, messageId string) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
 	if client.opts.SendMessageHeartbeatFunc != nil {
 		return client.opts.SendMessageHeartbeatFunc(ctx, queueName, messageId)
 	}
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
-	req := &pb_chronoqueue.SendMessageHeartBeatRequest{
+	req := &queueservice_pb.SendMessageHeartBeatRequest{
 		QueueName: queueName,
 		MessageId: messageId,
 	}
@@ -472,11 +474,11 @@ func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queue
 }
 
 // ListQueues returns list of available queues.
-func (client *ChronoQueueClient) ListQueues(ctx context.Context, prefix string) (*pb_chronoqueue.ListQueuesResponse, error) {
+func (client *ChronoQueueClient) ListQueues(ctx context.Context, prefix string) (*queueservice_pb.ListQueuesResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
-	req := &pb_chronoqueue.ListQueuesRequest{
+	req := &queueservice_pb.ListQueuesRequest{
 		Prefix: prefix,
 	}
 	res, err := client.service.ListQueues(ctx, req)
@@ -487,7 +489,7 @@ func (client *ChronoQueueClient) ListQueues(ctx context.Context, prefix string) 
 }
 
 // CreateSchedule creates a schedule and returns an empty response
-func (client *ChronoQueueClient) CreateSchedule(ctx context.Context, scheduleId string, scheduleOptions ScheduleOptions) (*pb_chronoqueue.CreateScheduleResponse, error) {
+func (client *ChronoQueueClient) CreateSchedule(ctx context.Context, scheduleId string, scheduleOptions ScheduleOptions) (*queueservice_pb.CreateScheduleResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
 
@@ -495,15 +497,15 @@ func (client *ChronoQueueClient) CreateSchedule(ctx context.Context, scheduleId 
 	if err != nil {
 		return nil, err
 	}
-	req := &pb_chronoqueue.CreateScheduleRequest{
-		Schedule: &pb_chronoqueue.Schedule{
+	req := &queueservice_pb.CreateScheduleRequest{
+		Schedule: &schedule_pb.Schedule{
 			ScheduleId: scheduleId,
-			Metadata: &pb_chronoqueue.Schedule_Metadata{
-				Payload: &pb_chronoqueue.Payload{
+			Metadata: &schedule_pb.Schedule_Metadata{
+				Payload: &common_pb.Payload{
 					Metadata: scheduleOptions.Payload.Metadata,
 					Data:     scheduleOptions.Payload.Data,
 				},
-				State:          pb_chronoqueue.Schedule_Metadata_State(scheduleOptions.State),
+				State:          schedule_pb.Schedule_Metadata_State(scheduleOptions.State),
 				CronSchedule:   scheduleOptions.CronSchedule,
 				QueueName:      scheduleOptions.QueueName,
 				ExclusivityKey: scheduleOptions.ExclusivityKey,
@@ -521,10 +523,10 @@ func (client *ChronoQueueClient) CreateSchedule(ctx context.Context, scheduleId 
 }
 
 // DeleteSchedule deletes a schedule and returns an empty response
-func (client *ChronoQueueClient) DeleteSchedule(ctx context.Context, scheduleId string) (*pb_chronoqueue.DeleteScheduleResponse, error) {
+func (client *ChronoQueueClient) DeleteSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.DeleteScheduleResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
-	req := &pb_chronoqueue.DeleteScheduleRequest{
+	req := &queueservice_pb.DeleteScheduleRequest{
 		ScheduleId: scheduleId,
 	}
 	res, err := client.service.DeleteSchedule(ctx, req)
@@ -535,10 +537,10 @@ func (client *ChronoQueueClient) DeleteSchedule(ctx context.Context, scheduleId 
 }
 
 // GetSchedule returns a schedule
-func (client *ChronoQueueClient) GetSchedule(ctx context.Context, scheduleId string) (*pb_chronoqueue.GetScheduleResponse, error) {
+func (client *ChronoQueueClient) GetSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.GetScheduleResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
-	req := &pb_chronoqueue.GetScheduleRequest{
+	req := &queueservice_pb.GetScheduleRequest{
 		ScheduleId: scheduleId,
 	}
 	res, err := client.service.GetSchedule(ctx, req)
@@ -549,10 +551,10 @@ func (client *ChronoQueueClient) GetSchedule(ctx context.Context, scheduleId str
 }
 
 // ListSchedules returns list of schedules
-func (client *ChronoQueueClient) ListSchedules(ctx context.Context, prefix string) (*pb_chronoqueue.ListSchedulesResponse, error) {
+func (client *ChronoQueueClient) ListSchedules(ctx context.Context, prefix string) (*queueservice_pb.ListSchedulesResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
-	req := &pb_chronoqueue.ListSchedulesRequest{
+	req := &queueservice_pb.ListSchedulesRequest{
 		Prefix: prefix,
 	}
 	res, err := client.service.ListSchedules(ctx, req)
@@ -563,10 +565,10 @@ func (client *ChronoQueueClient) ListSchedules(ctx context.Context, prefix strin
 }
 
 // GetScheduleHistory returns the history of a schedule
-func (client *ChronoQueueClient) GetScheduleHistory(ctx context.Context, scheduleId string, limit int64) (*pb_chronoqueue.GetScheduleHistoryResponse, error) {
+func (client *ChronoQueueClient) GetScheduleHistory(ctx context.Context, scheduleId string, limit int64) (*queueservice_pb.GetScheduleHistoryResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
-	req := &pb_chronoqueue.GetScheduleHistoryRequest{
+	req := &queueservice_pb.GetScheduleHistoryRequest{
 		ScheduleId: scheduleId,
 		Limit:      limit,
 	}
@@ -578,10 +580,10 @@ func (client *ChronoQueueClient) GetScheduleHistory(ctx context.Context, schedul
 }
 
 // PauseSchedule pauses a schedule
-func (client *ChronoQueueClient) PauseSchedule(ctx context.Context, scheduleId string) (*pb_chronoqueue.PauseScheduleResponse, error) {
+func (client *ChronoQueueClient) PauseSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.PauseScheduleResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
-	req := &pb_chronoqueue.PauseScheduleRequest{
+	req := &queueservice_pb.PauseScheduleRequest{
 		ScheduleId: scheduleId,
 	}
 	res, err := client.service.PauseSchedule(ctx, req)
@@ -592,10 +594,10 @@ func (client *ChronoQueueClient) PauseSchedule(ctx context.Context, scheduleId s
 }
 
 // ResumeSchedule resumes a schedule
-func (client *ChronoQueueClient) ResumeSchedule(ctx context.Context, scheduleId string) (*pb_chronoqueue.ResumeScheduleResponse, error) {
+func (client *ChronoQueueClient) ResumeSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.ResumeScheduleResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	defer cancel()
-	req := &pb_chronoqueue.ResumeScheduleRequest{
+	req := &queueservice_pb.ResumeScheduleRequest{
 		ScheduleId: scheduleId,
 	}
 	res, err := client.service.ResumeSchedule(ctx, req)

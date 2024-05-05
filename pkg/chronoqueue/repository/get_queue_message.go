@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 
-	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"google.golang.org/grpc/codes"
 )
 
-func (as *storage) validateExclusivity(queueMeta *chronoqueue.Queue_Options, exclusivityKey string) error {
-	if queueMeta.GetType() == chronoqueue.Queue_Options_EXCLUSIVE && exclusivityKey == "" {
+func (as *storage) validateExclusivity(queueMeta *queue_pb.QueueMetadata, exclusivityKey string) error {
+	if queueMeta.GetType() == queue_pb.QueueType_EXCLUSIVE && exclusivityKey == "" {
 		return errors.New("error: queue requires an exclusive key")
 	}
 
@@ -20,7 +22,7 @@ func (as *storage) validateExclusivity(queueMeta *chronoqueue.Queue_Options, exc
 	return nil
 }
 
-func (as *storage) getNextPendingMessage(ctx context.Context, queueName string, members []string) (*chronoqueue.Message, error) {
+func (as *storage) getNextPendingMessage(ctx context.Context, queueName string, members []string) (*message_pb.Message, error) {
 	for _, member := range members {
 		if len(member) == 0 {
 			continue
@@ -32,8 +34,8 @@ func (as *storage) getNextPendingMessage(ctx context.Context, queueName string, 
 			})
 			return nil, err
 		}
-		if meta.State == chronoqueue.Message_Metadata_PENDING {
-			return &chronoqueue.Message{
+		if meta.State == message_pb.Message_Metadata_PENDING {
+			return &message_pb.Message{
 				MessageId: member,
 				Metadata:  meta,
 			}, nil
@@ -42,7 +44,7 @@ func (as *storage) getNextPendingMessage(ctx context.Context, queueName string, 
 	return nil, nil
 }
 
-func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.GetNextMessageRequest) (*chronoqueue.GetNextMessageResponse, error) {
+func (as *storage) GetQueueMessage(ctx context.Context, request *queueservice_pb.GetNextMessageRequest) (*queueservice_pb.GetNextMessageResponse, error) {
 	queueMeta, err := as.getQueueMetadata(ctx, request.GetQueueName())
 	if err != nil {
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Failed to get queue's metadata.").GRPCStatus()
@@ -58,7 +60,7 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.Get
 	}
 	if len(members) == 0 {
 		util.Info("No messages found with a deadline before now")
-		return &chronoqueue.GetNextMessageResponse{}, nil
+		return &queueservice_pb.GetNextMessageResponse{}, nil
 	}
 
 	message, err := as.getNextPendingMessage(ctx, request.GetQueueName(), members)
@@ -67,7 +69,7 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.Get
 	}
 	if message == nil {
 		// util.Info("No pending messages found with a deadline before now")
-		return &chronoqueue.GetNextMessageResponse{}, nil
+		return &queueservice_pb.GetNextMessageResponse{}, nil
 	}
 
 	// Update the message's state to "Running" and restore the message
@@ -86,7 +88,7 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *chronoqueue.Get
 		"lease expiry": message.Metadata.GetLeaseExpiry(),
 		"message Id":   message.GetMessageId(),
 	})
-	return &chronoqueue.GetNextMessageResponse{
+	return &queueservice_pb.GetNextMessageResponse{
 		Message: message,
 	}, nil
 }

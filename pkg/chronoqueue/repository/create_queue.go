@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	queue "github.com/adrien19/chronoqueue/api/queue/v1"
+	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
@@ -62,7 +62,7 @@ func (as *storage) CreateQueue(ctx context.Context, request *queueservice_pb.Cre
 		}, chronoErr.GRPCStatus()
 	}
 
-	if request.Metadata.GetType() == queue.QueueType_EXCLUSIVE && request.Metadata.GetExclusivityKey() == "" {
+	if request.Metadata.GetType() == queue_pb.QueueType_EXCLUSIVE && request.Metadata.GetExclusivityKey() == "" {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Exclusivity key missing for an EXCLUSIVE queue type")
 		return &queueservice_pb.CreateQueueResponse{
 			Success: false,

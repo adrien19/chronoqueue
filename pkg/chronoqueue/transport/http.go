@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
@@ -118,30 +117,30 @@ func decodeHTTPCreateQueueRequest(_ context.Context, r *http.Request) (interface
 }
 
 func decodeHTTPDeleteQueueRequest(ctx context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.DeleteQueueRequest
+	var req queueservice_pb.DeleteQueueRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		return &chronoqueue.DeleteQueueResponse{Success: false}, err
+		return &queueservice_pb.DeleteQueueResponse{Success: false}, err
 	}
 	return &req, nil
 }
 
 func decodeHTTPPostMessageRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.PostMessageRequest
+	var req queueservice_pb.PostMessageRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		return &chronoqueue.PostMessageResponse{Success: false}, err
+		return &queueservice_pb.PostMessageResponse{Success: false}, err
 	}
 	// Validate the size of a message based on simple estimations.
 	err = util.ValidateMessageSize(req.Message)
 	if err != nil {
-		return &chronoqueue.PostMessageResponse{Success: false}, err
+		return &queueservice_pb.PostMessageResponse{Success: false}, err
 	}
 	return &req, nil
 }
 
 func decodeHTTPGetNextMessageRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.GetNextMessageRequest
+	var req queueservice_pb.GetNextMessageRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
@@ -150,19 +149,19 @@ func decodeHTTPGetNextMessageRequest(_ context.Context, r *http.Request) (interf
 }
 
 func decodeHTTPAcknowledgeMessageRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.AcknowledgeMessageRequest
+	var req queueservice_pb.AcknowledgeMessageRequest
 	if r.ContentLength == 0 {
 		return &req, nil
 	}
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		return &chronoqueue.AcknowledgeMessageResponse{Success: false}, err
+		return &queueservice_pb.AcknowledgeMessageResponse{Success: false}, err
 	}
 	return &req, nil
 }
 
 func decodeHTTPRenewMessageLeaseRequest(ctx context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.RenewMessageLeaseRequest
+	var req queueservice_pb.RenewMessageLeaseRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
@@ -171,7 +170,7 @@ func decodeHTTPRenewMessageLeaseRequest(ctx context.Context, r *http.Request) (i
 }
 
 func decodeHTTPGetPeekQueueMessagesRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.PeekQueueMessagesRequest
+	var req queueservice_pb.PeekQueueMessagesRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
@@ -180,7 +179,7 @@ func decodeHTTPGetPeekQueueMessagesRequest(_ context.Context, r *http.Request) (
 }
 
 func decodeHTTPGetQueueStateRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.GetQueueStateRequest
+	var req queueservice_pb.GetQueueStateRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
@@ -189,7 +188,7 @@ func decodeHTTPGetQueueStateRequest(_ context.Context, r *http.Request) (interfa
 }
 
 func decodeHTTPSendMessageHeartBeatRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.SendMessageHeartBeatRequest
+	var req queueservice_pb.SendMessageHeartBeatRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
@@ -198,7 +197,7 @@ func decodeHTTPSendMessageHeartBeatRequest(_ context.Context, r *http.Request) (
 }
 
 func decodeHTTPListQueuesRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.ListQueuesRequest
+	var req queueservice_pb.ListQueuesRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
@@ -207,7 +206,7 @@ func decodeHTTPListQueuesRequest(_ context.Context, r *http.Request) (interface{
 }
 
 func decodeHTTPCreateScheduleRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.CreateScheduleRequest
+	var req queueservice_pb.CreateScheduleRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
@@ -216,16 +215,16 @@ func decodeHTTPCreateScheduleRequest(_ context.Context, r *http.Request) (interf
 }
 
 func decodeHTTPDeleteScheduleRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.DeleteScheduleRequest
+	var req queueservice_pb.DeleteScheduleRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		return &chronoqueue.DeleteScheduleResponse{Success: false}, err
+		return &queueservice_pb.DeleteScheduleResponse{Success: false}, err
 	}
 	return &req, nil
 }
 
 func decodeHTTPGetScheduleRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.GetScheduleRequest
+	var req queueservice_pb.GetScheduleRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
@@ -234,7 +233,7 @@ func decodeHTTPGetScheduleRequest(_ context.Context, r *http.Request) (interface
 }
 
 func decodeHTTPListSchedulesRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.ListSchedulesRequest
+	var req queueservice_pb.ListSchedulesRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
@@ -243,7 +242,7 @@ func decodeHTTPListSchedulesRequest(_ context.Context, r *http.Request) (interfa
 }
 
 func decodeHTTPGetScheduleHistoryRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.GetScheduleHistoryRequest
+	var req queueservice_pb.GetScheduleHistoryRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return nil, err
@@ -252,19 +251,19 @@ func decodeHTTPGetScheduleHistoryRequest(_ context.Context, r *http.Request) (in
 }
 
 func decodeHTTPPauseScheduleRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.PauseScheduleRequest
+	var req queueservice_pb.PauseScheduleRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		return &chronoqueue.PauseScheduleResponse{Success: false}, err
+		return &queueservice_pb.PauseScheduleResponse{Success: false}, err
 	}
 	return &req, nil
 }
 
 func decodeHTTPResumeScheduleRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.ResumeScheduleRequest
+	var req queueservice_pb.ResumeScheduleRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		return &chronoqueue.ResumeScheduleResponse{Success: false}, err
+		return &queueservice_pb.ResumeScheduleResponse{Success: false}, err
 	}
 	return &req, nil
 }

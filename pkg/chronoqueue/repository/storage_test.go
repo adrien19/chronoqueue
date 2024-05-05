@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/alicebob/miniredis"
@@ -132,13 +133,13 @@ func Test_storage_DeleteQueue(t *testing.T) {
 	}
 	type args struct {
 		ctx     context.Context
-		request *chronoqueue.DeleteQueueRequest
+		request *queueservice_pb.DeleteQueueRequest
 	}
 	tests := []struct {
 		name    string
 		fields  fields
 		args    args
-		want    *chronoqueue.DeleteQueueResponse
+		want    *queueservice_pb.DeleteQueueResponse
 		wantErr bool
 	}{
 		// TODO: Add more test cases.
@@ -149,11 +150,11 @@ func Test_storage_DeleteQueue(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				request: &chronoqueue.DeleteQueueRequest{
+				request: &queueservice_pb.DeleteQueueRequest{
 					Name: "test_queue",
 				},
 			},
-			want:    &chronoqueue.DeleteQueueResponse{},
+			want:    &queueservice_pb.DeleteQueueResponse{},
 			wantErr: false,
 		},
 		{
@@ -163,11 +164,11 @@ func Test_storage_DeleteQueue(t *testing.T) {
 			},
 			args: args{
 				ctx:     context.TODO(),
-				request: &chronoqueue.DeleteQueueRequest{
+				request: &queueservice_pb.DeleteQueueRequest{
 					// Name: "test_queue",
 				},
 			},
-			want:    &chronoqueue.DeleteQueueResponse{},
+			want:    &queueservice_pb.DeleteQueueResponse{},
 			wantErr: true,
 		},
 	}
@@ -194,12 +195,12 @@ func Test_storage_CreateQueueMessage(t *testing.T) {
 
 	type args struct {
 		ctx     context.Context
-		request *chronoqueue.PostMessageRequest
+		request *queueservice_pb.PostMessageRequest
 	}
 	tests := []struct {
 		name    string
 		args    args
-		want    *chronoqueue.PostMessageResponse
+		want    *queueservice_pb.PostMessageResponse
 		wantErr bool
 	}{
 		// TODO: Add more test cases.
@@ -207,36 +208,36 @@ func Test_storage_CreateQueueMessage(t *testing.T) {
 			name: "Test successful post queue message",
 			args: args{
 				ctx: context.TODO(),
-				request: &chronoqueue.PostMessageRequest{
+				request: &queueservice_pb.PostMessageRequest{
 					QueueName: "test_queue",
-					Message: &chronoqueue.Message{
+					Message: &message_pb.Message{
 						MessageId: "test_message_id",
-						Metadata: &chronoqueue.Message_Metadata{
-							Payload:  &chronoqueue.Payload{},
+						Metadata: &message_pb.Message_Metadata{
+							Payload:  &common_pb.Payload{},
 							Priority: time.Now().Unix(),
 						},
 					},
 				},
 			},
-			want:    &chronoqueue.PostMessageResponse{},
+			want:    &queueservice_pb.PostMessageResponse{},
 			wantErr: false,
 		},
 		{
 			name: "Test missing message ID",
 			args: args{
 				ctx: context.TODO(),
-				request: &chronoqueue.PostMessageRequest{
+				request: &queueservice_pb.PostMessageRequest{
 					QueueName: "test_queue",
-					Message: &chronoqueue.Message{
+					Message: &message_pb.Message{
 						// MessageId: "test_message_id",
-						Metadata: &chronoqueue.Message_Metadata{
-							Payload:  &chronoqueue.Payload{},
+						Metadata: &message_pb.Message_Metadata{
+							Payload:  &common_pb.Payload{},
 							Priority: time.Now().Unix(),
 						},
 					},
 				},
 			},
-			want:    &chronoqueue.PostMessageResponse{},
+			want:    &queueservice_pb.PostMessageResponse{},
 			wantErr: true,
 		},
 	}
@@ -272,7 +273,7 @@ func Test_storage_GetQueueMessage(t *testing.T) {
 
 	type args struct {
 		ctx     context.Context
-		request *chronoqueue.GetNextMessageRequest
+		request *queueservice_pb.GetNextMessageRequest
 	}
 
 	tests := []struct {
@@ -286,7 +287,7 @@ func Test_storage_GetQueueMessage(t *testing.T) {
 			name: "Test successful get queue message",
 			args: args{
 				ctx: context.TODO(),
-				request: &chronoqueue.GetNextMessageRequest{
+				request: &queueservice_pb.GetNextMessageRequest{
 					QueueName:     "test_queue",
 					LeaseDuration: durationpb.New(30 * time.Second),
 				},
@@ -309,13 +310,13 @@ func Test_storage_GetQueueMessage(t *testing.T) {
 	}
 
 	// Second, add messages to the queue.
-	_, err = as.CreateQueueMessage(context.TODO(), &chronoqueue.PostMessageRequest{
+	_, err = as.CreateQueueMessage(context.TODO(), &queueservice_pb.PostMessageRequest{
 		QueueName: "test_queue",
-		Message: &chronoqueue.Message{
+		Message: &message_pb.Message{
 			MessageId: "test_message_id",
-			Metadata: &chronoqueue.Message_Metadata{
-				Payload:  &chronoqueue.Payload{},
-				State:    chronoqueue.Message_Metadata_PENDING,
+			Metadata: &message_pb.Message_Metadata{
+				Payload:  &common_pb.Payload{},
+				State:    message_pb.Message_Metadata_PENDING,
 				Priority: 0,
 			},
 		},
@@ -378,13 +379,13 @@ func Test_storage_DeleteQueueMessage(t *testing.T) {
 	}
 
 	// Second, add messages to the queue.
-	_, err = as.CreateQueueMessage(context.TODO(), &chronoqueue.PostMessageRequest{
+	_, err = as.CreateQueueMessage(context.TODO(), &queueservice_pb.PostMessageRequest{
 		QueueName: "test_queue",
-		Message: &chronoqueue.Message{
+		Message: &message_pb.Message{
 			MessageId: "test_message_id",
-			Metadata: &chronoqueue.Message_Metadata{
-				Payload:  &chronoqueue.Payload{},
-				State:    chronoqueue.Message_Metadata_PENDING,
+			Metadata: &message_pb.Message_Metadata{
+				Payload:  &common_pb.Payload{},
+				State:    message_pb.Message_Metadata_PENDING,
 				Priority: 0,
 			},
 		},
@@ -409,12 +410,12 @@ func Test_storage_AcknowledgeMessage(t *testing.T) {
 
 	type args struct {
 		ctx     context.Context
-		request *chronoqueue.AcknowledgeMessageRequest
+		request *queueservice_pb.AcknowledgeMessageRequest
 	}
 	tests := []struct {
 		name    string
 		args    args
-		want    *chronoqueue.AcknowledgeMessageResponse
+		want    *queueservice_pb.AcknowledgeMessageResponse
 		wantErr bool
 	}{
 		// TODO: Add more test cases.
@@ -422,13 +423,13 @@ func Test_storage_AcknowledgeMessage(t *testing.T) {
 			name: "Test successful acknowledge queue message",
 			args: args{
 				ctx: context.TODO(),
-				request: &chronoqueue.AcknowledgeMessageRequest{
+				request: &queueservice_pb.AcknowledgeMessageRequest{
 					QueueName: "test_queue",
 					MessageId: "test_message_id",
-					State:     chronoqueue.Message_Metadata_RUNNING,
+					State:     message_pb.Message_Metadata_RUNNING,
 				},
 			},
-			want:    &chronoqueue.AcknowledgeMessageResponse{},
+			want:    &queueservice_pb.AcknowledgeMessageResponse{},
 			wantErr: false,
 		},
 	}
@@ -446,13 +447,13 @@ func Test_storage_AcknowledgeMessage(t *testing.T) {
 	}
 
 	// Second, add messages to the queue.
-	_, err = as.CreateQueueMessage(context.TODO(), &chronoqueue.PostMessageRequest{
+	_, err = as.CreateQueueMessage(context.TODO(), &queueservice_pb.PostMessageRequest{
 		QueueName: "test_queue",
-		Message: &chronoqueue.Message{
+		Message: &message_pb.Message{
 			MessageId: "test_message_id",
-			Metadata: &chronoqueue.Message_Metadata{
-				Payload:  &chronoqueue.Payload{},
-				State:    chronoqueue.Message_Metadata_PENDING,
+			Metadata: &message_pb.Message_Metadata{
+				Payload:  &common_pb.Payload{},
+				State:    message_pb.Message_Metadata_PENDING,
 				Priority: 0,
 			},
 		},
@@ -482,12 +483,12 @@ func Test_storage_RenewMessageLease(t *testing.T) {
 
 	type args struct {
 		ctx     context.Context
-		request *chronoqueue.RenewMessageLeaseRequest
+		request *queueservice_pb.RenewMessageLeaseRequest
 	}
 	tests := []struct {
 		name    string
 		args    args
-		want    *chronoqueue.RenewMessageLeaseResponse
+		want    *queueservice_pb.RenewMessageLeaseResponse
 		wantErr bool
 	}{
 		// TODO: Add more test cases.
@@ -495,13 +496,13 @@ func Test_storage_RenewMessageLease(t *testing.T) {
 			name: "Test successful renew queue message's lease",
 			args: args{
 				ctx: context.TODO(),
-				request: &chronoqueue.RenewMessageLeaseRequest{
+				request: &queueservice_pb.RenewMessageLeaseRequest{
 					QueueName:     "test_queue",
 					MessageId:     "test_message_id",
 					LeaseDuration: durationpb.New(30 * time.Second),
 				},
 			},
-			want:    &chronoqueue.RenewMessageLeaseResponse{},
+			want:    &queueservice_pb.RenewMessageLeaseResponse{},
 			wantErr: false,
 		},
 	}
@@ -519,13 +520,13 @@ func Test_storage_RenewMessageLease(t *testing.T) {
 	}
 
 	// Second, add messages to the queue.
-	_, err = as.CreateQueueMessage(context.TODO(), &chronoqueue.PostMessageRequest{
+	_, err = as.CreateQueueMessage(context.TODO(), &queueservice_pb.PostMessageRequest{
 		QueueName: "test_queue",
-		Message: &chronoqueue.Message{
+		Message: &message_pb.Message{
 			MessageId: "test_message_id",
-			Metadata: &chronoqueue.Message_Metadata{
-				Payload:  &chronoqueue.Payload{},
-				State:    chronoqueue.Message_Metadata_PENDING,
+			Metadata: &message_pb.Message_Metadata{
+				Payload:  &common_pb.Payload{},
+				State:    message_pb.Message_Metadata_PENDING,
 				Priority: 0,
 			},
 		},
@@ -555,7 +556,7 @@ func Test_storage_PeekQueueMessages(t *testing.T) {
 
 	type args struct {
 		ctx     context.Context
-		request *chronoqueue.PeekQueueMessagesRequest
+		request *queueservice_pb.PeekQueueMessagesRequest
 	}
 	tests := []struct {
 		name    string
@@ -568,7 +569,7 @@ func Test_storage_PeekQueueMessages(t *testing.T) {
 			name: "Test successful peek queue messages",
 			args: args{
 				ctx: context.TODO(),
-				request: &chronoqueue.PeekQueueMessagesRequest{
+				request: &queueservice_pb.PeekQueueMessagesRequest{
 					QueueName: "test_queue",
 					Limit:     10,
 				},
@@ -591,13 +592,13 @@ func Test_storage_PeekQueueMessages(t *testing.T) {
 	}
 
 	// Second, add messages to the queue.
-	_, err = as.CreateQueueMessage(context.TODO(), &chronoqueue.PostMessageRequest{
+	_, err = as.CreateQueueMessage(context.TODO(), &queueservice_pb.PostMessageRequest{
 		QueueName: "test_queue",
-		Message: &chronoqueue.Message{
+		Message: &message_pb.Message{
 			MessageId: "test_message_id",
-			Metadata: &chronoqueue.Message_Metadata{
-				Payload:  &chronoqueue.Payload{},
-				State:    chronoqueue.Message_Metadata_PENDING,
+			Metadata: &message_pb.Message_Metadata{
+				Payload:  &common_pb.Payload{},
+				State:    message_pb.Message_Metadata_PENDING,
 				Priority: time.Now().Unix(),
 			},
 		},
@@ -627,7 +628,7 @@ func Test_storage_GetQueueState(t *testing.T) {
 
 	type args struct {
 		ctx     context.Context
-		request *chronoqueue.GetQueueStateRequest
+		request *queueservice_pb.GetQueueStateRequest
 	}
 	tests := []struct {
 		name    string
@@ -640,7 +641,7 @@ func Test_storage_GetQueueState(t *testing.T) {
 			name: "Test successful peek queue messages",
 			args: args{
 				ctx: context.TODO(),
-				request: &chronoqueue.GetQueueStateRequest{
+				request: &queueservice_pb.GetQueueStateRequest{
 					QueueName: "test_queue",
 				},
 			},
@@ -662,13 +663,13 @@ func Test_storage_GetQueueState(t *testing.T) {
 	}
 
 	// Second, add messages to the queue.
-	_, err = as.CreateQueueMessage(context.TODO(), &chronoqueue.PostMessageRequest{
+	_, err = as.CreateQueueMessage(context.TODO(), &queueservice_pb.PostMessageRequest{
 		QueueName: "test_queue",
-		Message: &chronoqueue.Message{
+		Message: &message_pb.Message{
 			MessageId: "test_message_id",
-			Metadata: &chronoqueue.Message_Metadata{
-				Payload:  &chronoqueue.Payload{},
-				State:    chronoqueue.Message_Metadata_PENDING,
+			Metadata: &message_pb.Message_Metadata{
+				Payload:  &common_pb.Payload{},
+				State:    message_pb.Message_Metadata_PENDING,
 				Priority: time.Now().Unix(),
 			},
 		},
@@ -716,8 +717,8 @@ func Test_storage_GetQueueState(t *testing.T) {
 // 	as := &storage{
 // 		redisClient: redisClient,
 // 	}
-// 	_, err := as.CreateQueue(context.TODO(), &chronoqueue.CreateQueueRequest{
-// 		Queue: &chronoqueue.Queue{
+// 	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
+// 		Queue: &queueservice_pb.Queue{
 // 			Name: "test_queue",
 // 		},
 // 	})
@@ -727,14 +728,14 @@ func Test_storage_GetQueueState(t *testing.T) {
 // 	}
 
 // 	// Second, add messages to the queue.
-// 	_, err = as.CreateQueueMessage(context.TODO(), &chronoqueue.PostMessageRequest{
+// 	_, err = as.CreateQueueMessage(context.TODO(), &queueservice_pb.PostMessageRequest{
 // 		QueueName: "test_queue",
-// 		Message: &chronoqueue.Message{
+// 		Message: &queueservice_pb.Message{
 // 			MessageId: "test_message_id",
 // 			Priority:  time.Now().Unix(),
-// 			Metadata: &chronoqueue.Message_Metadata{
-// 				Payload: &chronoqueue.Payload{},
-// 				State:   chronoqueue.Message_Metadata_INVISIBLE,
+// 			Metadata: &queueservice_pb.Message_Metadata{
+// 				Payload: &queueservice_pb.Payload{},
+// 				State:   queueservice_pb.Message_Metadata_INVISIBLE,
 // 			},
 // 		},
 // 	})

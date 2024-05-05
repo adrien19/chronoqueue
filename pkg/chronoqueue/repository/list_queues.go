@@ -5,18 +5,19 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"google.golang.org/grpc/codes"
 )
 
-func (as *storage) ListQueues(ctx context.Context, request *chronoqueue.ListQueuesRequest) (*chronoqueue.ListQueuesResponse, error) {
+func (as *storage) ListQueues(ctx context.Context, request *queueservice_pb.ListQueuesRequest) (*queueservice_pb.ListQueuesResponse, error) {
 	queueMetadataIDs, err := as.listMetadataIDs(ctx, "queue", request.GetPrefix(), 10)
 	if err != nil {
 		return nil, err
 	}
 
-	queues := make([]*chronoqueue.Queue, len(queueMetadataIDs))
+	queues := make([]*queue_pb.Queue, len(queueMetadataIDs))
 	for i, queueMetadataID := range queueMetadataIDs {
 		queueID := strings.Split(queueMetadataID, ":")[0]
 		metadata, err := as.getQueueMetadata(ctx, queueID)
@@ -26,13 +27,13 @@ func (as *storage) ListQueues(ctx context.Context, request *chronoqueue.ListQueu
 			return nil, chronoErr.GRPCStatus()
 		}
 
-		queues[i] = &chronoqueue.Queue{
+		queues[i] = &queue_pb.Queue{
 			Name:     queueID,
 			Metadata: metadata,
 		}
 	}
 
-	return &chronoqueue.ListQueuesResponse{
+	return &queueservice_pb.ListQueuesResponse{
 		Queues: queues,
 	}, nil
 }
