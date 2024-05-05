@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/repository"
 )
@@ -17,18 +18,18 @@ func NewChronoqueueService(storage repository.Storage) Service {
 	return &chronoqueueService{storage: storage}
 }
 
-func (cs *chronoqueueService) CreateQueue(ctx context.Context, request *chronoqueue.CreateQueueRequest) (*chronoqueue.CreateQueueResponse, error) {
+func (cs *chronoqueueService) CreateQueue(ctx context.Context, request *queueservice_pb.CreateQueueRequest) (*queueservice_pb.CreateQueueResponse, error) {
 	adapterFunc := func(ctx context.Context, req interface{}) (interface{}, error) {
-		specificReq, ok := req.(*chronoqueue.CreateQueueRequest)
+		specificReq, ok := req.(*queueservice_pb.CreateQueueRequest)
 		if !ok {
-			return &chronoqueue.CreateQueueResponse{Success: false}, errors.New("invalid request type for creating a queue")
+			return &queueservice_pb.CreateQueueResponse{Success: false}, errors.New("invalid request type for creating a queue")
 		}
 		return cs.storage.CreateQueue(ctx, specificReq)
 	}
-	wrappedHandler := util.ErrorHandler(adapterFunc, &chronoqueue.CreateQueueResponse{Success: false})
+	wrappedHandler := util.ErrorHandler(adapterFunc, &queueservice_pb.CreateQueueResponse{Success: false})
 
 	resp, err := wrappedHandler(ctx, request)
-	return resp.(*chronoqueue.CreateQueueResponse), err
+	return resp.(*queueservice_pb.CreateQueueResponse), err
 }
 
 func (cs *chronoqueueService) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error) {

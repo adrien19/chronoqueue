@@ -4,6 +4,7 @@ import (
 	"context"
 
 	pb "github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue"
 	"github.com/go-kit/kit/endpoint"
 )
@@ -53,7 +54,7 @@ func NewEndpointSet(svc chronoqueue.Service) Set {
 
 func MakeCreateQueueEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.CreateQueueRequest)
+		req := request.(*queueservice_pb.CreateQueueRequest)
 		return svc.CreateQueue(ctx, req)
 	}
 }
@@ -170,12 +171,12 @@ func MakeResumeScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	}
 }
 
-func (s *Set) CreateQueue(ctx context.Context, queueInfo *pb.Queue) (*pb.CreateQueueResponse, error) {
-	resp, err := s.CreateQueueEndpoint(ctx, queueInfo)
+func (s *Set) CreateQueue(ctx context.Context, request *queueservice_pb.CreateQueueRequest) (*queueservice_pb.CreateQueueResponse, error) {
+	resp, err := s.CreateQueueEndpoint(ctx, request)
 	if err != nil {
-		return resp.(*pb.CreateQueueResponse), err
+		return resp.(*queueservice_pb.CreateQueueResponse), err
 	}
-	return resp.(*pb.CreateQueueResponse), err
+	return resp.(*queueservice_pb.CreateQueueResponse), err
 }
 
 func (s *Set) DeleteQueue(ctx context.Context, request *pb.DeleteQueueRequest) (*pb.DeleteQueueResponse, error) {

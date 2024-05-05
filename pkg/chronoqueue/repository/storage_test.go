@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/alicebob/miniredis"
 	"github.com/redis/go-redis/v9"
@@ -68,13 +69,13 @@ func Test_storage_CreateQueue(t *testing.T) {
 	}
 	type args struct {
 		ctx     context.Context
-		request *chronoqueue.CreateQueueRequest
+		request *queueservice_pb.CreateQueueRequest
 	}
 	tests := []struct {
 		name    string
 		fields  fields
 		args    args
-		want    *chronoqueue.CreateQueueResponse
+		want    *queueservice_pb.CreateQueueResponse
 		wantErr bool
 	}{
 		// TODO: Add more test cases.
@@ -85,13 +86,11 @@ func Test_storage_CreateQueue(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				request: &chronoqueue.CreateQueueRequest{
-					Queue: &chronoqueue.Queue{
-						Name: "test_queue",
-					},
+				request: &queueservice_pb.CreateQueueRequest{
+					Name: "test_queue",
 				},
 			},
-			want:    &chronoqueue.CreateQueueResponse{},
+			want:    &queueservice_pb.CreateQueueResponse{},
 			wantErr: false,
 		},
 		{
@@ -100,14 +99,10 @@ func Test_storage_CreateQueue(t *testing.T) {
 				redisClient: redisClient,
 			},
 			args: args{
-				ctx: context.TODO(),
-				request: &chronoqueue.CreateQueueRequest{
-					Queue: &chronoqueue.Queue{
-						// Name: "test_queue",
-					},
-				},
+				ctx:     context.TODO(),
+				request: &queueservice_pb.CreateQueueRequest{},
 			},
-			want:    &chronoqueue.CreateQueueResponse{},
+			want:    &queueservice_pb.CreateQueueResponse{},
 			wantErr: true,
 		},
 	}
@@ -249,10 +244,8 @@ func Test_storage_CreateQueueMessage(t *testing.T) {
 	as := &storage{
 		redisClient: redisClient,
 	}
-	_, err := as.CreateQueue(context.TODO(), &chronoqueue.CreateQueueRequest{
-		Queue: &chronoqueue.Queue{
-			Name: "test_queue",
-		},
+	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
+		Name: "test_queue",
 	})
 	if err != nil {
 		t.Errorf("storage.CreateQueue() error = %v", err)
@@ -307,11 +300,8 @@ func Test_storage_GetQueueMessage(t *testing.T) {
 	as := &storage{
 		redisClient: redisClient,
 	}
-	_, err := as.CreateQueue(context.TODO(), &chronoqueue.CreateQueueRequest{
-		Queue: &chronoqueue.Queue{
-			Name: "test_queue",
-			// Metadata: &chronoqueue.Queue_Options{},
-		},
+	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
+		Name: "test_queue",
 	})
 	if err != nil {
 		t.Errorf("storage.CreateQueue() error = %v", err)
@@ -379,10 +369,8 @@ func Test_storage_DeleteQueueMessage(t *testing.T) {
 	as := &storage{
 		redisClient: redisClient,
 	}
-	_, err := as.CreateQueue(context.TODO(), &chronoqueue.CreateQueueRequest{
-		Queue: &chronoqueue.Queue{
-			Name: "test_queue",
-		},
+	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
+		Name: "test_queue",
 	})
 	if err != nil {
 		t.Errorf("storage.CreateQueue() error = %v", err)
@@ -449,10 +437,8 @@ func Test_storage_AcknowledgeMessage(t *testing.T) {
 	as := &storage{
 		redisClient: redisClient,
 	}
-	_, err := as.CreateQueue(context.TODO(), &chronoqueue.CreateQueueRequest{
-		Queue: &chronoqueue.Queue{
-			Name: "test_queue",
-		},
+	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
+		Name: "test_queue",
 	})
 	if err != nil {
 		t.Errorf("storage.CreateQueue() error = %v", err)
@@ -524,10 +510,8 @@ func Test_storage_RenewMessageLease(t *testing.T) {
 	as := &storage{
 		redisClient: redisClient,
 	}
-	_, err := as.CreateQueue(context.TODO(), &chronoqueue.CreateQueueRequest{
-		Queue: &chronoqueue.Queue{
-			Name: "test_queue",
-		},
+	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
+		Name: "test_queue",
 	})
 	if err != nil {
 		t.Errorf("storage.CreateQueue() error = %v", err)
@@ -598,10 +582,8 @@ func Test_storage_PeekQueueMessages(t *testing.T) {
 	as := &storage{
 		redisClient: redisClient,
 	}
-	_, err := as.CreateQueue(context.TODO(), &chronoqueue.CreateQueueRequest{
-		Queue: &chronoqueue.Queue{
-			Name: "test_queue",
-		},
+	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
+		Name: "test_queue",
 	})
 	if err != nil {
 		t.Errorf("storage.CreateQueue() error = %v", err)
@@ -671,10 +653,8 @@ func Test_storage_GetQueueState(t *testing.T) {
 	as := &storage{
 		redisClient: redisClient,
 	}
-	_, err := as.CreateQueue(context.TODO(), &chronoqueue.CreateQueueRequest{
-		Queue: &chronoqueue.Queue{
-			Name: "test_queue",
-		},
+	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
+		Name: "test_queue",
 	})
 	if err != nil {
 		t.Errorf("storage.CreateQueue() error = %v", err)

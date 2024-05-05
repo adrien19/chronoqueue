@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
 	grpctransport "github.com/go-kit/kit/transport/grpc"
@@ -31,6 +32,7 @@ type grpcServer struct {
 	resumeSchedule     grpctransport.Handler
 
 	chronoqueue.UnimplementedChronoQueueServer
+	queueservice_pb.UnimplementedQueueServiceServer
 }
 
 func NewGRPCServer(ep endpoints.Set) chronoqueue.ChronoQueueServer {
@@ -123,12 +125,12 @@ func NewGRPCServer(ep endpoints.Set) chronoqueue.ChronoQueueServer {
 	}
 }
 
-func (g *grpcServer) CreateQueue(ctx context.Context, r *chronoqueue.CreateQueueRequest) (*chronoqueue.CreateQueueResponse, error) {
+func (g *grpcServer) CreateQueue(ctx context.Context, r *queueservice_pb.CreateQueueRequest) (*queueservice_pb.CreateQueueResponse, error) {
 	_, resp, err := g.createQueue.ServeGRPC(ctx, r)
 	if err != nil {
-		return &chronoqueue.CreateQueueResponse{Success: false}, err
+		return &queueservice_pb.CreateQueueResponse{Success: false}, err
 	}
-	return resp.(*chronoqueue.CreateQueueResponse), nil
+	return resp.(*queueservice_pb.CreateQueueResponse), nil
 }
 
 func (g *grpcServer) DeleteQueue(ctx context.Context, r *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error) {
@@ -266,7 +268,7 @@ func (g *grpcServer) ResumeSchedule(ctx context.Context, r *chronoqueue.ResumeSc
 }
 
 func decodeGRPCCreateQueueRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
-	req := grpcReq.(*chronoqueue.CreateQueueRequest)
+	req := grpcReq.(*queueservice_pb.CreateQueueRequest)
 	return req, nil
 }
 

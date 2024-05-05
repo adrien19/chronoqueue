@@ -11,6 +11,8 @@ import (
 	"time"
 
 	pb_chronoqueue "github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	pb_queue "github.com/adrien19/chronoqueue/api/queue/v1"
+	pb_queueservice "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	structpb "github.com/golang/protobuf/ptypes/struct"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -240,16 +242,14 @@ func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, q
 		return &pb_chronoqueue.CreateQueueResponse{Success: false}, fmt.Errorf("invalid invisibility duration: %v", err)
 	}
 
-	req := &pb_chronoqueue.CreateQueueRequest{
-		Queue: &pb_chronoqueue.Queue{
-			Name: name,
-			Metadata: &pb_chronoqueue.Queue_Options{
-				Type:                 pb_chronoqueue.Queue_Options_Type(queueOptions.Type),
-				DequeueAttempts:      int32(queueOptions.DequeueAttempts),
-				LeaseDuration:        leaseDuration,
-				ExclusivityKey:       queueOptions.ExclusivityKey,
-				InvisibilityDuration: invisibilityDuration,
-			},
+	req := &pb_queueservice.CreateQueueRequest{
+		Name: name,
+		Metadata: &pb_queue.QueueMetadata{
+			Type:                 pb_queue.QueueType(queueOptions.Type),
+			DequeueAttempts:      int32(queueOptions.DequeueAttempts),
+			LeaseDuration:        leaseDuration,
+			ExclusivityKey:       queueOptions.ExclusivityKey,
+			InvisibilityDuration: invisibilityDuration,
 		},
 	}
 	res, err := client.service.CreateQueue(ctx, req)

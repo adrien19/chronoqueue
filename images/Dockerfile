@@ -7,6 +7,7 @@ FROM golang:1.21.3-alpine3.17 as base
 WORKDIR /go/src/chronoqueuesvr
 
 # Copy the server code
+COPY api-deplicated api-deplicated
 COPY api api
 COPY cmd/server cmd/server
 # COPY client client
@@ -15,7 +16,7 @@ COPY pkg/chronoqueue pkg/chronoqueue
 
 COPY go.mod go.sum ./
 RUN go mod download
-    # && go mod verify
+# && go mod verify
 
 # building server binary
 RUN go build -o chronoqueue ./cmd/server/main.go

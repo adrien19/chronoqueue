@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
 
@@ -290,6 +291,10 @@ func initGRPCServer(g *group.Group, addr string, server pb_chronoqueue.ChronoQue
 		opts = append(opts, grpc.Creds(creds))
 	}
 	baseServer := grpc.NewServer(opts...)
+
+	// Register the server reflection service on the server.
+	// See https://grpc.github.io/grpc/core/md_doc_server-reflection.html.
+	reflection.Register(baseServer)
 
 	pb_chronoqueue.RegisterChronoQueueServer(baseServer, server)
 	g.Add(func() error {

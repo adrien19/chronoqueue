@@ -16,7 +16,7 @@ import "proto/schedule/v1/schedule.proto";
 // Create queue
 message CreateQueueRequest {
     string name = 1;
-    // optional QueueMetadata metadata = 2;
+    optional chronoqueue.api.queue.v1.QueueMetadata metadata = 2;
 }
 message CreateQueueResponse {
     bool success = 1;

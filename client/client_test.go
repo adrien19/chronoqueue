@@ -10,6 +10,7 @@ import (
 	"time"
 
 	pb_chronoqueue "github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	queueservice "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -21,6 +22,7 @@ import (
 
 type mockChronoQueueServer struct {
 	pb_chronoqueue.UnimplementedChronoQueueServer
+	// queueservice.UnimplementedQueueServiceServer
 }
 
 func dialer() func(context.Context, string) (net.Conn, error) {
@@ -53,11 +55,11 @@ func testConnector(dialer func(context.Context, string) (net.Conn, error)) Conne
 	}
 }
 
-func (*mockChronoQueueServer) CreateQueue(ctx context.Context, req *pb_chronoqueue.CreateQueueRequest) (*pb_chronoqueue.CreateQueueResponse, error) {
-	if req.Queue.GetName() == "" {
+func (*mockChronoQueueServer) CreateQueue(ctx context.Context, req *queueservice.CreateQueueRequest) (*pb_chronoqueue.CreateQueueResponse, error) {
+	if req.GetName() == "" {
 		return &pb_chronoqueue.CreateQueueResponse{
 			Success: false,
-		}, status.Errorf(codes.InvalidArgument, "cannot create queue with no name %v", req.Queue)
+		}, status.Errorf(codes.InvalidArgument, "cannot create queue with no name %v", req)
 	}
 	return &pb_chronoqueue.CreateQueueResponse{
 		Success: true,

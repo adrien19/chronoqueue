@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
 
@@ -105,7 +106,7 @@ func NewHTTPHandler(ep endpoints.Set) http.Handler {
 }
 
 func decodeHTTPCreateQueueRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req chronoqueue.CreateQueueRequest
+	var req queueservice_pb.CreateQueueRequest
 	if r.ContentLength == 0 {
 		return &req, nil
 	}

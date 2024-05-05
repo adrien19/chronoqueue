@@ -18,7 +18,7 @@
         "ghcr.io/devcontainers/features/github-cli:1": {},
         "ghcr.io/devcontainers/features/azure-cli:1": {}
     },
-    "postCreateCommand": "./.devcontainer/scripts/docker-post-create.sh",
+    "postCreateCommand": "chmod +x ./.devcontainer/scripts/docker-post-create.sh && ./.devcontainer/scripts/docker-post-create.sh",
     "mounts": [
         // Mount docker-in-docker library volume
         "type=volume,source=dind-var-lib-docker,target=/var/lib/docker",
@@ -67,7 +67,8 @@
                 "IBM.output-colorizer",
                 "github.copilot",
                 "zxh404.vscode-proto3",
-                "ms-vscode.makefile-tools"
+                "ms-vscode.makefile-tools",
+                "GitHub.copilot-chat"
             ],
             "settings": {
                 "files.eol": "\n",
