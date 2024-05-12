@@ -5,14 +5,15 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 )
 
 // Fetches message IDs from the sorted set in Redis based on the priority range.
-func (as *storage) fetchMessageIDs(ctx context.Context, queueName string, priorityRange *chronoqueue.PeekQueueMessagesRequest_PriorityRange, limit int64) ([]string, error) {
+func (as *storage) fetchMessageIDs(ctx context.Context, queueName string, priorityRange *queueservice_pb.PeekQueueMessagesRequest_PriorityRange, limit int64) ([]string, error) {
 	min := "-inf"
 	max := "+inf"
 	// max := strconv.FormatInt(time.Now().UnixMilli(), 10)
@@ -28,7 +29,7 @@ func (as *storage) fetchMessageIDs(ctx context.Context, queueName string, priori
 	}).Result()
 }
 
-func (as *storage) PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error) {
+func (as *storage) PeekQueueMessages(ctx context.Context, request *queueservice_pb.PeekQueueMessagesRequest) (*queueservice_pb.PeekQueueMessagesResponse, error) {
 	queueName := request.GetQueueName()
 	messageIDs, err := as.fetchMessageIDs(ctx, queueName, request.PriorityRange, request.GetLimit())
 	if err != nil {
@@ -36,7 +37,7 @@ func (as *storage) PeekQueueMessages(ctx context.Context, request *chronoqueue.P
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	messages := make([]*chronoqueue.Message, len(messageIDs))
+	messages := make([]*message_pb.Message, len(messageIDs))
 	for i, messageID := range messageIDs {
 		if messageID == "" {
 			continue
@@ -48,11 +49,11 @@ func (as *storage) PeekQueueMessages(ctx context.Context, request *chronoqueue.P
 			return nil, chronoErr.GRPCStatus()
 		}
 
-		messages[i] = &chronoqueue.Message{
+		messages[i] = &message_pb.Message{
 			MessageId: messageID,
 			Metadata:  metadata,
 		}
 	}
 
-	return &chronoqueue.PeekQueueMessagesResponse{Messages: messages}, nil
+	return &queueservice_pb.PeekQueueMessagesResponse{Messages: messages}, nil
 }

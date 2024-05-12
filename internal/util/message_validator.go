@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 )
 
 const MaxMessageSize = 150 * 1024 // 150 KB
@@ -19,7 +19,7 @@ const sizeInt64 = 8
 const sizeInt32 = 4
 const sizeEnum = 2
 
-func ValidateMessageSize(msg *chronoqueue.Message) error {
+func ValidateMessageSize(msg *message_pb.Message) error {
 	// Compute total size for fixed fields
 	fixedSize := sizeInt64*4 + // Four int64 fields: priority, invisibility_duration, lease_duration, lease_expiry
 		sizeInt32 + // One int32 field: attempts_left

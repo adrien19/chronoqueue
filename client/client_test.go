@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
-	pb_chronoqueue "github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -20,7 +22,7 @@ import (
 )
 
 type mockChronoQueueServer struct {
-	pb_chronoqueue.UnimplementedChronoQueueServer
+	queueservice_pb.UnimplementedQueueServiceServer
 }
 
 func dialer() func(context.Context, string) (net.Conn, error) {
@@ -28,7 +30,7 @@ func dialer() func(context.Context, string) (net.Conn, error) {
 
 	server := grpc.NewServer()
 
-	pb_chronoqueue.RegisterChronoQueueServer(server, &mockChronoQueueServer{})
+	queueservice_pb.RegisterQueueServiceServer(server, &mockChronoQueueServer{})
 
 	go func() {
 		if err := server.Serve(listener); err != nil {
@@ -42,93 +44,93 @@ func dialer() func(context.Context, string) (net.Conn, error) {
 }
 
 func testConnector(dialer func(context.Context, string) (net.Conn, error)) Connector {
-	return func(address string, opts ClientOptions) (pb_chronoqueue.ChronoQueueClient, *grpc.ClientConn, error) {
+	return func(address string, opts ClientOptions) (queueservice_pb.QueueServiceClient, *grpc.ClientConn, error) {
 		ctx := context.Background()
 		conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(dialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			return nil, nil, err
 		}
-		client := pb_chronoqueue.NewChronoQueueClient(conn)
+		client := queueservice_pb.NewQueueServiceClient(conn)
 		return client, conn, nil
 	}
 }
 
-func (*mockChronoQueueServer) CreateQueue(ctx context.Context, req *pb_chronoqueue.CreateQueueRequest) (*pb_chronoqueue.CreateQueueResponse, error) {
-	if req.Queue.GetName() == "" {
-		return &pb_chronoqueue.CreateQueueResponse{
+func (*mockChronoQueueServer) CreateQueue(ctx context.Context, req *queueservice_pb.CreateQueueRequest) (*queueservice_pb.CreateQueueResponse, error) {
+	if req.GetName() == "" {
+		return &queueservice_pb.CreateQueueResponse{
 			Success: false,
-		}, status.Errorf(codes.InvalidArgument, "cannot create queue with no name %v", req.Queue)
+		}, status.Errorf(codes.InvalidArgument, "cannot create queue with no name %v", req)
 	}
-	return &pb_chronoqueue.CreateQueueResponse{
+	return &queueservice_pb.CreateQueueResponse{
 		Success: true,
 	}, nil
 }
 
-func (*mockChronoQueueServer) DeleteQueue(ctx context.Context, req *pb_chronoqueue.DeleteQueueRequest) (*pb_chronoqueue.DeleteQueueResponse, error) {
+func (*mockChronoQueueServer) DeleteQueue(ctx context.Context, req *queueservice_pb.DeleteQueueRequest) (*queueservice_pb.DeleteQueueResponse, error) {
 	if req.GetName() == "" {
-		return &pb_chronoqueue.DeleteQueueResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot delete queue with no name %v", req.Name)
+		return &queueservice_pb.DeleteQueueResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot delete queue with no name %v", req.Name)
 	}
-	return &pb_chronoqueue.DeleteQueueResponse{Success: true}, nil
+	return &queueservice_pb.DeleteQueueResponse{Success: true}, nil
 }
 
-func (*mockChronoQueueServer) PostMessage(ctx context.Context, req *pb_chronoqueue.PostMessageRequest) (*pb_chronoqueue.PostMessageResponse, error) {
+func (*mockChronoQueueServer) PostMessage(ctx context.Context, req *queueservice_pb.PostMessageRequest) (*queueservice_pb.PostMessageResponse, error) {
 	if req.GetQueueName() == "" {
-		return &pb_chronoqueue.PostMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot post message given queue with no name %v", req.GetQueueName())
+		return &queueservice_pb.PostMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot post message given queue with no name %v", req.GetQueueName())
 	}
 	if req.Message.GetMessageId() == "" {
-		return &pb_chronoqueue.PostMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot post message with no message ID %v", req.Message.GetMessageId())
+		return &queueservice_pb.PostMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot post message with no message ID %v", req.Message.GetMessageId())
 	}
-	return &pb_chronoqueue.PostMessageResponse{Success: true}, nil
+	return &queueservice_pb.PostMessageResponse{Success: true}, nil
 }
 
-func (*mockChronoQueueServer) SendMessageHeartbeat(ctx context.Context, req *pb_chronoqueue.SendMessageHeartBeatRequest) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
+func (*mockChronoQueueServer) SendMessageHeartbeat(ctx context.Context, req *queueservice_pb.SendMessageHeartBeatRequest) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
 	if req.GetQueueName() == "" {
-		return &pb_chronoqueue.SendMessageHeartBeatResponse{}, status.Errorf(codes.InvalidArgument, "cannot send heartbeat given queue with no name %v", req.GetQueueName())
+		return &queueservice_pb.SendMessageHeartBeatResponse{}, status.Errorf(codes.InvalidArgument, "cannot send heartbeat given queue with no name %v", req.GetQueueName())
 	}
 	if req.GetMessageId() == "" {
-		return &pb_chronoqueue.SendMessageHeartBeatResponse{}, status.Errorf(codes.InvalidArgument, "cannot post message with no message ID %v", req.GetMessageId())
+		return &queueservice_pb.SendMessageHeartBeatResponse{}, status.Errorf(codes.InvalidArgument, "cannot post message with no message ID %v", req.GetMessageId())
 	}
-	return &pb_chronoqueue.SendMessageHeartBeatResponse{}, nil
+	return &queueservice_pb.SendMessageHeartBeatResponse{}, nil
 }
 
-func (*mockChronoQueueServer) GetNextMessage(ctx context.Context, req *pb_chronoqueue.GetNextMessageRequest) (*pb_chronoqueue.GetNextMessageResponse, error) {
+func (*mockChronoQueueServer) GetNextMessage(ctx context.Context, req *queueservice_pb.GetNextMessageRequest) (*queueservice_pb.GetNextMessageResponse, error) {
 	if req.GetQueueName() == "" {
-		return &pb_chronoqueue.GetNextMessageResponse{}, status.Errorf(codes.InvalidArgument, "cannot query queue with no name %v", req)
+		return &queueservice_pb.GetNextMessageResponse{}, status.Errorf(codes.InvalidArgument, "cannot query queue with no name %v", req)
 	}
 	if req.GetQueueName() == "emptyQueue" {
-		return &pb_chronoqueue.GetNextMessageResponse{}, nil
+		return &queueservice_pb.GetNextMessageResponse{}, nil
 	}
-	return &pb_chronoqueue.GetNextMessageResponse{
-		Message: &pb_chronoqueue.Message{
+	return &queueservice_pb.GetNextMessageResponse{
+		Message: &message_pb.Message{
 			MessageId: "test_message",
-			Metadata:  &pb_chronoqueue.Message_Metadata{},
+			Metadata:  &message_pb.Message_Metadata{},
 		},
 	}, nil
 }
 
-func (*mockChronoQueueServer) PeekQueueMessages(ctx context.Context, req *pb_chronoqueue.PeekQueueMessagesRequest) (*pb_chronoqueue.PeekQueueMessagesResponse, error) {
+func (*mockChronoQueueServer) PeekQueueMessages(ctx context.Context, req *queueservice_pb.PeekQueueMessagesRequest) (*queueservice_pb.PeekQueueMessagesResponse, error) {
 	if req.GetQueueName() == "" {
-		return &pb_chronoqueue.PeekQueueMessagesResponse{}, status.Errorf(codes.InvalidArgument, "cannot query queue with no name %v", req)
+		return &queueservice_pb.PeekQueueMessagesResponse{}, status.Errorf(codes.InvalidArgument, "cannot query queue with no name %v", req)
 	}
 	if req.GetQueueName() == "emptyQueue" {
-		return &pb_chronoqueue.PeekQueueMessagesResponse{}, nil
+		return &queueservice_pb.PeekQueueMessagesResponse{}, nil
 	}
-	return &pb_chronoqueue.PeekQueueMessagesResponse{
-		Messages: []*pb_chronoqueue.Message{
+	return &queueservice_pb.PeekQueueMessagesResponse{
+		Messages: []*message_pb.Message{
 			{
 				MessageId: "test_message",
-				Metadata:  &pb_chronoqueue.Message_Metadata{},
+				Metadata:  &message_pb.Message_Metadata{},
 			},
 		},
 	}, nil
 }
 
-func (*mockChronoQueueServer) GetQueueState(ctx context.Context, req *pb_chronoqueue.GetQueueStateRequest) (*pb_chronoqueue.GetQueueStateResponse, error) {
+func (*mockChronoQueueServer) GetQueueState(ctx context.Context, req *queueservice_pb.GetQueueStateRequest) (*queueservice_pb.GetQueueStateResponse, error) {
 	if req.GetQueueName() == "" {
-		return &pb_chronoqueue.GetQueueStateResponse{}, status.Errorf(codes.InvalidArgument, "cannot query queue with no name %v", req)
+		return &queueservice_pb.GetQueueStateResponse{}, status.Errorf(codes.InvalidArgument, "cannot query queue with no name %v", req)
 	}
 	if req.GetQueueName() == "emptyQueue" {
-		return &pb_chronoqueue.GetQueueStateResponse{
+		return &queueservice_pb.GetQueueStateResponse{
 			StateCounts: map[string]int32{
 				"INVISIBLE": 0,
 				"PENDING":   0,
@@ -140,7 +142,7 @@ func (*mockChronoQueueServer) GetQueueState(ctx context.Context, req *pb_chronoq
 			EarliestDeadline: nil,
 		}, nil
 	}
-	return &pb_chronoqueue.GetQueueStateResponse{
+	return &queueservice_pb.GetQueueStateResponse{
 		StateCounts: map[string]int32{
 			"INVISIBLE": 1,
 			"PENDING":   0,
@@ -153,45 +155,45 @@ func (*mockChronoQueueServer) GetQueueState(ctx context.Context, req *pb_chronoq
 	}, nil
 }
 
-func (*mockChronoQueueServer) RenewMessageLease(ctx context.Context, req *pb_chronoqueue.RenewMessageLeaseRequest) (*pb_chronoqueue.RenewMessageLeaseResponse, error) {
+func (*mockChronoQueueServer) RenewMessageLease(ctx context.Context, req *queueservice_pb.RenewMessageLeaseRequest) (*queueservice_pb.RenewMessageLeaseResponse, error) {
 	if req.GetQueueName() == "" {
-		return &pb_chronoqueue.RenewMessageLeaseResponse{}, status.Errorf(codes.InvalidArgument, "cannot renew message's lease given queue with no name %v", req.GetQueueName())
+		return &queueservice_pb.RenewMessageLeaseResponse{}, status.Errorf(codes.InvalidArgument, "cannot renew message's lease given queue with no name %v", req.GetQueueName())
 	}
 	if req.GetMessageId() == "" {
-		return &pb_chronoqueue.RenewMessageLeaseResponse{}, status.Errorf(codes.InvalidArgument, "cannot renew message's lease with no message ID %v", req.GetMessageId())
+		return &queueservice_pb.RenewMessageLeaseResponse{}, status.Errorf(codes.InvalidArgument, "cannot renew message's lease with no message ID %v", req.GetMessageId())
 	}
-	return &pb_chronoqueue.RenewMessageLeaseResponse{
+	return &queueservice_pb.RenewMessageLeaseResponse{
 		RemainingTime: durationpb.New(30 * time.Second),
-		State:         pb_chronoqueue.Message_Metadata_RUNNING,
+		State:         message_pb.Message_Metadata_RUNNING,
 	}, nil
 }
 
-func (*mockChronoQueueServer) AcknowledgeMessage(ctx context.Context, req *pb_chronoqueue.AcknowledgeMessageRequest) (*pb_chronoqueue.AcknowledgeMessageResponse, error) {
+func (*mockChronoQueueServer) AcknowledgeMessage(ctx context.Context, req *queueservice_pb.AcknowledgeMessageRequest) (*queueservice_pb.AcknowledgeMessageResponse, error) {
 	if req.GetQueueName() == "" {
-		return &pb_chronoqueue.AcknowledgeMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot acknowledge message given queue with no name %v", req.GetQueueName())
+		return &queueservice_pb.AcknowledgeMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot acknowledge message given queue with no name %v", req.GetQueueName())
 	}
 	if req.GetMessageId() == "" {
-		return &pb_chronoqueue.AcknowledgeMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot acknowledge message with no message ID %v", req.GetMessageId())
+		return &queueservice_pb.AcknowledgeMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot acknowledge message with no message ID %v", req.GetMessageId())
 	}
-	return &pb_chronoqueue.AcknowledgeMessageResponse{Success: true}, nil
+	return &queueservice_pb.AcknowledgeMessageResponse{Success: true}, nil
 }
 
-func (*mockChronoQueueServer) SendMessageHeartBeat(ctx context.Context, req *pb_chronoqueue.SendMessageHeartBeatRequest) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
+func (*mockChronoQueueServer) SendMessageHeartBeat(ctx context.Context, req *queueservice_pb.SendMessageHeartBeatRequest) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
 	if req.GetQueueName() == "" {
-		return &pb_chronoqueue.SendMessageHeartBeatResponse{}, status.Errorf(codes.InvalidArgument, "cannot send message's heartbeat given queue with no name %v", req.GetQueueName())
+		return &queueservice_pb.SendMessageHeartBeatResponse{}, status.Errorf(codes.InvalidArgument, "cannot send message's heartbeat given queue with no name %v", req.GetQueueName())
 	}
 	if req.GetMessageId() == "" {
-		return &pb_chronoqueue.SendMessageHeartBeatResponse{}, status.Errorf(codes.InvalidArgument, "cannot send message's heartbeat with no message ID %v", req.GetMessageId())
+		return &queueservice_pb.SendMessageHeartBeatResponse{}, status.Errorf(codes.InvalidArgument, "cannot send message's heartbeat with no message ID %v", req.GetMessageId())
 	}
-	return &pb_chronoqueue.SendMessageHeartBeatResponse{}, nil
+	return &queueservice_pb.SendMessageHeartBeatResponse{}, nil
 }
 
-func (*mockChronoQueueServer) ListQueues(ctx context.Context, req *pb_chronoqueue.ListQueuesRequest) (*pb_chronoqueue.ListQueuesResponse, error) {
-	return &pb_chronoqueue.ListQueuesResponse{
-		Queues: []*pb_chronoqueue.Queue{
+func (*mockChronoQueueServer) ListQueues(ctx context.Context, req *queueservice_pb.ListQueuesRequest) (*queueservice_pb.ListQueuesResponse, error) {
+	return &queueservice_pb.ListQueuesResponse{
+		Queues: []*queue_pb.Queue{
 			{
 				Name:     "test_queue",
-				Metadata: &pb_chronoqueue.Queue_Options{},
+				Metadata: &queue_pb.QueueMetadata{},
 			},
 		},
 	}, nil
@@ -301,7 +303,7 @@ func TestDefaultServerConnector(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    pb_chronoqueue.ChronoQueueClient
+		want    queueservice_pb.QueueServiceClient
 		want1   *grpc.ClientConn
 		wantErr bool
 	}{
@@ -332,7 +334,7 @@ func TestDefaultServerConnector(t *testing.T) {
 
 func TestChronoQueueClient_heartbeatWorker(t *testing.T) {
 	type fields struct {
-		service   pb_chronoqueue.ChronoQueueClient
+		service   queueservice_pb.QueueServiceClient
 		conn      *grpc.ClientConn
 		workChan  chan WorkItem
 		closeChan chan struct{}
@@ -360,7 +362,7 @@ func TestChronoQueueClient_heartbeatWorker(t *testing.T) {
 
 func TestChronoQueueClient_setDefaultContextTimeout(t *testing.T) {
 	type fields struct {
-		service   pb_chronoqueue.ChronoQueueClient
+		service   queueservice_pb.QueueServiceClient
 		conn      *grpc.ClientConn
 		workChan  chan WorkItem
 		closeChan chan struct{}
@@ -457,7 +459,7 @@ func TestChronoQueueClient_CreateQueue(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    *pb_chronoqueue.CreateQueueResponse
+		want    *queueservice_pb.CreateQueueResponse
 		wantErr bool
 	}{
 		{
@@ -470,7 +472,7 @@ func TestChronoQueueClient_CreateQueue(t *testing.T) {
 					InvisibilityDuration: "10s",
 				},
 			},
-			want: &pb_chronoqueue.CreateQueueResponse{
+			want: &queueservice_pb.CreateQueueResponse{
 				Success: true,
 			},
 			wantErr: false,
@@ -523,7 +525,7 @@ func TestChronoQueueClient_DeleteQueue(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    *pb_chronoqueue.DeleteQueueResponse
+		want    *queueservice_pb.DeleteQueueResponse
 		wantErr bool
 	}{
 		{
@@ -536,7 +538,7 @@ func TestChronoQueueClient_DeleteQueue(t *testing.T) {
 					InvisibilityDuration: "10s",
 				},
 			},
-			want: &pb_chronoqueue.DeleteQueueResponse{
+			want: &queueservice_pb.DeleteQueueResponse{
 				Success: true,
 			},
 			wantErr: false,
@@ -590,7 +592,7 @@ func TestChronoQueueClient_PostMessage(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    *pb_chronoqueue.PostMessageResponse
+		want    *queueservice_pb.PostMessageResponse
 		wantErr bool
 	}{
 		{
@@ -604,7 +606,7 @@ func TestChronoQueueClient_PostMessage(t *testing.T) {
 					LeaseDuration: "3s",
 				},
 			},
-			want: &pb_chronoqueue.PostMessageResponse{
+			want: &queueservice_pb.PostMessageResponse{
 				Success: true,
 			},
 			wantErr: false,
@@ -726,9 +728,9 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 			},
 			setup: func(f *fields, client *ChronoQueueClient) {
 				// Override SendMessageHeartbeat to always succeed
-				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
+				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
 					f.sendHeartbeatCallCounter++
-					return &pb_chronoqueue.SendMessageHeartBeatResponse{}, nil
+					return &queueservice_pb.SendMessageHeartBeatResponse{}, nil
 				}
 				client.opts.MaxHeartbeatRetryCount = 1
 			},
@@ -754,7 +756,7 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 				successfulCalls:          0,
 			},
 			setup: func(f *fields, client *ChronoQueueClient) {
-				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
+				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
 					f.sendHeartbeatCallCounter++ // Increment call counter each time method is invoked
 
 					if f.retryCount == 0 {
@@ -764,7 +766,7 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 					}
 
 					f.successfulCalls++ // Increment successful calls counter
-					return &pb_chronoqueue.SendMessageHeartBeatResponse{}, nil
+					return &queueservice_pb.SendMessageHeartBeatResponse{}, nil
 				}
 			},
 			validate: func(t *testing.T, f *fields, client *ChronoQueueClient) {
@@ -795,7 +797,7 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 				successfulCalls:          0,
 			},
 			setup: func(f *fields, client *ChronoQueueClient) {
-				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
+				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
 					f.sendHeartbeatCallCounter++
 					return nil, errors.New("forced error")
 				}
@@ -827,9 +829,9 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 			},
 			setup: func(f *fields, client *ChronoQueueClient) {
 				// Setup a call counter and ensure it is reset
-				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*pb_chronoqueue.SendMessageHeartBeatResponse, error) {
+				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
 					f.sendHeartbeatCallCounter++
-					return &pb_chronoqueue.SendMessageHeartBeatResponse{}, nil
+					return &queueservice_pb.SendMessageHeartBeatResponse{}, nil
 				}
 			},
 			validate: func(t *testing.T, f *fields, client *ChronoQueueClient) {
@@ -896,7 +898,7 @@ func TestChronoQueueClient_GetNextMessage(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *pb_chronoqueue.GetNextMessageResponse
+		want    *queueservice_pb.GetNextMessageResponse
 		wantErr bool
 	}{
 		{
@@ -907,10 +909,10 @@ func TestChronoQueueClient_GetNextMessage(t *testing.T) {
 				leaseDuration:   "4s",
 				enableHeartbeat: false,
 			},
-			want: &pb_chronoqueue.GetNextMessageResponse{
-				Message: &pb_chronoqueue.Message{
+			want: &queueservice_pb.GetNextMessageResponse{
+				Message: &message_pb.Message{
 					MessageId: "test_message",
-					Metadata:  &pb_chronoqueue.Message_Metadata{},
+					Metadata:  &message_pb.Message_Metadata{},
 				},
 			},
 			wantErr: false,
@@ -923,7 +925,7 @@ func TestChronoQueueClient_GetNextMessage(t *testing.T) {
 				leaseDuration:   "3s",
 				enableHeartbeat: false,
 			},
-			want:    &pb_chronoqueue.GetNextMessageResponse{},
+			want:    &queueservice_pb.GetNextMessageResponse{},
 			wantErr: false,
 		},
 		{
@@ -975,7 +977,7 @@ func TestChronoQueueClient_PeekQueueMessages(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *pb_chronoqueue.PeekQueueMessagesResponse
+		want    *queueservice_pb.PeekQueueMessagesResponse
 		wantErr bool
 	}{
 		{
@@ -989,11 +991,11 @@ func TestChronoQueueClient_PeekQueueMessages(t *testing.T) {
 					Max: 0,
 				},
 			},
-			want: &pb_chronoqueue.PeekQueueMessagesResponse{
-				Messages: []*pb_chronoqueue.Message{
+			want: &queueservice_pb.PeekQueueMessagesResponse{
+				Messages: []*message_pb.Message{
 					{
 						MessageId: "test_message",
-						Metadata:  &pb_chronoqueue.Message_Metadata{},
+						Metadata:  &message_pb.Message_Metadata{},
 					},
 				},
 			},
@@ -1010,7 +1012,7 @@ func TestChronoQueueClient_PeekQueueMessages(t *testing.T) {
 					Max: 0,
 				},
 			},
-			want:    &pb_chronoqueue.PeekQueueMessagesResponse{},
+			want:    &queueservice_pb.PeekQueueMessagesResponse{},
 			wantErr: false,
 		},
 		{
@@ -1063,7 +1065,7 @@ func TestChronoQueueClient_GetQueueState(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *pb_chronoqueue.GetQueueStateResponse
+		want    *queueservice_pb.GetQueueStateResponse
 		wantErr bool
 	}{
 		{
@@ -1072,7 +1074,7 @@ func TestChronoQueueClient_GetQueueState(t *testing.T) {
 				ctx:   context.Background(),
 				queue: "validQueue",
 			},
-			want: &pb_chronoqueue.GetQueueStateResponse{
+			want: &queueservice_pb.GetQueueStateResponse{
 				StateCounts: map[string]int32{
 					"INVISIBLE": 1,
 					"PENDING":   0,
@@ -1091,7 +1093,7 @@ func TestChronoQueueClient_GetQueueState(t *testing.T) {
 				ctx:   context.Background(),
 				queue: "emptyQueue",
 			},
-			want: &pb_chronoqueue.GetQueueStateResponse{
+			want: &queueservice_pb.GetQueueStateResponse{
 				StateCounts: map[string]int32{
 					"INVISIBLE": 0,
 					"PENDING":   0,
@@ -1151,7 +1153,7 @@ func TestChronoQueueClient_RenewMessageLease(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *pb_chronoqueue.RenewMessageLeaseResponse
+		want    *queueservice_pb.RenewMessageLeaseResponse
 		wantErr bool
 	}{
 		{
@@ -1162,9 +1164,9 @@ func TestChronoQueueClient_RenewMessageLease(t *testing.T) {
 				messageId:     "validMessageId",
 				leaseDuration: "30s",
 			},
-			want: &pb_chronoqueue.RenewMessageLeaseResponse{
+			want: &queueservice_pb.RenewMessageLeaseResponse{
 				RemainingTime: &durationpb.Duration{Seconds: 30},
-				State:         pb_chronoqueue.Message_Metadata_RUNNING,
+				State:         message_pb.Message_Metadata_RUNNING,
 			},
 			wantErr: false,
 		},
@@ -1217,7 +1219,7 @@ func TestChronoQueueClient_AcknowledgeMessage(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *pb_chronoqueue.AcknowledgeMessageResponse
+		want    *queueservice_pb.AcknowledgeMessageResponse
 		wantErr bool
 	}{
 		{
@@ -1228,7 +1230,7 @@ func TestChronoQueueClient_AcknowledgeMessage(t *testing.T) {
 				messageId: "validMessageId",
 				state:     3,
 			},
-			want:    &pb_chronoqueue.AcknowledgeMessageResponse{Success: true},
+			want:    &queueservice_pb.AcknowledgeMessageResponse{Success: true},
 			wantErr: false,
 		},
 		{
@@ -1279,7 +1281,7 @@ func TestChronoQueueClient_SendMessageHeartbeat(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *pb_chronoqueue.SendMessageHeartBeatResponse
+		want    *queueservice_pb.SendMessageHeartBeatResponse
 		wantErr bool
 	}{
 		{
@@ -1289,7 +1291,7 @@ func TestChronoQueueClient_SendMessageHeartbeat(t *testing.T) {
 				queueName: "validQueue",
 				messageId: "validMessageId",
 			},
-			want:    &pb_chronoqueue.SendMessageHeartBeatResponse{},
+			want:    &queueservice_pb.SendMessageHeartBeatResponse{},
 			wantErr: false,
 		},
 		{
@@ -1338,7 +1340,7 @@ func TestChronoQueueClient_ListQueues(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *pb_chronoqueue.ListQueuesResponse
+		want    *queueservice_pb.ListQueuesResponse
 		wantErr bool
 	}{
 		{
@@ -1347,10 +1349,10 @@ func TestChronoQueueClient_ListQueues(t *testing.T) {
 				ctx:    context.Background(),
 				prefix: "",
 			},
-			want: &pb_chronoqueue.ListQueuesResponse{Queues: []*pb_chronoqueue.Queue{
+			want: &queueservice_pb.ListQueuesResponse{Queues: []*queue_pb.Queue{
 				{
 					Name:     "test_queue",
-					Metadata: &pb_chronoqueue.Queue_Options{},
+					Metadata: &queue_pb.QueueMetadata{},
 				},
 			}},
 			wantErr: false,

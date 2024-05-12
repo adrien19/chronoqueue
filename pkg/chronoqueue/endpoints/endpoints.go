@@ -3,7 +3,7 @@ package endpoints
 import (
 	"context"
 
-	pb "github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue"
 	"github.com/go-kit/kit/endpoint"
 )
@@ -53,277 +53,277 @@ func NewEndpointSet(svc chronoqueue.Service) Set {
 
 func MakeCreateQueueEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.CreateQueueRequest)
+		req := request.(*queueservice_pb.CreateQueueRequest)
 		return svc.CreateQueue(ctx, req)
 	}
 }
 
 func MakeDeleteQueueEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.DeleteQueueRequest)
+		req := request.(*queueservice_pb.DeleteQueueRequest)
 		return svc.DeleteQueue(ctx, req)
 	}
 }
 
 func MakePostMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.PostMessageRequest)
+		req := request.(*queueservice_pb.PostMessageRequest)
 		return svc.PostMessage(ctx, req)
 	}
 }
 
 func MakeGetNextMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.GetNextMessageRequest)
+		req := request.(*queueservice_pb.GetNextMessageRequest)
 		return svc.GetNextMessage(ctx, req)
 	}
 }
 
 func MakeAcknowledgeMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.AcknowledgeMessageRequest)
+		req := request.(*queueservice_pb.AcknowledgeMessageRequest)
 		return svc.AcknowledgeMessage(ctx, req)
 	}
 }
 
 func MakeRenewMessageLeaseEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.RenewMessageLeaseRequest)
+		req := request.(*queueservice_pb.RenewMessageLeaseRequest)
 		return svc.RenewMessageLease(ctx, req)
 	}
 }
 
 func MakePeekQueueMessagesEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.PeekQueueMessagesRequest)
+		req := request.(*queueservice_pb.PeekQueueMessagesRequest)
 		return svc.PeekQueueMessages(ctx, req)
 	}
 }
 
 func MakeGetQueueStateEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.GetQueueStateRequest)
+		req := request.(*queueservice_pb.GetQueueStateRequest)
 		return svc.GetQueueState(ctx, req)
 	}
 }
 
 func MakeSendMessageHeartBeatEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.SendMessageHeartBeatRequest)
+		req := request.(*queueservice_pb.SendMessageHeartBeatRequest)
 		return svc.SendMessageHeartBeat(ctx, req)
 	}
 }
 
 func MakeListQueuesEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.ListQueuesRequest)
+		req := request.(*queueservice_pb.ListQueuesRequest)
 		return svc.ListQueues(ctx, req)
 	}
 }
 
 func MakeCreateScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.CreateScheduleRequest)
+		req := request.(*queueservice_pb.CreateScheduleRequest)
 		return svc.CreateSchedule(ctx, req)
 	}
 }
 
 func MakeDeleteScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.DeleteScheduleRequest)
+		req := request.(*queueservice_pb.DeleteScheduleRequest)
 		return svc.DeleteSchedule(ctx, req)
 	}
 }
 
 func MakeGetScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.GetScheduleRequest)
+		req := request.(*queueservice_pb.GetScheduleRequest)
 		return svc.GetSchedule(ctx, req)
 	}
 }
 
 func MakeListSchedulesEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.ListSchedulesRequest)
+		req := request.(*queueservice_pb.ListSchedulesRequest)
 		return svc.ListSchedules(ctx, req)
 	}
 }
 
 func MakeGetScheduleHistoryEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.GetScheduleHistoryRequest)
+		req := request.(*queueservice_pb.GetScheduleHistoryRequest)
 		return svc.GetScheduleHistory(ctx, req)
 	}
 }
 
 func MakePauseScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.PauseScheduleRequest)
+		req := request.(*queueservice_pb.PauseScheduleRequest)
 		return svc.PauseSchedule(ctx, req)
 	}
 }
 
 func MakeResumeScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(*pb.ResumeScheduleRequest)
+		req := request.(*queueservice_pb.ResumeScheduleRequest)
 		return svc.ResumeSchedule(ctx, req)
 	}
 }
 
-func (s *Set) CreateQueue(ctx context.Context, queueInfo *pb.Queue) (*pb.CreateQueueResponse, error) {
-	resp, err := s.CreateQueueEndpoint(ctx, queueInfo)
+func (s *Set) CreateQueue(ctx context.Context, request *queueservice_pb.CreateQueueRequest) (*queueservice_pb.CreateQueueResponse, error) {
+	resp, err := s.CreateQueueEndpoint(ctx, request)
 	if err != nil {
-		return resp.(*pb.CreateQueueResponse), err
+		return resp.(*queueservice_pb.CreateQueueResponse), err
 	}
-	return resp.(*pb.CreateQueueResponse), err
+	return resp.(*queueservice_pb.CreateQueueResponse), err
 }
 
-func (s *Set) DeleteQueue(ctx context.Context, request *pb.DeleteQueueRequest) (*pb.DeleteQueueResponse, error) {
+func (s *Set) DeleteQueue(ctx context.Context, request *queueservice_pb.DeleteQueueRequest) (*queueservice_pb.DeleteQueueResponse, error) {
 	resp, err := s.DeleteQueueEndpoint(ctx, request)
 	if err != nil {
-		return &pb.DeleteQueueResponse{Success: false}, err
+		return &queueservice_pb.DeleteQueueResponse{Success: false}, err
 	}
-	return resp.(*pb.DeleteQueueResponse), err
+	return resp.(*queueservice_pb.DeleteQueueResponse), err
 }
 
-func (s *Set) PostMessage(ctx context.Context, request *pb.PostMessageRequest) (*pb.PostMessageResponse, error) {
+func (s *Set) PostMessage(ctx context.Context, request *queueservice_pb.PostMessageRequest) (*queueservice_pb.PostMessageResponse, error) {
 	resp, err := s.PostMessageEndpoint(ctx, request)
 	if err != nil {
-		return &pb.PostMessageResponse{Success: false}, err
+		return &queueservice_pb.PostMessageResponse{Success: false}, err
 	}
-	return resp.(*pb.PostMessageResponse), err
+	return resp.(*queueservice_pb.PostMessageResponse), err
 }
 
-func (s *Set) GetNextMessage(ctx context.Context, request *pb.GetNextMessageRequest) (*pb.GetNextMessageResponse, error) {
+func (s *Set) GetNextMessage(ctx context.Context, request *queueservice_pb.GetNextMessageRequest) (*queueservice_pb.GetNextMessageResponse, error) {
 	resp, err := s.GetNextMessageEndpoint(ctx, request)
 	if err != nil {
-		return &pb.GetNextMessageResponse{
+		return &queueservice_pb.GetNextMessageResponse{
 			Message: nil,
 		}, err
 	}
-	messageResp := resp.(*pb.GetNextMessageResponse)
+	messageResp := resp.(*queueservice_pb.GetNextMessageResponse)
 	return messageResp, nil
 
 }
 
-func (s *Set) AcknowledgeMessage(ctx context.Context, request *pb.AcknowledgeMessageRequest) (*pb.AcknowledgeMessageResponse, error) {
+func (s *Set) AcknowledgeMessage(ctx context.Context, request *queueservice_pb.AcknowledgeMessageRequest) (*queueservice_pb.AcknowledgeMessageResponse, error) {
 	resp, err := s.AcknowledgeMessageEndpoint(ctx, request)
 	if err != nil {
-		return &pb.AcknowledgeMessageResponse{Success: false}, err
+		return &queueservice_pb.AcknowledgeMessageResponse{Success: false}, err
 	}
-	ackResp := resp.(*pb.AcknowledgeMessageResponse)
+	ackResp := resp.(*queueservice_pb.AcknowledgeMessageResponse)
 	return ackResp, nil
 }
 
-func (s *Set) RenewMessageLease(ctx context.Context, request *pb.RenewMessageLeaseRequest) (*pb.RenewMessageLeaseResponse, error) {
+func (s *Set) RenewMessageLease(ctx context.Context, request *queueservice_pb.RenewMessageLeaseRequest) (*queueservice_pb.RenewMessageLeaseResponse, error) {
 	resp, err := s.RenewMessageLeaseEndpoint(ctx, request)
 	if err != nil || resp == nil {
 		return nil, err
 	}
-	renewLeaseResp := resp.(*pb.RenewMessageLeaseResponse)
+	renewLeaseResp := resp.(*queueservice_pb.RenewMessageLeaseResponse)
 	return renewLeaseResp, nil
 }
 
-func (s *Set) PeekQueueMessages(ctx context.Context, queueName string) (*pb.PeekQueueMessagesResponse, error) {
+func (s *Set) PeekQueueMessages(ctx context.Context, queueName string) (*queueservice_pb.PeekQueueMessagesResponse, error) {
 	resp, err := s.PeekQueueMessagesEndpoint(ctx, queueName)
 	if err != nil {
-		return &pb.PeekQueueMessagesResponse{}, err
+		return &queueservice_pb.PeekQueueMessagesResponse{}, err
 	}
-	messagesResp := resp.(*pb.PeekQueueMessagesResponse)
+	messagesResp := resp.(*queueservice_pb.PeekQueueMessagesResponse)
 	return messagesResp, nil
 
 }
 
-func (s *Set) GetQueueState(ctx context.Context, queueName string) (*pb.GetQueueStateResponse, error) {
+func (s *Set) GetQueueState(ctx context.Context, queueName string) (*queueservice_pb.GetQueueStateResponse, error) {
 	resp, err := s.GetQueueStateEndpoint(ctx, queueName)
 	if err != nil {
-		return &pb.GetQueueStateResponse{}, err
+		return &queueservice_pb.GetQueueStateResponse{}, err
 	}
-	stateResp := resp.(*pb.GetQueueStateResponse)
+	stateResp := resp.(*queueservice_pb.GetQueueStateResponse)
 
 	return stateResp, nil
 
 }
 
-func (s *Set) SendMessageHeartBeat(ctx context.Context, queueName string) (*pb.SendMessageHeartBeatResponse, error) {
+func (s *Set) SendMessageHeartBeat(ctx context.Context, queueName string) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
 	resp, err := s.GetQueueStateEndpoint(ctx, queueName)
 	if err != nil {
-		return &pb.SendMessageHeartBeatResponse{}, err
+		return &queueservice_pb.SendMessageHeartBeatResponse{}, err
 	}
-	stateResp := resp.(*pb.SendMessageHeartBeatResponse)
+	stateResp := resp.(*queueservice_pb.SendMessageHeartBeatResponse)
 
 	return stateResp, nil
 
 }
 
-func (s *Set) ListQueues(ctx context.Context, request *pb.ListQueuesRequest) (*pb.ListQueuesResponse, error) {
+func (s *Set) ListQueues(ctx context.Context, request *queueservice_pb.ListQueuesRequest) (*queueservice_pb.ListQueuesResponse, error) {
 	resp, err := s.ListQueuesEndpoint(ctx, request)
 	if err != nil {
-		return &pb.ListQueuesResponse{}, err
+		return &queueservice_pb.ListQueuesResponse{}, err
 	}
-	listResp := resp.(*pb.ListQueuesResponse)
+	listResp := resp.(*queueservice_pb.ListQueuesResponse)
 	return listResp, nil
 }
 
-func (s *Set) CreateSchedule(ctx context.Context, request *pb.CreateScheduleRequest) (*pb.CreateScheduleResponse, error) {
+func (s *Set) CreateSchedule(ctx context.Context, request *queueservice_pb.CreateScheduleRequest) (*queueservice_pb.CreateScheduleResponse, error) {
 	resp, err := s.CreateScheduleEndpoint(ctx, request)
 	if err != nil {
-		return &pb.CreateScheduleResponse{Success: false}, err
+		return &queueservice_pb.CreateScheduleResponse{Success: false}, err
 	}
-	createResp := resp.(*pb.CreateScheduleResponse)
+	createResp := resp.(*queueservice_pb.CreateScheduleResponse)
 	return createResp, nil
 }
 
-func (s *Set) DeleteSchedule(ctx context.Context, request *pb.DeleteScheduleRequest) (*pb.DeleteScheduleResponse, error) {
+func (s *Set) DeleteSchedule(ctx context.Context, request *queueservice_pb.DeleteScheduleRequest) (*queueservice_pb.DeleteScheduleResponse, error) {
 	resp, err := s.DeleteScheduleEndpoint(ctx, request)
 	if err != nil {
-		return &pb.DeleteScheduleResponse{Success: false}, err
+		return &queueservice_pb.DeleteScheduleResponse{Success: false}, err
 	}
-	deleteResp := resp.(*pb.DeleteScheduleResponse)
+	deleteResp := resp.(*queueservice_pb.DeleteScheduleResponse)
 	return deleteResp, nil
 }
 
-func (s *Set) GetSchedule(ctx context.Context, request *pb.GetScheduleRequest) (*pb.GetScheduleResponse, error) {
+func (s *Set) GetSchedule(ctx context.Context, request *queueservice_pb.GetScheduleRequest) (*queueservice_pb.GetScheduleResponse, error) {
 	resp, err := s.GetScheduleEndpoint(ctx, request)
 	if err != nil {
-		return &pb.GetScheduleResponse{}, err
+		return &queueservice_pb.GetScheduleResponse{}, err
 	}
-	getResp := resp.(*pb.GetScheduleResponse)
+	getResp := resp.(*queueservice_pb.GetScheduleResponse)
 	return getResp, nil
 }
 
-func (s *Set) ListSchedules(ctx context.Context, request *pb.ListSchedulesRequest) (*pb.ListSchedulesResponse, error) {
+func (s *Set) ListSchedules(ctx context.Context, request *queueservice_pb.ListSchedulesRequest) (*queueservice_pb.ListSchedulesResponse, error) {
 	resp, err := s.ListSchedulesEndpoint(ctx, request)
 	if err != nil {
-		return &pb.ListSchedulesResponse{}, err
+		return &queueservice_pb.ListSchedulesResponse{}, err
 	}
-	listResp := resp.(*pb.ListSchedulesResponse)
+	listResp := resp.(*queueservice_pb.ListSchedulesResponse)
 	return listResp, nil
 }
 
-func (s *Set) GetScheduleHistory(ctx context.Context, request *pb.GetScheduleHistoryRequest) (*pb.GetScheduleHistoryResponse, error) {
+func (s *Set) GetScheduleHistory(ctx context.Context, request *queueservice_pb.GetScheduleHistoryRequest) (*queueservice_pb.GetScheduleHistoryResponse, error) {
 	resp, err := s.GetScheduleHistoryEndpoint(ctx, request)
 	if err != nil {
-		return &pb.GetScheduleHistoryResponse{}, err
+		return &queueservice_pb.GetScheduleHistoryResponse{}, err
 	}
-	historyResp := resp.(*pb.GetScheduleHistoryResponse)
+	historyResp := resp.(*queueservice_pb.GetScheduleHistoryResponse)
 	return historyResp, nil
 }
 
-func (s *Set) PauseSchedule(ctx context.Context, request *pb.PauseScheduleRequest) (*pb.PauseScheduleResponse, error) {
+func (s *Set) PauseSchedule(ctx context.Context, request *queueservice_pb.PauseScheduleRequest) (*queueservice_pb.PauseScheduleResponse, error) {
 	resp, err := s.PauseScheduleEndpoint(ctx, request)
 	if err != nil {
-		return &pb.PauseScheduleResponse{Success: false}, err
+		return &queueservice_pb.PauseScheduleResponse{Success: false}, err
 	}
-	pauseResp := resp.(*pb.PauseScheduleResponse)
+	pauseResp := resp.(*queueservice_pb.PauseScheduleResponse)
 	return pauseResp, nil
 }
 
-func (s *Set) ResumeSchedule(ctx context.Context, request *pb.ResumeScheduleRequest) (*pb.ResumeScheduleResponse, error) {
+func (s *Set) ResumeSchedule(ctx context.Context, request *queueservice_pb.ResumeScheduleRequest) (*queueservice_pb.ResumeScheduleResponse, error) {
 	resp, err := s.ResumeScheduleEndpoint(ctx, request)
 	if err != nil {
-		return &pb.ResumeScheduleResponse{Success: false}, err
+		return &queueservice_pb.ResumeScheduleResponse{Success: false}, err
 	}
-	resumeResp := resp.(*pb.ResumeScheduleResponse)
+	resumeResp := resp.(*queueservice_pb.ResumeScheduleResponse)
 	return resumeResp, nil
 }

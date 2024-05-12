@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -24,7 +25,7 @@ const (
 )
 
 // Updates and saves the message metadata in Redis.
-func (as *storage) saveMessageMetadata(ctx context.Context, queueName string, messageID string, metadata *chronoqueue.Message_Metadata) error {
+func (as *storage) saveMessageMetadata(ctx context.Context, queueName string, messageID string, metadata *message_pb.Message_Metadata) error {
 
 	messageMutex := as.rs.NewMutex("mutex:" + messageID)
 	// Try to acquire the lock
@@ -75,7 +76,7 @@ func isValidTransition(currentState, newState transitionState) bool {
 	}
 }
 
-func (as *storage) AcknowledgeMessage(ctx context.Context, request *chronoqueue.AcknowledgeMessageRequest) (*chronoqueue.AcknowledgeMessageResponse, error) {
+func (as *storage) AcknowledgeMessage(ctx context.Context, request *queueservice_pb.AcknowledgeMessageRequest) (*queueservice_pb.AcknowledgeMessageResponse, error) {
 	queueName := request.GetQueueName()
 	messageID := request.GetMessageId()
 
@@ -108,5 +109,5 @@ func (as *storage) AcknowledgeMessage(ctx context.Context, request *chronoqueue.
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	return &chronoqueue.AcknowledgeMessageResponse{Success: true}, nil
+	return &queueservice_pb.AcknowledgeMessageResponse{Success: true}, nil
 }

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
@@ -21,7 +23,7 @@ const (
 )
 
 // Serialize the message metadata into JSON
-func (as *storage) serializeMessageMetadata(metadata *chronoqueue.Message_Metadata) ([]byte, error) {
+func (as *storage) serializeMessageMetadata(metadata *message_pb.Message_Metadata) ([]byte, error) {
 	m := protojson.MarshalOptions{
 		EmitUnpopulated: true,
 	}
@@ -29,7 +31,7 @@ func (as *storage) serializeMessageMetadata(metadata *chronoqueue.Message_Metada
 }
 
 // Serialize the metadata payload into JSON
-func (as *storage) serializeMetadataPayload(payload *chronoqueue.Payload) ([]byte, error) {
+func (as *storage) serializeMetadataPayload(payload *common_pb.Payload) ([]byte, error) {
 	m := protojson.MarshalOptions{
 		EmitUnpopulated: true,
 	}
@@ -37,7 +39,7 @@ func (as *storage) serializeMetadataPayload(payload *chronoqueue.Payload) ([]byt
 }
 
 // Serialize the metadata payload into JSON
-func (as *storage) encryptMetadataPayload(metadata *chronoqueue.Message_Metadata) error {
+func (as *storage) encryptMetadataPayload(metadata *message_pb.Message_Metadata) error {
 	if !as.encryptionKeyManager.Enabled {
 		return nil
 	}
@@ -54,7 +56,7 @@ func (as *storage) encryptMetadataPayload(metadata *chronoqueue.Message_Metadata
 	}
 
 	if encryptedPayload != "" && nonce != "" {
-		metadata.Payload = &chronoqueue.Payload{}
+		metadata.Payload = &common_pb.Payload{}
 		metadata.Payload.Metadata = make(map[string]*structpb.Value)
 	}
 
@@ -68,7 +70,7 @@ func (as *storage) encryptMetadataPayload(metadata *chronoqueue.Message_Metadata
 	return nil
 }
 
-func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.PostMessageRequest) (*chronoqueue.PostMessageResponse, error) {
+func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice_pb.PostMessageRequest) (*queueservice_pb.PostMessageResponse, error) {
 	queueName := request.GetQueueName()
 	message := request.GetMessage()
 
@@ -89,19 +91,19 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	// avoid double encryption for schedule messages.
-	if message.Metadata.GetCronSchedule() == "" {
-		err = as.encryptMetadataPayload(message.Metadata)
-		if err != nil {
-			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while encrypting message payload")
-			return nil, chronoErr.GRPCStatus()
-		}
-	}
+	// // avoid double encryption for schedule messages.
+	// if message.Metadata.GetCronSchedule() == "" {
+	// 	err = as.encryptMetadataPayload(message.Metadata)
+	// 	if err != nil {
+	// 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while encrypting message payload")
+	// 		return nil, chronoErr.GRPCStatus()
+	// 	}
+	// }
 
 	// Set the message invisibility expiry
 	invisibity_expiry := time.Now().Add(message.Metadata.InvisibilityDuration.AsDuration())
 	message.Metadata.InvisibilityExpiry = invisibity_expiry.UnixMilli()
-	message.Metadata.State = chronoqueue.Message_Metadata_INVISIBLE
+	message.Metadata.State = message_pb.Message_Metadata_INVISIBLE
 
 	priority := message.Metadata.GetPriority()
 	if priority > MaxPriority {
@@ -147,5 +149,5 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *chronoqueue.
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	return &chronoqueue.PostMessageResponse{Success: true}, nil
+	return &queueservice_pb.PostMessageResponse{Success: true}, nil
 }

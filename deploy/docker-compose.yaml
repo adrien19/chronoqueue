@@ -4,14 +4,14 @@ services:
   chronoqueuesvc:
     container_name: chronoqueue_container
     hostname: chronoqueue_container
-    build: 
+    build:
       context: ..
       dockerfile: ./images/Dockerfile
     # env_file: .env
     environment:
       - HOST=chronoqueue_container
       - AUTH_SERVICE_HOST=authentication
-      - REDIS_HOST=cachesvc_container
+      - REDIS_HOST=host.docker.internal
       - SERVER_CERT_PATH=/secrets/server.crt
       - SERVER_KEY_PATH=/secrets/server.key
       - CA_CERT_PATH=/secrets/ca.crt
@@ -19,33 +19,33 @@ services:
       - ENABLE_ENCRYPTION=true
       - ENCRYPTION_KEY_SOURCE_TYPE=LOCAL
       - ENCRYPTION_KEY=0123456789abcdef0123456789abcdef
-    depends_on:
-      - cachesvc
+    # depends_on:
+    #   - cachesvc
       # - authenticationsvc
-    networks:
-      - chronoqueue_network
-    volumes: 
+    # networks:
+    #   - chronoqueue_network
+    volumes:
       - ../certs:/secrets
     ports:
       - "9000:9000"
       - "9001:9001"
 
-  cachesvc:
-    image: bitnami/redis:latest
-    container_name: cachesvc_container
-    environment:
-      - ALLOW_EMPTY_PASSWORD=yes
-    ports:
-      - '6379:6379'
-    networks:
-      - chronoqueue_network
-    volumes: 
-      - cachesvc:/data
-    restart: unless-stopped
+#   cachesvc:
+#     image: bitnami/redis:latest
+#     container_name: cachesvc_container
+#     environment:
+#       - ALLOW_EMPTY_PASSWORD=yes
+#     ports:
+#       - '6379:6379'
+#     networks:
+#       - chronoqueue_network
+#     volumes: 
+#       - cachesvc:/data
+#     restart: unless-stopped
 
-networks:
-  chronoqueue_network:
-    # external: true
+# networks:
+#   chronoqueue_network:
+#     # external: true
 
-volumes:
-    cachesvc:
+# volumes:
+#     cachesvc:

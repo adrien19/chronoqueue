@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"syscall"
 
-	pb_chronoqueue "github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue"
@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
 
@@ -101,7 +102,7 @@ func initializeEncryptionKeyManager(logger log.Logger) *keymanager.EncryptionKey
 	return KeyManager
 }
 
-func startServers(httpAddr, grpcAddr string, httpHandler http.Handler, grpcServer pb_chronoqueue.ChronoQueueServer, tlsConfig *tls.Config, logger log.Logger) {
+func startServers(httpAddr, grpcAddr string, httpHandler http.Handler, grpcServer queueservice_pb.QueueServiceServer, tlsConfig *tls.Config, logger log.Logger) {
 	var g group.Group
 	initHTTPServer(&g, httpAddr, httpHandler, tlsConfig, logger)
 	initGRPCServer(&g, grpcAddr, grpcServer, tlsConfig, logger)
@@ -275,7 +276,7 @@ func verifyPeerCertificateInterceptor(ctx context.Context, req interface{}, info
 	return handler(ctx, req)
 }
 
-func initGRPCServer(g *group.Group, addr string, server pb_chronoqueue.ChronoQueueServer, tlsConfig *tls.Config, logger log.Logger) {
+func initGRPCServer(g *group.Group, addr string, server queueservice_pb.QueueServiceServer, tlsConfig *tls.Config, logger log.Logger) {
 	grpcListener, err := net.Listen("tcp", addr)
 	if err != nil {
 		logger.Log("transport", "gRPC", "during", "Listen", "err", err)
@@ -291,7 +292,11 @@ func initGRPCServer(g *group.Group, addr string, server pb_chronoqueue.ChronoQue
 	}
 	baseServer := grpc.NewServer(opts...)
 
-	pb_chronoqueue.RegisterChronoQueueServer(baseServer, server)
+	// Register the server reflection service on the server.
+	// See https://grpc.github.io/grpc/core/md_doc_server-reflection.html.
+	reflection.Register(baseServer)
+
+	queueservice_pb.RegisterQueueServiceServer(baseServer, server)
 	g.Add(func() error {
 		logger.Log("transport", "gRPC", "addr", addr)
 		return baseServer.Serve(grpcListener)

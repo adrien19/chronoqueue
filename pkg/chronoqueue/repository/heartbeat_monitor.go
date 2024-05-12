@@ -5,7 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -14,14 +15,14 @@ const (
 	DefaultLeaseRenewal        = 3   // Default lease renewal time (y seconds)
 )
 
-func (as *storage) SendMessageHeartBeat(ctx context.Context, request *chronoqueue.SendMessageHeartBeatRequest) (*chronoqueue.SendMessageHeartBeatResponse, error) {
+func (as *storage) SendMessageHeartBeat(ctx context.Context, request *queueservice_pb.SendMessageHeartBeatRequest) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
 	meta, err := as.fetchMessageMetadata(ctx, request.GetQueueName(), request.GetMessageId())
 	if err != nil {
 		return nil, err
 	}
 
-	if meta == nil || meta.State != chronoqueue.Message_Metadata_RUNNING {
-		return &chronoqueue.SendMessageHeartBeatResponse{
+	if meta == nil || meta.State != message_pb.Message_Metadata_RUNNING {
+		return &queueservice_pb.SendMessageHeartBeatResponse{
 			RemainingTime: nil,
 			State:         meta.State,
 		}, nil
@@ -64,7 +65,7 @@ func (as *storage) SendMessageHeartBeat(ctx context.Context, request *chronoqueu
 	expiration := 60 * renewalDuration
 	_, err = as.redisClient.Set(ctx, key, time.Now().Unix(), expiration).Result()
 
-	return &chronoqueue.SendMessageHeartBeatResponse{
+	return &queueservice_pb.SendMessageHeartBeatResponse{
 		RemainingTime: remainingTimeDuration,
 		State:         meta.State,
 	}, err

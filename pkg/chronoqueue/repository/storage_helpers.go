@@ -9,7 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
@@ -28,7 +31,7 @@ func ErrorHandler(defaultResp interface{}, msg string) ChronoHandlerFunc {
 	}
 }
 
-func (as *storage) decryptMessageMetadataPayload(metadata *chronoqueue.Message_Metadata) error {
+func (as *storage) decryptMessageMetadataPayload(metadata *message_pb.Message_Metadata) error {
 	// Fetch the base64-encoded values from metadata
 	base64EncryptedPayload := metadata.Payload.Metadata["encryptedPayload"].GetStringValue()
 	base64Nonce := metadata.Payload.Metadata["nonce"].GetStringValue()
@@ -66,7 +69,7 @@ func (as *storage) decryptMessageMetadataPayload(metadata *chronoqueue.Message_M
 }
 
 // Fetches and deserializes the message metadata from Redis.
-func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, messageID string) (*chronoqueue.Message_Metadata, error) {
+func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, messageID string) (*message_pb.Message_Metadata, error) {
 
 	messageMutex := as.rs.NewMutex("mutex:" + messageID)
 	// Try to acquire the lock
@@ -88,7 +91,7 @@ func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, m
 		return nil, err
 	}
 
-	var meta chronoqueue.Message_Metadata
+	var meta message_pb.Message_Metadata
 	err = protojson.Unmarshal([]byte(result), &meta)
 	if err != nil {
 		return nil, err
@@ -117,29 +120,29 @@ func (as *storage) getMetadata(ctx context.Context, key string, metadata interfa
 	return nil
 }
 
-func (as *storage) getQueueMetadata(ctx context.Context, queueName string) (*chronoqueue.Queue_Options, error) {
+func (as *storage) getQueueMetadata(ctx context.Context, queueName string) (*queue_pb.QueueMetadata, error) {
 	queueMetaKey := fmt.Sprintf("%s:meta", queueName)
-	var queueMeta chronoqueue.Queue_Options
+	var queueMeta queue_pb.QueueMetadata
 	if err := as.getMetadata(ctx, queueMetaKey, &queueMeta); err != nil {
 		return nil, err
 	}
 	return &queueMeta, nil
 }
 
-func (as *storage) getScheduleMetadata(ctx context.Context, scheduleId string) (*chronoqueue.Schedule_Metadata, error) {
+func (as *storage) getScheduleMetadata(ctx context.Context, scheduleId string) (*schedule_pb.Schedule_Metadata, error) {
 	scheduleMetaKey := scheduleId
 	if !strings.HasPrefix(scheduleId, "schedule:") || !strings.HasSuffix(scheduleId, ":meta") {
 		scheduleMetaKey = fmt.Sprintf("schedule:%s:meta", scheduleId)
 	}
-	var scheduleMeta chronoqueue.Schedule_Metadata
+	var scheduleMeta schedule_pb.Schedule_Metadata
 	if err := as.getMetadata(ctx, scheduleMetaKey, &scheduleMeta); err != nil {
 		return nil, err
 	}
 	return &scheduleMeta, nil
 }
 
-func (as *storage) updateMessageStateAndLease(message *chronoqueue.Message, request *chronoqueue.GetNextMessageRequest, queueMeta *chronoqueue.Queue_Options) {
-	message.Metadata.State = chronoqueue.Message_Metadata_RUNNING
+func (as *storage) updateMessageStateAndLease(message *message_pb.Message, request *queueservice_pb.GetNextMessageRequest, queueMeta *queue_pb.QueueMetadata) {
+	message.Metadata.State = message_pb.Message_Metadata_RUNNING
 	if message.Metadata.GetLeaseDuration().AsDuration() <= 0 {
 		if request.LeaseDuration.AsDuration() > 0 {
 			message.Metadata.LeaseDuration = request.GetLeaseDuration()
@@ -153,7 +156,7 @@ func (as *storage) updateMessageStateAndLease(message *chronoqueue.Message, requ
 	message.Metadata.LeaseExpiry = expireDate.UnixNano() / int64(time.Millisecond)
 }
 
-func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string, message *chronoqueue.Message) error {
+func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string, message *message_pb.Message) error {
 
 	messageMutex := as.rs.NewMutex("mutex:" + message.MessageId)
 	// Try to acquire the lock

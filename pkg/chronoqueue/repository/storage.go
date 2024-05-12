@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adrien19/chronoqueue/api-deplicated/chronoqueue/v1"
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/go-redsync/redsync/v4"
@@ -22,24 +24,24 @@ import (
 )
 
 type Storage interface {
-	CreateQueue(ctx context.Context, request *chronoqueue.CreateQueueRequest) (*chronoqueue.CreateQueueResponse, error)
-	DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error)
-	CreateQueueMessage(ctx context.Context, request *chronoqueue.PostMessageRequest) (*chronoqueue.PostMessageResponse, error)
-	GetQueueMessage(ctx context.Context, request *chronoqueue.GetNextMessageRequest) (*chronoqueue.GetNextMessageResponse, error)
+	CreateQueue(ctx context.Context, request *queueservice_pb.CreateQueueRequest) (*queueservice_pb.CreateQueueResponse, error)
+	DeleteQueue(ctx context.Context, request *queueservice_pb.DeleteQueueRequest) (*queueservice_pb.DeleteQueueResponse, error)
+	CreateQueueMessage(ctx context.Context, request *queueservice_pb.PostMessageRequest) (*queueservice_pb.PostMessageResponse, error)
+	GetQueueMessage(ctx context.Context, request *queueservice_pb.GetNextMessageRequest) (*queueservice_pb.GetNextMessageResponse, error)
 	DeleteQueueMessage(ctx context.Context, queueName string, messageID string) error
-	AcknowledgeMessage(ctx context.Context, request *chronoqueue.AcknowledgeMessageRequest) (*chronoqueue.AcknowledgeMessageResponse, error)
-	RenewMessageLease(ctx context.Context, request *chronoqueue.RenewMessageLeaseRequest) (*chronoqueue.RenewMessageLeaseResponse, error)
-	PeekQueueMessages(ctx context.Context, request *chronoqueue.PeekQueueMessagesRequest) (*chronoqueue.PeekQueueMessagesResponse, error)
-	GetQueueState(ctx context.Context, request *chronoqueue.GetQueueStateRequest) (*chronoqueue.GetQueueStateResponse, error)
-	SendMessageHeartBeat(ctx context.Context, request *chronoqueue.SendMessageHeartBeatRequest) (*chronoqueue.SendMessageHeartBeatResponse, error)
-	ListQueues(ctx context.Context, request *chronoqueue.ListQueuesRequest) (*chronoqueue.ListQueuesResponse, error)
-	CreateSchedule(ctx context.Context, request *chronoqueue.CreateScheduleRequest) (*chronoqueue.CreateScheduleResponse, error)
-	DeleteSchedule(ctx context.Context, request *chronoqueue.DeleteScheduleRequest) (*chronoqueue.DeleteScheduleResponse, error)
-	GetSchedule(ctx context.Context, request *chronoqueue.GetScheduleRequest) (*chronoqueue.GetScheduleResponse, error)
-	ListSchedules(ctx context.Context, request *chronoqueue.ListSchedulesRequest) (*chronoqueue.ListSchedulesResponse, error)
-	GetScheduleHistory(ctx context.Context, request *chronoqueue.GetScheduleHistoryRequest) (*chronoqueue.GetScheduleHistoryResponse, error)
-	PauseSchedule(ctx context.Context, request *chronoqueue.PauseScheduleRequest) (*chronoqueue.PauseScheduleResponse, error)
-	ResumeSchedule(ctx context.Context, request *chronoqueue.ResumeScheduleRequest) (*chronoqueue.ResumeScheduleResponse, error)
+	AcknowledgeMessage(ctx context.Context, request *queueservice_pb.AcknowledgeMessageRequest) (*queueservice_pb.AcknowledgeMessageResponse, error)
+	RenewMessageLease(ctx context.Context, request *queueservice_pb.RenewMessageLeaseRequest) (*queueservice_pb.RenewMessageLeaseResponse, error)
+	PeekQueueMessages(ctx context.Context, request *queueservice_pb.PeekQueueMessagesRequest) (*queueservice_pb.PeekQueueMessagesResponse, error)
+	GetQueueState(ctx context.Context, request *queueservice_pb.GetQueueStateRequest) (*queueservice_pb.GetQueueStateResponse, error)
+	SendMessageHeartBeat(ctx context.Context, request *queueservice_pb.SendMessageHeartBeatRequest) (*queueservice_pb.SendMessageHeartBeatResponse, error)
+	ListQueues(ctx context.Context, request *queueservice_pb.ListQueuesRequest) (*queueservice_pb.ListQueuesResponse, error)
+	CreateSchedule(ctx context.Context, request *queueservice_pb.CreateScheduleRequest) (*queueservice_pb.CreateScheduleResponse, error)
+	DeleteSchedule(ctx context.Context, request *queueservice_pb.DeleteScheduleRequest) (*queueservice_pb.DeleteScheduleResponse, error)
+	GetSchedule(ctx context.Context, request *queueservice_pb.GetScheduleRequest) (*queueservice_pb.GetScheduleResponse, error)
+	ListSchedules(ctx context.Context, request *queueservice_pb.ListSchedulesRequest) (*queueservice_pb.ListSchedulesResponse, error)
+	GetScheduleHistory(ctx context.Context, request *queueservice_pb.GetScheduleHistoryRequest) (*queueservice_pb.GetScheduleHistoryResponse, error)
+	PauseSchedule(ctx context.Context, request *queueservice_pb.PauseScheduleRequest) (*queueservice_pb.PauseScheduleResponse, error)
+	ResumeSchedule(ctx context.Context, request *queueservice_pb.ResumeScheduleRequest) (*queueservice_pb.ResumeScheduleResponse, error)
 }
 
 type storage struct {
@@ -73,7 +75,7 @@ func NewQueueStorage(ctx context.Context, redisClient *redis.Client, encryptionK
 	return storage
 }
 
-func (as *storage) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQueueRequest) (*chronoqueue.DeleteQueueResponse, error) {
+func (as *storage) DeleteQueue(ctx context.Context, request *queueservice_pb.DeleteQueueRequest) (*queueservice_pb.DeleteQueueResponse, error) {
 
 	// Create or fetch the mutex for this specific queue
 	queueMutex := as.rs.NewMutex("mutex:" + request.GetName())
@@ -81,7 +83,7 @@ func (as *storage) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQ
 	// Try to acquire the lock
 	if err := queueMutex.Lock(); err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
-		return &chronoqueue.DeleteQueueResponse{Success: false}, chronoErr.GRPCStatus()
+		return &queueservice_pb.DeleteQueueResponse{Success: false}, chronoErr.GRPCStatus()
 	}
 
 	defer func() {
@@ -92,7 +94,7 @@ func (as *storage) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQ
 	}()
 
 	if request == nil || request.GetName() == "" {
-		return &chronoqueue.DeleteQueueResponse{Success: false}, errors.New("error: queue information missing")
+		return &queueservice_pb.DeleteQueueResponse{Success: false}, errors.New("error: queue information missing")
 	}
 	checker := NewKeyChecker(as.redisClient, 100)
 
@@ -104,13 +106,13 @@ func (as *storage) DeleteQueue(ctx context.Context, request *chronoqueue.DeleteQ
 		checker.Add(iter.Val())
 	}
 	if err := iter.Err(); err != nil {
-		return &chronoqueue.DeleteQueueResponse{Success: false}, err
+		return &queueservice_pb.DeleteQueueResponse{Success: false}, err
 	}
 
 	deleted := checker.Stop()
 	log.Println("deleted", deleted, "keys", "in", time.Since(start))
 
-	return &chronoqueue.DeleteQueueResponse{Success: true}, nil
+	return &queueservice_pb.DeleteQueueResponse{Success: true}, nil
 }
 
 func (as *storage) DeleteQueueMessage(ctx context.Context, queueName string, messageID string) error {
@@ -169,7 +171,7 @@ func calculateNextRunTime(cronSchedule string) (int64, error) {
 	return nextRun.UnixMilli(), nil
 }
 
-func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, metadata *chronoqueue.Schedule_Metadata) error {
+func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, metadata *schedule_pb.Schedule_Metadata) error {
 	scheduleID := strings.Split(key, ":")[1]
 	queueID := metadata.GetQueueName()
 
@@ -202,7 +204,7 @@ func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, me
 			EmitUnpopulated: true,
 		}
 
-		runMessageInstanceMetadata := chronoqueue.Message_Metadata{
+		runMessageInstanceMetadata := message_pb.Message_Metadata{
 			Priority:      metadata.Priority,
 			LeaseDuration: metadata.LeaseDuration,
 			LeaseExpiry:   0,
@@ -210,8 +212,7 @@ func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, me
 				Seconds: nextRunTime / int64(time.Millisecond),
 			},
 			AttemptsLeft:      1,
-			State:             chronoqueue.Message_Metadata_INVISIBLE,
-			CronSchedule:      scheduleID,
+			State:             message_pb.Message_Metadata_INVISIBLE,
 			Payload:           metadata.Payload,
 			LeaseRenewalCount: 0,
 		}
@@ -223,8 +224,8 @@ func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, me
 			return err
 		}
 
-		_, err = as.CreateQueueMessage(ctx, &chronoqueue.PostMessageRequest{
-			Message: &chronoqueue.Message{
+		_, err = as.CreateQueueMessage(ctx, &queueservice_pb.PostMessageRequest{
+			Message: &message_pb.Message{
 				MessageId: randomID,
 				Metadata:  &runMessageInstanceMetadata,
 			},
@@ -282,7 +283,7 @@ func (as *storage) updateAllCronSchedules(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			if metadata.State == chronoqueue.Schedule_Metadata_SCHEDULED {
+			if metadata.State == schedule_pb.Schedule_Metadata_SCHEDULED {
 				err = as.updateMessageCronSchedule(ctx, key, metadata)
 				if err != nil {
 					return err
