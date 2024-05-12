@@ -13,3 +13,14 @@ func GenerateID() (string, error) {
 	}
 	return hex.EncodeToString(id), nil
 }
+
+func FilterEmptyStrings(s []string) []string {
+	j := 0
+	for _, val := range s {
+		if val != "" {
+			s[j] = val
+			j++
+		}
+	}
+	return s[:j]
+}
