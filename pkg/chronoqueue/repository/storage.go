@@ -68,8 +68,8 @@ func NewQueueStorage(ctx context.Context, redisClient *redis.Client, encryptionK
 	// }
 
 	// Schedule the initial tasks
-	tasks <- Task{Name: "invisibleToPending", Script: invisibleToPending, GoFunc: nil, Interval: 2 * time.Second}
-	tasks <- Task{Name: "runningToPending", Script: runningToPending, GoFunc: nil, Interval: 2 * time.Second}
+	tasks <- Task{Name: "invisibleToPending", Script: invisibleToPending, GoFunc: nil, Interval: time.Second}
+	tasks <- Task{Name: "runningToPending", Script: runningToPending, GoFunc: nil, Interval: time.Second}
 	tasks <- Task{Name: "updateCronSchedules", Script: nil, GoFunc: storage.updateAllCronSchedules, Interval: time.Second}
 
 	return storage

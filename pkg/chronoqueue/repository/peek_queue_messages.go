@@ -36,12 +36,10 @@ func (as *storage) PeekQueueMessages(ctx context.Context, request *queueservice_
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error while fetching message IDs")
 		return nil, chronoErr.GRPCStatus()
 	}
+	messageIDs = util.FilterEmptyStrings(messageIDs)
 
 	messages := make([]*message_pb.Message, len(messageIDs))
 	for i, messageID := range messageIDs {
-		if messageID == "" {
-			continue
-		}
 		metadata, err := as.fetchMessageMetadata(ctx, queueName, messageID)
 		if err != nil {
 			msg := fmt.Sprintf("error fetching metadata for message %s", messageID)
