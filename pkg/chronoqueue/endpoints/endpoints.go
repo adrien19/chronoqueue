@@ -2,10 +2,12 @@ package endpoints
 
 import (
 	"context"
+	"time"
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue"
 	"github.com/go-kit/kit/endpoint"
+	"github.com/go-kit/log"
 )
 
 // Add the new endpoints to the Set struct
@@ -29,143 +31,293 @@ type Set struct {
 	ResumeScheduleEndpoint       endpoint.Endpoint
 }
 
-func NewEndpointSet(svc chronoqueue.Service) Set {
+func NewEndpointSet(svc chronoqueue.Service, logger log.Logger) Set {
 	return Set{
-		CreateQueueEndpoint:          MakeCreateQueueEndpoint(svc),
-		DeleteQueueEndpoint:          MakeDeleteQueueEndpoint(svc),
-		PostMessageEndpoint:          MakePostMessageEndpoint(svc),
-		GetNextMessageEndpoint:       MakeGetNextMessageEndpoint(svc),
-		AcknowledgeMessageEndpoint:   MakeAcknowledgeMessageEndpoint(svc),
-		RenewMessageLeaseEndpoint:    MakeRenewMessageLeaseEndpoint(svc),
-		PeekQueueMessagesEndpoint:    MakePeekQueueMessagesEndpoint(svc),
-		GetQueueStateEndpoint:        MakeGetQueueStateEndpoint(svc),
-		SendMessageHeartBeatEndpoint: MakeSendMessageHeartBeatEndpoint(svc),
-		ListQueuesEndpoint:           MakeListQueuesEndpoint(svc),
-		CreateScheduleEndpoint:       MakeCreateScheduleEndpoint(svc),
-		DeleteScheduleEndpoint:       MakeDeleteScheduleEndpoint(svc),
-		GetScheduleEndpoint:          MakeGetScheduleEndpoint(svc),
-		ListSchedulesEndpoint:        MakeListSchedulesEndpoint(svc),
-		GetScheduleHistoryEndpoint:   MakeGetScheduleHistoryEndpoint(svc),
-		PauseScheduleEndpoint:        MakePauseScheduleEndpoint(svc),
-		ResumeScheduleEndpoint:       MakeResumeScheduleEndpoint(svc),
+		CreateQueueEndpoint:          MakeCreateQueueEndpoint(svc, logger),
+		DeleteQueueEndpoint:          MakeDeleteQueueEndpoint(svc, logger),
+		PostMessageEndpoint:          MakePostMessageEndpoint(svc, logger),
+		GetNextMessageEndpoint:       MakeGetNextMessageEndpoint(svc, logger),
+		AcknowledgeMessageEndpoint:   MakeAcknowledgeMessageEndpoint(svc, logger),
+		RenewMessageLeaseEndpoint:    MakeRenewMessageLeaseEndpoint(svc, logger),
+		PeekQueueMessagesEndpoint:    MakePeekQueueMessagesEndpoint(svc, logger),
+		GetQueueStateEndpoint:        MakeGetQueueStateEndpoint(svc, logger),
+		SendMessageHeartBeatEndpoint: MakeSendMessageHeartBeatEndpoint(svc, logger),
+		ListQueuesEndpoint:           MakeListQueuesEndpoint(svc, logger),
+		CreateScheduleEndpoint:       MakeCreateScheduleEndpoint(svc, logger),
+		DeleteScheduleEndpoint:       MakeDeleteScheduleEndpoint(svc, logger),
+		GetScheduleEndpoint:          MakeGetScheduleEndpoint(svc, logger),
+		ListSchedulesEndpoint:        MakeListSchedulesEndpoint(svc, logger),
+		GetScheduleHistoryEndpoint:   MakeGetScheduleHistoryEndpoint(svc, logger),
+		PauseScheduleEndpoint:        MakePauseScheduleEndpoint(svc, logger),
+		ResumeScheduleEndpoint:       MakeResumeScheduleEndpoint(svc, logger),
 	}
 }
 
-func MakeCreateQueueEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakeCreateQueueEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.CreateQueueRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "createQueue",
+				"queue", req.GetName(),
+				"type", req.Metadata.GetType(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.CreateQueue(ctx, req)
 	}
 }
 
-func MakeDeleteQueueEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakeDeleteQueueEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.DeleteQueueRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "deleteQueue",
+				"queue", req.GetName(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.DeleteQueue(ctx, req)
 	}
 }
 
-func MakePostMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakePostMessageEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.PostMessageRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "postMessage",
+				"queue", req.GetQueueName(),
+				"messageId", req.Message.GetMessageId(),
+				"metadata", req.Message.GetMetadata(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.PostMessage(ctx, req)
 	}
 }
 
-func MakeGetNextMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakeGetNextMessageEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.GetNextMessageRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "getNextMessage",
+				"queue", req.GetQueueName(),
+				"exclusivityKey", req.GetExclusivityKey(),
+				"leaseDuration", req.GetLeaseDuration(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.GetNextMessage(ctx, req)
 	}
 }
 
-func MakeAcknowledgeMessageEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakeAcknowledgeMessageEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.AcknowledgeMessageRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "acknowledgeMessage",
+				"queue", req.GetQueueName(),
+				"messageId", req.GetMessageId(),
+				"state", req.GetState(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.AcknowledgeMessage(ctx, req)
 	}
 }
 
-func MakeRenewMessageLeaseEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakeRenewMessageLeaseEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.RenewMessageLeaseRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "renewMessageLease",
+				"queue", req.GetQueueName(),
+				"messageId", req.GetMessageId(),
+				"leaseDuration", req.GetLeaseDuration(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.RenewMessageLease(ctx, req)
 	}
 }
 
-func MakePeekQueueMessagesEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakePeekQueueMessagesEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.PeekQueueMessagesRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "peekQueueMessages",
+				"queue", req.GetQueueName(),
+				"limit", req.GetLimit(),
+				"priorityRange", req.GetPriorityRange(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.PeekQueueMessages(ctx, req)
 	}
 }
 
-func MakeGetQueueStateEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakeGetQueueStateEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.GetQueueStateRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "getQueueState",
+				"queue", req.GetQueueName(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.GetQueueState(ctx, req)
 	}
 }
 
-func MakeSendMessageHeartBeatEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakeSendMessageHeartBeatEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.SendMessageHeartBeatRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "sendMessageHeartBeat",
+				"queue", req.GetQueueName(),
+				"messageId", req.GetMessageId(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.SendMessageHeartBeat(ctx, req)
 	}
 }
 
-func MakeListQueuesEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakeListQueuesEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.ListQueuesRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "listQueues",
+				"prefix", req.GetPrefix(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.ListQueues(ctx, req)
 	}
 }
 
-func MakeCreateScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakeCreateScheduleEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.CreateScheduleRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "createSchedule",
+				"scheduleId", req.Schedule.GetScheduleId(),
+				"cronSchedule", req.Schedule.Metadata.GetCronSchedule(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.CreateSchedule(ctx, req)
 	}
 }
 
-func MakeDeleteScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakeDeleteScheduleEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.DeleteScheduleRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "deleteSchedule",
+				"scheduleId", req.GetScheduleId(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.DeleteSchedule(ctx, req)
 	}
 }
 
-func MakeGetScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakeGetScheduleEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.GetScheduleRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "getSchedule",
+				"scheduleId", req.GetScheduleId(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.GetSchedule(ctx, req)
 	}
 }
 
-func MakeListSchedulesEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakeListSchedulesEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.ListSchedulesRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "listSchedules",
+				"prefix", req.GetPrefix(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.ListSchedules(ctx, req)
 	}
 }
 
-func MakeGetScheduleHistoryEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakeGetScheduleHistoryEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.GetScheduleHistoryRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "getScheduleHistory",
+				"scheduleId", req.GetScheduleId(),
+				"limit", req.GetLimit(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.GetScheduleHistory(ctx, req)
 	}
 }
 
-func MakePauseScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakePauseScheduleEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.PauseScheduleRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "pauseSchedule",
+				"scheduleId", req.GetScheduleId(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.PauseSchedule(ctx, req)
 	}
 }
 
-func MakeResumeScheduleEndpoint(svc chronoqueue.Service) endpoint.Endpoint {
+func MakeResumeScheduleEndpoint(svc chronoqueue.Service, logger log.Logger) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(*queueservice_pb.ResumeScheduleRequest)
+		defer func(begin time.Time) {
+			logger.Log(
+				"method", "resumeSchedule",
+				"scheduleId", req.GetScheduleId(),
+				"took", time.Since(begin),
+				"err", err,
+			)
+		}(time.Now())
 		return svc.ResumeSchedule(ctx, req)
 	}
 }

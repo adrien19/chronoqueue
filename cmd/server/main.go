@@ -54,7 +54,7 @@ func main() {
 
 	database := repository.NewQueueStorage(ctx, redisClient, encryptionKeyManager)
 	service := chronoqueue.NewChronoqueueService(database)
-	eps := endpoints.NewEndpointSet(service)
+	eps := endpoints.NewEndpointSet(service, logger)
 	httpHandler := transport.NewHTTPHandler(eps)
 	grpcServer := transport.NewGRPCServer(eps)
 
