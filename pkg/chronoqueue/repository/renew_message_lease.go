@@ -7,7 +7,6 @@ import (
 	"time"
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
-	"github.com/adrien19/chronoqueue/internal/util"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -35,10 +34,11 @@ func (as *storage) RenewMessageLease(ctx context.Context, request *queueservice_
 	if err != nil {
 		return nil, fmt.Errorf("error saving updated message metadata: %v", err)
 	}
-	util.InfoWithFields("Message successfully renewed lease", map[string]interface{}{
-		"message_id": messageID,
-		"new_expiry": metadata.GetLeaseExpiry(),
-	})
+	as.logger.InfoWithFields(
+		"Message successfully renewed lease",
+		"message_id", messageID,
+		"new_expiry", metadata.GetLeaseExpiry(),
+	)
 	remainingTimeDuration := durationpb.New(time.Duration(metadata.GetLeaseExpiry()-time.Now().UnixNano()/int64(time.Millisecond)) * time.Millisecond)
 
 	return &queueservice_pb.RenewMessageLeaseResponse{

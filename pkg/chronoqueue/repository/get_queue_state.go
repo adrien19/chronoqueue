@@ -20,13 +20,14 @@ func (as *storage) GetQueueState(ctx context.Context, request *queueservice_pb.G
 	// Try to acquire the lock
 	if err := queueMutex.Lock(); err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
+		// chronoErr := util.NewServiceError("LOCK_ERROR", codes.Internal, err)
 		return nil, chronoErr.GRPCStatus()
 	}
 
 	defer func() {
 		// Release the message lock
 		if ok, err := queueMutex.Unlock(); !ok || err != nil {
-			util.Error("Failed to release queue lock", err)
+			as.logger.Error("Failed to release queue lock", err)
 		}
 	}()
 
@@ -57,6 +58,8 @@ func (as *storage) GetQueueState(ctx context.Context, request *queueservice_pb.G
 		if err != nil {
 			msg := fmt.Sprintf("Unexpected error occured while fetching metadata for message %s", member.Member.(string))
 			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, msg)
+			as.logger.DebugWithFields(msg, "err", chronoErr.Error())
+
 			return nil, chronoErr.GRPCStatus()
 		}
 

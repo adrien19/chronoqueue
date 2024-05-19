@@ -38,21 +38,11 @@ func (as *storage) decryptMessageMetadataPayload(metadata *message_pb.Message_Me
 
 	if !as.encryptionKeyManager.Enabled {
 		if base64EncryptedPayload != "" || base64Nonce != "" {
-			util.WarnWithFields("Metadata with no fields: ", map[string]interface{}{
-				"base64EncryptedPayload": base64EncryptedPayload,
-				"base64Nonce":            base64Nonce,
-				"meta":                   metadata.Payload,
-			})
 			return errors.New("encrypted payload found but encryption not enabled")
 		}
 		return nil
 	}
 	if base64EncryptedPayload == "" || base64Nonce == "" {
-		util.WarnWithFields("Metadata with no encrypted payload: ", map[string]interface{}{
-			"base64EncryptedPayload": base64EncryptedPayload,
-			"base64Nonce":            base64Nonce,
-			"meta":                   metadata.Payload,
-		})
 		return errors.New("encryptedPayload or nonce not found in metadata")
 	}
 
@@ -81,7 +71,7 @@ func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, m
 	defer func() {
 		// Release the message lock
 		if ok, err := messageMutex.Unlock(); !ok || err != nil {
-			util.Error("Failed to release message lock", err)
+			as.logger.Error("Failed to release message lock", err)
 		}
 	}()
 
@@ -168,7 +158,7 @@ func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string
 	defer func() {
 		// Release the message lock
 		if ok, err := messageMutex.Unlock(); !ok || err != nil {
-			util.Error("Failed to release message lock", err)
+			as.logger.Error("Failed to release message lock", err)
 		}
 	}()
 

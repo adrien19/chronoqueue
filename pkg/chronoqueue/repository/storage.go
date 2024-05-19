@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+
+	// "log"
 	"strings"
 	"time"
 
@@ -13,6 +14,10 @@ import (
 	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/internal/util"
+	log "github.com/adrien19/chronoqueue/pkg/chronoqueue/log"
+
+	// "github.com/go-kit/log"
+
 	"github.com/go-redsync/redsync/v4"
 	"github.com/go-redsync/redsync/v4/redis/goredis/v9"
 	"github.com/redis/go-redis/v9"
@@ -48,15 +53,17 @@ type storage struct {
 	redisClient          *redis.Client
 	rs                   *redsync.Redsync
 	encryptionKeyManager *keymanager.EncryptionKeyManager
+	logger               *log.Logger
 }
 
-func NewQueueStorage(ctx context.Context, redisClient *redis.Client, encryptionKeyManager *keymanager.EncryptionKeyManager) Storage {
+func NewQueueStorage(ctx context.Context, redisClient *redis.Client, encryptionKeyManager *keymanager.EncryptionKeyManager, logger *log.Logger) Storage {
 	pool := goredis.NewPool(redisClient)
 	rs := redsync.New(pool)
 	storage := &storage{
 		redisClient:          redisClient,
 		rs:                   rs,
 		encryptionKeyManager: encryptionKeyManager,
+		logger:               logger,
 	}
 
 	// Create a buffered channel for tasks
@@ -89,7 +96,7 @@ func (as *storage) DeleteQueue(ctx context.Context, request *queueservice_pb.Del
 	defer func() {
 		// Release the message lock
 		if ok, err := queueMutex.Unlock(); !ok || err != nil {
-			util.Error("Failed to release queue lock", err)
+			as.logger.ErrorWithFields("Failed to release queue lock", "error", err)
 		}
 	}()
 
@@ -110,7 +117,12 @@ func (as *storage) DeleteQueue(ctx context.Context, request *queueservice_pb.Del
 	}
 
 	deleted := checker.Stop()
-	log.Println("deleted", deleted, "keys", "in", time.Since(start))
+	as.logger.DebugWithFields(
+		"Deleted keys associated with queue",
+		"total", deleted,
+		"queue", request.GetName(),
+		"took", time.Since(start),
+	)
 
 	return &queueservice_pb.DeleteQueueResponse{Success: true}, nil
 }
@@ -138,19 +150,21 @@ func (as *storage) worker(ctx context.Context, tasks chan Task) {
 			if task.Script != nil {
 				err := task.Script.Run(ctx, as.redisClient, nil, now).Err()
 				if err != nil && err.Error() != "redis: nil" {
-					util.ErrorWithFields("Failed to run the script", map[string]interface{}{
-						"task":  task.Name,
-						"error": err,
-					})
+					as.logger.ErrorWithFields(
+						"Failed to run the script",
+						"task", task.Name,
+						"error", err,
+					)
 				}
 			}
 			if task.GoFunc != nil {
 				err := task.GoFunc(ctx)
 				if err != nil {
-					util.ErrorWithFields("Failed to run the go routine", map[string]interface{}{
-						"task":  task.Name,
-						"error": err,
-					})
+					as.logger.ErrorWithFields(
+						"Failed to run the go routine",
+						"task", task.Name,
+						"error", err,
+					)
 				}
 			}
 
@@ -184,7 +198,7 @@ func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, me
 	defer func() {
 		// Release the message lock
 		if ok, err := scheduleMutex.Unlock(); !ok || err != nil {
-			util.Error("Failed to release message lock", err)
+			as.logger.Error("Failed to release message lock", err)
 		}
 	}()
 
@@ -236,10 +250,11 @@ func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, me
 		}
 
 		// Log the update for the schedule
-		util.InfoWithFields("Updating cron schedule for schedule", map[string]interface{}{
-			"scheduleMetadataID": key,
-			"state":              metadata.State,
-		})
+		as.logger.InfoWithFields(
+			"Updating cron schedule for schedule",
+			"scheduleMetadataID", key,
+			"state", metadata.State,
+		)
 
 		// Update the schedule with the run times
 		scheduleMetadataByte, err := m.Marshal(metadata)

@@ -37,7 +37,7 @@ func (as *storage) saveMessageMetadata(ctx context.Context, queueName string, me
 	defer func() {
 		// Release the message lock
 		if ok, err := messageMutex.Unlock(); !ok || err != nil {
-			util.Error("Failed to release message lock", err)
+			as.logger.Error("Failed to release message lock", err)
 		}
 	}()
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -116,9 +115,7 @@ func (as *storage) setScheduleMetadata(ctx context.Context, scheduleInfo *schedu
 	}
 
 	if scheduleInfo.Metadata.Payload.Metadata["encryptedPayload"] == nil && scheduleInfo.Metadata.Payload.Metadata["nonce"] == nil {
-		util.InfoWithFields("Encrypting schedule metadata payload", map[string]interface{}{
-			"scheduleID": scheduleInfo.GetScheduleId(),
-		})
+		as.logger.InfoWithFields("Encrypting schedule metadata payload", "scheduleID", scheduleInfo.GetScheduleId())
 		err := as.encryptScheduleMetadataPayload(scheduleInfo.Metadata)
 		if err != nil {
 			return err
@@ -130,10 +127,7 @@ func (as *storage) setScheduleMetadata(ctx context.Context, scheduleInfo *schedu
 		return err
 	}
 
-	util.InfoWithFields("Updating schedule metadata payload", map[string]interface{}{
-		"scheduleID": scheduleInfo.GetScheduleId(),
-		"metadata":   scheduleInfo.GetMetadata(),
-	})
+	as.logger.DebugWithFields("Updating schedule metadata payload", "scheduleID", scheduleInfo.GetScheduleId(), "metadata", scheduleInfo.GetMetadata())
 	_, err = txPipeline.HSet(ctx, fmt.Sprintf("schedule:%s:meta", scheduleInfo.GetScheduleId()), "metadata", string(scheduleMetadataByte)).Result()
 	return err
 }
@@ -148,10 +142,11 @@ func (as *storage) setPausedScheduleMetadata(ctx context.Context, scheduleInfo *
 		return err
 	}
 
-	util.InfoWithFields("Updating schedule metadata payload", map[string]interface{}{
-		"scheduleID": scheduleInfo.GetScheduleId(),
-		"metadata":   scheduleInfo.GetMetadata(),
-	})
+	as.logger.InfoWithFields(
+		"Updating schedule metadata payload",
+		"scheduleID", scheduleInfo.GetScheduleId(),
+		"metadata", scheduleInfo.GetMetadata(),
+	)
 	_, err = as.redisClient.HSet(ctx, fmt.Sprintf("schedule:%s:meta", scheduleInfo.GetScheduleId()), "metadata", string(scheduleMetadataByte)).Result()
 	return err
 }
@@ -170,7 +165,7 @@ func (as *storage) DeleteSchedule(ctx context.Context, request *queueservice_pb.
 	defer func() {
 		// Release the message lock
 		if ok, err := scheduleMutex.Unlock(); !ok || err != nil {
-			util.Error("Failed to release schedule lock", err)
+			as.logger.Error("Failed to release schedule lock", err)
 		}
 	}()
 
@@ -191,7 +186,12 @@ func (as *storage) DeleteSchedule(ctx context.Context, request *queueservice_pb.
 	}
 
 	deleted := checker.Stop()
-	log.Println("deleted", deleted, "keys", "in", time.Since(start))
+	as.logger.DebugWithFields(
+		"Deleted keys associated with schedule",
+		"total", deleted,
+		"scheduleID", request.GetScheduleId(),
+		"took", time.Since(start),
+	)
 
 	return &queueservice_pb.DeleteScheduleResponse{Success: true}, nil
 }
@@ -335,7 +335,7 @@ func (as *storage) PauseSchedule(ctx context.Context, request *queueservice_pb.P
 	defer func() {
 		// Release the message lock
 		if ok, err := scheduleMutex.Unlock(); !ok || err != nil {
-			util.Error("Failed to release schedule lock", err)
+			as.logger.Error("Failed to release schedule lock", err)
 		}
 	}()
 
@@ -376,7 +376,7 @@ func (as *storage) ResumeSchedule(ctx context.Context, request *queueservice_pb.
 	defer func() {
 		// Release the message lock
 		if ok, err := scheduleMutex.Unlock(); !ok || err != nil {
-			util.Error("Failed to release schedule lock", err)
+			as.logger.Error("Failed to release schedule lock", err)
 		}
 	}()
 

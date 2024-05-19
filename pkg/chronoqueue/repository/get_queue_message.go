@@ -29,9 +29,7 @@ func (as *storage) getNextPendingMessage(ctx context.Context, queueName string, 
 		}
 		meta, err := as.fetchMessageMetadata(ctx, queueName, member)
 		if err != nil {
-			util.ErrorWithFields("Failed to fetch message metadata", map[string]interface{}{
-				"error": err,
-			})
+			as.logger.ErrorWithFields("Failed to fetch message metadata", "error", err)
 			return nil, err
 		}
 		if meta.State == message_pb.Message_Metadata_PENDING {
@@ -59,7 +57,7 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *queueservice_pb
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Failed to get queue members.").GRPCStatus()
 	}
 	if len(members) == 0 {
-		util.Info("No messages found with a deadline before now")
+		as.logger.Info("No messages found with a deadline before now")
 		return &queueservice_pb.GetNextMessageResponse{}, nil
 	}
 
@@ -84,10 +82,11 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *queueservice_pb
 		return nil, err
 	}
 
-	util.InfoWithFields("Successfully leased the message:", map[string]interface{}{
-		"lease expiry": message.Metadata.GetLeaseExpiry(),
-		"message Id":   message.GetMessageId(),
-	})
+	as.logger.InfoWithFields(
+		"Successfully leased the message:",
+		"lease expiry", message.Metadata.GetLeaseExpiry(),
+		"message Id", message.GetMessageId(),
+	)
 	return &queueservice_pb.GetNextMessageResponse{
 		Message: message,
 	}, nil

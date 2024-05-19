@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/adrien19/chronoqueue/internal/encryption/adapters"
-	"github.com/adrien19/chronoqueue/internal/util"
+	"github.com/adrien19/chronoqueue/pkg/chronoqueue/log"
 )
 
 const defaultRefreshDuration = 1 * time.Hour
@@ -25,9 +25,10 @@ type EncryptionKeyManager struct {
 		sync.RWMutex
 		key []byte
 	}
+	logger *log.Logger
 }
 
-func NewEncryptionKeyManager() (*EncryptionKeyManager, error) {
+func NewEncryptionKeyManager(logger *log.Logger) (*EncryptionKeyManager, error) {
 	encryptionEnabled := envString("ENABLE_ENCRYPTION", "false")
 	if encryptionEnabled != "true" {
 		return &EncryptionKeyManager{
@@ -38,6 +39,7 @@ func NewEncryptionKeyManager() (*EncryptionKeyManager, error) {
 				sync.RWMutex
 				key []byte
 			}{},
+			logger: nil,
 		}, nil
 	}
 
@@ -55,6 +57,7 @@ func NewEncryptionKeyManager() (*EncryptionKeyManager, error) {
 	}
 	manager.adapter = adapter
 	manager.Enabled = true
+	manager.logger = logger
 
 	// Get refresh duration from env or use default
 	refreshDurationStr := os.Getenv("KEY_REFRESH_DURATION_IN_MINUTES")
@@ -62,9 +65,7 @@ func NewEncryptionKeyManager() (*EncryptionKeyManager, error) {
 		durationInMinutes, err := strconv.Atoi(refreshDurationStr)
 		if err != nil {
 			// Log the error and use default duration
-			util.WarnWithFields("No KEY_REFRESH_DURATION_IN_MINUTES, using default - 1 hour.", map[string]interface{}{
-				"error": err,
-			})
+			manager.logger.WarnWithFields("No KEY_REFRESH_DURATION_IN_MINUTES, using default - 1 hour.", "error", err)
 			manager.refreshDelay = defaultRefreshDuration
 		} else {
 			manager.refreshDelay = time.Duration(durationInMinutes) * time.Minute
@@ -97,9 +98,7 @@ func (m *EncryptionKeyManager) refreshKey() error {
 	}
 	keySize := len(key)
 	if keySize != 16 && keySize != 24 && keySize != 32 {
-		util.FatalWithFields("Invalid encryption key size", map[string]interface{}{
-			"bytes": keySize,
-		})
+		m.logger.FatalWithFields("Invalid encryption key size", "bytes", keySize)
 	}
 
 	m.cache.Lock()
@@ -114,9 +113,7 @@ func (m *EncryptionKeyManager) keyRefresher() {
 	for range ticker.C {
 		err := m.refreshKey()
 		if err != nil {
-			util.WarnWithFields("Error refreshing encryption key", map[string]interface{}{
-				"error": err,
-			})
+			m.logger.WarnWithFields("Error refreshing encryption key", "error", err)
 		}
 	}
 }
