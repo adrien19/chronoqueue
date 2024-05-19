@@ -10,6 +10,7 @@ import (
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
+	"github.com/adrien19/chronoqueue/pkg/chronoqueue/log"
 	"github.com/alicebob/miniredis"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -44,6 +45,7 @@ func TestNewQueueStorage(t *testing.T) {
 		ctx                  context.Context
 		redisClient          *redis.Client
 		encryptionKeyManager *keymanager.EncryptionKeyManager
+		logger               *log.Logger
 	}
 	tests := []struct {
 		name string
@@ -54,7 +56,7 @@ func TestNewQueueStorage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NewQueueStorage(tt.args.ctx, tt.args.redisClient, tt.args.encryptionKeyManager); !reflect.DeepEqual(got, tt.want) {
+			if got := NewQueueStorage(tt.args.ctx, tt.args.redisClient, tt.args.encryptionKeyManager, tt.args.logger); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NewQueueStorage() = %v, want %v", got, tt.want)
 			}
 		})

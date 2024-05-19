@@ -6,7 +6,9 @@ import (
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
+	log "github.com/adrien19/chronoqueue/pkg/chronoqueue/log"
 	grpctransport "github.com/go-kit/kit/transport/grpc"
+	// "github.com/go-kit/log"
 )
 
 type grpcServer struct {
@@ -33,92 +35,112 @@ type grpcServer struct {
 	queueservice_pb.UnimplementedQueueServiceServer
 }
 
-func NewGRPCServer(ep endpoints.Set) queueservice_pb.QueueServiceServer {
+func NewGRPCServer(ep endpoints.Set, logger *log.Logger) queueservice_pb.QueueServiceServer {
+	// opts := []grpctransport.ServerOption{
+	// 	grpctransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
+	// }
 	return &grpcServer{
 		createQueue: grpctransport.NewServer(
 			ep.CreateQueueEndpoint,
 			decodeGRPCCreateQueueRequest,
 			decodeGRPCCreateQueueResponse,
+			// opts...,
 		),
 		deleteQueue: grpctransport.NewServer(
 			ep.DeleteQueueEndpoint,
 			decodeGRPCDeleteQueueRequest,
 			decodeGRPCDeleteQueueResponse,
+			// opts...,
 		),
 		postMessage: grpctransport.NewServer(
 			ep.PostMessageEndpoint,
 			decodeGRPCPostMessageRequest,
 			decodeGRPCPostMessageResponse,
+			// opts...,
 		),
 		getNextMessage: grpctransport.NewServer(
 			ep.GetNextMessageEndpoint,
 			decodeGRPCGetNextMessageRequest,
 			decodeGRPCGetNextMessageResponse,
+			// opts...,
 		),
 		acknowledgeMessage: grpctransport.NewServer(
 			ep.AcknowledgeMessageEndpoint,
 			decodeGRPCAcknowledgeMessageRequest,
 			decodeGRPCAcknowledgeMessageResponse,
+			// opts...,
 		),
 		renewMessageLease: grpctransport.NewServer(
 			ep.RenewMessageLeaseEndpoint,
 			decodeGRPCRenewMessageLeaseRequest,
 			decodeGRPCRenewMessageLeaseResponse,
+			// opts...,
 		),
 		peekQueueMessages: grpctransport.NewServer(
 			ep.PeekQueueMessagesEndpoint,
 			decodeGRPCPeekQueueMessagesRequest,
 			decodeGRPCPeekQueueMessagesResponse,
+			// opts...,
 		),
 		getQueueState: grpctransport.NewServer(
 			ep.GetQueueStateEndpoint,
 			decodeGRPCGetQueueStateRequest,
 			decodeGRPCGetQueueStateResponse,
+			// opts...,
 		),
 		sendMessageHeartBeat: grpctransport.NewServer(
 			ep.SendMessageHeartBeatEndpoint,
 			decodeGRPCSendMessageHeartBeatRequest,
 			decodeGRPCSendMessageHeartBeatResponse,
+			// opts...,
 		),
 		listQueues: grpctransport.NewServer(
 			ep.ListQueuesEndpoint,
 			decodeGRPCListQueuesRequest,
 			decodeGRPCListQueuesResponse,
+			// opts...,
 		),
 		createSchedule: grpctransport.NewServer(
 			ep.CreateScheduleEndpoint,
 			decodeGRPCCreateScheduleRequest,
 			decodeGRPCCreateScheduleResponse,
+			// opts...,
 		),
 		deleteSchedule: grpctransport.NewServer(
 			ep.DeleteScheduleEndpoint,
 			decodeGRPCDeleteScheduleRequest,
 			decodeGRPCDeleteScheduleResponse,
+			// opts...,
 		),
 		getSchedule: grpctransport.NewServer(
 			ep.GetScheduleEndpoint,
 			decodeGRPCGetScheduleRequest,
 			decodeGRPCGetScheduleResponse,
+			// opts...,
 		),
 		listSchedules: grpctransport.NewServer(
 			ep.ListSchedulesEndpoint,
 			decodeGRPCListSchedulesRequest,
 			decodeGRPCListSchedulesResponse,
+			// opts...,
 		),
 		getScheduleHistory: grpctransport.NewServer(
 			ep.GetScheduleHistoryEndpoint,
 			decodeGRPCGetScheduleHistoryRequest,
 			decodeGRPCGetScheduleHistoryResponse,
+			// opts...,
 		),
 		pauseSchedule: grpctransport.NewServer(
 			ep.PauseScheduleEndpoint,
 			decodeGRPCPauseScheduleRequest,
 			decodeGRPCPauseScheduleResponse,
+			// opts...,
 		),
 		resumeSchedule: grpctransport.NewServer(
 			ep.ResumeScheduleEndpoint,
 			decodeGRPCResumeScheduleRequest,
 			decodeGRPCResumeScheduleResponse,
+			// opts...,
 		),
 	}
 }

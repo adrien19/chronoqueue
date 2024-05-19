@@ -10,95 +10,118 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
 
 	httptransport "github.com/go-kit/kit/transport/http"
+	// "github.com/go-kit/log"
+	log "github.com/adrien19/chronoqueue/pkg/chronoqueue/log"
 )
 
-func NewHTTPHandler(ep endpoints.Set) http.Handler {
+func NewHTTPHandler(ep endpoints.Set, logger *log.Logger) http.Handler {
+	// opts := []httptransport.ServerOption{
+	// 	httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
+	// 	httptransport.ServerErrorEncoder(encodeError),
+	// }
 	m := http.NewServeMux()
 
 	m.Handle("/queue/createQueue", httptransport.NewServer(
 		ep.CreateQueueEndpoint,
 		decodeHTTPCreateQueueRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/queue/deleteQueue", httptransport.NewServer(
 		ep.DeleteQueueEndpoint,
 		decodeHTTPDeleteQueueRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/queue/postMessage", httptransport.NewServer(
 		ep.PostMessageEndpoint,
 		decodeHTTPPostMessageRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/queue/getNextMessage", httptransport.NewServer(
 		ep.GetNextMessageEndpoint,
 		decodeHTTPGetNextMessageRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/queue/acknowledgeMessage", httptransport.NewServer(
 		ep.AcknowledgeMessageEndpoint,
 		decodeHTTPAcknowledgeMessageRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/queue/renewMessageLease", httptransport.NewServer(
 		ep.RenewMessageLeaseEndpoint,
 		decodeHTTPRenewMessageLeaseRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/queue/peekQueueMessages", httptransport.NewServer(
 		ep.PeekQueueMessagesEndpoint,
 		decodeHTTPGetPeekQueueMessagesRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/queue/getQueueState", httptransport.NewServer(
 		ep.GetQueueStateEndpoint,
 		decodeHTTPGetQueueStateRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/queue/sendMessageHeartBeat", httptransport.NewServer(
 		ep.SendMessageHeartBeatEndpoint,
 		decodeHTTPSendMessageHeartBeatRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/queue/listQueues", httptransport.NewServer(
 		ep.ListQueuesEndpoint,
 		decodeHTTPListQueuesRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/schedule/createSchedule", httptransport.NewServer(
 		ep.CreateScheduleEndpoint,
 		decodeHTTPCreateScheduleRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/schedule/deleteSchedule", httptransport.NewServer(
 		ep.DeleteScheduleEndpoint,
 		decodeHTTPDeleteScheduleRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/schedule/getSchedule", httptransport.NewServer(
 		ep.GetScheduleEndpoint,
 		decodeHTTPGetScheduleRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/schedule/listSchedules", httptransport.NewServer(
 		ep.ListSchedulesEndpoint,
 		decodeHTTPListSchedulesRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/schedule/getScheduleHistory", httptransport.NewServer(
 		ep.GetScheduleHistoryEndpoint,
 		decodeHTTPGetScheduleHistoryRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/schedule/pauseSchedule", httptransport.NewServer(
 		ep.PauseScheduleEndpoint,
 		decodeHTTPPauseScheduleRequest,
 		encodeResponse,
+		// opts...,
 	))
 	m.Handle("/schedule/resumeSchedule", httptransport.NewServer(
 		ep.ResumeScheduleEndpoint,
 		decodeHTTPResumeScheduleRequest,
 		encodeResponse,
+		// opts...,
 	))
 
 	return m
@@ -270,12 +293,14 @@ func decodeHTTPResumeScheduleRequest(_ context.Context, r *http.Request) (interf
 
 func encodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(error); ok && e != nil {
-		return encodeError(ctx, e, w)
+		encodeError(ctx, e, w)
+		return nil
 	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	return json.NewEncoder(w).Encode(response)
 }
 
-func encodeError(_ context.Context, err error, w http.ResponseWriter) error {
+func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	switch err {
 	case util.ErrUnknown:
@@ -285,7 +310,7 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) error {
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
 	}
-	return json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]interface{}{
 		"error": err.Error(),
 	})
 }

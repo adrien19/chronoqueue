@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
@@ -18,12 +19,16 @@ import (
 
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
+	log "github.com/adrien19/chronoqueue/pkg/chronoqueue/log"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/repository"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue/transport"
 	kitgrpc "github.com/go-kit/kit/transport/grpc"
-	"github.com/go-kit/log"
+
+	// "github.com/go-kit/log"
+
 	"github.com/oklog/oklog/pkg/group"
 	"github.com/redis/go-redis/v9"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -45,37 +50,65 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	logger := initializeLogger()
-	httpAddr, grpcAddr, redisConnectionString := getConfigsFromEnv()
+	httpAddr, grpcAddr, redisConnectionString, loglevel, logformat := getConfigsFromEnv()
+	logger := initializeLogger(loglevel, logformat)
 
 	redisClient := initializeRedis(ctx, redisConnectionString, logger)
 
 	encryptionKeyManager := initializeEncryptionKeyManager(logger)
 
-	database := repository.NewQueueStorage(ctx, redisClient, encryptionKeyManager)
+	database := repository.NewQueueStorage(ctx, redisClient, encryptionKeyManager, logger)
 	service := chronoqueue.NewChronoqueueService(database)
-	eps := endpoints.NewEndpointSet(service)
-	httpHandler := transport.NewHTTPHandler(eps)
-	grpcServer := transport.NewGRPCServer(eps)
+	eps := endpoints.NewEndpointSet(service, logger)
+	httpHandler := transport.NewHTTPHandler(eps, logger)
+	grpcServer := transport.NewGRPCServer(eps, logger)
 
 	tlsConfig := getTLSConfigIfEnabled(logger) // This returns a tls.Config if mTLS is enabled, otherwise nil
 
 	startServers(httpAddr, grpcAddr, httpHandler, grpcServer, tlsConfig, logger)
 }
 
-func initializeLogger() log.Logger {
-	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-	return log.With(logger, "ts", log.DefaultTimestampUTC)
+func initializeLogger(loglevel, logformat string) *log.Logger {
+	level, err := logrus.ParseLevel(strings.ToLower(loglevel))
+	if err != nil {
+		level = logrus.InfoLevel
+	}
+	formatter := logrus.Formatter(nil)
+	fieldMap := logrus.FieldMap{
+		logrus.FieldKeyTime:  "timestamp",
+		logrus.FieldKeyLevel: "level",
+		logrus.FieldKeyMsg:   "message",
+		logrus.FieldKeyFunc:  "caller",
+	}
+	if strings.ToLower(logformat) == "json" {
+		formatter = &logrus.JSONFormatter{
+			PrettyPrint: true,
+			FieldMap:    fieldMap,
+		}
+	} else {
+		formatter = &logrus.TextFormatter{
+			DisableColors:          false,
+			FullTimestamp:          true,
+			DisableLevelTruncation: true,
+			TimestampFormat:        "2006-01-02 15:04:05",
+			FieldMap:               fieldMap,
+		}
+	}
+	l := log.NewLogger(log.WithLevel(level), log.WithFormatter(formatter))
+	return l
+
 }
 
-func getConfigsFromEnv() (string, string, string) {
-	httpAddr := net.JoinHostPort(envString("HOST", defaultHostname), envString("HTTP_PORT", defaultHTTPPort))
-	grpcAddr := net.JoinHostPort(envString("HOST", defaultHostname), envString("GRPC_PORT", defaultGRPCPort))
-	redisConnectionString := fmt.Sprintf("%s:%s", envString("REDIS_HOST", defaultRedisHost), envString("REDIS_PORT", defaultRedisPort))
-	return httpAddr, grpcAddr, redisConnectionString
+func getConfigsFromEnv() (httpAddr, grpcAddr, redisConnectionString, loglevel, logformat string) {
+	httpAddr = net.JoinHostPort(envString("HOST", defaultHostname), envString("HTTP_PORT", defaultHTTPPort))
+	grpcAddr = net.JoinHostPort(envString("HOST", defaultHostname), envString("GRPC_PORT", defaultGRPCPort))
+	redisConnectionString = fmt.Sprintf("%s:%s", envString("REDIS_HOST", defaultRedisHost), envString("REDIS_PORT", defaultRedisPort))
+	loglevel = envString("LOG_LEVEL", "info")
+	logformat = envString("LOG_FORMAT", "json")
+	return
 }
 
-func initializeRedis(ctx context.Context, connectionString string, logger log.Logger) *redis.Client {
+func initializeRedis(ctx context.Context, connectionString string, logger *log.Logger) *redis.Client {
 	dsn := connectionString
 	if dsn == "" {
 		dsn = "localhost:6379"
@@ -87,29 +120,29 @@ func initializeRedis(ctx context.Context, connectionString string, logger log.Lo
 	})
 	_, err := redisClient.Ping(ctx).Result()
 	if err != nil {
-		logger.Log("could not connect to redis", err)
+		logger.ErrorWithFields("could not connect to redis", "err", err)
 		os.Exit(1)
 	}
 	return redisClient
 }
 
-func initializeEncryptionKeyManager(logger log.Logger) *keymanager.EncryptionKeyManager {
-	KeyManager, err := keymanager.NewEncryptionKeyManager()
+func initializeEncryptionKeyManager(logger *log.Logger) *keymanager.EncryptionKeyManager {
+	KeyManager, err := keymanager.NewEncryptionKeyManager(logger)
 	if err != nil {
-		logger.Log("msg", "Failed to initialize encryption key manager", "err", err)
+		logger.ErrorWithFields("Failed to initialize encryption key manager", "err", err)
 		os.Exit(1)
 	}
 	return KeyManager
 }
 
-func startServers(httpAddr, grpcAddr string, httpHandler http.Handler, grpcServer queueservice_pb.QueueServiceServer, tlsConfig *tls.Config, logger log.Logger) {
+func startServers(httpAddr, grpcAddr string, httpHandler http.Handler, grpcServer queueservice_pb.QueueServiceServer, tlsConfig *tls.Config, logger *log.Logger) {
 	var g group.Group
 	initHTTPServer(&g, httpAddr, httpHandler, tlsConfig, logger)
 	initGRPCServer(&g, grpcAddr, grpcServer, tlsConfig, logger)
 	waitForTermination(&g, logger)
 }
 
-func getTLSConfigIfEnabled(logger log.Logger) *tls.Config {
+func getTLSConfigIfEnabled(logger *log.Logger) *tls.Config {
 	tlsEnabled := envString("CHRONOQUEUE_TLS_ENABLED", "false") == "true"
 	if !tlsEnabled {
 		return nil
@@ -122,13 +155,13 @@ func getTLSConfigIfEnabled(logger log.Logger) *tls.Config {
 
 	cert, err := tls.LoadX509KeyPair(serverCertPath, serverKeyPath)
 	if err != nil {
-		logger.Log("msg", "Failed to load server.crt/server.key", "err", err)
+		logger.ErrorWithFields("Failed to load server.crt/server.key", "err", err)
 		os.Exit(1)
 	}
 
 	caCert, err := os.ReadFile(caCertPath)
 	if err != nil {
-		logger.Log("msg", "Failed to read ca.crt", "err", err)
+		logger.ErrorWithFields("Failed to read ca.crt", "err", err)
 		os.Exit(1)
 	}
 	caCertPool := x509.NewCertPool()
@@ -190,10 +223,10 @@ func clientCertMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func initHTTPServer(g *group.Group, addr string, handler http.Handler, tlsConfig *tls.Config, logger log.Logger) {
+func initHTTPServer(g *group.Group, addr string, handler http.Handler, tlsConfig *tls.Config, logger *log.Logger) {
 	httpListener, err := net.Listen("tcp", addr)
 	if err != nil {
-		logger.Log("transport", "HTTP", "during", "Listen", "err", err)
+		logger.ErrorWithFields("Failed to listen on HTTP", "transport", "HTTP", "err", err)
 		os.Exit(1)
 	}
 
@@ -203,7 +236,7 @@ func initHTTPServer(g *group.Group, addr string, handler http.Handler, tlsConfig
 	}
 
 	g.Add(func() error {
-		logger.Log("transport", "HTTP", "addr", addr)
+		logger.InfoWithFields("Starting HTTP Server", "transport", "HTTP", "addr", addr)
 		return http.Serve(httpListener, handler)
 	}, func(error) {
 		httpListener.Close()
@@ -276,10 +309,10 @@ func verifyPeerCertificateInterceptor(ctx context.Context, req interface{}, info
 	return handler(ctx, req)
 }
 
-func initGRPCServer(g *group.Group, addr string, server queueservice_pb.QueueServiceServer, tlsConfig *tls.Config, logger log.Logger) {
+func initGRPCServer(g *group.Group, addr string, server queueservice_pb.QueueServiceServer, tlsConfig *tls.Config, logger *log.Logger) {
 	grpcListener, err := net.Listen("tcp", addr)
 	if err != nil {
-		logger.Log("transport", "gRPC", "during", "Listen", "err", err)
+		logger.ErrorWithFields("Failed to listen on gRPC", "transport", "gRPC", "during", "Listen", "err", err)
 		os.Exit(1)
 	}
 
@@ -298,14 +331,14 @@ func initGRPCServer(g *group.Group, addr string, server queueservice_pb.QueueSer
 
 	queueservice_pb.RegisterQueueServiceServer(baseServer, server)
 	g.Add(func() error {
-		logger.Log("transport", "gRPC", "addr", addr)
+		logger.InfoWithFields("Starting gRPC Server", "transport", "gRPC", "addr", addr)
 		return baseServer.Serve(grpcListener)
 	}, func(error) {
 		grpcListener.Close()
 	})
 }
 
-func waitForTermination(g *group.Group, logger log.Logger) {
+func waitForTermination(g *group.Group, logger *log.Logger) {
 	cancelInterrupt := make(chan struct{})
 	g.Add(func() error {
 		c := make(chan os.Signal, 1)
@@ -319,7 +352,8 @@ func waitForTermination(g *group.Group, logger log.Logger) {
 	}, func(error) {
 		close(cancelInterrupt)
 	})
-	logger.Log("exit", g.Run())
+	logger.InfoWithFields("Exiting...", "signal", g.Run())
+
 }
 
 func envString(env, fallback string) string {

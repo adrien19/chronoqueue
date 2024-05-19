@@ -19,6 +19,8 @@ services:
       - ENABLE_ENCRYPTION=true
       - ENCRYPTION_KEY_SOURCE_TYPE=LOCAL
       - ENCRYPTION_KEY=0123456789abcdef0123456789abcdef
+      - LOG_LEVEL=debug
+      - LOG_FORMAT=text
     # depends_on:
     #   - cachesvc
       # - authenticationsvc
