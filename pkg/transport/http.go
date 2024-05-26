@@ -7,11 +7,11 @@ import (
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
-	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
+	"github.com/adrien19/chronoqueue/pkg/endpoints"
 
 	httptransport "github.com/go-kit/kit/transport/http"
 	// "github.com/go-kit/log"
-	log "github.com/adrien19/chronoqueue/pkg/chronoqueue/log"
+	log "github.com/adrien19/chronoqueue/pkg/log"
 )
 
 func NewHTTPHandler(ep endpoints.Set, logger *log.Logger) http.Handler {

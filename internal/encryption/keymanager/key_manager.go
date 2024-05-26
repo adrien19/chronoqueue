@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/adrien19/chronoqueue/internal/encryption/adapters"
-	"github.com/adrien19/chronoqueue/pkg/chronoqueue/log"
+	"github.com/adrien19/chronoqueue/pkg/log"
 )
 
 const defaultRefreshDuration = 1 * time.Hour

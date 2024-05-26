@@ -10,7 +10,7 @@ import (
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
-	"github.com/adrien19/chronoqueue/pkg/chronoqueue/log"
+	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/alicebob/miniredis"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/types/known/durationpb"

@@ -17,11 +17,11 @@ import (
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 
-	"github.com/adrien19/chronoqueue/pkg/chronoqueue"
-	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
-	log "github.com/adrien19/chronoqueue/pkg/chronoqueue/log"
-	"github.com/adrien19/chronoqueue/pkg/chronoqueue/repository"
-	"github.com/adrien19/chronoqueue/pkg/chronoqueue/transport"
+	chronoqueue "github.com/adrien19/chronoqueue/pkg/chronoqueue"
+	"github.com/adrien19/chronoqueue/pkg/endpoints"
+	log "github.com/adrien19/chronoqueue/pkg/log"
+	"github.com/adrien19/chronoqueue/pkg/repository"
+	"github.com/adrien19/chronoqueue/pkg/transport"
 	kitgrpc "github.com/go-kit/kit/transport/grpc"
 
 	// "github.com/go-kit/log"
