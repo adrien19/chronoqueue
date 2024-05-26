@@ -14,7 +14,7 @@ import (
 	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/internal/util"
-	log "github.com/adrien19/chronoqueue/pkg/chronoqueue/log"
+	log "github.com/adrien19/chronoqueue/pkg/log"
 
 	// "github.com/go-kit/log"
 

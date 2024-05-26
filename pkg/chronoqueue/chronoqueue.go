@@ -4,7 +4,7 @@ import (
 	"context"
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
-	"github.com/adrien19/chronoqueue/pkg/chronoqueue/repository"
+	"github.com/adrien19/chronoqueue/pkg/repository"
 )
 
 type chronoqueueService struct {

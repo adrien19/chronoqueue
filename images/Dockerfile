@@ -11,7 +11,7 @@ COPY api api
 COPY cmd/server cmd/server
 # COPY client client
 COPY internal internal
-COPY pkg/chronoqueue pkg/chronoqueue
+COPY pkg pkg
 
 COPY go.mod go.sum ./
 RUN go mod download

@@ -5,8 +5,8 @@ import (
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
-	"github.com/adrien19/chronoqueue/pkg/chronoqueue/endpoints"
-	log "github.com/adrien19/chronoqueue/pkg/chronoqueue/log"
+	"github.com/adrien19/chronoqueue/pkg/endpoints"
+	log "github.com/adrien19/chronoqueue/pkg/log"
 	grpctransport "github.com/go-kit/kit/transport/grpc"
 	// "github.com/go-kit/log"
 )

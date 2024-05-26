@@ -5,8 +5,8 @@ import (
 	"time"
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
-	"github.com/adrien19/chronoqueue/pkg/chronoqueue"
-	"github.com/adrien19/chronoqueue/pkg/chronoqueue/log"
+	chronoqueue "github.com/adrien19/chronoqueue/pkg/chronoqueue"
+	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/go-kit/kit/endpoint"
 )
 
