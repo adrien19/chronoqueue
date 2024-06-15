@@ -15,6 +15,7 @@ import (
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/internal/util"
 	log "github.com/adrien19/chronoqueue/pkg/log"
+	schedule "github.com/adrien19/chronoqueue/pkg/schedule"
 
 	// "github.com/go-kit/log"
 
@@ -40,13 +41,19 @@ type Storage interface {
 	GetQueueState(ctx context.Context, request *queueservice_pb.GetQueueStateRequest) (*queueservice_pb.GetQueueStateResponse, error)
 	SendMessageHeartBeat(ctx context.Context, request *queueservice_pb.SendMessageHeartBeatRequest) (*queueservice_pb.SendMessageHeartBeatResponse, error)
 	ListQueues(ctx context.Context, request *queueservice_pb.ListQueuesRequest) (*queueservice_pb.ListQueuesResponse, error)
-	CreateSchedule(ctx context.Context, request *queueservice_pb.CreateScheduleRequest) (*queueservice_pb.CreateScheduleResponse, error)
-	DeleteSchedule(ctx context.Context, request *queueservice_pb.DeleteScheduleRequest) (*queueservice_pb.DeleteScheduleResponse, error)
-	GetSchedule(ctx context.Context, request *queueservice_pb.GetScheduleRequest) (*queueservice_pb.GetScheduleResponse, error)
-	ListSchedules(ctx context.Context, request *queueservice_pb.ListSchedulesRequest) (*queueservice_pb.ListSchedulesResponse, error)
-	GetScheduleHistory(ctx context.Context, request *queueservice_pb.GetScheduleHistoryRequest) (*queueservice_pb.GetScheduleHistoryResponse, error)
-	PauseSchedule(ctx context.Context, request *queueservice_pb.PauseScheduleRequest) (*queueservice_pb.PauseScheduleResponse, error)
-	ResumeSchedule(ctx context.Context, request *queueservice_pb.ResumeScheduleRequest) (*queueservice_pb.ResumeScheduleResponse, error)
+	CreateSchedule(ctx context.Context, request *schedule.Schedule) (*queueservice_pb.CreateScheduleResponse, error)
+	DeleteSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.DeleteScheduleResponse, error)
+	GetSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.GetScheduleResponse, error)
+	ListSchedules(ctx context.Context, prefix string) (*queueservice_pb.ListSchedulesResponse, error)
+	GetScheduleHistory(ctx context.Context, scheduleId string, limit int64) (*queueservice_pb.GetScheduleHistoryResponse, error)
+	PauseSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.PauseScheduleResponse, error)
+	ResumeSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.ResumeScheduleResponse, error)
+	RecordExecution(ctx context.Context, execution *schedule.Execution) error
+	ListExecutions(ctx context.Context, scheduleID string) ([]*schedule.Execution, error)
+	PushToQueue(ctx context.Context, queueName string, scheduleID string, priority float64) error
+	PopFromQueue(ctx context.Context, queueName string) (string, error)
+	LockSchedule(ctx context.Context, scheduleID string, workerID string, ttl time.Duration) (bool, error)
+	UnlockSchedule(ctx context.Context, scheduleID string, workerID string) error
 }
 
 type storage struct {
@@ -77,7 +84,7 @@ func NewQueueStorage(ctx context.Context, redisClient *redis.Client, encryptionK
 	// Schedule the initial tasks
 	tasks <- Task{Name: "invisibleToPending", Script: invisibleToPending, GoFunc: nil, Interval: time.Second}
 	tasks <- Task{Name: "runningToPending", Script: runningToPending, GoFunc: nil, Interval: time.Second}
-	tasks <- Task{Name: "updateCronSchedules", Script: nil, GoFunc: storage.updateAllCronSchedules, Interval: time.Second}
+	// tasks <- Task{Name: "updateCronSchedules", Script: nil, GoFunc: storage.updateAllCronSchedules, Interval: time.Second}
 
 	return storage
 }

@@ -12,6 +12,7 @@ import "google/protobuf/duration.proto";
 import "proto/queue/v1/queue.proto";
 import "proto/message/v1/message.proto";
 import "proto/schedule/v1/schedule.proto";
+import "proto/execution/v1/execution.proto";
 
 // Create queue
 message CreateQueueRequest {
@@ -168,4 +169,12 @@ message GetScheduleHistoryRequest {
 }
 message GetScheduleHistoryResponse {
     chronoqueue.api.schedule.v1.ScheduleHistory schedule_history = 1;
+}
+
+// Execute a job from schedule
+message ExecutionRequest {
+    chronoqueue.api.schedule.v1.Schedule schedule = 1;
+}
+message ExecutionResponse {
+    chronoqueue.api.execution.v1.Execution execution = 1;
 }

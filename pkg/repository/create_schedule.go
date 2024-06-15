@@ -2,58 +2,25 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
-	"github.com/adrien19/chronoqueue/internal/encryption"
 	"github.com/adrien19/chronoqueue/internal/util"
+	schedule "github.com/adrien19/chronoqueue/pkg/schedule"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// Serialize the metadata payload into JSON
-func (as *storage) encryptScheduleMetadataPayload(metadata *schedule_pb.Schedule_Metadata) error {
-	if !as.encryptionKeyManager.Enabled {
-		return nil
-	}
-	// Get the payload data from the message
-	payloadData, err := as.serializeMetadataPayload(metadata.Payload)
-	if err != nil {
-		return err
-	}
-
-	// Encrypt the payload data
-	encryptedPayload, nonce, err := encryption.EncryptPayload(payloadData, as.encryptionKeyManager)
-	if err != nil {
-		return err
-	}
-
-	if encryptedPayload != "" && nonce != "" {
-		metadata.Payload = &common_pb.Payload{}
-		metadata.Payload.Metadata = make(map[string]*structpb.Value)
-	}
-
-	// Update to the metadata field of Payload
-	metadata.Payload.Metadata["encryptedPayload"] = structpb.NewStringValue(encryptedPayload)
-	metadata.Payload.Metadata["nonce"] = structpb.NewStringValue(nonce)
-
-	if metadata.Payload.Metadata["encryptedPayload"].GetStringValue() == "" || metadata.Payload.Metadata["nonce"].GetStringValue() == "" {
-		return errors.New("failed to updated encryptedPayload or nonce in metadata")
-	}
-	return nil
-}
-
-func (as *storage) CreateSchedule(ctx context.Context, request *queueservice_pb.CreateScheduleRequest) (*queueservice_pb.CreateScheduleResponse, error) {
-	scheduleInfo := request.GetSchedule()
-	if scheduleInfo == nil || scheduleInfo.GetScheduleId() == "" {
+func (as *storage) CreateSchedule(ctx context.Context, scheduleInfo *schedule.Schedule) (*queueservice_pb.CreateScheduleResponse, error) {
+	if scheduleInfo == nil || scheduleInfo.ScheduleId == "" {
 		err := errors.New("creating schedule: schedule ID required")
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Invalid input provided")
 		return &queueservice_pb.CreateScheduleResponse{
@@ -61,7 +28,7 @@ func (as *storage) CreateSchedule(ctx context.Context, request *queueservice_pb.
 		}, chronoErr.GRPCStatus()
 	}
 
-	exists, err := as.checkScheduleExistence(ctx, scheduleInfo.GetScheduleId())
+	exists, err := as.checkScheduleExistence(ctx, scheduleInfo.ScheduleId)
 	if err != nil {
 		return &queueservice_pb.CreateScheduleResponse{
 			Success: false,
@@ -75,7 +42,7 @@ func (as *storage) CreateSchedule(ctx context.Context, request *queueservice_pb.
 	}
 
 	txPipeline := as.redisClient.TxPipeline()
-	_, err = txPipeline.ZAdd(ctx, scheduleInfo.GetScheduleId(), redis.Z{}).Result()
+	_, err = txPipeline.ZAdd(ctx, scheduleInfo.ScheduleId, redis.Z{}).Result()
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating schedule")
 		return &queueservice_pb.CreateScheduleResponse{
@@ -99,6 +66,14 @@ func (as *storage) CreateSchedule(ctx context.Context, request *queueservice_pb.
 		}, chronoErr.GRPCStatus()
 	}
 
+	err = as.PushToQueue(ctx, scheduleInfo.Metadata.QueueName, scheduleInfo.ScheduleId, 0)
+	if err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while pushing schedule to queue")
+		return &queueservice_pb.CreateScheduleResponse{
+			Success: false,
+		}, chronoErr.GRPCStatus()
+	}
+
 	return &queueservice_pb.CreateScheduleResponse{
 		Success: true,
 	}, nil
@@ -109,26 +84,18 @@ func (as *storage) checkScheduleExistence(ctx context.Context, scheduleId string
 	return exists >= 2, err
 }
 
-func (as *storage) setScheduleMetadata(ctx context.Context, scheduleInfo *schedule_pb.Schedule, txPipeline redis.Pipeliner) error {
-	m := protojson.MarshalOptions{
-		EmitUnpopulated: true,
+func (as *storage) setScheduleMetadata(ctx context.Context, scheduleInfo *schedule.Schedule, txPipeline redis.Pipeliner) error {
+	err := scheduleInfo.Metadata.EncryptPayload(as.encryptionKeyManager)
+	if err != nil {
+		return err
 	}
-
-	if scheduleInfo.Metadata.Payload.Metadata["encryptedPayload"] == nil && scheduleInfo.Metadata.Payload.Metadata["nonce"] == nil {
-		as.logger.InfoWithFields("Encrypting schedule metadata payload", "scheduleID", scheduleInfo.GetScheduleId())
-		err := as.encryptScheduleMetadataPayload(scheduleInfo.Metadata)
-		if err != nil {
-			return err
-		}
-	}
-
-	scheduleMetadataByte, err := m.Marshal(scheduleInfo.GetMetadata())
+	scheduleMetadataByte, err := scheduleInfo.Metadata.ToBytes()
 	if err != nil {
 		return err
 	}
 
-	as.logger.DebugWithFields("Updating schedule metadata payload", "scheduleID", scheduleInfo.GetScheduleId(), "metadata", scheduleInfo.GetMetadata())
-	_, err = txPipeline.HSet(ctx, fmt.Sprintf("schedule:%s:meta", scheduleInfo.GetScheduleId()), "metadata", string(scheduleMetadataByte)).Result()
+	as.logger.DebugWithFields("Updating schedule metadata payload", "scheduleID", scheduleInfo.ScheduleId, "metadata", scheduleInfo.Metadata)
+	_, err = txPipeline.HSet(ctx, fmt.Sprintf("schedule:%s:meta", scheduleInfo.ScheduleId), "metadata", string(scheduleMetadataByte)).Result()
 	return err
 }
 
@@ -151,10 +118,13 @@ func (as *storage) setPausedScheduleMetadata(ctx context.Context, scheduleInfo *
 	return err
 }
 
-func (as *storage) DeleteSchedule(ctx context.Context, request *queueservice_pb.DeleteScheduleRequest) (*queueservice_pb.DeleteScheduleResponse, error) {
-
+func (as *storage) DeleteSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.DeleteScheduleResponse, error) {
+	if scheduleId == "" {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, errors.New("error: scheduleId must be provided"), "Failed to delete schedule")
+		return &queueservice_pb.DeleteScheduleResponse{Success: false}, chronoErr.GRPCStatus()
+	}
 	// Create or fetch the mutex for this specific schedule
-	scheduleMutex := as.rs.NewMutex("mutex:" + request.GetScheduleId())
+	scheduleMutex := as.rs.NewMutex("mutex:" + scheduleId)
 
 	// Try to acquire the lock
 	if err := scheduleMutex.Lock(); err != nil {
@@ -169,39 +139,42 @@ func (as *storage) DeleteSchedule(ctx context.Context, request *queueservice_pb.
 		}
 	}()
 
-	if request == nil || request.GetScheduleId() == "" {
-		return &queueservice_pb.DeleteScheduleResponse{Success: false}, errors.New("error: schedule information missing")
-	}
-	checker := NewKeyChecker(as.redisClient, 100)
-
-	start := time.Now()
-	checker.Start(ctx)
-
-	iter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("*%s*", request.GetScheduleId()), 0).Iterator()
-	for iter.Next(ctx) {
-		checker.Add(iter.Val())
-	}
-	if err := iter.Err(); err != nil {
-		return &queueservice_pb.DeleteScheduleResponse{Success: false}, err
+	metadata, err := as.getScheduleMetadata(ctx, scheduleId)
+	if err != nil {
+		msg := fmt.Sprintf("error fetching metadata for schedule %s", scheduleId)
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, msg)
+		return &queueservice_pb.DeleteScheduleResponse{Success: false}, chronoErr.GRPCStatus()
 	}
 
-	deleted := checker.Stop()
-	as.logger.DebugWithFields(
-		"Deleted keys associated with schedule",
-		"total", deleted,
-		"scheduleID", request.GetScheduleId(),
-		"took", time.Since(start),
-	)
+	// Delete the schedule metadata
+	_, err = as.redisClient.Del(ctx, fmt.Sprintf("schedule:%s:meta", scheduleId)).Result()
+	if err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to delete schedule's metadata")
+		return &queueservice_pb.DeleteScheduleResponse{Success: false}, chronoErr.GRPCStatus()
+	}
+
+	// Delete the schedule sorted set
+	_, err = as.redisClient.Del(ctx, scheduleId).Result()
+	if err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to delete schedule's sorted set")
+		return &queueservice_pb.DeleteScheduleResponse{Success: false}, chronoErr.GRPCStatus()
+	}
+
+	err = as.RemoveFromQueue(ctx, metadata.QueueName, scheduleId)
+	if err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to delete scheduleId from queue")
+		return &queueservice_pb.DeleteScheduleResponse{Success: false}, chronoErr.GRPCStatus()
+	}
 
 	return &queueservice_pb.DeleteScheduleResponse{Success: true}, nil
 }
 
-func (as *storage) GetSchedule(ctx context.Context, request *queueservice_pb.GetScheduleRequest) (*queueservice_pb.GetScheduleResponse, error) {
-	if request == nil || request.GetScheduleId() == "" {
+func (as *storage) GetSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.GetScheduleResponse, error) {
+	if scheduleId == "" {
 		return nil, errors.New("error: schedule information missing")
 	}
 
-	scheduleMetadata, err := as.redisClient.HGet(ctx, fmt.Sprintf("schedule:%s:meta", request.GetScheduleId()), "metadata").Result()
+	scheduleMetadata, err := as.redisClient.HGet(ctx, fmt.Sprintf("schedule:%s:meta", scheduleId), "metadata").Result()
 	if err != nil {
 		return nil, err
 	}
@@ -209,19 +182,20 @@ func (as *storage) GetSchedule(ctx context.Context, request *queueservice_pb.Get
 	var metadata schedule_pb.Schedule_Metadata
 	err = protojson.Unmarshal([]byte(scheduleMetadata), &metadata)
 	if err != nil {
+		as.logger.WarnWithFields("Failed to unmarshal schedule metadata", "scheduleID", scheduleId, "error", err)
 		return nil, err
 	}
 
 	return &queueservice_pb.GetScheduleResponse{
 		Schedule: &schedule_pb.Schedule{
-			ScheduleId: request.GetScheduleId(),
+			ScheduleId: scheduleId,
 			Metadata:   &metadata,
 		},
 	}, nil
 }
 
-func (as *storage) ListSchedules(ctx context.Context, request *queueservice_pb.ListSchedulesRequest) (*queueservice_pb.ListSchedulesResponse, error) {
-	scheduleMetadataIDs, err := as.listMetadataIDs(ctx, "schedule", request.GetPrefix(), 100)
+func (as *storage) ListSchedules(ctx context.Context, prefix string) (*queueservice_pb.ListSchedulesResponse, error) {
+	scheduleMetadataIDs, err := as.listMetadataIDs(ctx, "schedule", prefix, 100)
 	if err != nil {
 		return nil, err
 	}
@@ -247,13 +221,16 @@ func (as *storage) ListSchedules(ctx context.Context, request *queueservice_pb.L
 	}, nil
 }
 
-func (as *storage) GetScheduleMessages(ctx context.Context, scheduleId string) ([]*message_pb.Message, error) {
+func (as *storage) GetScheduleMessages(ctx context.Context, scheduleId string, limit int64) ([]*message_pb.Message, error) {
 	if scheduleId == "" {
 		return nil, errors.New("error: must provide scheduleId")
 	}
+	if limit == 0 {
+		limit = -1
+	}
 
 	// Retrieve messageIds from sorted list set in ascending order of timestamp
-	messageIds, err := as.redisClient.ZRange(ctx, scheduleId, 0, -1).Result()
+	messageIds, err := as.redisClient.ZRange(ctx, scheduleId, 0, limit).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -288,12 +265,12 @@ func (as *storage) GetScheduleMessages(ctx context.Context, scheduleId string) (
 	return messages, nil
 }
 
-func (as *storage) GetScheduleHistory(ctx context.Context, request *queueservice_pb.GetScheduleHistoryRequest) (*queueservice_pb.GetScheduleHistoryResponse, error) {
-	if request == nil || request.GetScheduleId() == "" {
+func (as *storage) GetScheduleHistory(ctx context.Context, scheduleId string, limit int64) (*queueservice_pb.GetScheduleHistoryResponse, error) {
+	if scheduleId == "" {
 		return nil, errors.New("error: schedule information missing")
 	}
 
-	scheduleMetadata, err := as.redisClient.HGet(ctx, fmt.Sprintf("schedule:%s:meta", request.GetScheduleId()), "metadata").Result()
+	scheduleMetadata, err := as.redisClient.HGet(ctx, fmt.Sprintf("schedule:%s:meta", scheduleId), "metadata").Result()
 	if err != nil {
 		return nil, err
 	}
@@ -304,14 +281,14 @@ func (as *storage) GetScheduleHistory(ctx context.Context, request *queueservice
 		return nil, err
 	}
 
-	scheduleMessages, err := as.GetScheduleMessages(ctx, request.GetScheduleId())
+	scheduleMessages, err := as.GetScheduleMessages(ctx, scheduleId, limit)
 	if err != nil {
 		return nil, err
 	}
 
 	return &queueservice_pb.GetScheduleHistoryResponse{
 		ScheduleHistory: &schedule_pb.ScheduleHistory{
-			ScheduleId: request.GetScheduleId(),
+			ScheduleId: scheduleId,
 			Messages:   scheduleMessages,
 			NextRun:    metadata.GetNextRun(),
 			LastRun:    metadata.GetLastRun(),
@@ -321,12 +298,12 @@ func (as *storage) GetScheduleHistory(ctx context.Context, request *queueservice
 	}, nil
 }
 
-func (as *storage) PauseSchedule(ctx context.Context, request *queueservice_pb.PauseScheduleRequest) (*queueservice_pb.PauseScheduleResponse, error) {
-	if request == nil || request.GetScheduleId() == "" {
+func (as *storage) PauseSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.PauseScheduleResponse, error) {
+	if scheduleId == "" {
 		return nil, errors.New("error: schedule information missing")
 	}
 	// Create or fetch the mutex for this specific schedule
-	scheduleMutex := as.rs.NewMutex("mutex:" + "schedule" + request.GetScheduleId() + ":meta")
+	scheduleMutex := as.rs.NewMutex("mutex:" + "schedule" + scheduleId + ":meta")
 	if err := scheduleMutex.Lock(); err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
 		return &queueservice_pb.PauseScheduleResponse{Success: false}, chronoErr.GRPCStatus()
@@ -339,9 +316,9 @@ func (as *storage) PauseSchedule(ctx context.Context, request *queueservice_pb.P
 		}
 	}()
 
-	scheduleMetadata, err := as.getScheduleMetadata(ctx, request.GetScheduleId())
+	scheduleMetadata, err := as.getScheduleMetadata(ctx, scheduleId)
 	if err != nil {
-		msg := fmt.Sprintf("error fetching metadata for schedule %s", request.GetScheduleId())
+		msg := fmt.Sprintf("error fetching metadata for schedule %s", scheduleId)
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, msg)
 		return nil, chronoErr.GRPCStatus()
 	}
@@ -349,7 +326,7 @@ func (as *storage) PauseSchedule(ctx context.Context, request *queueservice_pb.P
 	scheduleMetadata.State = schedule_pb.Schedule_Metadata_PAUSED
 
 	err = as.setPausedScheduleMetadata(ctx, &schedule_pb.Schedule{
-		ScheduleId: request.GetScheduleId(),
+		ScheduleId: scheduleId,
 		Metadata:   scheduleMetadata,
 	})
 	if err != nil {
@@ -361,13 +338,13 @@ func (as *storage) PauseSchedule(ctx context.Context, request *queueservice_pb.P
 	}, nil
 }
 
-func (as *storage) ResumeSchedule(ctx context.Context, request *queueservice_pb.ResumeScheduleRequest) (*queueservice_pb.ResumeScheduleResponse, error) {
-	if request == nil || request.GetScheduleId() == "" {
+func (as *storage) ResumeSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.ResumeScheduleResponse, error) {
+	if scheduleId == "" {
 		return nil, errors.New("error: schedule information missing")
 	}
 
 	// Create or fetch the mutex for this specific schedule
-	scheduleMutex := as.rs.NewMutex("mutex:" + "schedule" + request.GetScheduleId() + ":meta")
+	scheduleMutex := as.rs.NewMutex("mutex:" + "schedule" + scheduleId + ":meta")
 	if err := scheduleMutex.Lock(); err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
 		return &queueservice_pb.ResumeScheduleResponse{Success: false}, chronoErr.GRPCStatus()
@@ -380,9 +357,9 @@ func (as *storage) ResumeSchedule(ctx context.Context, request *queueservice_pb.
 		}
 	}()
 
-	scheduleMetadata, err := as.getScheduleMetadata(ctx, request.GetScheduleId())
+	scheduleMetadata, err := as.getScheduleMetadata(ctx, scheduleId)
 	if err != nil {
-		msg := fmt.Sprintf("error fetching metadata for schedule %s", request.GetScheduleId())
+		msg := fmt.Sprintf("error fetching metadata for schedule %s", scheduleId)
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, msg)
 		return nil, chronoErr.GRPCStatus()
 	}
@@ -390,7 +367,7 @@ func (as *storage) ResumeSchedule(ctx context.Context, request *queueservice_pb.
 	scheduleMetadata.State = schedule_pb.Schedule_Metadata_SCHEDULED
 
 	err = as.setPausedScheduleMetadata(ctx, &schedule_pb.Schedule{
-		ScheduleId: request.GetScheduleId(),
+		ScheduleId: scheduleId,
 		Metadata:   scheduleMetadata,
 	})
 	if err != nil {
@@ -400,4 +377,132 @@ func (as *storage) ResumeSchedule(ctx context.Context, request *queueservice_pb.
 	return &queueservice_pb.ResumeScheduleResponse{
 		Success: true,
 	}, nil
+}
+
+func (s *storage) RecordExecution(ctx context.Context, execution *schedule.Execution) error {
+	executionJSON, err := json.Marshal(execution)
+	if err != nil {
+		return err
+	}
+
+	err = s.redisClient.Set(ctx, fmt.Sprintf("execution:%s", execution.ID), executionJSON, 0).Err()
+	if err != nil {
+		return err
+	}
+
+	err = s.redisClient.SAdd(ctx, fmt.Sprintf("executions:%s", execution.ScheduleID), execution.ID).Err()
+	return err
+}
+
+func (s *storage) ListExecutions(ctx context.Context, scheduleID string) ([]*schedule.Execution, error) {
+	executionIDs, err := s.redisClient.SMembers(ctx, fmt.Sprintf("executions:%s", scheduleID)).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	var executions []*schedule.Execution
+	for _, execID := range executionIDs {
+		executionJSON, err := s.redisClient.Get(ctx, fmt.Sprintf("execution:%s", execID)).Result()
+		if err != nil {
+			return nil, err
+		}
+
+		var execution schedule.Execution
+		err = json.Unmarshal([]byte(executionJSON), &execution)
+		if err != nil {
+			return nil, err
+		}
+
+		executions = append(executions, &execution)
+	}
+
+	return executions, nil
+}
+
+func (s *storage) PushToQueue(ctx context.Context, queueName string, scheduleID string, priority float64) error {
+	lockKey := "lock:queue:" + queueName
+	lockID, err := s.lock(ctx, lockKey, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	defer s.unlock(ctx, lockKey, lockID)
+	return s.redisClient.ZAdd(ctx, "queue:"+queueName, redis.Z{
+		Score:  priority,
+		Member: scheduleID,
+	}).Err()
+}
+
+func (s *storage) PopFromQueue(ctx context.Context, queueName string) (string, error) {
+	lockKey := "lock:queue:" + queueName
+	lockID, err := s.lock(ctx, lockKey, 5*time.Second)
+	if err != nil {
+		return "", err
+	}
+	defer s.unlock(ctx, lockKey, lockID)
+
+	result, err := s.redisClient.ZPopMin(ctx, "queue:"+queueName).Result()
+	if err != nil {
+		return "", err
+	}
+	if len(result) == 0 {
+		return "", fmt.Errorf("no items in queue")
+	}
+	return result[0].Member.(string), nil
+}
+
+func (s *storage) RemoveFromQueue(ctx context.Context, queueName, memberID string) error {
+	lockKey := "lock:queue:" + queueName
+	lockID, err := s.lock(ctx, lockKey, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	defer s.unlock(ctx, lockKey, lockID)
+
+	result, err := s.redisClient.ZRem(ctx, "queue:"+queueName, memberID).Result()
+	if err != nil {
+		return err
+	}
+	s.logger.DebugWithFields("Removed item from queue", "queueName", queueName, "memberID", memberID, "total", result)
+	return nil
+}
+
+func (s *storage) lock(ctx context.Context, key string, timeout time.Duration) (string, error) {
+	lockID := uuid.New().String()
+	ok, err := s.redisClient.SetNX(ctx, key, lockID, timeout).Result()
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", fmt.Errorf("unable to acquire lock")
+	}
+	return lockID, nil
+}
+
+func (s *storage) unlock(ctx context.Context, key, lockID string) error {
+	currentLockID, err := s.redisClient.Get(ctx, key).Result()
+	if err != nil && err != redis.Nil {
+		return err
+	}
+	if currentLockID == lockID {
+		_, err = s.redisClient.Del(ctx, key).Result()
+	}
+	return err
+}
+
+func (s *storage) LockSchedule(ctx context.Context, scheduleID string, workerID string, ttl time.Duration) (bool, error) {
+	lockKey := "lock:schedule:" + scheduleID
+	ok, err := s.redisClient.SetNX(ctx, lockKey, workerID, ttl).Result()
+	return ok, err
+}
+
+func (s *storage) UnlockSchedule(ctx context.Context, scheduleID string, workerID string) error {
+	lockKey := "lock:schedule:" + scheduleID
+	currentWorkerID, err := s.redisClient.Get(ctx, lockKey).Result()
+	if err != nil && err != redis.Nil {
+		return err
+	}
+	if currentWorkerID == workerID {
+		_, err = s.redisClient.Del(ctx, lockKey).Result()
+	}
+	return err
 }

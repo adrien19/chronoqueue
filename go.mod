@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/go-kit/kit v0.12.0
-	github.com/go-kit/log v0.2.1
+	github.com/google/uuid v1.3.0
 	github.com/oklog/oklog v0.3.2
 	github.com/redis/go-redis/v9 v9.0.3
 	google.golang.org/grpc v1.54.0
@@ -15,6 +15,7 @@ require (
 	github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302 // indirect
 	github.com/cenkalti/backoff/v3 v3.0.0 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.0 // indirect
+	github.com/go-kit/log v0.2.1 // indirect
 	github.com/gomodule/redigo v1.8.9 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect

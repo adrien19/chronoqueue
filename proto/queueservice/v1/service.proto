@@ -25,4 +25,5 @@ service QueueService {
     rpc GetSchedule (GetScheduleRequest) returns (GetScheduleResponse);
     rpc ListSchedules (ListSchedulesRequest) returns (ListSchedulesResponse);
     rpc GetScheduleHistory (GetScheduleHistoryRequest) returns (GetScheduleHistoryResponse);
+    rpc ExecuteJob(ExecutionRequest) returns (ExecutionResponse);
 }

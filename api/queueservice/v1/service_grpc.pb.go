@@ -38,6 +38,7 @@ const (
 	QueueService_GetSchedule_FullMethodName          = "/chronoqueue.api.queueservice.v1.QueueService/GetSchedule"
 	QueueService_ListSchedules_FullMethodName        = "/chronoqueue.api.queueservice.v1.QueueService/ListSchedules"
 	QueueService_GetScheduleHistory_FullMethodName   = "/chronoqueue.api.queueservice.v1.QueueService/GetScheduleHistory"
+	QueueService_ExecuteJob_FullMethodName           = "/chronoqueue.api.queueservice.v1.QueueService/ExecuteJob"
 )
 
 // QueueServiceClient is the client API for QueueService service.
@@ -61,6 +62,7 @@ type QueueServiceClient interface {
 	GetSchedule(ctx context.Context, in *GetScheduleRequest, opts ...grpc.CallOption) (*GetScheduleResponse, error)
 	ListSchedules(ctx context.Context, in *ListSchedulesRequest, opts ...grpc.CallOption) (*ListSchedulesResponse, error)
 	GetScheduleHistory(ctx context.Context, in *GetScheduleHistoryRequest, opts ...grpc.CallOption) (*GetScheduleHistoryResponse, error)
+	ExecuteJob(ctx context.Context, in *ExecutionRequest, opts ...grpc.CallOption) (*ExecutionResponse, error)
 }
 
 type queueServiceClient struct {
@@ -224,6 +226,15 @@ func (c *queueServiceClient) GetScheduleHistory(ctx context.Context, in *GetSche
 	return out, nil
 }
 
+func (c *queueServiceClient) ExecuteJob(ctx context.Context, in *ExecutionRequest, opts ...grpc.CallOption) (*ExecutionResponse, error) {
+	out := new(ExecutionResponse)
+	err := c.cc.Invoke(ctx, QueueService_ExecuteJob_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // QueueServiceServer is the server API for QueueService service.
 // All implementations should embed UnimplementedQueueServiceServer
 // for forward compatibility
@@ -245,6 +256,7 @@ type QueueServiceServer interface {
 	GetSchedule(context.Context, *GetScheduleRequest) (*GetScheduleResponse, error)
 	ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error)
 	GetScheduleHistory(context.Context, *GetScheduleHistoryRequest) (*GetScheduleHistoryResponse, error)
+	ExecuteJob(context.Context, *ExecutionRequest) (*ExecutionResponse, error)
 }
 
 // UnimplementedQueueServiceServer should be embedded to have forward compatible implementations.
@@ -301,6 +313,9 @@ func (UnimplementedQueueServiceServer) ListSchedules(context.Context, *ListSched
 }
 func (UnimplementedQueueServiceServer) GetScheduleHistory(context.Context, *GetScheduleHistoryRequest) (*GetScheduleHistoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetScheduleHistory not implemented")
+}
+func (UnimplementedQueueServiceServer) ExecuteJob(context.Context, *ExecutionRequest) (*ExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ExecuteJob not implemented")
 }
 
 // UnsafeQueueServiceServer may be embedded to opt out of forward compatibility for this service.
@@ -620,6 +635,24 @@ func _QueueService_GetScheduleHistory_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _QueueService_ExecuteJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).ExecuteJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_ExecuteJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).ExecuteJob(ctx, req.(*ExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // QueueService_ServiceDesc is the grpc.ServiceDesc for QueueService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -694,6 +727,10 @@ var QueueService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetScheduleHistory",
 			Handler:    _QueueService_GetScheduleHistory_Handler,
+		},
+		{
+			MethodName: "ExecuteJob",
+			Handler:    _QueueService_ExecuteJob_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

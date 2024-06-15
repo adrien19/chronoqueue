@@ -5,6 +5,7 @@ import (
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/pkg/repository"
+	schedule "github.com/adrien19/chronoqueue/pkg/schedule"
 )
 
 type chronoqueueService struct {
@@ -56,29 +57,33 @@ func (cs *chronoqueueService) ListQueues(ctx context.Context, request *queueserv
 }
 
 func (cs *chronoqueueService) CreateSchedule(ctx context.Context, request *queueservice_pb.CreateScheduleRequest) (*queueservice_pb.CreateScheduleResponse, error) {
-	return cs.storage.CreateSchedule(ctx, request)
+	schedule, err := schedule.NewScheduleFromProto(request.Schedule)
+	if err != nil {
+		return nil, err
+	}
+	return cs.storage.CreateSchedule(ctx, schedule)
 }
 
 func (cs *chronoqueueService) DeleteSchedule(ctx context.Context, request *queueservice_pb.DeleteScheduleRequest) (*queueservice_pb.DeleteScheduleResponse, error) {
-	return cs.storage.DeleteSchedule(ctx, request)
+	return cs.storage.DeleteSchedule(ctx, request.GetScheduleId())
 }
 
 func (cs *chronoqueueService) GetSchedule(ctx context.Context, request *queueservice_pb.GetScheduleRequest) (*queueservice_pb.GetScheduleResponse, error) {
-	return cs.storage.GetSchedule(ctx, request)
+	return cs.storage.GetSchedule(ctx, request.GetScheduleId())
 }
 
 func (cs *chronoqueueService) ListSchedules(ctx context.Context, request *queueservice_pb.ListSchedulesRequest) (*queueservice_pb.ListSchedulesResponse, error) {
-	return cs.storage.ListSchedules(ctx, request)
+	return cs.storage.ListSchedules(ctx, request.GetPrefix())
 }
 
 func (cs *chronoqueueService) GetScheduleHistory(ctx context.Context, request *queueservice_pb.GetScheduleHistoryRequest) (*queueservice_pb.GetScheduleHistoryResponse, error) {
-	return cs.storage.GetScheduleHistory(ctx, request)
+	return cs.storage.GetScheduleHistory(ctx, request.GetScheduleId(), request.GetLimit())
 }
 
 func (cs *chronoqueueService) PauseSchedule(ctx context.Context, request *queueservice_pb.PauseScheduleRequest) (*queueservice_pb.PauseScheduleResponse, error) {
-	return cs.storage.PauseSchedule(ctx, request)
+	return cs.storage.PauseSchedule(ctx, request.GetScheduleId())
 }
 
 func (cs *chronoqueueService) ResumeSchedule(ctx context.Context, request *queueservice_pb.ResumeScheduleRequest) (*queueservice_pb.ResumeScheduleResponse, error) {
-	return cs.storage.ResumeSchedule(ctx, request)
+	return cs.storage.ResumeSchedule(ctx, request.GetScheduleId())
 }

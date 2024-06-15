@@ -1,0 +1,17 @@
+// ./proto/message/v1/message.proto
+
+syntax = "proto3";
+package chronoqueue.api.execution.v1;
+
+option go_package = "github.com/adrien19/chronoqueue/api/execution/v1;execution";
+
+import "google/protobuf/timestamp.proto";
+
+message Execution {
+    string id = 1;
+    string schedule_id = 2;
+    google.protobuf.Timestamp execution_time = 3;
+    string status = 4;
+    string message = 5;
+    string worker_id = 6;
+}
