@@ -1,0 +1,1146 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "proto/queueservice/v1/service.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "QueueService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/queues": {
+      "get": {
+        "operationId": "QueueService_ListQueues",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListQueuesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "prefix",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      },
+      "post": {
+        "summary": "Queue Management Operations",
+        "operationId": "QueueService_CreateQueue",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CreateQueueResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateQueueRequest"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{name}": {
+      "delete": {
+        "operationId": "QueueService_DeleteQueue",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteQueueResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{queueName}/messages": {
+      "post": {
+        "summary": "Message Operations",
+        "operationId": "QueueService_PostMessage",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PostMessageResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "message",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1Message"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{queueName}/messages/{messageId}:acknowledge": {
+      "post": {
+        "operationId": "QueueService_AcknowledgeMessage",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1AcknowledgeMessageResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceAcknowledgeMessageBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{queueName}/messages/{messageId}:renewLease": {
+      "post": {
+        "operationId": "QueueService_RenewMessageLease",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RenewMessageLeaseResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceRenewMessageLeaseBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{queueName}/messages:getNext": {
+      "post": {
+        "operationId": "QueueService_GetNextMessage",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetNextMessageResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceGetNextMessageBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{queueName}/messages:heartbeat": {
+      "post": {
+        "operationId": "QueueService_SendMessageHeartBeat",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1SendMessageHeartBeatResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceSendMessageHeartBeatBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{queueName}/messages:peek": {
+      "get": {
+        "operationId": "QueueService_PeekQueueMessages",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PeekQueueMessagesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "priorityRange.min",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "priorityRange.max",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{queueName}/state": {
+      "get": {
+        "operationId": "QueueService_GetQueueState",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetQueueStateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schedules": {
+      "get": {
+        "operationId": "QueueService_ListSchedules",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListSchedulesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "prefix",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      },
+      "post": {
+        "summary": "Schedule Management Operations",
+        "operationId": "QueueService_CreateSchedule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CreateScheduleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateScheduleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schedules/{scheduleId}": {
+      "get": {
+        "operationId": "QueueService_GetSchedule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetScheduleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      },
+      "delete": {
+        "operationId": "QueueService_DeleteSchedule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteScheduleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schedules/{scheduleId}/history": {
+      "get": {
+        "operationId": "QueueService_GetScheduleHistory",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetScheduleHistoryResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schedules/{scheduleId}:pause": {
+      "post": {
+        "operationId": "QueueService_PauseSchedule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PauseScheduleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServicePauseScheduleBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schedules/{scheduleId}:resume": {
+      "post": {
+        "operationId": "QueueService_ResumeSchedule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ResumeScheduleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceResumeScheduleBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "PeekQueueMessagesRequestPriorityRange": {
+      "type": "object",
+      "properties": {
+        "min": {
+          "type": "string",
+          "format": "int64"
+        },
+        "max": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "QueueServiceAcknowledgeMessageBody": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "$ref": "#/definitions/v1MessageMetadataState"
+        }
+      },
+      "title": "Acknowledge the message on the queue"
+    },
+    "QueueServiceGetNextMessageBody": {
+      "type": "object",
+      "properties": {
+        "leaseDuration": {
+          "type": "string"
+        },
+        "exclusivityKey": {
+          "type": "string"
+        }
+      },
+      "title": "Get the next message on the queue"
+    },
+    "QueueServicePauseScheduleBody": {
+      "type": "object",
+      "title": "Pause a schedule"
+    },
+    "QueueServiceRenewMessageLeaseBody": {
+      "type": "object",
+      "properties": {
+        "leaseDuration": {
+          "type": "string"
+        }
+      },
+      "title": "Renew lease period of a message"
+    },
+    "QueueServiceResumeScheduleBody": {
+      "type": "object",
+      "title": "Resume a schedule"
+    },
+    "QueueServiceSendMessageHeartBeatBody": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string"
+        }
+      },
+      "title": "send a heartbeat to the queue"
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "protobufNullValue": {
+      "type": "string",
+      "enum": [
+        "NULL_VALUE"
+      ],
+      "default": "NULL_VALUE",
+      "description": "`NullValue` is a singleton enumeration to represent the null value for the\n`Value` type union.\n\nThe JSON representation for `NullValue` is JSON `null`.\n\n - NULL_VALUE: Null value."
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1AcknowledgeMessageResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1CreateQueueRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/definitions/v1QueueMetadata"
+        }
+      },
+      "title": "Create queue"
+    },
+    "v1CreateQueueResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1CreateScheduleRequest": {
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "$ref": "#/definitions/v1Schedule"
+        }
+      },
+      "title": "Create a schedule"
+    },
+    "v1CreateScheduleResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1DeleteQueueResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1DeleteScheduleResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1GetNextMessageResponse": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "$ref": "#/definitions/v1Message"
+        }
+      }
+    },
+    "v1GetQueueStateResponse": {
+      "type": "object",
+      "properties": {
+        "stateCounts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "earliestDeadline": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v1GetScheduleHistoryResponse": {
+      "type": "object",
+      "properties": {
+        "scheduleHistory": {
+          "$ref": "#/definitions/v1ScheduleHistory"
+        }
+      }
+    },
+    "v1GetScheduleResponse": {
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "$ref": "#/definitions/v1Schedule"
+        }
+      }
+    },
+    "v1ListQueuesResponse": {
+      "type": "object",
+      "properties": {
+        "queues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Queue"
+          }
+        }
+      }
+    },
+    "v1ListSchedulesResponse": {
+      "type": "object",
+      "properties": {
+        "schedules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Schedule"
+          }
+        }
+      }
+    },
+    "v1Message": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/definitions/v1MessageMetadata"
+        }
+      }
+    },
+    "v1MessageMetadata": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "$ref": "#/definitions/v1Payload"
+        },
+        "state": {
+          "$ref": "#/definitions/v1MessageMetadataState"
+        },
+        "invisibilityDuration": {
+          "type": "string"
+        },
+        "attemptsLeft": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "leaseDuration": {
+          "type": "string"
+        },
+        "leaseExpiry": {
+          "type": "string",
+          "format": "int64"
+        },
+        "leaseRenewalCount": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "invisibilityExpiry": {
+          "type": "string",
+          "format": "int64"
+        },
+        "priority": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v1MessageMetadataState": {
+      "type": "string",
+      "enum": [
+        "INVISIBLE",
+        "PENDING",
+        "RUNNING",
+        "COMPLETED",
+        "CANCELED",
+        "ERRORED"
+      ],
+      "default": "INVISIBLE"
+    },
+    "v1PauseScheduleResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1Payload": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "data": {
+          "type": "object"
+        }
+      }
+    },
+    "v1PeekQueueMessagesResponse": {
+      "type": "object",
+      "properties": {
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Message"
+          }
+        }
+      }
+    },
+    "v1PostMessageResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1Queue": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/definitions/v1QueueMetadata"
+        }
+      }
+    },
+    "v1QueueMetadata": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/v1QueueType"
+        },
+        "dequeueAttempts": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "leaseDuration": {
+          "type": "string"
+        },
+        "exclusivityKey": {
+          "type": "string"
+        },
+        "invisibilityDuration": {
+          "type": "string"
+        }
+      }
+    },
+    "v1QueueType": {
+      "type": "string",
+      "enum": [
+        "SIMPLE",
+        "EXCLUSIVE"
+      ],
+      "default": "SIMPLE"
+    },
+    "v1RenewMessageLeaseResponse": {
+      "type": "object",
+      "properties": {
+        "remainingTime": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/definitions/v1MessageMetadataState"
+        }
+      }
+    },
+    "v1ResumeScheduleResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1Schedule": {
+      "type": "object",
+      "properties": {
+        "scheduleId": {
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/definitions/v1ScheduleMetadata"
+        }
+      }
+    },
+    "v1ScheduleHistory": {
+      "type": "object",
+      "properties": {
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Message"
+          }
+        },
+        "scheduleId": {
+          "type": "string"
+        },
+        "nextRun": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastRun": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v1ScheduleMetadata": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "$ref": "#/definitions/v1Payload"
+        },
+        "state": {
+          "$ref": "#/definitions/v1ScheduleMetadataState"
+        },
+        "cronSchedule": {
+          "type": "string"
+        },
+        "queueName": {
+          "type": "string"
+        },
+        "messageIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "nextRun": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastRun": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "exclusivityKey": {
+          "type": "string"
+        },
+        "stateMessage": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "string",
+          "format": "int64"
+        },
+        "hasMaxMessages": {
+          "type": "boolean"
+        },
+        "maxMessages": {
+          "type": "string",
+          "format": "int64"
+        },
+        "leaseDuration": {
+          "type": "string"
+        }
+      }
+    },
+    "v1ScheduleMetadataState": {
+      "type": "string",
+      "enum": [
+        "SCHEDULED",
+        "CANCELED",
+        "ERRORED",
+        "PAUSED"
+      ],
+      "default": "SCHEDULED"
+    },
+    "v1SendMessageHeartBeatResponse": {
+      "type": "object",
+      "properties": {
+        "remainingTime": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/definitions/v1MessageMetadataState"
+        }
+      }
+    }
+  }
+}

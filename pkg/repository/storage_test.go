@@ -8,6 +8,7 @@ import (
 
 	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/pkg/log"
@@ -67,54 +68,64 @@ func Test_storage_CreateQueue(t *testing.T) {
 	setup()
 	defer teardown()
 
-	type fields struct {
-		redisClient *redis.Client
-	}
+	// Create a proper storage instance for testing (without background workers)
+	logger := log.NewLogger()
+	storage := NewQueueStorageForTesting(redisClient, nil, logger)
+
 	type args struct {
 		ctx     context.Context
 		request *queueservice_pb.CreateQueueRequest
 	}
 	tests := []struct {
 		name    string
-		fields  fields
 		args    args
 		want    *queueservice_pb.CreateQueueResponse
 		wantErr bool
 	}{
-		// TODO: Add more test cases.
 		{
 			name: "Test successful create queue",
-			fields: fields{
-				redisClient: redisClient,
-			},
 			args: args{
 				ctx: context.TODO(),
 				request: &queueservice_pb.CreateQueueRequest{
 					Name: "test_queue",
+					Metadata: &queue_pb.QueueMetadata{
+						Type: queue_pb.QueueType_SIMPLE,
+					},
 				},
 			},
-			want:    &queueservice_pb.CreateQueueResponse{},
+			want: &queueservice_pb.CreateQueueResponse{
+				Success: true,
+			},
 			wantErr: false,
 		},
 		{
 			name: "Test missing queue name",
-			fields: fields{
-				redisClient: redisClient,
-			},
 			args: args{
 				ctx:     context.TODO(),
 				request: &queueservice_pb.CreateQueueRequest{},
 			},
-			want:    &queueservice_pb.CreateQueueResponse{},
+			want: &queueservice_pb.CreateQueueResponse{
+				Success: false,
+			},
+			wantErr: true,
+		},
+		{
+			name: "Test missing metadata",
+			args: args{
+				ctx: context.TODO(),
+				request: &queueservice_pb.CreateQueueRequest{
+					Name: "test_queue_no_metadata",
+				},
+			},
+			want: &queueservice_pb.CreateQueueResponse{
+				Success: false,
+			},
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			as := &storage{
-				redisClient: tt.fields.redisClient,
-			}
-			got, err := as.CreateQueue(tt.args.ctx, tt.args.request)
+			got, err := storage.CreateQueue(tt.args.ctx, tt.args.request)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("storage.CreateQueue() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -130,56 +141,62 @@ func Test_storage_DeleteQueue(t *testing.T) {
 	setup()
 	defer teardown()
 
-	type fields struct {
-		redisClient *redis.Client
+	// Create a proper storage instance for testing (without background workers)
+	logger := log.NewLogger()
+	storage := NewQueueStorageForTesting(redisClient, nil, logger)
+
+	// First create a queue to delete in the successful test case
+	createRequest := &queueservice_pb.CreateQueueRequest{
+		Name: "test_queue",
+		Metadata: &queue_pb.QueueMetadata{
+			Type: queue_pb.QueueType_SIMPLE,
+		},
 	}
+	_, err := storage.CreateQueue(context.Background(), createRequest)
+	if err != nil {
+		t.Fatalf("Failed to create test queue: %v", err)
+	}
+
 	type args struct {
 		ctx     context.Context
 		request *queueservice_pb.DeleteQueueRequest
 	}
 	tests := []struct {
 		name    string
-		fields  fields
 		args    args
 		want    *queueservice_pb.DeleteQueueResponse
 		wantErr bool
 	}{
-		// TODO: Add more test cases.
 		{
 			name: "Test successful delete queue",
-			fields: fields{
-				redisClient: redisClient,
-			},
 			args: args{
 				ctx: context.TODO(),
 				request: &queueservice_pb.DeleteQueueRequest{
 					Name: "test_queue",
 				},
 			},
-			want:    &queueservice_pb.DeleteQueueResponse{},
+			want: &queueservice_pb.DeleteQueueResponse{
+				Success: true,
+			},
 			wantErr: false,
 		},
 		{
 			name: "Test missing queue name",
-			fields: fields{
-				redisClient: redisClient,
-			},
 			args: args{
-				ctx:     context.TODO(),
+				ctx: context.TODO(),
 				request: &queueservice_pb.DeleteQueueRequest{
-					// Name: "test_queue",
+					Name: "",
 				},
 			},
-			want:    &queueservice_pb.DeleteQueueResponse{},
+			want: &queueservice_pb.DeleteQueueResponse{
+				Success: false,
+			},
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			as := &storage{
-				redisClient: tt.fields.redisClient,
-			}
-			got, err := as.DeleteQueue(tt.args.ctx, tt.args.request)
+			got, err := storage.DeleteQueue(tt.args.ctx, tt.args.request)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("storage.DeleteQueue() error = %v, wantErr %v", err, tt.wantErr)
 				return

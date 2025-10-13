@@ -1,0 +1,253 @@
+package chronoqueue
+
+import (
+	"context"
+	"fmt"
+
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	"github.com/adrien19/chronoqueue/pkg/log"
+	"github.com/adrien19/chronoqueue/pkg/repository"
+)
+
+// ChronoQueueServer implements the gRPC QueueService interface directly
+// using the storage layer without intermediate service abstractions
+type ChronoQueueServer struct {
+	storage repository.Storage
+	logger  *log.Logger
+	queueservice_pb.UnimplementedQueueServiceServer
+}
+
+// NewChronoQueueServer creates a new gRPC server instance
+func NewChronoQueueServer(storage repository.Storage, logger *log.Logger) *ChronoQueueServer {
+	return &ChronoQueueServer{
+		storage: storage,
+		logger:  logger,
+	}
+}
+
+// Queue Management Methods
+
+func (s *ChronoQueueServer) CreateQueue(ctx context.Context, req *queueservice_pb.CreateQueueRequest) (*queueservice_pb.CreateQueueResponse, error) {
+	s.logger.InfoWithFields("CreateQueue called", "queue_name", req.GetName())
+
+	resp, err := s.storage.CreateQueue(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to create queue", "queue_name", req.GetName(), "error", err)
+		return nil, fmt.Errorf("failed to create queue: %w", err)
+	}
+
+	s.logger.InfoWithFields("Queue created successfully", "queue_name", req.GetName())
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) DeleteQueue(ctx context.Context, req *queueservice_pb.DeleteQueueRequest) (*queueservice_pb.DeleteQueueResponse, error) {
+	s.logger.InfoWithFields("DeleteQueue called", "queue_name", req.GetName())
+
+	resp, err := s.storage.DeleteQueue(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to delete queue", "queue_name", req.GetName(), "error", err)
+		return nil, fmt.Errorf("failed to delete queue: %w", err)
+	}
+
+	s.logger.InfoWithFields("Queue deleted successfully", "queue_name", req.GetName())
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) ListQueues(ctx context.Context, req *queueservice_pb.ListQueuesRequest) (*queueservice_pb.ListQueuesResponse, error) {
+	s.logger.Info("ListQueues called")
+
+	resp, err := s.storage.ListQueues(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to list queues", "error", err)
+		return nil, fmt.Errorf("failed to list queues: %w", err)
+	}
+
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) GetQueueState(ctx context.Context, req *queueservice_pb.GetQueueStateRequest) (*queueservice_pb.GetQueueStateResponse, error) {
+	s.logger.InfoWithFields("GetQueueState called", "queue_name", req.GetQueueName())
+
+	resp, err := s.storage.GetQueueState(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to get queue state", "queue_name", req.GetQueueName(), "error", err)
+		return nil, fmt.Errorf("failed to get queue state: %w", err)
+	}
+
+	return resp, nil
+}
+
+// Message Operations
+
+func (s *ChronoQueueServer) PostMessage(ctx context.Context, req *queueservice_pb.PostMessageRequest) (*queueservice_pb.PostMessageResponse, error) {
+	s.logger.InfoWithFields("PostMessage called", "queue_name", req.GetQueueName())
+
+	resp, err := s.storage.CreateQueueMessage(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to post message", "queue_name", req.GetQueueName(), "error", err)
+		return nil, fmt.Errorf("failed to post message: %w", err)
+	}
+
+	s.logger.InfoWithFields("Message posted successfully", "queue_name", req.GetQueueName())
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) GetNextMessage(ctx context.Context, req *queueservice_pb.GetNextMessageRequest) (*queueservice_pb.GetNextMessageResponse, error) {
+	s.logger.InfoWithFields("GetNextMessage called", "queue_name", req.GetQueueName())
+
+	resp, err := s.storage.GetQueueMessage(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to get next message", "queue_name", req.GetQueueName(), "error", err)
+		return nil, fmt.Errorf("failed to get next message: %w", err)
+	}
+
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) AcknowledgeMessage(ctx context.Context, req *queueservice_pb.AcknowledgeMessageRequest) (*queueservice_pb.AcknowledgeMessageResponse, error) {
+	s.logger.InfoWithFields("AcknowledgeMessage called",
+		"queue_name", req.GetQueueName(),
+		"message_id", req.GetMessageId())
+
+	resp, err := s.storage.AcknowledgeMessage(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to acknowledge message",
+			"queue_name", req.GetQueueName(),
+			"message_id", req.GetMessageId(),
+			"error", err)
+		return nil, fmt.Errorf("failed to acknowledge message: %w", err)
+	}
+
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) RenewMessageLease(ctx context.Context, req *queueservice_pb.RenewMessageLeaseRequest) (*queueservice_pb.RenewMessageLeaseResponse, error) {
+	s.logger.InfoWithFields("RenewMessageLease called",
+		"queue_name", req.GetQueueName(),
+		"message_id", req.GetMessageId())
+
+	resp, err := s.storage.RenewMessageLease(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to renew message lease",
+			"queue_name", req.GetQueueName(),
+			"message_id", req.GetMessageId(),
+			"error", err)
+		return nil, fmt.Errorf("failed to renew message lease: %w", err)
+	}
+
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) PeekQueueMessages(ctx context.Context, req *queueservice_pb.PeekQueueMessagesRequest) (*queueservice_pb.PeekQueueMessagesResponse, error) {
+	s.logger.InfoWithFields("PeekQueueMessages called", "queue_name", req.GetQueueName())
+
+	resp, err := s.storage.PeekQueueMessages(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to peek queue messages", "queue_name", req.GetQueueName(), "error", err)
+		return nil, fmt.Errorf("failed to peek queue messages: %w", err)
+	}
+
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) SendMessageHeartBeat(ctx context.Context, req *queueservice_pb.SendMessageHeartBeatRequest) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
+	s.logger.InfoWithFields("SendMessageHeartBeat called", "queue_name", req.GetQueueName())
+
+	resp, err := s.storage.SendMessageHeartBeat(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to send message heartbeat", "queue_name", req.GetQueueName(), "error", err)
+		return nil, fmt.Errorf("failed to send message heartbeat: %w", err)
+	}
+
+	return resp, nil
+}
+
+// Schedule Management Methods
+
+func (s *ChronoQueueServer) CreateSchedule(ctx context.Context, req *queueservice_pb.CreateScheduleRequest) (*queueservice_pb.CreateScheduleResponse, error) {
+	s.logger.InfoWithFields("CreateSchedule called", "schedule_name", req.Schedule.GetScheduleId())
+
+	resp, err := s.storage.CreateSchedule(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to create schedule", "schedule_name", req.GetSchedule().ScheduleId, "error", err)
+		return nil, fmt.Errorf("failed to create schedule: %w", err)
+	}
+
+	s.logger.InfoWithFields("Schedule created successfully", "schedule_name", req.GetSchedule().ScheduleId)
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) DeleteSchedule(ctx context.Context, req *queueservice_pb.DeleteScheduleRequest) (*queueservice_pb.DeleteScheduleResponse, error) {
+	s.logger.InfoWithFields("DeleteSchedule called", "schedule_name", req.ScheduleId)
+
+	resp, err := s.storage.DeleteSchedule(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to delete schedule", "schedule_name", req.ScheduleId, "error", err)
+		return nil, fmt.Errorf("failed to delete schedule: %w", err)
+	}
+
+	s.logger.InfoWithFields("Schedule deleted successfully", "schedule_name", req.ScheduleId)
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) GetSchedule(ctx context.Context, req *queueservice_pb.GetScheduleRequest) (*queueservice_pb.GetScheduleResponse, error) {
+	s.logger.InfoWithFields("GetSchedule called", "schedule_name", req.ScheduleId)
+
+	resp, err := s.storage.GetSchedule(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to get schedule", "schedule_name", req.ScheduleId, "error", err)
+		return nil, fmt.Errorf("failed to get schedule: %w", err)
+	}
+
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) ListSchedules(ctx context.Context, req *queueservice_pb.ListSchedulesRequest) (*queueservice_pb.ListSchedulesResponse, error) {
+	s.logger.Info("ListSchedules called")
+
+	resp, err := s.storage.ListSchedules(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to list schedules", "error", err)
+		return nil, fmt.Errorf("failed to list schedules: %w", err)
+	}
+
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) GetScheduleHistory(ctx context.Context, req *queueservice_pb.GetScheduleHistoryRequest) (*queueservice_pb.GetScheduleHistoryResponse, error) {
+	s.logger.InfoWithFields("GetScheduleHistory called", "schedule_name", req.ScheduleId)
+
+	resp, err := s.storage.GetScheduleHistory(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to get schedule history", "schedule_name", req.ScheduleId, "error", err)
+		return nil, fmt.Errorf("failed to get schedule history: %w", err)
+	}
+
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) PauseSchedule(ctx context.Context, req *queueservice_pb.PauseScheduleRequest) (*queueservice_pb.PauseScheduleResponse, error) {
+	s.logger.InfoWithFields("PauseSchedule called", "schedule_name", req.ScheduleId)
+
+	resp, err := s.storage.PauseSchedule(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to pause schedule", "schedule_name", req.ScheduleId, "error", err)
+		return nil, fmt.Errorf("failed to pause schedule: %w", err)
+	}
+
+	s.logger.InfoWithFields("Schedule paused successfully", "schedule_name", req.ScheduleId)
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) ResumeSchedule(ctx context.Context, req *queueservice_pb.ResumeScheduleRequest) (*queueservice_pb.ResumeScheduleResponse, error) {
+	s.logger.InfoWithFields("ResumeSchedule called", "schedule_name", req.ScheduleId)
+
+	resp, err := s.storage.ResumeSchedule(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to resume schedule", "schedule_name", req.ScheduleId, "error", err)
+		return nil, fmt.Errorf("failed to resume schedule: %w", err)
+	}
+
+	s.logger.InfoWithFields("Schedule resumed successfully", "schedule_name", req.ScheduleId)
+	return resp, nil
+}

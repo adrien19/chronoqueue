@@ -178,3 +178,12 @@ deploy/olm-catalog/k8s-triliovault/.DS_Store
 .DS_Store
 
 certs/*
+*.log
+logs/*
+*.crt
+*.key
+*.pem
+*.p12
+*.jks
+*.pfx
+*_unit.json

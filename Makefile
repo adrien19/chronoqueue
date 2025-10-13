@@ -20,8 +20,8 @@ PROTOC ?= protoc
 
 # Version of "protoc" to use
 # Must also specify a protobuf "suite" version from https://github.com/protocolbuffers/protobuf/releases
-PROTOC_VERSION = 24.4
-PROTOBUF_SUITE_VERSION = 24.4
+PROTOC_VERSION = 32.0
+PROTOBUF_SUITE_VERSION = 32.0
 
 # name of protoc-gen-go when protoc-gen-go --version is run.
 PROTOC_GEN_GO_NAME = "protoc-gen-go"
@@ -64,8 +64,8 @@ else
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
 
-PROTOC_GEN_GO_VERSION = v1.32.0
-PROTOC_GEN_GO_GRPC_VERSION = 1.3.0
+PROTOC_GEN_GO_VERSION = v1.36.9
+PROTOC_GEN_GO_GRPC_VERSION = 1.5.1
 
 # Default docker container and e2e test targets.
 TARGET_OS ?= linux
@@ -156,10 +156,20 @@ endif
 
 
 ################################################################################
+# Target: check-gotestsum                                                      #
+################################################################################
+.PHONY: check-gotestsum
+check-gotestsum:
+	@which gotestsum > /dev/null || { \
+		echo "Installing gotestsum..."; \
+		go install gotest.tools/gotestsum@latest; \
+	}
+
+################################################################################
 # Target: test                                                                 #
 ################################################################################
 .PHONY: test
-test:
+test: check-gotestsum
 	CGO_ENABLED=$(CGO) \
 		gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json \
@@ -167,8 +177,32 @@ test:
 			-- \
 				./pkg/... ./internal/... ./cmd/... ./client/...\
 				$(COVERAGE_OPTS)
+
+
+.PHONY: test-no-gotestsum
+test-no-gotestsum:
+.PHONY: test-no-gotestsum
+test-no-gotestsum:
 	CGO_ENABLED=$(CGO) \
-		go test ./tests/...
+		go test -v \
+				./pkg/... ./internal/... ./cmd/... ./client/... \
+				$(COVERAGE_OPTS)
+
+.PHONY: test-stable
+test-stable:
+	CGO_ENABLED=$(CGO) \
+		go test -v \
+				./client ./pkg/chronoqueue ./pkg/gateway ./pkg/metrics ./cmd/server ./internal/util ./internal/encryption/... ./pkg/log \
+				$(COVERAGE_OPTS)
+
+.PHONY: test-stable-gotestsum
+test-stable-gotestsum: check-gotestsum
+	CGO_ENABLED=$(CGO) gotestsum \
+		--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_stable.json \
+		--format pkgname-and-test-fails \
+		-- \
+		./client ./pkg/chronoqueue ./pkg/gateway ./pkg/metrics ./cmd/server ./internal/util ./internal/encryption/... ./pkg/log \
+		$(COVERAGE_OPTS)
 
 ################################################################################
 # Target: test-race                                                            #
@@ -177,6 +211,16 @@ test:
 test-race:
 	CGO_ENABLED=1 ./pkg/... ./internal/... ./cmd/... ./client/... | xargs \
 		go test -race
+
+################################################################################
+# Target: check-linter                                                         #
+################################################################################
+.PHONY: check-linter
+check-linter:
+	@which $(GOLANGCI_LINT) > /dev/null || { \
+		echo "Installing golangci-lint..."; \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.55.2; \
+	}
 
 ################################################################################
 # Target: lint                                                                 #
@@ -229,6 +273,24 @@ format: modtidy-all
 check: format test lint
 	git status && [[ -z `git status -s` ]]
 
+
+# Download Google API proto files (required for HTTP annotations)
+################################################################################
+# Target: get-googleapis                                                       #
+################################################################################
+.PHONY: get-googleapis
+get-googleapis: ## Download Google API proto files for annotations
+	@echo "Downloading Google API proto files..."
+	@mkdir -p ./proto/google/api
+	@curl -sSL https://raw.githubusercontent.com/googleapis/googleapis/master/google/api/annotations.proto \
+		> ./proto/google/api/annotations.proto
+	@curl -sSL https://raw.githubusercontent.com/googleapis/googleapis/master/google/api/http.proto \
+		> ./proto/google/api/http.proto
+	@curl -sSL https://raw.githubusercontent.com/googleapis/googleapis/master/google/api/field_behavior.proto \
+		> ./proto/google/api/field_behavior.proto
+	@echo "Google API proto files downloaded!"
+
+
 ################################################################################
 # Target: init-proto                                                           #
 ################################################################################
@@ -236,6 +298,9 @@ check: format test lint
 init-proto:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v$(PROTOC_GEN_GO_GRPC_VERSION)
+	go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@latest
+	go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@latest
+	@echo "init-proto completed!"
 
 
 ################################################################################
@@ -250,11 +315,25 @@ define genProtoc
 .PHONY: gen-proto-$(1)
 gen-proto-$(1):
 	$(PROTOC) --go_out=. --go_opt=module=$(PROTO_PREFIX) --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,module=$(PROTO_PREFIX) ./proto/$(1)/v1/*.proto
+	# Generate gRPC-Gateway reverse proxy code (only for queueservice)
+	@if [ "$(1)" = "queueservice" ]; then \
+		mkdir -p docs/api && \
+		$(PROTOC) --grpc-gateway_out=. \
+			--grpc-gateway_opt=module=$(PROTO_PREFIX) \
+			--grpc-gateway_opt=generate_unbound_methods=true \
+			./proto/$(1)/v1/service.proto; \
+	fi
+	# Generate OpenAPI v2 documentation (only for queueservice)
+	@if [ "$(1)" = "queueservice" ]; then \
+		$(PROTOC) --openapiv2_out=docs/api \
+			--openapiv2_opt=allow_merge=true,merge_file_name=chronoqueue \
+			./proto/$(1)/v1/service.proto; \
+	fi
 endef
 
 $(foreach ITEM,$(GRPC_PROTOS),$(eval $(call genProtoc,$(ITEM))))
 
-GEN_PROTOS:=$(foreach ITEM,$(GRPC_PROTOS),gen-proto-$(ITEM))
+GEN_PROTOS:=$(foreach ITEM,$(filter-out google,$(GRPC_PROTOS)),gen-proto-$(ITEM))
 
 .PHONY: gen-proto
 gen-proto: check-proto-version $(GEN_PROTOS) modtidy

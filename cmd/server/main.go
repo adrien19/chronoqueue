@@ -4,83 +4,125 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"syscall"
+	"time"
+
+	"github.com/spf13/pflag"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/reflection"
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
-
-	chronoqueue "github.com/adrien19/chronoqueue/pkg/chronoqueue"
-	"github.com/adrien19/chronoqueue/pkg/endpoints"
-	log "github.com/adrien19/chronoqueue/pkg/log"
+	"github.com/adrien19/chronoqueue/pkg/chronoqueue"
+	"github.com/adrien19/chronoqueue/pkg/gateway"
+	"github.com/adrien19/chronoqueue/pkg/log"
+	"github.com/adrien19/chronoqueue/pkg/metrics"
 	"github.com/adrien19/chronoqueue/pkg/repository"
-	"github.com/adrien19/chronoqueue/pkg/transport"
-	kitgrpc "github.com/go-kit/kit/transport/grpc"
-
-	// "github.com/go-kit/log"
-
-	"github.com/oklog/oklog/pkg/group"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/peer"
-	"google.golang.org/grpc/reflection"
-	"google.golang.org/grpc/status"
 )
 
-const (
-	defaultGRPCPort  = "9000"
-	defaultHTTPPort  = "9001"
-	defaultHostname  = "0.0.0.0"
-	defaultRedisHost = "0.0.0.0"
-	defaultRedisPort = "6379"
-	defaultRedisDB   = "0"
-)
+type ServerConfig struct {
+	GRPCAddr     string
+	HTTPAddr     string
+	RedisAddr    string
+	LogLevel     string
+	LogFormat    string
+	EnableTLS    bool
+	CertFile     string
+	KeyFile      string
+	CACertFile   string
+	EnableCORS   bool
+	AllowOrigins []string
+}
 
 func main() {
+	// Parse command-line flags
+	config := parseFlags()
+
+	// Initialize logger
+	logger := initializeLogger(config.LogLevel, config.LogFormat)
+	logger.Info("Starting ChronoQueue server...")
+
+	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	httpAddr, grpcAddr, redisConnectionString, loglevel, logformat := getConfigsFromEnv()
-	logger := initializeLogger(loglevel, logformat)
-
-	redisClient := initializeRedis(ctx, redisConnectionString, logger)
-
+	// Initialize dependencies
+	redisClient := initializeRedis(ctx, config.RedisAddr, logger)
 	encryptionKeyManager := initializeEncryptionKeyManager(logger)
 
+	// Initialize metrics
+	gateway.InitMetrics()
+
+	// Initialize storage layer (database)
 	database := repository.NewQueueStorage(ctx, redisClient, encryptionKeyManager, logger)
-	service := chronoqueue.NewChronoqueueService(database)
-	eps := endpoints.NewEndpointSet(service, logger)
-	httpHandler := transport.NewHTTPHandler(eps, logger)
-	grpcServer := transport.NewGRPCServer(eps, logger)
 
-	tlsConfig := getTLSConfigIfEnabled(logger) // This returns a tls.Config if mTLS is enabled, otherwise nil
+	// Initialize gRPC server directly with storage (no intermediate service layer)
+	grpcServer := chronoqueue.NewChronoQueueServer(database, logger)
 
-	startServers(httpAddr, grpcAddr, httpHandler, grpcServer, tlsConfig, logger)
+	// Start servers
+	startServers(ctx, config, grpcServer, logger)
 }
 
-func initializeLogger(loglevel, logformat string) *log.Logger {
-	level, err := logrus.ParseLevel(strings.ToLower(loglevel))
+func parseFlags() ServerConfig {
+	var config ServerConfig
+
+	pflag.StringVar(&config.GRPCAddr, "grpc-addr", ":9000", "gRPC server address")
+	pflag.StringVar(&config.HTTPAddr, "http-addr", ":8080", "HTTP gateway address")
+	pflag.StringVar(&config.RedisAddr, "redis-addr", "localhost:6379", "Redis server address")
+	pflag.StringVar(&config.LogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
+	pflag.StringVar(&config.LogFormat, "log-format", "text", "Log format (text, json)")
+	pflag.BoolVar(&config.EnableTLS, "enable-tls", false, "Enable TLS")
+	pflag.StringVar(&config.CertFile, "cert-file", "", "TLS certificate file")
+	pflag.StringVar(&config.KeyFile, "key-file", "", "TLS key file")
+	pflag.StringVar(&config.CACertFile, "ca-cert-file", "", "CA certificate file for mutual TLS (optional)")
+	pflag.BoolVar(&config.EnableCORS, "enable-cors", false, "Enable CORS for HTTP gateway")
+	pflag.StringSliceVar(&config.AllowOrigins, "cors-origins", []string{"*"}, "Allowed CORS origins")
+
+	// Add help flag
+	help := pflag.BoolP("help", "h", false, "Show help message")
+
+	pflag.Parse()
+
+	if *help {
+		fmt.Println("ChronoQueue - High-performance message queue system")
+		fmt.Println()
+		fmt.Println("Usage:")
+		pflag.PrintDefaults()
+		os.Exit(0)
+	}
+
+	// Validate configuration
+	if config.EnableTLS && (config.CertFile == "" || config.KeyFile == "") {
+		fmt.Fprintf(os.Stderr, "Error: TLS enabled but cert-file or key-file not specified\n")
+		os.Exit(1)
+	}
+
+	return config
+}
+
+func initializeLogger(logLevel, logFormat string) *log.Logger {
+	level, err := logrus.ParseLevel(logLevel)
 	if err != nil {
 		level = logrus.InfoLevel
 	}
-	formatter := logrus.Formatter(nil)
+
+	var formatter logrus.Formatter
 	fieldMap := logrus.FieldMap{
 		logrus.FieldKeyTime:  "timestamp",
 		logrus.FieldKeyLevel: "level",
 		logrus.FieldKeyMsg:   "message",
 		logrus.FieldKeyFunc:  "caller",
 	}
-	if strings.ToLower(logformat) == "json" {
+
+	if logFormat == "json" {
 		formatter = &logrus.JSONFormatter{
 			PrettyPrint: true,
 			FieldMap:    fieldMap,
@@ -94,272 +136,225 @@ func initializeLogger(loglevel, logformat string) *log.Logger {
 			FieldMap:               fieldMap,
 		}
 	}
-	l := log.NewLogger(log.WithLevel(level), log.WithFormatter(formatter))
-	return l
 
+	return log.NewLogger(log.WithLevel(level), log.WithFormatter(formatter))
 }
 
-func getConfigsFromEnv() (httpAddr, grpcAddr, redisConnectionString, loglevel, logformat string) {
-	httpAddr = net.JoinHostPort(envString("HOST", defaultHostname), envString("HTTP_PORT", defaultHTTPPort))
-	grpcAddr = net.JoinHostPort(envString("HOST", defaultHostname), envString("GRPC_PORT", defaultGRPCPort))
-	redisConnectionString = fmt.Sprintf("%s:%s", envString("REDIS_HOST", defaultRedisHost), envString("REDIS_PORT", defaultRedisPort))
-	loglevel = envString("LOG_LEVEL", "info")
-	logformat = envString("LOG_FORMAT", "json")
-	return
-}
-
-func initializeRedis(ctx context.Context, connectionString string, logger *log.Logger) *redis.Client {
-	dsn := connectionString
-	if dsn == "" {
-		dsn = "localhost:6379"
-	}
-	db, _ := strconv.ParseInt(envString("REDIS_DB", defaultRedisDB), 10, 0)
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: dsn,
-		DB:   int(db),
+func initializeRedis(ctx context.Context, addr string, logger *log.Logger) *redis.Client {
+	client := redis.NewClient(&redis.Options{
+		Addr: addr,
 	})
-	_, err := redisClient.Ping(ctx).Result()
+
+	// Test connection
+	_, err := client.Ping(ctx).Result()
 	if err != nil {
-		logger.ErrorWithFields("could not connect to redis", "err", err)
+		logger.ErrorWithFields("Failed to connect to Redis", "addr", addr, "error", err)
 		os.Exit(1)
 	}
-	return redisClient
+
+	logger.InfoWithFields("Connected to Redis", "addr", addr)
+	return client
 }
 
 func initializeEncryptionKeyManager(logger *log.Logger) *keymanager.EncryptionKeyManager {
-	KeyManager, err := keymanager.NewEncryptionKeyManager(logger)
+	// This is a simplified version. In production, you might want to
+	// load encryption keys from environment variables or a secure vault
+	km, err := keymanager.NewEncryptionKeyManager(logger)
 	if err != nil {
-		logger.ErrorWithFields("Failed to initialize encryption key manager", "err", err)
+		logger.ErrorWithFields("Failed to initialize encryption key manager", "error", err)
 		os.Exit(1)
 	}
-	return KeyManager
+	logger.Info("Encryption key manager initialized")
+	return km
 }
 
-func startServers(httpAddr, grpcAddr string, httpHandler http.Handler, grpcServer queueservice_pb.QueueServiceServer, tlsConfig *tls.Config, logger *log.Logger) {
-	var g group.Group
-	initHTTPServer(&g, httpAddr, httpHandler, tlsConfig, logger)
-	initGRPCServer(&g, grpcAddr, grpcServer, tlsConfig, logger)
-	waitForTermination(&g, logger)
-}
+func startServers(ctx context.Context, config ServerConfig, grpcServer *chronoqueue.ChronoQueueServer, logger *log.Logger) {
+	// Channel to listen for interrupt signal to terminate gracefully
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 
-func getTLSConfigIfEnabled(logger *log.Logger) *tls.Config {
-	tlsEnabled := envString("CHRONOQUEUE_TLS_ENABLED", "false") == "true"
-	if !tlsEnabled {
-		return nil
-	}
+	// Start gRPC server
+	grpcDone := make(chan error, 1)
+	go func() {
+		grpcDone <- startGRPCServer(config, grpcServer, logger)
+	}()
 
-	// Fetch paths from environment variables or use defaults
-	serverCertPath := envString("SERVER_CERT_PATH", "server.crt")
-	serverKeyPath := envString("SERVER_KEY_PATH", "server.key")
-	caCertPath := envString("CA_CERT_PATH", "ca.crt")
+	// Start HTTP gateway
+	httpDone := make(chan error, 1)
+	go func() {
+		httpDone <- startHTTPGateway(ctx, config, logger)
+	}()
 
-	cert, err := tls.LoadX509KeyPair(serverCertPath, serverKeyPath)
-	if err != nil {
-		logger.ErrorWithFields("Failed to load server.crt/server.key", "err", err)
-		os.Exit(1)
-	}
-
-	caCert, err := os.ReadFile(caCertPath)
-	if err != nil {
-		logger.ErrorWithFields("Failed to read ca.crt", "err", err)
-		os.Exit(1)
-	}
-	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(caCert)
-
-	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		ClientCAs:    caCertPool,
-	}
-}
-
-func clientCertMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
-			http.Error(w, "No client certificate provided", http.StatusUnauthorized)
-			return
+	// Wait for interrupt signal or server errors
+	select {
+	case <-interrupt:
+		logger.Info("Received interrupt signal, shutting down gracefully...")
+	case err := <-grpcDone:
+		if err != nil {
+			logger.ErrorWithFields("gRPC server error", "error", err)
 		}
-
-		seenDNs := make(map[string]bool)
-
-		// Iterate through the chain of client's certificates
-		for _, clientCert := range r.TLS.PeerCertificates {
-			// 1. Check if the certificate is X.509v3
-			if clientCert.Version != 3 {
-				http.Error(w, "Certificate is not X.509v3", http.StatusForbidden)
-				return
-			}
-
-			// 2. For client certificates, check key usage
-			if (clientCert.KeyUsage & x509.KeyUsageDigitalSignature) == 0 {
-				http.Error(w, "Client certificate key usage does not include digital signature", http.StatusForbidden)
-				return
-			}
-
-			// 3. For CA certificates, check key usage
-			if clientCert.IsCA && (clientCert.KeyUsage&x509.KeyUsageCertSign) == 0 {
-				http.Error(w, "CA certificate key usage does not include certificate signing", http.StatusForbidden)
-				return
-			}
-
-			// 4. Check weak signature algorithms
-			if clientCert.SignatureAlgorithm == x509.SHA1WithRSA || clientCert.SignatureAlgorithm == x509.MD5WithRSA {
-				http.Error(w, "Certificate uses a weak signature algorithm", http.StatusForbidden)
-				return
-			}
-
-			// 5. Check Distinguished Name uniqueness
-			dn := clientCert.Subject.String()
-			if _, exists := seenDNs[dn]; exists {
-				http.Error(w, "Multiple certificates in the chain have the same distinguished name", http.StatusForbidden)
-				return
-			}
-			seenDNs[dn] = true
-		}
-
-		// If all checks pass, call the next handler
-		next.ServeHTTP(w, r)
-	})
-}
-
-func initHTTPServer(g *group.Group, addr string, handler http.Handler, tlsConfig *tls.Config, logger *log.Logger) {
-	httpListener, err := net.Listen("tcp", addr)
-	if err != nil {
-		logger.ErrorWithFields("Failed to listen on HTTP", "transport", "HTTP", "err", err)
-		os.Exit(1)
-	}
-
-	if tlsConfig != nil {
-		httpListener = tls.NewListener(httpListener, tlsConfig)
-		handler = clientCertMiddleware(handler)
-	}
-
-	g.Add(func() error {
-		logger.InfoWithFields("Starting HTTP Server", "transport", "HTTP", "addr", addr)
-		return http.Serve(httpListener, handler)
-	}, func(error) {
-		httpListener.Close()
-	})
-}
-
-func customVerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-	if len(verifiedChains) == 0 || len(verifiedChains[0]) == 0 {
-		return errors.New("could not obtain client certificate")
-	}
-	// Iterate through each presented chain
-	for _, chain := range verifiedChains {
-		for _, cert := range chain {
-			// 1. Check if the certificate is X.509v3
-			if cert.Version != 3 {
-				return errors.New("certificate is not X.509v3")
-			}
-
-			// 3. For CA certificates
-			if cert.IsCA {
-				// Check the key usage includes the required constraints
-				if (cert.KeyUsage & x509.KeyUsageCertSign) == 0 {
-					return errors.New("CA certificate key usage does not include certificate signing")
-				}
-			} else {
-				// 2. For client certificates
-				// Check the key usage includes Digital Signature
-				if (cert.KeyUsage & x509.KeyUsageDigitalSignature) == 0 {
-					return errors.New("client certificate key usage does not include digital signature")
-				}
-			}
-
-			// 4. & 5. Check signature algorithms
-			if cert.SignatureAlgorithm == x509.SHA1WithRSA || cert.SignatureAlgorithm == x509.MD5WithRSA {
-				return errors.New("certificate uses weak signature algorithm")
-			}
-
-			// 5. Check each certificate in the chain has a unique Distinguished Name (for end-entity certs)
-			for _, otherCert := range chain {
-				if otherCert != cert && otherCert.Subject.String() == cert.Subject.String() {
-					return errors.New("multiple certificates in the chain have the same distinguished name")
-				}
-			}
+	case err := <-httpDone:
+		if err != nil {
+			logger.ErrorWithFields("HTTP server error", "error", err)
 		}
 	}
 
-	return nil
+	// Graceful shutdown
+	logger.Info("Server shutdown complete")
 }
 
-func verifyPeerCertificateInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	peer, ok := peer.FromContext(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "no peer found")
-	}
-
-	tlsAuth, ok := peer.AuthInfo.(credentials.TLSInfo)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "unexpected peer transport credentials")
-	}
-
-	if len(tlsAuth.State.VerifiedChains) == 0 || len(tlsAuth.State.VerifiedChains[0]) == 0 {
-		return nil, status.Error(codes.Unauthenticated, "could not obtain client certificate")
-	}
-
-	err := customVerifyPeerCertificate(nil, tlsAuth.State.VerifiedChains)
+func startGRPCServer(config ServerConfig, grpcServer *chronoqueue.ChronoQueueServer, logger *log.Logger) error {
+	listener, err := net.Listen("tcp", config.GRPCAddr)
 	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, err.Error())
-	}
-
-	return handler(ctx, req)
-}
-
-func initGRPCServer(g *group.Group, addr string, server queueservice_pb.QueueServiceServer, tlsConfig *tls.Config, logger *log.Logger) {
-	grpcListener, err := net.Listen("tcp", addr)
-	if err != nil {
-		logger.ErrorWithFields("Failed to listen on gRPC", "transport", "gRPC", "during", "Listen", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to listen on %s: %w", config.GRPCAddr, err)
 	}
 
 	var opts []grpc.ServerOption
-	opts = append(opts, grpc.ChainUnaryInterceptor(kitgrpc.Interceptor))
+
+	// Add interceptors
+	interceptors := []grpc.UnaryServerInterceptor{
+		gateway.RecoveryInterceptor(logger),
+		gateway.LoggingInterceptor(logger),
+		gateway.AuthInterceptor(logger),
+		gateway.MetricsInterceptor(logger),
+		gateway.ValidationInterceptor(logger),
+	}
+
+	// Get TLS configuration
+	tlsConfig := getTLSConfigIfEnabled(config, logger)
 	if tlsConfig != nil {
-		opts = append(opts, grpc.ChainUnaryInterceptor(verifyPeerCertificateInterceptor))
+		// Add TLS certificate verification interceptor if mTLS is enabled
+		if tlsConfig.ClientAuth == tls.RequireAndVerifyClientCert {
+			interceptors = append(interceptors, gateway.VerifyPeerCertificateInterceptor)
+			logger.InfoWithFields("Added peer certificate verification interceptor for mTLS")
+		}
+
 		creds := credentials.NewTLS(tlsConfig)
 		opts = append(opts, grpc.Creds(creds))
+
+		logger.InfoWithFields("TLS enabled for gRPC server",
+			"cert_file", config.CertFile,
+			"mutual_tls", tlsConfig.ClientAuth == tls.RequireAndVerifyClientCert)
 	}
-	baseServer := grpc.NewServer(opts...)
 
-	// Register the server reflection service on the server.
-	// See https://grpc.github.io/grpc/core/md_doc_server-reflection.html.
-	reflection.Register(baseServer)
+	opts = append(opts, grpc.ChainUnaryInterceptor(interceptors...))
 
-	queueservice_pb.RegisterQueueServiceServer(baseServer, server)
-	g.Add(func() error {
-		logger.InfoWithFields("Starting gRPC Server", "transport", "gRPC", "addr", addr)
-		return baseServer.Serve(grpcListener)
-	}, func(error) {
-		grpcListener.Close()
-	})
+	server := grpc.NewServer(opts...)
+
+	// Register services
+	queueservice_pb.RegisterQueueServiceServer(server, grpcServer)
+
+	// Enable reflection for development
+	reflection.Register(server)
+
+	logger.InfoWithFields("Starting gRPC server", "addr", config.GRPCAddr)
+
+	return server.Serve(listener)
 }
 
-func waitForTermination(g *group.Group, logger *log.Logger) {
-	cancelInterrupt := make(chan struct{})
-	g.Add(func() error {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-		select {
-		case sig := <-c:
-			return fmt.Errorf("received signal %s", sig)
-		case <-cancelInterrupt:
-			return nil
+func startHTTPGateway(ctx context.Context, config ServerConfig, logger *log.Logger) error {
+	// Use the gateway helper function from gateway package
+	gatewayConfig := gateway.GatewayConfig{
+		GRPCServerAddr: config.GRPCAddr,
+		HTTPAddr:       config.HTTPAddr,
+		CORSEnabled:    config.EnableCORS,
+		AllowedOrigins: config.AllowOrigins,
+	}
+
+	gatewayHandler, err := gateway.NewHTTPGateway(ctx, gatewayConfig, logger)
+	if err != nil {
+		return fmt.Errorf("failed to create HTTP gateway: %w", err)
+	}
+
+	// Create HTTP mux for additional endpoints
+	httpMux := http.NewServeMux()
+
+	// Mount the gRPC-Gateway at the root
+	httpMux.Handle("/", gatewayHandler)
+
+	// Add health check endpoint
+	httpMux.Handle("/health", gateway.HealthCheckHandler())
+
+	// Add metrics endpoint
+	httpMux.Handle("/metrics", gateway.MetricsHandler())
+
+	// Add Swagger UI endpoint
+	httpMux.Handle("/docs/", gateway.SwaggerUIHandler())
+
+	// Serve the OpenAPI spec
+	httpMux.Handle("/docs/swagger.json", gateway.SwaggerSpecHandler())
+
+	// Wrap with metrics middleware
+	var handler http.Handler = httpMux
+	handler = metrics.HTTPMetricsMiddleware(handler)
+
+	// Get TLS configuration and apply client certificate middleware if mTLS is enabled
+	tlsConfig := getTLSConfigIfEnabled(config, logger)
+	if tlsConfig != nil && tlsConfig.ClientAuth == tls.RequireAndVerifyClientCert {
+		handler = gateway.ClientCertMiddleware(handler)
+		logger.InfoWithFields("Added client certificate middleware for HTTP mTLS")
+	}
+
+	server := &http.Server{
+		Addr:         config.HTTPAddr,
+		Handler:      handler,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		TLSConfig:    tlsConfig,
+	}
+
+	logger.InfoWithFields("Starting HTTP gateway",
+		"addr", config.HTTPAddr,
+		"grpc_endpoint", config.GRPCAddr,
+		"tls_enabled", tlsConfig != nil,
+		"mutual_tls", tlsConfig != nil && tlsConfig.ClientAuth == tls.RequireAndVerifyClientCert)
+
+	// Start server with or without TLS
+	if tlsConfig != nil {
+		return server.ListenAndServeTLS("", "") // Certificates are in TLSConfig
+	}
+	return server.ListenAndServe()
+}
+
+// getTLSConfigIfEnabled checks if TLS is enabled and returns the TLS configuration
+func getTLSConfigIfEnabled(config ServerConfig, logger *log.Logger) *tls.Config {
+	if !config.EnableTLS {
+		return nil
+	}
+
+	// Load server certificate and key
+	cert, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
+	if err != nil {
+		logger.ErrorWithFields("Failed to load server certificate/key", "cert_file", config.CertFile, "key_file", config.KeyFile, "error", err)
+		os.Exit(1)
+	}
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
+
+	// If CA certificate is provided, enable mutual TLS
+	if config.CACertFile != "" {
+		caCert, err := os.ReadFile(config.CACertFile)
+		if err != nil {
+			logger.ErrorWithFields("Failed to read CA certificate", "ca_cert_file", config.CACertFile, "error", err)
+			os.Exit(1)
 		}
-	}, func(error) {
-		close(cancelInterrupt)
-	})
-	logger.InfoWithFields("Exiting...", "signal", g.Run())
 
-}
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			logger.ErrorWithFields("Failed to parse CA certificate", "ca_cert_file", config.CACertFile)
+			os.Exit(1)
+		}
 
-func envString(env, fallback string) string {
-	e := os.Getenv(env)
-	if e == "" {
-		return fallback
+		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+		tlsConfig.ClientCAs = caCertPool
+
+		logger.InfoWithFields("Mutual TLS enabled", "ca_cert_file", config.CACertFile)
+	} else {
+		// Server-side TLS only
+		logger.InfoWithFields("Server-side TLS enabled (no client certificates required)")
 	}
-	return e
+
+	return tlsConfig
 }
