@@ -17,11 +17,13 @@ func (as *storage) fetchMessageIDs(ctx context.Context, queueName string, priori
 	min := "-inf"
 	max := "+inf"
 	// max := strconv.FormatInt(time.Now().UnixMilli(), 10)
-	if priorityRange != nil {
+	if priorityRange != nil && (priorityRange.GetMin() != 0 || priorityRange.GetMax() != 0) {
 		min = strconv.FormatInt(priorityRange.GetMin(), 10)
 		max = strconv.FormatInt(priorityRange.GetMax(), 10)
 	}
-	return as.redisClient.ZRangeByScore(ctx, queueName, &redis.ZRangeBy{
+	fmt.Println("Fetching message IDs from Redis with priority range:", min, "-", max)
+	prefixedQueueName := "queue:" + queueName
+	return as.redisClient.ZRangeByScore(ctx, prefixedQueueName, &redis.ZRangeBy{
 		Min:    min,
 		Max:    max,
 		Offset: 0,

@@ -96,6 +96,7 @@ func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, m
 }
 
 func (as *storage) getMetadata(ctx context.Context, key string, metadata interface{}) error {
+	fmt.Printf("Fetching metadata for key: %s\n", key)
 	metaResult, err := as.redisClient.HGet(ctx, key, "metadata").Result()
 	if err != nil {
 		return err
@@ -111,7 +112,7 @@ func (as *storage) getMetadata(ctx context.Context, key string, metadata interfa
 }
 
 func (as *storage) getQueueMetadata(ctx context.Context, queueName string) (*queue_pb.QueueMetadata, error) {
-	queueMetaKey := fmt.Sprintf("%s:meta", queueName)
+	queueMetaKey := fmt.Sprintf("queue:%s:meta", queueName)
 	var queueMeta queue_pb.QueueMetadata
 	if err := as.getMetadata(ctx, queueMetaKey, &queueMeta); err != nil {
 		return nil, err
@@ -147,6 +148,10 @@ func (as *storage) updateMessageStateAndLease(message *message_pb.Message, reque
 }
 
 func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string, message *message_pb.Message) error {
+	return as.saveMessageWithMetadataAndOldState(ctx, queueName, message, message_pb.Message_Metadata_State(-1))
+}
+
+func (as *storage) saveMessageWithMetadataAndOldState(ctx context.Context, queueName string, message *message_pb.Message, oldState message_pb.Message_Metadata_State) error {
 
 	messageMutex := as.rs.NewMutex("mutex:" + message.MessageId)
 	// Try to acquire the lock
@@ -162,6 +167,20 @@ func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string
 		}
 	}()
 
+	key := fmt.Sprintf("%s:%s:meta", queueName, message.MessageId)
+
+	// If oldState is -1, we need to fetch the old state
+	if oldState == message_pb.Message_Metadata_State(-1) {
+		if oldMetadata, err := as.fetchMessageMetadata(ctx, queueName, message.MessageId); err == nil {
+			oldState = oldMetadata.State
+		} else {
+			// If we can't fetch old metadata, assume this is a new message
+			as.logger.Info("No existing metadata found for message, assuming new message", "messageID", message.MessageId, "queueName", queueName)
+			oldState = message_pb.Message_Metadata_State(-1)
+		}
+	} // Begin transaction pipeline for atomic updates
+	txPipeline := as.redisClient.TxPipeline()
+
 	// Create a proto message's metadata marshaller
 	m := protojson.MarshalOptions{
 		EmitUnpopulated: true,
@@ -172,18 +191,42 @@ func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string
 		return err
 	}
 
-	messageMetadataByte, err := m.Marshal(message.Metadata)
+	messageMetadataBytes, err := m.Marshal(message.Metadata)
 	if err != nil {
 		return err
 	}
 
-	key := fmt.Sprintf("%s:%s:meta", queueName, message.MessageId)
-	return as.redisClient.HSet(ctx, key, "metadata", string(messageMetadataByte)).Err()
+	// Update message metadata
+	_, err = txPipeline.HSet(ctx, key, "metadata", string(messageMetadataBytes)).Result()
+	if err != nil {
+		return err
+	}
+
+	// Handle state index transitions
+	newState := message.Metadata.State
+	if oldState != newState {
+		var newScore float64
+		switch newState {
+		case message_pb.Message_Metadata_RUNNING:
+			newScore = float64(message.Metadata.LeaseExpiry)
+		case message_pb.Message_Metadata_INVISIBLE:
+			newScore = float64(message.Metadata.InvisibilityExpiry)
+		}
+
+		if err := as.transitionStateIndex(ctx, txPipeline, key, oldState, newState, newScore); err != nil {
+			return fmt.Errorf("failed to update state indexes: %w", err)
+		}
+	}
+
+	// Commit the transaction
+	_, err = txPipeline.Exec(ctx)
+	return err
 }
 
 func (as *storage) fetchQueueMembersBeforeNow(ctx context.Context, queueName string) ([]string, error) {
 	max := strconv.FormatInt(time.Now().UnixMilli(), 10)
-	return as.redisClient.ZRangeByScore(ctx, queueName, &redis.ZRangeBy{
+	prefixedQueueName := "queue:" + queueName
+	return as.redisClient.ZRangeByScore(ctx, prefixedQueueName, &redis.ZRangeBy{
 		Min:    "-inf",
 		Max:    max,
 		Offset: 0,
@@ -196,11 +239,13 @@ func (as *storage) listMetadataIDs(ctx context.Context, keyType string, prefix s
 	var cursor uint64
 	var err error
 	queryStr := ""
-	if keyType == "queue" {
-		queryStr = prefix + "*" + ":meta"
-	} else if keyType == "schedule" {
+	switch keyType {
+	case "queue":
+		fmt.Println("Listing queue metadata IDs with prefix:", prefix)
+		queryStr = "queue:" + prefix + "*" + ":meta"
+	case "schedule":
 		queryStr = "schedule:" + prefix + "*" + ":meta"
-	} else {
+	default:
 		return nil, errors.New("invalid key type: " + queryStr)
 	}
 	for {
@@ -215,4 +260,83 @@ func (as *storage) listMetadataIDs(ctx context.Context, keyType string, prefix s
 		}
 	}
 	return metadataIDs, nil
+}
+
+// State index management helpers for sorted sets optimization
+
+// addToStateIndex adds a message to the appropriate state-based sorted set
+func (as *storage) addToStateIndex(ctx context.Context, pipeline redis.Pipeliner, messageKey string, state message_pb.Message_Metadata_State, score float64) error {
+	var indexKey string
+	switch state {
+	case message_pb.Message_Metadata_INVISIBLE:
+		indexKey = "invisible_messages"
+	case message_pb.Message_Metadata_RUNNING:
+		indexKey = "running_messages"
+	case message_pb.Message_Metadata_PENDING:
+		// PENDING messages don't need indexing as they're handled by queue priority
+		return nil
+	case message_pb.Message_Metadata_COMPLETED, message_pb.Message_Metadata_CANCELED, message_pb.Message_Metadata_ERRORED:
+		// Terminal states don't need indexing
+		return nil
+	default:
+		return nil
+	}
+
+	if pipeline != nil {
+		_, err := pipeline.ZAdd(ctx, indexKey, redis.Z{
+			Score:  score,
+			Member: messageKey,
+		}).Result()
+		return err
+	} else {
+		_, err := as.redisClient.ZAdd(ctx, indexKey, redis.Z{
+			Score:  score,
+			Member: messageKey,
+		}).Result()
+		return err
+	}
+}
+
+// removeFromStateIndex removes a message from the appropriate state-based sorted set
+func (as *storage) removeFromStateIndex(ctx context.Context, pipeline redis.Pipeliner, messageKey string, state message_pb.Message_Metadata_State) error {
+	var indexKey string
+	switch state {
+	case message_pb.Message_Metadata_INVISIBLE:
+		indexKey = "invisible_messages"
+	case message_pb.Message_Metadata_RUNNING:
+		indexKey = "running_messages"
+	case message_pb.Message_Metadata_PENDING:
+		// PENDING messages don't need indexing
+		return nil
+	case message_pb.Message_Metadata_COMPLETED, message_pb.Message_Metadata_CANCELED, message_pb.Message_Metadata_ERRORED:
+		// Terminal states don't need indexing
+		return nil
+	default:
+		return nil
+	}
+
+	if pipeline != nil {
+		_, err := pipeline.ZRem(ctx, indexKey, messageKey).Result()
+		return err
+	} else {
+		_, err := as.redisClient.ZRem(ctx, indexKey, messageKey).Result()
+		return err
+	}
+}
+
+// transitionStateIndex handles state transitions by removing from old index and adding to new index
+func (as *storage) transitionStateIndex(ctx context.Context, pipeline redis.Pipeliner, messageKey string, oldState, newState message_pb.Message_Metadata_State, newScore float64) error {
+	// Remove from old state index (skip if oldState is -1, indicating no previous state)
+	if oldState != message_pb.Message_Metadata_State(-1) {
+		if err := as.removeFromStateIndex(ctx, pipeline, messageKey, oldState); err != nil {
+			return fmt.Errorf("failed to remove from old state index: %w", err)
+		}
+	}
+
+	// Add to new state index
+	if err := as.addToStateIndex(ctx, pipeline, messageKey, newState, newScore); err != nil {
+		return fmt.Errorf("failed to add to new state index: %w", err)
+	}
+
+	return nil
 }

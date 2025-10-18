@@ -120,7 +120,8 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice
 	txPipeline := as.redisClient.TxPipeline()
 
 	// Add the message to the queue
-	_, err = txPipeline.ZAdd(ctx, queueName, redis.Z{
+	prefixedQueueName := "queue:" + queueName
+	_, err = txPipeline.ZAdd(ctx, prefixedQueueName, redis.Z{
 		Score:  float64(priorityScore),
 		Member: message.GetMessageId(),
 	}).Result()
@@ -139,6 +140,17 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice
 	_, err = txPipeline.HSet(ctx, fmt.Sprintf("%s:%s:meta", queueName, message.MessageId), "metadata", string(messageMetadataByte)).Result()
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while saving message metadata")
+		return nil, chronoErr.GRPCStatus()
+	}
+
+	// Add message to state-based index (INVISIBLE state)
+	messageKey := fmt.Sprintf("%s:%s:meta", queueName, message.MessageId)
+	_, err = txPipeline.ZAdd(ctx, "invisible_messages", redis.Z{
+		Score:  float64(message.Metadata.InvisibilityExpiry),
+		Member: messageKey,
+	}).Result()
+	if err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while adding message to invisible index")
 		return nil, chronoErr.GRPCStatus()
 	}
 

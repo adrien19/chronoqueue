@@ -11,7 +11,7 @@ GIT_COMMIT  = $(shell git rev-list -1 HEAD)
 GIT_VERSION ?= $(shell git describe --always --abbrev=7 --dirty)
 # By default, disable CGO_ENABLED. See the details on https://golang.org/cmd/cgo
 CGO         ?= 0
-BINARIES    ?= server
+BINARIES    ?= chronoqueue
 
 # Add latest tag if LATEST_RELEASE is true
 LATEST_RELEASE ?=
@@ -127,11 +127,21 @@ build: $(CHRONOQUEUE_BINS)
 
 # Generate builds for chronoqueue binaries for the target
 # Params:
-# $(1): the binary name for the target
-# $(2): the binary main directory
-# $(3): the target os
-# $(4): the target arch
+# $(1): the file name for the target
+# $(2): the binary name for the target
+# $(3): the goos for the target
+# $(4): the goarch for the target
 # $(5): the output directory
+define genBinariesForTarget
+.PHONY: $(5)/$(1)
+$(5)/$(1):
+	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags="" -tags=$(CHRONOQUEUE_GO_BUILD_TAGS) \
+	  -o $(5)/$(1) \
+	  .
+endef
+
+# Generate binary targets
+$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EXT),.,$(GOOS),$(GOARCH),$(CHRONOQUEUE_OUT_DIR))))
 define genBinariesForTarget
 .PHONY: $(5)/$(1)
 $(5)/$(1):
@@ -140,7 +150,7 @@ $(5)/$(1):
 endef
 
 # Generate binary targets
-$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EXT),./cmd/$(ITEM),$(GOOS),$(GOARCH),$(CHRONOQUEUE_OUT_DIR))))
+$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EXT),.,$(GOOS),$(GOARCH),$(CHRONOQUEUE_OUT_DIR))))
 
 
 ################################################################################
@@ -151,7 +161,7 @@ build-linux: $(BUILD_LINUX_BINS)
 
 # Generate linux binaries targets to build linux docker image
 ifneq ($(GOOS), linux)
-$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM),./cmd/$(ITEM),linux,$(GOARCH),$(CHRONOQUEUE_LINUX_OUT_DIR))))
+# Linux targets are handled by the main target now
 endif
 
 
@@ -192,7 +202,7 @@ test-no-gotestsum:
 test-stable:
 	CGO_ENABLED=$(CGO) \
 		go test -v \
-				./client ./pkg/chronoqueue ./pkg/gateway ./pkg/metrics ./cmd/server ./internal/util ./internal/encryption/... ./pkg/log \
+				./client ./pkg/chronoqueue ./pkg/gateway ./pkg/metrics ./internal/server ./internal/util ./internal/encryption/... ./pkg/log \
 				$(COVERAGE_OPTS)
 
 .PHONY: test-stable-gotestsum
@@ -201,7 +211,7 @@ test-stable-gotestsum: check-gotestsum
 		--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_stable.json \
 		--format pkgname-and-test-fails \
 		-- \
-		./client ./pkg/chronoqueue ./pkg/gateway ./pkg/metrics ./cmd/server ./internal/util ./internal/encryption/... ./pkg/log \
+		./client ./pkg/chronoqueue ./pkg/gateway ./pkg/metrics ./internal/server ./internal/util ./internal/encryption/... ./pkg/log \
 		$(COVERAGE_OPTS)
 
 ################################################################################

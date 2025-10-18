@@ -25,12 +25,13 @@ func (as *storage) RenewMessageLease(ctx context.Context, request *queueservice_
 	}
 
 	// Update the lease duration and expiration time
+	oldState := metadata.State // Capture old state before updates
 	metadata.LeaseDuration = request.GetLeaseDuration()
 	expireDate := time.Now().Add(time.Duration(metadata.GetLeaseDuration().AsDuration()))
 	metadata.LeaseExpiry = expireDate.UnixNano() / int64(time.Millisecond)
 
-	// Save the updated metadata
-	err = as.saveMessageMetadata(ctx, queueName, messageID, metadata)
+	// Save the updated metadata with known old state to avoid redundant fetch
+	err = as.saveMessageMetadataWithOldState(ctx, queueName, messageID, metadata, oldState)
 	if err != nil {
 		return nil, fmt.Errorf("error saving updated message metadata: %v", err)
 	}

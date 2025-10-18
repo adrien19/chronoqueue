@@ -71,9 +71,10 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *queueservice_pb
 	}
 
 	// Update the message's state to "Running" and restore the message
+	oldState := message.Metadata.State // Capture old state before update (should be PENDING)
 	as.updateMessageStateAndLease(message, request, queueMeta)
 
-	if err := as.saveMessageWithMetadata(ctx, request.GetQueueName(), message); err != nil {
+	if err := as.saveMessageWithMetadataAndOldState(ctx, request.GetQueueName(), message, oldState); err != nil {
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to save message's metadata.").GRPCStatus()
 	}
 

@@ -1,0 +1,184 @@
+package commands
+
+import (
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/adrien19/chronoqueue/client"
+	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
+	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/types/known/durationpb"
+)
+
+// NewQueueCommand creates the queue command group
+func NewQueueCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "queue",
+		Short: "Queue management operations",
+		Long:  `Manage ChronoQueue queues - create, delete, list, and get queue state.`,
+	}
+
+	cmd.AddCommand(newQueueCreateCommand())
+	cmd.AddCommand(newQueueDeleteCommand())
+	cmd.AddCommand(newQueueListCommand())
+	cmd.AddCommand(newQueueStateCommand())
+
+	return cmd
+}
+
+// newQueueCreateCommand creates the queue create subcommand
+func newQueueCreateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "create <queue-name>",
+		Short: "Create a new queue",
+		Long:  `Create a new ChronoQueue queue with the specified configuration.`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			queueName := args[0]
+
+			// Parse flags
+			queueType, _ := cmd.Flags().GetString("type")
+			queueTypeInt := client.ParseQueueType(queueType)
+
+			dequeueAttempts, _ := cmd.Flags().GetInt32("dequeue-attempts")
+			leaseDurationStr, _ := cmd.Flags().GetString("lease-duration")
+			exclusivityKey, _ := cmd.Flags().GetString("exclusivity-key")
+			invisibilityDurationStr, _ := cmd.Flags().GetString("invisibility-duration")
+			queueOpts := client.QueueOptions{
+				Type:                 queueTypeInt,
+				DequeueAttempts:      dequeueAttempts,
+				LeaseDuration:        leaseDurationStr,
+				ExclusivityKey:       exclusivityKey,
+				InvisibilityDuration: invisibilityDurationStr,
+			}
+
+			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
+				// Stub implementation for now
+				resp, err := client.CreateQueue(cmd.Context(), queueName, queueOpts)
+				if err != nil {
+					return err
+				}
+				outputs.PrintInfo(fmt.Sprintf("Status: %v", resp.GetSuccess()))
+				return nil
+			})
+		},
+	}
+
+	cmd.Flags().StringP("type", "t", "simple", "Queue type (simple, exclusive)")
+	cmd.Flags().Int32P("dequeue-attempts", "a", 3, "Maximum dequeue attempts")
+	cmd.Flags().StringP("lease-duration", "l", "30s", "Message lease duration")
+	cmd.Flags().StringP("exclusivity-key", "k", "", "Exclusivity key (required for exclusive queues)")
+	cmd.Flags().StringP("invisibility-duration", "i", "0s", "Message invisibility duration")
+
+	return cmd
+}
+
+// newQueueDeleteCommand creates the queue delete subcommand
+func newQueueDeleteCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "delete <queue-name>",
+		Short: "Delete a queue",
+		Long:  `Delete an existing ChronoQueue queue and all its messages.`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			queueName := args[0]
+			force, _ := cmd.Flags().GetBool("force")
+
+			if !force {
+				fmt.Printf("Are you sure you want to delete queue '%s'? This action cannot be undone. [y/N]: ", queueName)
+				var confirm string
+				fmt.Scanln(&confirm)
+				if confirm != "y" && confirm != "Y" {
+					outputs.PrintInfo("Operation cancelled")
+					return nil
+				}
+			}
+
+			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
+				resp, err := client.DeleteQueue(cmd.Context(), queueName)
+				if err != nil {
+					return err
+				}
+				outputs.PrintInfo(fmt.Sprintf("Status: %v", resp.GetSuccess()))
+				return nil
+			})
+		},
+	}
+
+	cmd.Flags().BoolP("force", "f", false, "Force deletion without confirmation")
+
+	return cmd
+}
+
+// newQueueListCommand creates the queue list subcommand
+func newQueueListCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all queues",
+		Long:  `List all ChronoQueue queues with their metadata.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
+				queues, err := client.ListQueues(cmd.Context(), "")
+				if err != nil {
+					return err
+				}
+				outputs.PrintInfo(fmt.Sprintf("Queues: %d", len(queues.GetQueues())))
+				for _, q := range queues.GetQueues() {
+					outputs.PrintInfo(fmt.Sprintf("Queue: %s, Type: %s, Metadata: %v", q.Name, q.Metadata.Type, q.Metadata))
+				}
+				return nil
+			})
+		},
+	}
+
+	return cmd
+}
+
+// newQueueStateCommand creates the queue state subcommand
+func newQueueStateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "state <queue-name>",
+		Short: "Get queue state information",
+		Long:  `Get detailed state information for a specific queue.`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			queueName := args[0]
+
+			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
+				state, err := client.GetQueueState(cmd.Context(), queueName)
+				if err != nil {
+					return err
+				}
+				outputs.PrintInfo(fmt.Sprintf("Queue: %s", queueName))
+				outputs.PrintInfo(fmt.Sprintf("Invisible Messages: %d", state.GetStateCounts()["INVISIBLE"]))
+				outputs.PrintInfo(fmt.Sprintf("Pending Messages: %d", state.GetStateCounts()["PENDING"]))
+				outputs.PrintInfo(fmt.Sprintf("Running Messages: %d", state.GetStateCounts()["RUNNING"]))
+				outputs.PrintInfo(fmt.Sprintf("Errored Messages: %d", state.GetStateCounts()["ERRORED"]))
+				outputs.PrintInfo(fmt.Sprintf("Completed Messages: %d", state.GetStateCounts()["COMPLETED"]))
+				if state.GetEarliestDeadline() != nil {
+					outputs.PrintInfo(fmt.Sprintf("Earliest Deadline: %s", state.GetEarliestDeadline().AsTime().String()))
+				}
+				return nil
+			})
+		},
+	}
+
+	return cmd
+}
+
+// Helper functions
+
+func parseDurationToPb(duration string) (*durationpb.Duration, error) {
+	d, err := time.ParseDuration(duration)
+	if err != nil {
+		return nil, err
+	}
+	return durationpb.New(d), nil
+}
+
+func formatTimestamp(timestamp int64) string {
+	// Convert Unix timestamp to readable format
+	// For now, just return as string
+	return strconv.FormatInt(timestamp, 10)
+}

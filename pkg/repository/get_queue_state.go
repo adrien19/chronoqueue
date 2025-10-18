@@ -31,8 +31,9 @@ func (as *storage) GetQueueState(ctx context.Context, request *queueservice_pb.G
 		}
 	}()
 
+	prefixedQueueName := "queue:" + request.GetQueueName()
 	// Now we can safely compute the queue state as before
-	membersWithScores, err := as.redisClient.ZRangeByScoreWithScores(ctx, request.GetQueueName(), &redis.ZRangeBy{
+	membersWithScores, err := as.redisClient.ZRangeByScoreWithScores(ctx, prefixedQueueName, &redis.ZRangeBy{
 		Min:    "-inf",
 		Max:    "+inf",
 		Offset: 0,

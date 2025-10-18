@@ -17,10 +17,12 @@ func (as *storage) ListQueues(ctx context.Context, request *queueservice_pb.List
 		return nil, err
 	}
 
+	fmt.Println("Queue Metadata IDs:", queueMetadataIDs) // Debugging line
+
 	queues := make([]*queue_pb.Queue, len(queueMetadataIDs))
 	for i, queueMetadataID := range queueMetadataIDs {
-		queueID := strings.Split(queueMetadataID, ":")[0]
-		metadata, err := as.getQueueMetadata(ctx, queueID)
+		queueID := strings.Split(queueMetadataID, ":")[1]  // Extract queue name from "queue:<name>:meta"
+		metadata, err := as.getQueueMetadata(ctx, queueID) // Use extracted queue name
 		if err != nil {
 			msg := fmt.Sprintf("error fetching metadata for queue %s", queueID)
 			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, msg)

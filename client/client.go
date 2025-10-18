@@ -180,9 +180,9 @@ func DefaultServerConnector(address string, opts ClientOptions) (queueservice_pb
 		var conn *grpc.ClientConn
 		var err error
 		if opts.TLSCredentials != nil {
-			conn, err = grpc.Dial(address, grpc.WithTransportCredentials(opts.TLSCredentials))
+			conn, err = grpc.NewClient(address, grpc.WithTransportCredentials(opts.TLSCredentials))
 		} else {
-			conn, err = grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			conn, err = grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		}
 
 		if err == nil {
@@ -190,7 +190,7 @@ func DefaultServerConnector(address string, opts ClientOptions) (queueservice_pb
 		}
 
 		// Log or handle error, then retry
-		log.Printf("Failed to connect to %s: %v", address, err)
+		log.Printf("Failed to connect to %s (attempt %d/%d): %v", address, i+1, opts.MaxRetries, err)
 
 		// Sleep for backoff duration, then increase backoff, adding jitter
 		time.Sleep(backoff + time.Duration(rand.Intn(100))*time.Millisecond)
@@ -227,6 +227,38 @@ func parseDurationToProto(durationStr string) (*durationpb.Duration, error) {
 		return nil, err
 	}
 	return durationpb.New(parsedDuration), nil
+}
+
+// Function to convert SIMPLE queue type string to enum
+func ParseQueueType(queueType string) int32 {
+	switch queueType {
+	case "simple", "SIMPLE":
+		return int32(pb_queue.QueueType_SIMPLE)
+	case "exclusive", "EXCLUSIVE":
+		return int32(pb_queue.QueueType_EXCLUSIVE)
+	default:
+		// Default to SIMPLE if unknown
+		return int32(pb_queue.QueueType_SIMPLE)
+	}
+}
+
+func ParseMessageState(state string) (State, error) {
+	switch state {
+	case "PENDING":
+		return State(message_pb.Message_Metadata_PENDING), nil
+	case "RUNNING":
+		return State(message_pb.Message_Metadata_RUNNING), nil
+	case "COMPLETED":
+		return State(message_pb.Message_Metadata_COMPLETED), nil
+	case "INVISIBLE":
+		return State(message_pb.Message_Metadata_INVISIBLE), nil
+	case "CANCELED":
+		return State(message_pb.Message_Metadata_CANCELED), nil
+	case "ERRORED":
+		return State(message_pb.Message_Metadata_ERRORED), nil
+	default:
+		return 0, errors.New("invalid message state")
+	}
 }
 
 // CreateQueue create a queue and returns empty response

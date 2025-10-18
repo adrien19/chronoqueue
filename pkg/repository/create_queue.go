@@ -14,8 +14,8 @@ import (
 )
 
 func (as *storage) checkQueueExistence(ctx context.Context, queueName string) (bool, error) {
-	exists, err := as.redisClient.Exists(ctx, queueName, fmt.Sprintf("%s:meta", queueName)).Result()
-	return exists >= 2, err
+	exists, err := as.redisClient.Exists(ctx, queueName, fmt.Sprintf("queue:%s:meta", queueName)).Result()
+	return exists >= 1, err
 }
 
 func (as *storage) setQueueMetadata(ctx context.Context, request *queueservice_pb.CreateQueueRequest, txPipeline redis.Pipeliner) error {
@@ -27,7 +27,7 @@ func (as *storage) setQueueMetadata(ctx context.Context, request *queueservice_p
 		return err
 	}
 
-	_, err = txPipeline.HSet(ctx, fmt.Sprintf("%s:meta", request.GetName()), "metadata", string(queueMetadataByte)).Result()
+	_, err = txPipeline.HSet(ctx, fmt.Sprintf("queue:%s:meta", request.GetName()), "metadata", string(queueMetadataByte)).Result()
 	return err
 }
 
@@ -42,9 +42,10 @@ func (as *storage) CreateQueue(ctx context.Context, request *queueservice_pb.Cre
 
 	exists, err := as.checkQueueExistence(ctx, request.GetName())
 	if err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occurred while checking queue existence")
 		return &queueservice_pb.CreateQueueResponse{
 			Success: false,
-		}, err
+		}, chronoErr.GRPCStatus()
 	}
 	if exists {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.AlreadyExists, err, "Queue already exists")
@@ -54,7 +55,8 @@ func (as *storage) CreateQueue(ctx context.Context, request *queueservice_pb.Cre
 	}
 
 	txPipeline := as.redisClient.TxPipeline()
-	_, err = txPipeline.ZAdd(ctx, request.GetName(), redis.Z{}).Result()
+	queueID := "queue:" + request.GetName() // add prefix to avoid key collisions
+	_, err = txPipeline.ZAdd(ctx, queueID, redis.Z{}).Result()
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating queue")
 		return &queueservice_pb.CreateQueueResponse{
