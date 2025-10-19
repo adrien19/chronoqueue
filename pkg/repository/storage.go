@@ -323,8 +323,6 @@ func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, me
 			LeaseRenewalCount: 0,
 		}
 
-		priorityScore := time.Now().Add(time.Duration(int64(MaxPriority-runMessageInstanceMetadata.GetPriority()))).UnixNano() / int64(time.Millisecond)
-
 		randomID, err := util.GenerateID()
 		if err != nil {
 			return err
@@ -360,9 +358,9 @@ func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, me
 		}
 
 		messageInfo := fmt.Sprintf("%s:%s", queueID, randomID)
-		// Add the message to the queue
+		// Add the message to the schedule sorted set using the next run time as score
 		_, err = as.redisClient.ZAdd(ctx, scheduleID, redis.Z{
-			Score:  float64(priorityScore),
+			Score:  float64(nextRunTime),
 			Member: messageInfo,
 		}).Result()
 		if err != nil {

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strconv"
 	"strings"
 	"time"
 
@@ -223,15 +222,10 @@ func (as *storage) saveMessageWithMetadataAndOldState(ctx context.Context, queue
 	return err
 }
 
-func (as *storage) fetchQueueMembersBeforeNow(ctx context.Context, queueName string) ([]string, error) {
-	max := strconv.FormatInt(time.Now().UnixMilli(), 10)
+func (as *storage) fetchQueueMembersByPriority(ctx context.Context, queueName string, limit int64) ([]string, error) {
 	prefixedQueueName := "queue:" + queueName
-	return as.redisClient.ZRangeByScore(ctx, prefixedQueueName, &redis.ZRangeBy{
-		Min:    "-inf",
-		Max:    max,
-		Offset: 0,
-		Count:  10,
-	}).Result()
+	// Get messages ordered by priority (lowest score = highest priority)
+	return as.redisClient.ZRange(ctx, prefixedQueueName, 0, limit-1).Result()
 }
 
 func (as *storage) listMetadataIDs(ctx context.Context, keyType string, prefix string, limit int64) ([]string, error) {

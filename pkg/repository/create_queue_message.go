@@ -112,9 +112,13 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice
 		priority = MinPriority
 	}
 	// Calculate the message's priority score
-	// The score is calculated as the current time plus the message's priority
-	// This ensures that messages with a higher priority are processed first
-	priorityScore := time.Now().Add(time.Duration(int64(MaxPriority-priority))).UnixNano() / int64(time.Millisecond)
+	// Priority-based scoring: Higher priority = Lower score for Redis sorted set ordering
+	// Score format: priority_component + timestamp_component
+	// Priority component: (MaxPriority - priority) * 1e10 (to ensure priority dominates)
+	// Timestamp component: current timestamp in milliseconds (for FIFO within same priority)
+	priorityComponent := int64(MaxPriority-priority) * 1e10
+	timestampComponent := time.Now().UnixMilli()
+	priorityScore := priorityComponent + timestampComponent
 
 	// Begin transaction pipeline
 	txPipeline := as.redisClient.TxPipeline()

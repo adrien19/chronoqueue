@@ -52,7 +52,7 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *queueservice_pb
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Error occured while validating the exclusivity key.").GRPCStatus()
 	}
 
-	members, err := as.fetchQueueMembersBeforeNow(ctx, request.GetQueueName())
+	members, err := as.fetchQueueMembersByPriority(ctx, request.GetQueueName(), 50)
 	if err != nil {
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Failed to get queue members.").GRPCStatus()
 	}
