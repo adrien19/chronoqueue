@@ -24,4 +24,11 @@ type Service interface {
 	GetScheduleHistory(ctx context.Context, request *queueservice_pb.GetScheduleHistoryRequest) (*queueservice_pb.GetScheduleHistoryResponse, error)
 	PauseSchedule(ctx context.Context, request *queueservice_pb.PauseScheduleRequest) (*queueservice_pb.PauseScheduleResponse, error)
 	ResumeSchedule(ctx context.Context, request *queueservice_pb.ResumeScheduleRequest) (*queueservice_pb.ResumeScheduleResponse, error)
+
+	// Dead Letter Queue Management Operations
+	GetDLQMessages(ctx context.Context, request *queueservice_pb.GetDLQMessagesRequest) (*queueservice_pb.GetDLQMessagesResponse, error)
+	RequeueFromDLQ(ctx context.Context, request *queueservice_pb.RequeueFromDLQRequest) (*queueservice_pb.RequeueFromDLQResponse, error)
+	DeleteFromDLQ(ctx context.Context, request *queueservice_pb.DeleteFromDLQRequest) (*queueservice_pb.DeleteFromDLQResponse, error)
+	PurgeDLQ(ctx context.Context, request *queueservice_pb.PurgeDLQRequest) (*queueservice_pb.PurgeDLQResponse, error)
+	GetDLQStats(ctx context.Context, request *queueservice_pb.GetDLQStatsRequest) (*queueservice_pb.GetDLQStatsResponse, error)
 }

@@ -73,10 +73,12 @@ func (QueueType) EnumDescriptor() ([]byte, []int) {
 type QueueMetadata struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	Type                 QueueType              `protobuf:"varint,1,opt,name=type,proto3,enum=chronoqueue.api.queue.v1.QueueType" json:"type,omitempty"`
-	DequeueAttempts      int32                  `protobuf:"varint,2,opt,name=dequeue_attempts,json=dequeueAttempts,proto3" json:"dequeue_attempts,omitempty"`
+	DefaultMaxAttempts   int32                  `protobuf:"varint,2,opt,name=default_max_attempts,json=defaultMaxAttempts,proto3" json:"default_max_attempts,omitempty"`
 	LeaseDuration        *durationpb.Duration   `protobuf:"bytes,3,opt,name=lease_duration,json=leaseDuration,proto3" json:"lease_duration,omitempty"`
 	ExclusivityKey       string                 `protobuf:"bytes,4,opt,name=exclusivity_key,json=exclusivityKey,proto3" json:"exclusivity_key,omitempty"`
 	InvisibilityDuration *durationpb.Duration   `protobuf:"bytes,5,opt,name=invisibility_duration,json=invisibilityDuration,proto3" json:"invisibility_duration,omitempty"`
+	DeadLetterQueueName  string                 `protobuf:"bytes,6,opt,name=dead_letter_queue_name,json=deadLetterQueueName,proto3" json:"dead_letter_queue_name,omitempty"`
+	AutoCreateDlq        bool                   `protobuf:"varint,7,opt,name=auto_create_dlq,json=autoCreateDlq,proto3" json:"auto_create_dlq,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -118,9 +120,9 @@ func (x *QueueMetadata) GetType() QueueType {
 	return QueueType_SIMPLE
 }
 
-func (x *QueueMetadata) GetDequeueAttempts() int32 {
+func (x *QueueMetadata) GetDefaultMaxAttempts() int32 {
 	if x != nil {
-		return x.DequeueAttempts
+		return x.DefaultMaxAttempts
 	}
 	return 0
 }
@@ -144,6 +146,20 @@ func (x *QueueMetadata) GetInvisibilityDuration() *durationpb.Duration {
 		return x.InvisibilityDuration
 	}
 	return nil
+}
+
+func (x *QueueMetadata) GetDeadLetterQueueName() string {
+	if x != nil {
+		return x.DeadLetterQueueName
+	}
+	return ""
+}
+
+func (x *QueueMetadata) GetAutoCreateDlq() bool {
+	if x != nil {
+		return x.AutoCreateDlq
+	}
+	return false
 }
 
 type Queue struct {
@@ -202,13 +218,15 @@ var File_proto_queue_v1_queue_proto protoreflect.FileDescriptor
 
 const file_proto_queue_v1_queue_proto_rawDesc = "" +
 	"\n" +
-	"\x1aproto/queue/v1/queue.proto\x12\x18chronoqueue.api.queue.v1\x1a\x1egoogle/protobuf/duration.proto\"\xae\x02\n" +
+	"\x1aproto/queue/v1/queue.proto\x12\x18chronoqueue.api.queue.v1\x1a\x1egoogle/protobuf/duration.proto\"\x92\x03\n" +
 	"\rQueueMetadata\x127\n" +
-	"\x04type\x18\x01 \x01(\x0e2#.chronoqueue.api.queue.v1.QueueTypeR\x04type\x12)\n" +
-	"\x10dequeue_attempts\x18\x02 \x01(\x05R\x0fdequeueAttempts\x12@\n" +
+	"\x04type\x18\x01 \x01(\x0e2#.chronoqueue.api.queue.v1.QueueTypeR\x04type\x120\n" +
+	"\x14default_max_attempts\x18\x02 \x01(\x05R\x12defaultMaxAttempts\x12@\n" +
 	"\x0elease_duration\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\rleaseDuration\x12'\n" +
 	"\x0fexclusivity_key\x18\x04 \x01(\tR\x0eexclusivityKey\x12N\n" +
-	"\x15invisibility_duration\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x14invisibilityDuration\"`\n" +
+	"\x15invisibility_duration\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x14invisibilityDuration\x123\n" +
+	"\x16dead_letter_queue_name\x18\x06 \x01(\tR\x13deadLetterQueueName\x12&\n" +
+	"\x0fauto_create_dlq\x18\a \x01(\bR\rautoCreateDlq\"`\n" +
 	"\x05Queue\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12C\n" +
 	"\bmetadata\x18\x02 \x01(\v2'.chronoqueue.api.queue.v1.QueueMetadataR\bmetadata*&\n" +

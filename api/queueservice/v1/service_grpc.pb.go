@@ -38,6 +38,11 @@ const (
 	QueueService_GetScheduleHistory_FullMethodName   = "/chronoqueue.api.queueservice.v1.QueueService/GetScheduleHistory"
 	QueueService_PauseSchedule_FullMethodName        = "/chronoqueue.api.queueservice.v1.QueueService/PauseSchedule"
 	QueueService_ResumeSchedule_FullMethodName       = "/chronoqueue.api.queueservice.v1.QueueService/ResumeSchedule"
+	QueueService_GetDLQMessages_FullMethodName       = "/chronoqueue.api.queueservice.v1.QueueService/GetDLQMessages"
+	QueueService_RequeueFromDLQ_FullMethodName       = "/chronoqueue.api.queueservice.v1.QueueService/RequeueFromDLQ"
+	QueueService_DeleteFromDLQ_FullMethodName        = "/chronoqueue.api.queueservice.v1.QueueService/DeleteFromDLQ"
+	QueueService_PurgeDLQ_FullMethodName             = "/chronoqueue.api.queueservice.v1.QueueService/PurgeDLQ"
+	QueueService_GetDLQStats_FullMethodName          = "/chronoqueue.api.queueservice.v1.QueueService/GetDLQStats"
 )
 
 // QueueServiceClient is the client API for QueueService service.
@@ -64,6 +69,12 @@ type QueueServiceClient interface {
 	GetScheduleHistory(ctx context.Context, in *GetScheduleHistoryRequest, opts ...grpc.CallOption) (*GetScheduleHistoryResponse, error)
 	PauseSchedule(ctx context.Context, in *PauseScheduleRequest, opts ...grpc.CallOption) (*PauseScheduleResponse, error)
 	ResumeSchedule(ctx context.Context, in *ResumeScheduleRequest, opts ...grpc.CallOption) (*ResumeScheduleResponse, error)
+	// Dead Letter Queue Management Operations
+	GetDLQMessages(ctx context.Context, in *GetDLQMessagesRequest, opts ...grpc.CallOption) (*GetDLQMessagesResponse, error)
+	RequeueFromDLQ(ctx context.Context, in *RequeueFromDLQRequest, opts ...grpc.CallOption) (*RequeueFromDLQResponse, error)
+	DeleteFromDLQ(ctx context.Context, in *DeleteFromDLQRequest, opts ...grpc.CallOption) (*DeleteFromDLQResponse, error)
+	PurgeDLQ(ctx context.Context, in *PurgeDLQRequest, opts ...grpc.CallOption) (*PurgeDLQResponse, error)
+	GetDLQStats(ctx context.Context, in *GetDLQStatsRequest, opts ...grpc.CallOption) (*GetDLQStatsResponse, error)
 }
 
 type queueServiceClient struct {
@@ -244,6 +255,56 @@ func (c *queueServiceClient) ResumeSchedule(ctx context.Context, in *ResumeSched
 	return out, nil
 }
 
+func (c *queueServiceClient) GetDLQMessages(ctx context.Context, in *GetDLQMessagesRequest, opts ...grpc.CallOption) (*GetDLQMessagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDLQMessagesResponse)
+	err := c.cc.Invoke(ctx, QueueService_GetDLQMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) RequeueFromDLQ(ctx context.Context, in *RequeueFromDLQRequest, opts ...grpc.CallOption) (*RequeueFromDLQResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RequeueFromDLQResponse)
+	err := c.cc.Invoke(ctx, QueueService_RequeueFromDLQ_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) DeleteFromDLQ(ctx context.Context, in *DeleteFromDLQRequest, opts ...grpc.CallOption) (*DeleteFromDLQResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteFromDLQResponse)
+	err := c.cc.Invoke(ctx, QueueService_DeleteFromDLQ_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) PurgeDLQ(ctx context.Context, in *PurgeDLQRequest, opts ...grpc.CallOption) (*PurgeDLQResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PurgeDLQResponse)
+	err := c.cc.Invoke(ctx, QueueService_PurgeDLQ_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) GetDLQStats(ctx context.Context, in *GetDLQStatsRequest, opts ...grpc.CallOption) (*GetDLQStatsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDLQStatsResponse)
+	err := c.cc.Invoke(ctx, QueueService_GetDLQStats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // QueueServiceServer is the server API for QueueService service.
 // All implementations should embed UnimplementedQueueServiceServer
 // for forward compatibility.
@@ -268,6 +329,12 @@ type QueueServiceServer interface {
 	GetScheduleHistory(context.Context, *GetScheduleHistoryRequest) (*GetScheduleHistoryResponse, error)
 	PauseSchedule(context.Context, *PauseScheduleRequest) (*PauseScheduleResponse, error)
 	ResumeSchedule(context.Context, *ResumeScheduleRequest) (*ResumeScheduleResponse, error)
+	// Dead Letter Queue Management Operations
+	GetDLQMessages(context.Context, *GetDLQMessagesRequest) (*GetDLQMessagesResponse, error)
+	RequeueFromDLQ(context.Context, *RequeueFromDLQRequest) (*RequeueFromDLQResponse, error)
+	DeleteFromDLQ(context.Context, *DeleteFromDLQRequest) (*DeleteFromDLQResponse, error)
+	PurgeDLQ(context.Context, *PurgeDLQRequest) (*PurgeDLQResponse, error)
+	GetDLQStats(context.Context, *GetDLQStatsRequest) (*GetDLQStatsResponse, error)
 }
 
 // UnimplementedQueueServiceServer should be embedded to have
@@ -327,6 +394,21 @@ func (UnimplementedQueueServiceServer) PauseSchedule(context.Context, *PauseSche
 }
 func (UnimplementedQueueServiceServer) ResumeSchedule(context.Context, *ResumeScheduleRequest) (*ResumeScheduleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResumeSchedule not implemented")
+}
+func (UnimplementedQueueServiceServer) GetDLQMessages(context.Context, *GetDLQMessagesRequest) (*GetDLQMessagesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDLQMessages not implemented")
+}
+func (UnimplementedQueueServiceServer) RequeueFromDLQ(context.Context, *RequeueFromDLQRequest) (*RequeueFromDLQResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RequeueFromDLQ not implemented")
+}
+func (UnimplementedQueueServiceServer) DeleteFromDLQ(context.Context, *DeleteFromDLQRequest) (*DeleteFromDLQResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteFromDLQ not implemented")
+}
+func (UnimplementedQueueServiceServer) PurgeDLQ(context.Context, *PurgeDLQRequest) (*PurgeDLQResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeDLQ not implemented")
+}
+func (UnimplementedQueueServiceServer) GetDLQStats(context.Context, *GetDLQStatsRequest) (*GetDLQStatsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDLQStats not implemented")
 }
 func (UnimplementedQueueServiceServer) testEmbeddedByValue() {}
 
@@ -654,6 +736,96 @@ func _QueueService_ResumeSchedule_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _QueueService_GetDLQMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDLQMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).GetDLQMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_GetDLQMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).GetDLQMessages(ctx, req.(*GetDLQMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_RequeueFromDLQ_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RequeueFromDLQRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).RequeueFromDLQ(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_RequeueFromDLQ_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).RequeueFromDLQ(ctx, req.(*RequeueFromDLQRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_DeleteFromDLQ_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteFromDLQRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).DeleteFromDLQ(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_DeleteFromDLQ_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).DeleteFromDLQ(ctx, req.(*DeleteFromDLQRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_PurgeDLQ_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeDLQRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).PurgeDLQ(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_PurgeDLQ_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).PurgeDLQ(ctx, req.(*PurgeDLQRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_GetDLQStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDLQStatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).GetDLQStats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_GetDLQStats_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).GetDLQStats(ctx, req.(*GetDLQStatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // QueueService_ServiceDesc is the grpc.ServiceDesc for QueueService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -728,6 +900,26 @@ var QueueService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResumeSchedule",
 			Handler:    _QueueService_ResumeSchedule_Handler,
+		},
+		{
+			MethodName: "GetDLQMessages",
+			Handler:    _QueueService_GetDLQMessages_Handler,
+		},
+		{
+			MethodName: "RequeueFromDLQ",
+			Handler:    _QueueService_RequeueFromDLQ_Handler,
+		},
+		{
+			MethodName: "DeleteFromDLQ",
+			Handler:    _QueueService_DeleteFromDLQ_Handler,
+		},
+		{
+			MethodName: "PurgeDLQ",
+			Handler:    _QueueService_PurgeDLQ_Handler,
+		},
+		{
+			MethodName: "GetDLQStats",
+			Handler:    _QueueService_GetDLQStats_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

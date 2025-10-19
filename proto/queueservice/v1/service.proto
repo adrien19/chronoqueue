@@ -124,4 +124,37 @@ service QueueService {
             body: "*"
         };
     }
+
+    // Dead Letter Queue Management Operations
+    rpc GetDLQMessages(GetDLQMessagesRequest) returns (GetDLQMessagesResponse) {
+        option (google.api.http) = {
+            get: "/v1/dlq/{dlq_name=*}/messages"
+        };
+    }
+
+    rpc RequeueFromDLQ(RequeueFromDLQRequest) returns (RequeueFromDLQResponse) {
+        option (google.api.http) = {
+            post: "/v1/dlq/{dlq_name=*}/messages/{message_id=*}:requeue"
+            body: "*"
+        };
+    }
+
+    rpc DeleteFromDLQ(DeleteFromDLQRequest) returns (DeleteFromDLQResponse) {
+        option (google.api.http) = {
+            delete: "/v1/dlq/{dlq_name=*}/messages/{message_id=*}"
+        };
+    }
+
+    rpc PurgeDLQ(PurgeDLQRequest) returns (PurgeDLQResponse) {
+        option (google.api.http) = {
+            post: "/v1/dlq/{dlq_name=*}:purge"
+            body: "*"
+        };
+    }
+
+    rpc GetDLQStats(GetDLQStatsRequest) returns (GetDLQStatsResponse) {
+        option (google.api.http) = {
+            get: "/v1/dlq/{dlq_name=*}/stats"
+        };
+    }
 }

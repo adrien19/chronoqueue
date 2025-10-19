@@ -44,7 +44,7 @@ func TestNewQueueCreateCommand(t *testing.T) {
 	assert.NotNil(t, cmd.Args)
 
 	// Check that flags are properly added
-	flags := []string{"type", "dequeue-attempts", "lease-duration", "exclusivity-key", "invisibility-duration"}
+	flags := []string{"type", "default-max-attempts", "lease-duration", "exclusivity-key", "invisibility-duration"}
 	for _, flagName := range flags {
 		flag := cmd.Flags().Lookup(flagName)
 		assert.NotNil(t, flag, "Flag %s should be present", flagName)
@@ -99,7 +99,7 @@ func TestQueueCreateCommand_DefaultFlags(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "simple", queueType)
 
-	dequeueAttempts, err := cmd.Flags().GetInt32("dequeue-attempts")
+	dequeueAttempts, err := cmd.Flags().GetInt32("default-max-attempts")
 	assert.NoError(t, err)
 	assert.Equal(t, int32(3), dequeueAttempts)
 
@@ -126,7 +126,7 @@ func TestQueueCreateCommand_FlagSettings(t *testing.T) {
 		expectedType interface{}
 	}{
 		{"type", "exclusive", "string"},
-		{"dequeue-attempts", "5", "int32"},
+		{"default-max-attempts", "5", "int32"},
 		{"lease-duration", "60s", "string"},
 		{"exclusivity-key", "test-key", "string"},
 		{"invisibility-duration", "10s", "string"},
@@ -227,7 +227,7 @@ func TestQueueCommand_Flags(t *testing.T) {
 	cmd := newQueueCreateCommand()
 
 	// Test that long flags are properly defined
-	longFlags := []string{"type", "dequeue-attempts", "lease-duration", "exclusivity-key", "invisibility-duration"}
+	longFlags := []string{"type", "default-max-attempts", "lease-duration", "exclusivity-key", "invisibility-duration"}
 
 	for _, longFlag := range longFlags {
 		flag := cmd.Flags().Lookup(longFlag)

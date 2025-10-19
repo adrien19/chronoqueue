@@ -146,6 +146,7 @@ type Message_Metadata struct {
 	LeaseRenewalCount    int32                  `protobuf:"varint,7,opt,name=lease_renewal_count,json=leaseRenewalCount,proto3" json:"lease_renewal_count,omitempty"`
 	InvisibilityExpiry   int64                  `protobuf:"varint,8,opt,name=invisibility_expiry,json=invisibilityExpiry,proto3" json:"invisibility_expiry,omitempty"`
 	Priority             int64                  `protobuf:"varint,9,opt,name=priority,proto3" json:"priority,omitempty"`
+	MaxAttempts          int32                  `protobuf:"varint,10,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -243,15 +244,22 @@ func (x *Message_Metadata) GetPriority() int64 {
 	return 0
 }
 
+func (x *Message_Metadata) GetMaxAttempts() int32 {
+	if x != nil {
+		return x.MaxAttempts
+	}
+	return 0
+}
+
 var File_proto_message_v1_message_proto protoreflect.FileDescriptor
 
 const file_proto_message_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"\x1eproto/message/v1/message.proto\x12\x1achronoqueue.api.message.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cproto/common/v1/common.proto\"\xba\x05\n" +
+	"\x1eproto/message/v1/message.proto\x12\x1achronoqueue.api.message.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cproto/common/v1/common.proto\"\xdd\x05\n" +
 	"\aMessage\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\x12H\n" +
-	"\bmetadata\x18\x03 \x01(\v2,.chronoqueue.api.message.v1.Message.MetadataR\bmetadata\x1a\xc5\x04\n" +
+	"\bmetadata\x18\x03 \x01(\v2,.chronoqueue.api.message.v1.Message.MetadataR\bmetadata\x1a\xe8\x04\n" +
 	"\bMetadata\x12<\n" +
 	"\apayload\x18\x01 \x01(\v2\".chronoqueue.api.common.v1.PayloadR\apayload\x12H\n" +
 	"\x05state\x18\x02 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\x12N\n" +
@@ -261,7 +269,9 @@ const file_proto_message_v1_message_proto_rawDesc = "" +
 	"\flease_expiry\x18\x06 \x01(\x03R\vleaseExpiry\x12.\n" +
 	"\x13lease_renewal_count\x18\a \x01(\x05R\x11leaseRenewalCount\x12/\n" +
 	"\x13invisibility_expiry\x18\b \x01(\x03R\x12invisibilityExpiry\x12\x1a\n" +
-	"\bpriority\x18\t \x01(\x03R\bpriority\"Z\n" +
+	"\bpriority\x18\t \x01(\x03R\bpriority\x12!\n" +
+	"\fmax_attempts\x18\n" +
+	" \x01(\x05R\vmaxAttempts\"Z\n" +
 	"\x05State\x12\r\n" +
 	"\tINVISIBLE\x10\x00\x12\v\n" +
 	"\aPENDING\x10\x01\x12\v\n" +

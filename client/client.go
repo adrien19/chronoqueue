@@ -36,6 +36,7 @@ type (
 	MessageOptions struct {
 		Payload              Payload `json:"payload,omitempty"`
 		AttemptsLeft         int32   `json:"attemptsLeft,omitempty"`
+		MaxAttempts          int32   `json:"maxAttempts,omitempty"`
 		InvisibilityDuration string  `json:"invisibilityDuration"`
 		LeaseDuration        string  `json:"leaseDuration"`
 		LeaseExpiry          int64   `json:"leaseExpiry,omitempty"`
@@ -280,7 +281,7 @@ func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, q
 		Name: name,
 		Metadata: &pb_queue.QueueMetadata{
 			Type:                 pb_queue.QueueType(queueOptions.Type),
-			DequeueAttempts:      int32(queueOptions.DequeueAttempts),
+			DefaultMaxAttempts:   int32(queueOptions.DequeueAttempts),
 			LeaseDuration:        leaseDuration,
 			ExclusivityKey:       queueOptions.ExclusivityKey,
 			InvisibilityDuration: invisibilityDuration,
@@ -330,6 +331,7 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 					Data:     messageOptions.Payload.Data,
 				},
 				AttemptsLeft:         messageOptions.AttemptsLeft,
+				MaxAttempts:          messageOptions.MaxAttempts,
 				LeaseDuration:        leaseDuration,
 				LeaseExpiry:          messageOptions.LeaseExpiry,
 				InvisibilityDuration: invisibilityDuration,

@@ -1661,6 +1661,507 @@ func (x *GetScheduleHistoryResponse) GetScheduleHistory() *v12.ScheduleHistory {
 	return nil
 }
 
+// Get messages from DLQ
+type GetDLQMessagesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DlqName       string                 `protobuf:"bytes,1,opt,name=dlq_name,json=dlqName,proto3" json:"dlq_name,omitempty"`
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDLQMessagesRequest) Reset() {
+	*x = GetDLQMessagesRequest{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDLQMessagesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDLQMessagesRequest) ProtoMessage() {}
+
+func (x *GetDLQMessagesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDLQMessagesRequest.ProtoReflect.Descriptor instead.
+func (*GetDLQMessagesRequest) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *GetDLQMessagesRequest) GetDlqName() string {
+	if x != nil {
+		return x.DlqName
+	}
+	return ""
+}
+
+func (x *GetDLQMessagesRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type GetDLQMessagesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Messages      []*v11.Message         `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDLQMessagesResponse) Reset() {
+	*x = GetDLQMessagesResponse{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDLQMessagesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDLQMessagesResponse) ProtoMessage() {}
+
+func (x *GetDLQMessagesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDLQMessagesResponse.ProtoReflect.Descriptor instead.
+func (*GetDLQMessagesResponse) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *GetDLQMessagesResponse) GetMessages() []*v11.Message {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+// Requeue message from DLQ back to original queue
+type RequeueFromDLQRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DlqName       string                 `protobuf:"bytes,1,opt,name=dlq_name,json=dlqName,proto3" json:"dlq_name,omitempty"`
+	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	TargetQueue   string                 `protobuf:"bytes,3,opt,name=target_queue,json=targetQueue,proto3" json:"target_queue,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequeueFromDLQRequest) Reset() {
+	*x = RequeueFromDLQRequest{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequeueFromDLQRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequeueFromDLQRequest) ProtoMessage() {}
+
+func (x *RequeueFromDLQRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequeueFromDLQRequest.ProtoReflect.Descriptor instead.
+func (*RequeueFromDLQRequest) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *RequeueFromDLQRequest) GetDlqName() string {
+	if x != nil {
+		return x.DlqName
+	}
+	return ""
+}
+
+func (x *RequeueFromDLQRequest) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+func (x *RequeueFromDLQRequest) GetTargetQueue() string {
+	if x != nil {
+		return x.TargetQueue
+	}
+	return ""
+}
+
+type RequeueFromDLQResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequeueFromDLQResponse) Reset() {
+	*x = RequeueFromDLQResponse{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequeueFromDLQResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequeueFromDLQResponse) ProtoMessage() {}
+
+func (x *RequeueFromDLQResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequeueFromDLQResponse.ProtoReflect.Descriptor instead.
+func (*RequeueFromDLQResponse) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *RequeueFromDLQResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+// Delete message from DLQ
+type DeleteFromDLQRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DlqName       string                 `protobuf:"bytes,1,opt,name=dlq_name,json=dlqName,proto3" json:"dlq_name,omitempty"`
+	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteFromDLQRequest) Reset() {
+	*x = DeleteFromDLQRequest{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteFromDLQRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteFromDLQRequest) ProtoMessage() {}
+
+func (x *DeleteFromDLQRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteFromDLQRequest.ProtoReflect.Descriptor instead.
+func (*DeleteFromDLQRequest) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *DeleteFromDLQRequest) GetDlqName() string {
+	if x != nil {
+		return x.DlqName
+	}
+	return ""
+}
+
+func (x *DeleteFromDLQRequest) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+type DeleteFromDLQResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteFromDLQResponse) Reset() {
+	*x = DeleteFromDLQResponse{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteFromDLQResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteFromDLQResponse) ProtoMessage() {}
+
+func (x *DeleteFromDLQResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteFromDLQResponse.ProtoReflect.Descriptor instead.
+func (*DeleteFromDLQResponse) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *DeleteFromDLQResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+// Purge all messages from DLQ
+type PurgeDLQRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DlqName       string                 `protobuf:"bytes,1,opt,name=dlq_name,json=dlqName,proto3" json:"dlq_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PurgeDLQRequest) Reset() {
+	*x = PurgeDLQRequest{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PurgeDLQRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PurgeDLQRequest) ProtoMessage() {}
+
+func (x *PurgeDLQRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PurgeDLQRequest.ProtoReflect.Descriptor instead.
+func (*PurgeDLQRequest) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *PurgeDLQRequest) GetDlqName() string {
+	if x != nil {
+		return x.DlqName
+	}
+	return ""
+}
+
+type PurgeDLQResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PurgeDLQResponse) Reset() {
+	*x = PurgeDLQResponse{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PurgeDLQResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PurgeDLQResponse) ProtoMessage() {}
+
+func (x *PurgeDLQResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PurgeDLQResponse.ProtoReflect.Descriptor instead.
+func (*PurgeDLQResponse) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *PurgeDLQResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+// Get DLQ statistics
+type GetDLQStatsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DlqName       string                 `protobuf:"bytes,1,opt,name=dlq_name,json=dlqName,proto3" json:"dlq_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDLQStatsRequest) Reset() {
+	*x = GetDLQStatsRequest{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDLQStatsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDLQStatsRequest) ProtoMessage() {}
+
+func (x *GetDLQStatsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDLQStatsRequest.ProtoReflect.Descriptor instead.
+func (*GetDLQStatsRequest) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *GetDLQStatsRequest) GetDlqName() string {
+	if x != nil {
+		return x.DlqName
+	}
+	return ""
+}
+
+type GetDLQStatsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	MessageCount  int64                  `protobuf:"varint,2,opt,name=message_count,json=messageCount,proto3" json:"message_count,omitempty"`
+	CreatedAt     int64                  `protobuf:"varint,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     int64                  `protobuf:"varint,4,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDLQStatsResponse) Reset() {
+	*x = GetDLQStatsResponse{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDLQStatsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDLQStatsResponse) ProtoMessage() {}
+
+func (x *GetDLQStatsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDLQStatsResponse.ProtoReflect.Descriptor instead.
+func (*GetDLQStatsResponse) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *GetDLQStatsResponse) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GetDLQStatsResponse) GetMessageCount() int64 {
+	if x != nil {
+		return x.MessageCount
+	}
+	return 0
+}
+
+func (x *GetDLQStatsResponse) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *GetDLQStatsResponse) GetUpdatedAt() int64 {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return 0
+}
+
 type PeekQueueMessagesRequest_PriorityRange struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Min           int64                  `protobuf:"varint,1,opt,name=min,proto3" json:"min,omitempty"`
@@ -1671,7 +2172,7 @@ type PeekQueueMessagesRequest_PriorityRange struct {
 
 func (x *PeekQueueMessagesRequest_PriorityRange) Reset() {
 	*x = PeekQueueMessagesRequest_PriorityRange{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[34]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1683,7 +2184,7 @@ func (x *PeekQueueMessagesRequest_PriorityRange) String() string {
 func (*PeekQueueMessagesRequest_PriorityRange) ProtoMessage() {}
 
 func (x *PeekQueueMessagesRequest_PriorityRange) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[34]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1823,7 +2324,38 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"scheduleId\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x03R\x05limit\"u\n" +
 	"\x1aGetScheduleHistoryResponse\x12W\n" +
-	"\x10schedule_history\x18\x01 \x01(\v2,.chronoqueue.api.schedule.v1.ScheduleHistoryR\x0fscheduleHistoryBBZ@github.com/adrien19/chronoqueue/api/queueservice/v1;queueserviceb\x06proto3"
+	"\x10schedule_history\x18\x01 \x01(\v2,.chronoqueue.api.schedule.v1.ScheduleHistoryR\x0fscheduleHistory\"H\n" +
+	"\x15GetDLQMessagesRequest\x12\x19\n" +
+	"\bdlq_name\x18\x01 \x01(\tR\adlqName\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\"Y\n" +
+	"\x16GetDLQMessagesResponse\x12?\n" +
+	"\bmessages\x18\x01 \x03(\v2#.chronoqueue.api.message.v1.MessageR\bmessages\"t\n" +
+	"\x15RequeueFromDLQRequest\x12\x19\n" +
+	"\bdlq_name\x18\x01 \x01(\tR\adlqName\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\x12!\n" +
+	"\ftarget_queue\x18\x03 \x01(\tR\vtargetQueue\"2\n" +
+	"\x16RequeueFromDLQResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"P\n" +
+	"\x14DeleteFromDLQRequest\x12\x19\n" +
+	"\bdlq_name\x18\x01 \x01(\tR\adlqName\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\"1\n" +
+	"\x15DeleteFromDLQResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\",\n" +
+	"\x0fPurgeDLQRequest\x12\x19\n" +
+	"\bdlq_name\x18\x01 \x01(\tR\adlqName\",\n" +
+	"\x10PurgeDLQResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"/\n" +
+	"\x12GetDLQStatsRequest\x12\x19\n" +
+	"\bdlq_name\x18\x01 \x01(\tR\adlqName\"\x8c\x01\n" +
+	"\x13GetDLQStatsResponse\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12#\n" +
+	"\rmessage_count\x18\x02 \x01(\x03R\fmessageCount\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x03 \x01(\x03R\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\x04 \x01(\x03R\tupdatedAtBBZ@github.com/adrien19/chronoqueue/api/queueservice/v1;queueserviceb\x06proto3"
 
 var (
 	file_proto_queueservice_v1_request_response_proto_rawDescOnce sync.Once
@@ -1837,7 +2369,7 @@ func file_proto_queueservice_v1_request_response_proto_rawDescGZIP() []byte {
 	return file_proto_queueservice_v1_request_response_proto_rawDescData
 }
 
-var file_proto_queueservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
+var file_proto_queueservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
 var file_proto_queueservice_v1_request_response_proto_goTypes = []any{
 	(*CreateQueueRequest)(nil),                     // 0: chronoqueue.api.queueservice.v1.CreateQueueRequest
 	(*CreateQueueResponse)(nil),                    // 1: chronoqueue.api.queueservice.v1.CreateQueueResponse
@@ -1873,42 +2405,53 @@ var file_proto_queueservice_v1_request_response_proto_goTypes = []any{
 	(*ListSchedulesResponse)(nil),                  // 31: chronoqueue.api.queueservice.v1.ListSchedulesResponse
 	(*GetScheduleHistoryRequest)(nil),              // 32: chronoqueue.api.queueservice.v1.GetScheduleHistoryRequest
 	(*GetScheduleHistoryResponse)(nil),             // 33: chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse
-	(*PeekQueueMessagesRequest_PriorityRange)(nil), // 34: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
-	nil,                             // 35: chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
-	(*v1.QueueMetadata)(nil),        // 36: chronoqueue.api.queue.v1.QueueMetadata
-	(*v11.Message)(nil),             // 37: chronoqueue.api.message.v1.Message
-	(*durationpb.Duration)(nil),     // 38: google.protobuf.Duration
-	(v11.Message_Metadata_State)(0), // 39: chronoqueue.api.message.v1.Message.Metadata.State
-	(*timestamppb.Timestamp)(nil),   // 40: google.protobuf.Timestamp
-	(*v1.Queue)(nil),                // 41: chronoqueue.api.queue.v1.Queue
-	(*v12.Schedule)(nil),            // 42: chronoqueue.api.schedule.v1.Schedule
-	(*v12.ScheduleHistory)(nil),     // 43: chronoqueue.api.schedule.v1.ScheduleHistory
+	(*GetDLQMessagesRequest)(nil),                  // 34: chronoqueue.api.queueservice.v1.GetDLQMessagesRequest
+	(*GetDLQMessagesResponse)(nil),                 // 35: chronoqueue.api.queueservice.v1.GetDLQMessagesResponse
+	(*RequeueFromDLQRequest)(nil),                  // 36: chronoqueue.api.queueservice.v1.RequeueFromDLQRequest
+	(*RequeueFromDLQResponse)(nil),                 // 37: chronoqueue.api.queueservice.v1.RequeueFromDLQResponse
+	(*DeleteFromDLQRequest)(nil),                   // 38: chronoqueue.api.queueservice.v1.DeleteFromDLQRequest
+	(*DeleteFromDLQResponse)(nil),                  // 39: chronoqueue.api.queueservice.v1.DeleteFromDLQResponse
+	(*PurgeDLQRequest)(nil),                        // 40: chronoqueue.api.queueservice.v1.PurgeDLQRequest
+	(*PurgeDLQResponse)(nil),                       // 41: chronoqueue.api.queueservice.v1.PurgeDLQResponse
+	(*GetDLQStatsRequest)(nil),                     // 42: chronoqueue.api.queueservice.v1.GetDLQStatsRequest
+	(*GetDLQStatsResponse)(nil),                    // 43: chronoqueue.api.queueservice.v1.GetDLQStatsResponse
+	(*PeekQueueMessagesRequest_PriorityRange)(nil), // 44: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
+	nil,                             // 45: chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
+	(*v1.QueueMetadata)(nil),        // 46: chronoqueue.api.queue.v1.QueueMetadata
+	(*v11.Message)(nil),             // 47: chronoqueue.api.message.v1.Message
+	(*durationpb.Duration)(nil),     // 48: google.protobuf.Duration
+	(v11.Message_Metadata_State)(0), // 49: chronoqueue.api.message.v1.Message.Metadata.State
+	(*timestamppb.Timestamp)(nil),   // 50: google.protobuf.Timestamp
+	(*v1.Queue)(nil),                // 51: chronoqueue.api.queue.v1.Queue
+	(*v12.Schedule)(nil),            // 52: chronoqueue.api.schedule.v1.Schedule
+	(*v12.ScheduleHistory)(nil),     // 53: chronoqueue.api.schedule.v1.ScheduleHistory
 }
 var file_proto_queueservice_v1_request_response_proto_depIdxs = []int32{
-	36, // 0: chronoqueue.api.queueservice.v1.CreateQueueRequest.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
-	37, // 1: chronoqueue.api.queueservice.v1.PostMessageRequest.message:type_name -> chronoqueue.api.message.v1.Message
-	38, // 2: chronoqueue.api.queueservice.v1.GetNextMessageRequest.lease_duration:type_name -> google.protobuf.Duration
-	37, // 3: chronoqueue.api.queueservice.v1.GetNextMessageResponse.message:type_name -> chronoqueue.api.message.v1.Message
-	39, // 4: chronoqueue.api.queueservice.v1.AcknowledgeMessageRequest.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	38, // 5: chronoqueue.api.queueservice.v1.RenewMessageLeaseRequest.lease_duration:type_name -> google.protobuf.Duration
-	38, // 6: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.remaining_time:type_name -> google.protobuf.Duration
-	39, // 7: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	34, // 8: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.priority_range:type_name -> chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
-	37, // 9: chronoqueue.api.queueservice.v1.PeekQueueMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
-	35, // 10: chronoqueue.api.queueservice.v1.GetQueueStateResponse.state_counts:type_name -> chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
-	40, // 11: chronoqueue.api.queueservice.v1.GetQueueStateResponse.earliest_deadline:type_name -> google.protobuf.Timestamp
-	38, // 12: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.remaining_time:type_name -> google.protobuf.Duration
-	39, // 13: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	41, // 14: chronoqueue.api.queueservice.v1.ListQueuesResponse.queues:type_name -> chronoqueue.api.queue.v1.Queue
-	42, // 15: chronoqueue.api.queueservice.v1.CreateScheduleRequest.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
-	42, // 16: chronoqueue.api.queueservice.v1.GetScheduleResponse.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
-	42, // 17: chronoqueue.api.queueservice.v1.ListSchedulesResponse.schedules:type_name -> chronoqueue.api.schedule.v1.Schedule
-	43, // 18: chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse.schedule_history:type_name -> chronoqueue.api.schedule.v1.ScheduleHistory
-	19, // [19:19] is the sub-list for method output_type
-	19, // [19:19] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	46, // 0: chronoqueue.api.queueservice.v1.CreateQueueRequest.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
+	47, // 1: chronoqueue.api.queueservice.v1.PostMessageRequest.message:type_name -> chronoqueue.api.message.v1.Message
+	48, // 2: chronoqueue.api.queueservice.v1.GetNextMessageRequest.lease_duration:type_name -> google.protobuf.Duration
+	47, // 3: chronoqueue.api.queueservice.v1.GetNextMessageResponse.message:type_name -> chronoqueue.api.message.v1.Message
+	49, // 4: chronoqueue.api.queueservice.v1.AcknowledgeMessageRequest.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
+	48, // 5: chronoqueue.api.queueservice.v1.RenewMessageLeaseRequest.lease_duration:type_name -> google.protobuf.Duration
+	48, // 6: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.remaining_time:type_name -> google.protobuf.Duration
+	49, // 7: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
+	44, // 8: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.priority_range:type_name -> chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
+	47, // 9: chronoqueue.api.queueservice.v1.PeekQueueMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
+	45, // 10: chronoqueue.api.queueservice.v1.GetQueueStateResponse.state_counts:type_name -> chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
+	50, // 11: chronoqueue.api.queueservice.v1.GetQueueStateResponse.earliest_deadline:type_name -> google.protobuf.Timestamp
+	48, // 12: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.remaining_time:type_name -> google.protobuf.Duration
+	49, // 13: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
+	51, // 14: chronoqueue.api.queueservice.v1.ListQueuesResponse.queues:type_name -> chronoqueue.api.queue.v1.Queue
+	52, // 15: chronoqueue.api.queueservice.v1.CreateScheduleRequest.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
+	52, // 16: chronoqueue.api.queueservice.v1.GetScheduleResponse.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
+	52, // 17: chronoqueue.api.queueservice.v1.ListSchedulesResponse.schedules:type_name -> chronoqueue.api.schedule.v1.Schedule
+	53, // 18: chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse.schedule_history:type_name -> chronoqueue.api.schedule.v1.ScheduleHistory
+	47, // 19: chronoqueue.api.queueservice.v1.GetDLQMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
+	20, // [20:20] is the sub-list for method output_type
+	20, // [20:20] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_proto_queueservice_v1_request_response_proto_init() }
@@ -1924,7 +2467,7 @@ func file_proto_queueservice_v1_request_response_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_queueservice_v1_request_response_proto_rawDesc), len(file_proto_queueservice_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   36,
+			NumMessages:   46,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

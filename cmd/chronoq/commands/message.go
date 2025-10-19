@@ -111,7 +111,7 @@ func newMessagePostCommand() *cobra.Command {
 				InvisibilityDuration: invisibilityDuration,
 				LeaseDuration:        leaseDuration,
 				Priority:             priority,
-				AttemptsLeft:         maxAttempts, // Use default attempts
+				MaxAttempts:          maxAttempts, // Set max attempts for the message
 			}
 
 			return WithClient(cmd, func(client *client.ChronoQueueClient) error {

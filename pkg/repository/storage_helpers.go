@@ -80,11 +80,23 @@ func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, m
 		return nil, err
 	}
 
+	as.logger.DebugWithFields(
+		"Fetched metadata for message:",
+		"message Id", messageID,
+		"metadata", result,
+	)
+
 	var meta message_pb.Message_Metadata
 	err = protojson.Unmarshal([]byte(result), &meta)
 	if err != nil {
 		return nil, err
 	}
+
+	as.logger.DebugWithFields(
+		"Successfully unmarshaled metadata for message:",
+		"message Id", messageID,
+		"metadata", meta.Payload,
+	)
 
 	err = as.decryptMessageMetadataPayload(&meta)
 	if err != nil {
@@ -139,6 +151,25 @@ func (as *storage) updateMessageStateAndLease(message *message_pb.Message, reque
 		} else {
 			message.Metadata.LeaseDuration = queueMeta.LeaseDuration
 		}
+	}
+
+	// Initialize retry counts if not set
+	if message.Metadata.AttemptsLeft == 0 && message.Metadata.MaxAttempts == 0 {
+		// Use queue default if message doesn't specify max attempts
+		message.Metadata.MaxAttempts = queueMeta.GetDefaultMaxAttempts()
+		message.Metadata.AttemptsLeft = message.Metadata.MaxAttempts
+	} else if message.Metadata.AttemptsLeft == -1 && message.Metadata.MaxAttempts > 0 {
+		// Message specified max_attempts but attempts_left wasn't initialized
+		as.logger.InfoWithFields(
+			"Initializing attempts left for message:",
+			"message Id", message.GetMessageId(),
+			"old attempts left", message.Metadata.AttemptsLeft,
+			"max attempts", message.Metadata.MaxAttempts,
+		)
+		message.Metadata.AttemptsLeft = message.Metadata.MaxAttempts
+	} else if message.Metadata.AttemptsLeft == 0 && message.Metadata.MaxAttempts == -1 {
+		// Infinite retries: set attempts_left to -1 to indicate infinite
+		message.Metadata.AttemptsLeft = -1
 	}
 
 	// Add lease expiry data to the message metadata
@@ -226,6 +257,13 @@ func (as *storage) fetchQueueMembersByPriority(ctx context.Context, queueName st
 	prefixedQueueName := "queue:" + queueName
 	// Get messages ordered by priority (lowest score = highest priority)
 	return as.redisClient.ZRange(ctx, prefixedQueueName, 0, limit-1).Result()
+}
+
+func (as *storage) removeQueueMembersByPriority(ctx context.Context, queueName string, memberIDs []string) error {
+	prefixedQueueName := "queue:" + queueName
+	// Remove messages ordered by priority (lowest score = highest priority)
+	_, err := as.redisClient.ZRem(ctx, prefixedQueueName, memberIDs).Result()
+	return err
 }
 
 func (as *storage) listMetadataIDs(ctx context.Context, keyType string, prefix string, limit int64) ([]string, error) {

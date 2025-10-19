@@ -169,3 +169,52 @@ message GetScheduleHistoryRequest {
 message GetScheduleHistoryResponse {
     chronoqueue.api.schedule.v1.ScheduleHistory schedule_history = 1;
 }
+
+// Dead Letter Queue Management Operations
+
+// Get messages from DLQ
+message GetDLQMessagesRequest {
+    string dlq_name = 1;
+    int32 limit = 2;
+}
+message GetDLQMessagesResponse {
+    repeated chronoqueue.api.message.v1.Message messages = 1;
+}
+
+// Requeue message from DLQ back to original queue
+message RequeueFromDLQRequest {
+    string dlq_name = 1;
+    string message_id = 2;
+    string target_queue = 3;
+}
+message RequeueFromDLQResponse {
+    bool success = 1;
+}
+
+// Delete message from DLQ
+message DeleteFromDLQRequest {
+    string dlq_name = 1;
+    string message_id = 2;
+}
+message DeleteFromDLQResponse {
+    bool success = 1;
+}
+
+// Purge all messages from DLQ
+message PurgeDLQRequest {
+    string dlq_name = 1;
+}
+message PurgeDLQResponse {
+    bool success = 1;
+}
+
+// Get DLQ statistics
+message GetDLQStatsRequest {
+    string dlq_name = 1;
+}
+message GetDLQStatsResponse {
+    string name = 1;
+    int64 message_count = 2;
+    int64 created_at = 3;
+    int64 updated_at = 4;
+}

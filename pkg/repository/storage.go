@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	// "log"
 	"strings"
 	"time"
 
@@ -17,8 +16,6 @@ import (
 	"github.com/adrien19/chronoqueue/internal/util"
 	log "github.com/adrien19/chronoqueue/pkg/log"
 
-	// "github.com/go-kit/log"
-
 	"github.com/go-redsync/redsync/v4"
 	"github.com/go-redsync/redsync/v4/redis/goredis/v9"
 	"github.com/redis/go-redis/v9"
@@ -28,6 +25,14 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// DLQStats represents statistics about a Dead Letter Queue
+type DLQStats struct {
+	Name         string `json:"name"`
+	MessageCount int64  `json:"message_count"`
+	CreatedAt    int64  `json:"created_at"`
+	UpdatedAt    int64  `json:"updated_at"`
+}
 
 type Storage interface {
 	CreateQueue(ctx context.Context, request *queueservice_pb.CreateQueueRequest) (*queueservice_pb.CreateQueueResponse, error)
@@ -48,6 +53,18 @@ type Storage interface {
 	GetScheduleHistory(ctx context.Context, request *queueservice_pb.GetScheduleHistoryRequest) (*queueservice_pb.GetScheduleHistoryResponse, error)
 	PauseSchedule(ctx context.Context, request *queueservice_pb.PauseScheduleRequest) (*queueservice_pb.PauseScheduleResponse, error)
 	ResumeSchedule(ctx context.Context, request *queueservice_pb.ResumeScheduleRequest) (*queueservice_pb.ResumeScheduleResponse, error)
+
+	// Message processing methods
+	ProcessExpiredInvisibleMessages(ctx context.Context) error
+	ProcessExpiredRunningMessages(ctx context.Context) error
+	ProcessErroredMessagesForDLQ(ctx context.Context) error
+
+	// DLQ management methods
+	GetDLQMessages(ctx context.Context, dlqName string, limit int32) ([]*message_pb.Message, error)
+	RequeueFromDLQ(ctx context.Context, dlqName string, messageID string, targetQueueName string, resetRetries bool) error
+	DeleteFromDLQ(ctx context.Context, dlqName string, messageID string) error
+	PurgeDLQ(ctx context.Context, dlqName string) error
+	GetDLQStats(ctx context.Context, dlqName string) (*DLQStats, error)
 }
 
 type storage struct {
@@ -76,9 +93,12 @@ func NewQueueStorage(ctx context.Context, redisClient *redis.Client, encryptionK
 	// }
 
 	// Schedule the initial tasks
-	tasks <- Task{Name: "invisibleToPending", Script: invisibleToPending, GoFunc: nil, Interval: time.Second}
-	tasks <- Task{Name: "runningToPending", Script: runningToPending, GoFunc: nil, Interval: time.Second}
+	// tasks <- Task{Name: "invisibleToPending", Script: invisibleToPending, GoFunc: nil, Interval: time.Second}
+	// tasks <- Task{Name: "runningToPending", Script: runningToPending, GoFunc: nil, Interval: time.Second}
 	tasks <- Task{Name: "updateCronSchedules", Script: nil, GoFunc: storage.updateAllCronSchedules, Interval: time.Second}
+	tasks <- Task{Name: "processErroredMessages", Script: processErroredMessages, GoFunc: nil, Interval: time.Second}
+	tasks <- Task{Name: "invisibleToPending", Script: invisibleToPending, GoFunc: nil, Interval: time.Second} // process expired invisible messages
+	tasks <- Task{Name: "runningToPending", Script: runningToPending, GoFunc: nil, Interval: time.Second}     // process expired running messages
 
 	return storage
 }

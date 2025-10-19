@@ -16,6 +16,199 @@
     "application/json"
   ],
   "paths": {
+    "/v1/dlq/{dlqName}/messages": {
+      "get": {
+        "summary": "Dead Letter Queue Management Operations",
+        "operationId": "QueueService_GetDLQMessages",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetDLQMessagesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "dlqName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/dlq/{dlqName}/messages/{messageId}": {
+      "delete": {
+        "operationId": "QueueService_DeleteFromDLQ",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteFromDLQResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "dlqName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/dlq/{dlqName}/messages/{messageId}:requeue": {
+      "post": {
+        "operationId": "QueueService_RequeueFromDLQ",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RequeueFromDLQResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "dlqName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceRequeueFromDLQBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/dlq/{dlqName}/stats": {
+      "get": {
+        "operationId": "QueueService_GetDLQStats",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetDLQStatsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "dlqName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/dlq/{dlqName}:purge": {
+      "post": {
+        "operationId": "QueueService_PurgeDLQ",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PurgeDLQResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "dlqName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServicePurgeDLQBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
     "/v1/queues": {
       "get": {
         "operationId": "QueueService_ListQueues",
@@ -678,6 +871,10 @@
       "type": "object",
       "title": "Pause a schedule"
     },
+    "QueueServicePurgeDLQBody": {
+      "type": "object",
+      "title": "Purge all messages from DLQ"
+    },
     "QueueServiceRenewMessageLeaseBody": {
       "type": "object",
       "properties": {
@@ -686,6 +883,15 @@
         }
       },
       "title": "Renew lease period of a message"
+    },
+    "QueueServiceRequeueFromDLQBody": {
+      "type": "object",
+      "properties": {
+        "targetQueue": {
+          "type": "string"
+        }
+      },
+      "title": "Requeue message from DLQ back to original queue"
     },
     "QueueServiceResumeScheduleBody": {
       "type": "object",
@@ -781,6 +987,14 @@
         }
       }
     },
+    "v1DeleteFromDLQResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
     "v1DeleteQueueResponse": {
       "type": "object",
       "properties": {
@@ -794,6 +1008,38 @@
       "properties": {
         "success": {
           "type": "boolean"
+        }
+      }
+    },
+    "v1GetDLQMessagesResponse": {
+      "type": "object",
+      "properties": {
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Message"
+          }
+        }
+      }
+    },
+    "v1GetDLQStatsResponse": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "messageCount": {
+          "type": "string",
+          "format": "int64"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "int64"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "int64"
         }
       }
     },
@@ -906,6 +1152,10 @@
         "priority": {
           "type": "string",
           "format": "int64"
+        },
+        "maxAttempts": {
+          "type": "integer",
+          "format": "int32"
         }
       }
     },
@@ -961,6 +1211,14 @@
         }
       }
     },
+    "v1PurgeDLQResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
     "v1Queue": {
       "type": "object",
       "properties": {
@@ -978,7 +1236,7 @@
         "type": {
           "$ref": "#/definitions/v1QueueType"
         },
-        "dequeueAttempts": {
+        "defaultMaxAttempts": {
           "type": "integer",
           "format": "int32"
         },
@@ -990,6 +1248,12 @@
         },
         "invisibilityDuration": {
           "type": "string"
+        },
+        "deadLetterQueueName": {
+          "type": "string"
+        },
+        "autoCreateDlq": {
+          "type": "boolean"
         }
       }
     },
@@ -1009,6 +1273,14 @@
         },
         "state": {
           "$ref": "#/definitions/v1MessageMetadataState"
+        }
+      }
+    },
+    "v1RequeueFromDLQResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
         }
       }
     },

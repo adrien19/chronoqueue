@@ -72,6 +72,11 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *queueservice_pb
 
 	// Update the message's state to "Running" and restore the message
 	oldState := message.Metadata.State // Capture old state before update (should be PENDING)
+	as.logger.InfoWithFields(
+		"Leasing message:",
+		"message Id", message.GetMessageId(),
+		"old state", oldState,
+	)
 	as.updateMessageStateAndLease(message, request, queueMeta)
 
 	if err := as.saveMessageWithMetadataAndOldState(ctx, request.GetQueueName(), message, oldState); err != nil {

@@ -79,6 +79,39 @@ func (as *storage) CreateQueue(ctx context.Context, request *queueservice_pb.Cre
 		}, chronoErr.GRPCStatus()
 	}
 
+	// create dlq if auto dlq is enabled
+	if request.GetMetadata().GetAutoCreateDlq() {
+		dlqName := fmt.Sprintf("%s_dlq", request.GetName())
+		if request.GetMetadata().GetDeadLetterQueueName() != "" {
+			dlqName = request.GetMetadata().GetDeadLetterQueueName()
+		}
+		dlqRequest := &queueservice_pb.CreateQueueRequest{
+			Name: dlqName,
+			Metadata: &queue_pb.QueueMetadata{
+				Type:                 request.GetMetadata().GetType(),
+				AutoCreateDlq:        false,
+				ExclusivityKey:       request.GetMetadata().GetExclusivityKey(),
+				LeaseDuration:        request.GetMetadata().GetLeaseDuration(),
+				InvisibilityDuration: request.GetMetadata().GetInvisibilityDuration(),
+				DefaultMaxAttempts:   request.GetMetadata().GetDefaultMaxAttempts(),
+			},
+		}
+		err = as.setQueueMetadata(ctx, dlqRequest, txPipeline)
+		if err != nil {
+			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating DLQ metadata")
+			return &queueservice_pb.CreateQueueResponse{
+				Success: false,
+			}, chronoErr.GRPCStatus()
+		}
+		_, err = txPipeline.ZAdd(ctx, "queue:"+dlqName, redis.Z{}).Result()
+		if err != nil {
+			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating DLQ")
+			return &queueservice_pb.CreateQueueResponse{
+				Success: false,
+			}, chronoErr.GRPCStatus()
+		}
+	}
+
 	_, err = txPipeline.Exec(ctx)
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating executing pipeline transaction")

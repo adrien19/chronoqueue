@@ -251,3 +251,100 @@ func (s *ChronoQueueServer) ResumeSchedule(ctx context.Context, req *queueservic
 	s.logger.InfoWithFields("Schedule resumed successfully", "schedule_name", req.ScheduleId)
 	return resp, nil
 }
+
+// Dead Letter Queue Management Methods
+
+func (s *ChronoQueueServer) GetDLQMessages(ctx context.Context, req *queueservice_pb.GetDLQMessagesRequest) (*queueservice_pb.GetDLQMessagesResponse, error) {
+	s.logger.InfoWithFields("GetDLQMessages called", "dlq_name", req.GetDlqName())
+
+	messages, err := s.storage.GetDLQMessages(ctx, req.GetDlqName(), req.GetLimit())
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to get DLQ messages", "dlq_name", req.GetDlqName(), "error", err)
+		return nil, fmt.Errorf("failed to get DLQ messages: %w", err)
+	}
+
+	return &queueservice_pb.GetDLQMessagesResponse{
+		Messages: messages,
+	}, nil
+}
+
+func (s *ChronoQueueServer) RequeueFromDLQ(ctx context.Context, req *queueservice_pb.RequeueFromDLQRequest) (*queueservice_pb.RequeueFromDLQResponse, error) {
+	s.logger.InfoWithFields("RequeueFromDLQ called",
+		"dlq_name", req.GetDlqName(),
+		"message_id", req.GetMessageId(),
+		"target_queue", req.GetTargetQueue())
+
+	err := s.storage.RequeueFromDLQ(ctx, req.GetDlqName(), req.GetMessageId(), req.GetTargetQueue(), true)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to requeue message from DLQ",
+			"dlq_name", req.GetDlqName(),
+			"message_id", req.GetMessageId(),
+			"target_queue", req.GetTargetQueue(),
+			"error", err)
+		return nil, fmt.Errorf("failed to requeue message from DLQ: %w", err)
+	}
+
+	s.logger.InfoWithFields("Message requeued from DLQ successfully",
+		"dlq_name", req.GetDlqName(),
+		"message_id", req.GetMessageId(),
+		"target_queue", req.GetTargetQueue())
+
+	return &queueservice_pb.RequeueFromDLQResponse{
+		Success: true,
+	}, nil
+}
+
+func (s *ChronoQueueServer) DeleteFromDLQ(ctx context.Context, req *queueservice_pb.DeleteFromDLQRequest) (*queueservice_pb.DeleteFromDLQResponse, error) {
+	s.logger.InfoWithFields("DeleteFromDLQ called",
+		"dlq_name", req.GetDlqName(),
+		"message_id", req.GetMessageId())
+
+	err := s.storage.DeleteFromDLQ(ctx, req.GetDlqName(), req.GetMessageId())
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to delete message from DLQ",
+			"dlq_name", req.GetDlqName(),
+			"message_id", req.GetMessageId(),
+			"error", err)
+		return nil, fmt.Errorf("failed to delete message from DLQ: %w", err)
+	}
+
+	s.logger.InfoWithFields("Message deleted from DLQ successfully",
+		"dlq_name", req.GetDlqName(),
+		"message_id", req.GetMessageId())
+
+	return &queueservice_pb.DeleteFromDLQResponse{
+		Success: true,
+	}, nil
+}
+
+func (s *ChronoQueueServer) PurgeDLQ(ctx context.Context, req *queueservice_pb.PurgeDLQRequest) (*queueservice_pb.PurgeDLQResponse, error) {
+	s.logger.InfoWithFields("PurgeDLQ called", "dlq_name", req.GetDlqName())
+
+	err := s.storage.PurgeDLQ(ctx, req.GetDlqName())
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to purge DLQ", "dlq_name", req.GetDlqName(), "error", err)
+		return nil, fmt.Errorf("failed to purge DLQ: %w", err)
+	}
+
+	s.logger.InfoWithFields("DLQ purged successfully", "dlq_name", req.GetDlqName())
+	return &queueservice_pb.PurgeDLQResponse{
+		Success: true,
+	}, nil
+}
+
+func (s *ChronoQueueServer) GetDLQStats(ctx context.Context, req *queueservice_pb.GetDLQStatsRequest) (*queueservice_pb.GetDLQStatsResponse, error) {
+	s.logger.InfoWithFields("GetDLQStats called", "dlq_name", req.GetDlqName())
+
+	stats, err := s.storage.GetDLQStats(ctx, req.GetDlqName())
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to get DLQ stats", "dlq_name", req.GetDlqName(), "error", err)
+		return nil, fmt.Errorf("failed to get DLQ stats: %w", err)
+	}
+
+	return &queueservice_pb.GetDLQStatsResponse{
+		Name:         stats.Name,
+		MessageCount: stats.MessageCount,
+		CreatedAt:    stats.CreatedAt,
+		UpdatedAt:    stats.UpdatedAt,
+	}, nil
+}

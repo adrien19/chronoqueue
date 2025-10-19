@@ -29,6 +29,7 @@ message Message {
         int32 lease_renewal_count = 7;
         int64 invisibility_expiry = 8;
         int64 priority = 9;
+        int32 max_attempts = 10;
     }
     Message.Metadata metadata = 3;
 }

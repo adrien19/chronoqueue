@@ -41,7 +41,7 @@ func newQueueCreateCommand() *cobra.Command {
 			queueType, _ := cmd.Flags().GetString("type")
 			queueTypeInt := client.ParseQueueType(queueType)
 
-			dequeueAttempts, _ := cmd.Flags().GetInt32("dequeue-attempts")
+			dequeueAttempts, _ := cmd.Flags().GetInt32("default-max-attempts")
 			leaseDurationStr, _ := cmd.Flags().GetString("lease-duration")
 			exclusivityKey, _ := cmd.Flags().GetString("exclusivity-key")
 			invisibilityDurationStr, _ := cmd.Flags().GetString("invisibility-duration")
@@ -66,8 +66,8 @@ func newQueueCreateCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringP("type", "t", "simple", "Queue type (simple, exclusive)")
-	cmd.Flags().Int32P("dequeue-attempts", "a", 3, "Maximum dequeue attempts")
-	cmd.Flags().StringP("lease-duration", "l", "30s", "Message lease duration")
+	cmd.Flags().Int32P("default-max-attempts", "a", 3, "Default maximum attempts for messages in this queue")
+	cmd.Flags().StringP("lease-duration", "l", "30s", "Default message lease duration")
 	cmd.Flags().StringP("exclusivity-key", "k", "", "Exclusivity key (required for exclusive queues)")
 	cmd.Flags().StringP("invisibility-duration", "i", "0s", "Message invisibility duration")
 
