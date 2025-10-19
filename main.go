@@ -56,6 +56,7 @@ Examples:
 	rootCmd.AddCommand(commands.NewQueueCommand())
 	rootCmd.AddCommand(commands.NewMessageCommand())
 	rootCmd.AddCommand(commands.NewScheduleCommand())
+	rootCmd.AddCommand(commands.NewDLQCommand())
 	rootCmd.AddCommand(commands.NewStartCommand()) // Legacy compatibility
 
 	// Execute root command

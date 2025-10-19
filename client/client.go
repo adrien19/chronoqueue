@@ -32,6 +32,8 @@ type (
 		InvisibilityDuration string `json:"invisibilityDuration"`
 		LeaseDuration        string `json:"leaseDuration"`
 		Type                 int32  `json:"type,omitempty"`
+		DeadLetterQueueName  string `json:"deadLetterQueueName,omitempty"`
+		AutoCreateDLQ        bool   `json:"autoCreateDLQ,omitempty"`
 	}
 	MessageOptions struct {
 		Payload              Payload `json:"payload,omitempty"`
@@ -60,6 +62,14 @@ type (
 		ExclusivityKey string  `json:"exclusivityKey,omitempty"`
 		MaxMessages    int64   `json:"maxMessages,omitempty"`
 		LeaseDuration  string  `json:"leaseDuration,omitempty"`
+	}
+
+	// DLQStats represents statistics about a Dead Letter Queue
+	DLQStats struct {
+		Name         string `json:"name"`
+		MessageCount int64  `json:"message_count"`
+		CreatedAt    int64  `json:"created_at"`
+		UpdatedAt    int64  `json:"updated_at"`
 	}
 
 	Connector func(address string, opts ClientOptions) (queueservice_pb.QueueServiceClient, *grpc.ClientConn, error)
@@ -285,6 +295,8 @@ func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, q
 			LeaseDuration:        leaseDuration,
 			ExclusivityKey:       queueOptions.ExclusivityKey,
 			InvisibilityDuration: invisibilityDuration,
+			DeadLetterQueueName:  queueOptions.DeadLetterQueueName,
+			AutoCreateDlq:        queueOptions.AutoCreateDLQ,
 		},
 	}
 	res, err := client.service.CreateQueue(ctx, req)
@@ -635,6 +647,87 @@ func (client *ChronoQueueClient) ResumeSchedule(ctx context.Context, scheduleId 
 		ScheduleId: scheduleId,
 	}
 	res, err := client.service.ResumeSchedule(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// Dead Letter Queue Management Methods
+
+// GetDLQMessages retrieves messages from a Dead Letter Queue
+func (client *ChronoQueueClient) GetDLQMessages(ctx context.Context, dlqName string, limit int32) (*queueservice_pb.GetDLQMessagesResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	req := &queueservice_pb.GetDLQMessagesRequest{
+		DlqName: dlqName,
+		Limit:   limit,
+	}
+	res, err := client.service.GetDLQMessages(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// RequeueFromDLQ moves a message from DLQ back to its original queue or specified target queue
+func (client *ChronoQueueClient) RequeueFromDLQ(ctx context.Context, dlqName string, messageId string, targetQueue string) (*queueservice_pb.RequeueFromDLQResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	req := &queueservice_pb.RequeueFromDLQRequest{
+		DlqName:     dlqName,
+		MessageId:   messageId,
+		TargetQueue: targetQueue,
+	}
+	res, err := client.service.RequeueFromDLQ(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// DeleteFromDLQ permanently deletes a message from a DLQ
+func (client *ChronoQueueClient) DeleteFromDLQ(ctx context.Context, dlqName string, messageId string) (*queueservice_pb.DeleteFromDLQResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	req := &queueservice_pb.DeleteFromDLQRequest{
+		DlqName:   dlqName,
+		MessageId: messageId,
+	}
+	res, err := client.service.DeleteFromDLQ(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// PurgeDLQ removes all messages from a DLQ
+func (client *ChronoQueueClient) PurgeDLQ(ctx context.Context, dlqName string) (*queueservice_pb.PurgeDLQResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	req := &queueservice_pb.PurgeDLQRequest{
+		DlqName: dlqName,
+	}
+	res, err := client.service.PurgeDLQ(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// GetDLQStats returns statistics about a DLQ
+func (client *ChronoQueueClient) GetDLQStats(ctx context.Context, dlqName string) (*queueservice_pb.GetDLQStatsResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	req := &queueservice_pb.GetDLQStatsRequest{
+		DlqName: dlqName,
+	}
+	res, err := client.service.GetDLQStats(ctx, req)
 	if err != nil {
 		return nil, err
 	}

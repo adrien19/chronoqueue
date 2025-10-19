@@ -45,12 +45,16 @@ func newQueueCreateCommand() *cobra.Command {
 			leaseDurationStr, _ := cmd.Flags().GetString("lease-duration")
 			exclusivityKey, _ := cmd.Flags().GetString("exclusivity-key")
 			invisibilityDurationStr, _ := cmd.Flags().GetString("invisibility-duration")
+			deadLetterQueueName, _ := cmd.Flags().GetString("dlq-name")
+			autoCreateDLQ, _ := cmd.Flags().GetBool("auto-create-dlq")
 			queueOpts := client.QueueOptions{
 				Type:                 queueTypeInt,
 				DequeueAttempts:      dequeueAttempts,
 				LeaseDuration:        leaseDurationStr,
 				ExclusivityKey:       exclusivityKey,
 				InvisibilityDuration: invisibilityDurationStr,
+				DeadLetterQueueName:  deadLetterQueueName,
+				AutoCreateDLQ:        autoCreateDLQ,
 			}
 
 			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
@@ -70,6 +74,8 @@ func newQueueCreateCommand() *cobra.Command {
 	cmd.Flags().StringP("lease-duration", "l", "30s", "Default message lease duration")
 	cmd.Flags().StringP("exclusivity-key", "k", "", "Exclusivity key (required for exclusive queues)")
 	cmd.Flags().StringP("invisibility-duration", "i", "0s", "Message invisibility duration")
+	cmd.Flags().StringP("dlq-name", "d", "", "Dead letter queue name for failed messages")
+	cmd.Flags().BoolP("auto-create-dlq", "", false, "Automatically create the dead letter queue if it doesn't exist")
 
 	return cmd
 }
