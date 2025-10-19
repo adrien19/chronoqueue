@@ -1021,6 +1021,60 @@ func local_request_QueueService_GetDLQStats_0(ctx context.Context, marshaler run
 	return msg, metadata, err
 }
 
+func request_QueueService_ValidateCalendarSchedule_0(ctx context.Context, marshaler runtime.Marshaler, client QueueServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq ValidateCalendarScheduleRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.ValidateCalendarSchedule(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_QueueService_ValidateCalendarSchedule_0(ctx context.Context, marshaler runtime.Marshaler, server QueueServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq ValidateCalendarScheduleRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	msg, err := server.ValidateCalendarSchedule(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+func request_QueueService_PreviewCalendarSchedule_0(ctx context.Context, marshaler runtime.Marshaler, client QueueServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq PreviewCalendarScheduleRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.PreviewCalendarSchedule(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_QueueService_PreviewCalendarSchedule_0(ctx context.Context, marshaler runtime.Marshaler, server QueueServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq PreviewCalendarScheduleRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	msg, err := server.PreviewCalendarSchedule(ctx, &protoReq)
+	return msg, metadata, err
+}
+
 // RegisterQueueServiceHandlerServer registers the http handlers for service QueueService to "mux".
 // UnaryRPC     :call QueueServiceServer directly.
 // StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
@@ -1467,6 +1521,46 @@ func RegisterQueueServiceHandlerServer(ctx context.Context, mux *runtime.ServeMu
 		}
 		forward_QueueService_GetDLQStats_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodPost, pattern_QueueService_ValidateCalendarSchedule_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/chronoqueue.api.queueservice.v1.QueueService/ValidateCalendarSchedule", runtime.WithHTTPPathPattern("/v1/calendar-schedules:validate"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_QueueService_ValidateCalendarSchedule_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_QueueService_ValidateCalendarSchedule_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_QueueService_PreviewCalendarSchedule_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/chronoqueue.api.queueservice.v1.QueueService/PreviewCalendarSchedule", runtime.WithHTTPPathPattern("/v1/calendar-schedules:preview"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_QueueService_PreviewCalendarSchedule_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_QueueService_PreviewCalendarSchedule_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 
 	return nil
 }
@@ -1881,55 +1975,93 @@ func RegisterQueueServiceHandlerClient(ctx context.Context, mux *runtime.ServeMu
 		}
 		forward_QueueService_GetDLQStats_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodPost, pattern_QueueService_ValidateCalendarSchedule_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/chronoqueue.api.queueservice.v1.QueueService/ValidateCalendarSchedule", runtime.WithHTTPPathPattern("/v1/calendar-schedules:validate"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_QueueService_ValidateCalendarSchedule_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_QueueService_ValidateCalendarSchedule_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_QueueService_PreviewCalendarSchedule_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/chronoqueue.api.queueservice.v1.QueueService/PreviewCalendarSchedule", runtime.WithHTTPPathPattern("/v1/calendar-schedules:preview"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_QueueService_PreviewCalendarSchedule_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_QueueService_PreviewCalendarSchedule_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 	return nil
 }
 
 var (
-	pattern_QueueService_CreateQueue_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "queues"}, ""))
-	pattern_QueueService_DeleteQueue_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "queues", "name"}, ""))
-	pattern_QueueService_ListQueues_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "queues"}, ""))
-	pattern_QueueService_GetQueueState_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "queues", "queue_name", "state"}, ""))
-	pattern_QueueService_PostMessage_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "queues", "queue_name", "messages"}, ""))
-	pattern_QueueService_GetNextMessage_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "queues", "queue_name", "messages"}, "getNext"))
-	pattern_QueueService_AcknowledgeMessage_0   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3, 1, 0, 4, 1, 5, 4}, []string{"v1", "queues", "queue_name", "messages", "message_id"}, "acknowledge"))
-	pattern_QueueService_RenewMessageLease_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3, 1, 0, 4, 1, 5, 4}, []string{"v1", "queues", "queue_name", "messages", "message_id"}, "renewLease"))
-	pattern_QueueService_PeekQueueMessages_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "queues", "queue_name", "messages"}, "peek"))
-	pattern_QueueService_SendMessageHeartBeat_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "queues", "queue_name", "messages"}, "heartbeat"))
-	pattern_QueueService_CreateSchedule_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "schedules"}, ""))
-	pattern_QueueService_DeleteSchedule_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "schedules", "schedule_id"}, ""))
-	pattern_QueueService_GetSchedule_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "schedules", "schedule_id"}, ""))
-	pattern_QueueService_ListSchedules_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "schedules"}, ""))
-	pattern_QueueService_GetScheduleHistory_0   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "schedules", "schedule_id", "history"}, ""))
-	pattern_QueueService_PauseSchedule_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "schedules", "schedule_id"}, "pause"))
-	pattern_QueueService_ResumeSchedule_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "schedules", "schedule_id"}, "resume"))
-	pattern_QueueService_GetDLQMessages_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "dlq", "dlq_name", "messages"}, ""))
-	pattern_QueueService_RequeueFromDLQ_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3, 1, 0, 4, 1, 5, 4}, []string{"v1", "dlq", "dlq_name", "messages", "message_id"}, "requeue"))
-	pattern_QueueService_DeleteFromDLQ_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3, 1, 0, 4, 1, 5, 4}, []string{"v1", "dlq", "dlq_name", "messages", "message_id"}, ""))
-	pattern_QueueService_PurgeDLQ_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "dlq", "dlq_name"}, "purge"))
-	pattern_QueueService_GetDLQStats_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "dlq", "dlq_name", "stats"}, ""))
+	pattern_QueueService_CreateQueue_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "queues"}, ""))
+	pattern_QueueService_DeleteQueue_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "queues", "name"}, ""))
+	pattern_QueueService_ListQueues_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "queues"}, ""))
+	pattern_QueueService_GetQueueState_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "queues", "queue_name", "state"}, ""))
+	pattern_QueueService_PostMessage_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "queues", "queue_name", "messages"}, ""))
+	pattern_QueueService_GetNextMessage_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "queues", "queue_name", "messages"}, "getNext"))
+	pattern_QueueService_AcknowledgeMessage_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3, 1, 0, 4, 1, 5, 4}, []string{"v1", "queues", "queue_name", "messages", "message_id"}, "acknowledge"))
+	pattern_QueueService_RenewMessageLease_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3, 1, 0, 4, 1, 5, 4}, []string{"v1", "queues", "queue_name", "messages", "message_id"}, "renewLease"))
+	pattern_QueueService_PeekQueueMessages_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "queues", "queue_name", "messages"}, "peek"))
+	pattern_QueueService_SendMessageHeartBeat_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "queues", "queue_name", "messages"}, "heartbeat"))
+	pattern_QueueService_CreateSchedule_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "schedules"}, ""))
+	pattern_QueueService_DeleteSchedule_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "schedules", "schedule_id"}, ""))
+	pattern_QueueService_GetSchedule_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "schedules", "schedule_id"}, ""))
+	pattern_QueueService_ListSchedules_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "schedules"}, ""))
+	pattern_QueueService_GetScheduleHistory_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "schedules", "schedule_id", "history"}, ""))
+	pattern_QueueService_PauseSchedule_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "schedules", "schedule_id"}, "pause"))
+	pattern_QueueService_ResumeSchedule_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "schedules", "schedule_id"}, "resume"))
+	pattern_QueueService_GetDLQMessages_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "dlq", "dlq_name", "messages"}, ""))
+	pattern_QueueService_RequeueFromDLQ_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3, 1, 0, 4, 1, 5, 4}, []string{"v1", "dlq", "dlq_name", "messages", "message_id"}, "requeue"))
+	pattern_QueueService_DeleteFromDLQ_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3, 1, 0, 4, 1, 5, 4}, []string{"v1", "dlq", "dlq_name", "messages", "message_id"}, ""))
+	pattern_QueueService_PurgeDLQ_0                 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "dlq", "dlq_name"}, "purge"))
+	pattern_QueueService_GetDLQStats_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "dlq", "dlq_name", "stats"}, ""))
+	pattern_QueueService_ValidateCalendarSchedule_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "calendar-schedules"}, "validate"))
+	pattern_QueueService_PreviewCalendarSchedule_0  = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "calendar-schedules"}, "preview"))
 )
 
 var (
-	forward_QueueService_CreateQueue_0          = runtime.ForwardResponseMessage
-	forward_QueueService_DeleteQueue_0          = runtime.ForwardResponseMessage
-	forward_QueueService_ListQueues_0           = runtime.ForwardResponseMessage
-	forward_QueueService_GetQueueState_0        = runtime.ForwardResponseMessage
-	forward_QueueService_PostMessage_0          = runtime.ForwardResponseMessage
-	forward_QueueService_GetNextMessage_0       = runtime.ForwardResponseMessage
-	forward_QueueService_AcknowledgeMessage_0   = runtime.ForwardResponseMessage
-	forward_QueueService_RenewMessageLease_0    = runtime.ForwardResponseMessage
-	forward_QueueService_PeekQueueMessages_0    = runtime.ForwardResponseMessage
-	forward_QueueService_SendMessageHeartBeat_0 = runtime.ForwardResponseMessage
-	forward_QueueService_CreateSchedule_0       = runtime.ForwardResponseMessage
-	forward_QueueService_DeleteSchedule_0       = runtime.ForwardResponseMessage
-	forward_QueueService_GetSchedule_0          = runtime.ForwardResponseMessage
-	forward_QueueService_ListSchedules_0        = runtime.ForwardResponseMessage
-	forward_QueueService_GetScheduleHistory_0   = runtime.ForwardResponseMessage
-	forward_QueueService_PauseSchedule_0        = runtime.ForwardResponseMessage
-	forward_QueueService_ResumeSchedule_0       = runtime.ForwardResponseMessage
-	forward_QueueService_GetDLQMessages_0       = runtime.ForwardResponseMessage
-	forward_QueueService_RequeueFromDLQ_0       = runtime.ForwardResponseMessage
-	forward_QueueService_DeleteFromDLQ_0        = runtime.ForwardResponseMessage
-	forward_QueueService_PurgeDLQ_0             = runtime.ForwardResponseMessage
-	forward_QueueService_GetDLQStats_0          = runtime.ForwardResponseMessage
+	forward_QueueService_CreateQueue_0              = runtime.ForwardResponseMessage
+	forward_QueueService_DeleteQueue_0              = runtime.ForwardResponseMessage
+	forward_QueueService_ListQueues_0               = runtime.ForwardResponseMessage
+	forward_QueueService_GetQueueState_0            = runtime.ForwardResponseMessage
+	forward_QueueService_PostMessage_0              = runtime.ForwardResponseMessage
+	forward_QueueService_GetNextMessage_0           = runtime.ForwardResponseMessage
+	forward_QueueService_AcknowledgeMessage_0       = runtime.ForwardResponseMessage
+	forward_QueueService_RenewMessageLease_0        = runtime.ForwardResponseMessage
+	forward_QueueService_PeekQueueMessages_0        = runtime.ForwardResponseMessage
+	forward_QueueService_SendMessageHeartBeat_0     = runtime.ForwardResponseMessage
+	forward_QueueService_CreateSchedule_0           = runtime.ForwardResponseMessage
+	forward_QueueService_DeleteSchedule_0           = runtime.ForwardResponseMessage
+	forward_QueueService_GetSchedule_0              = runtime.ForwardResponseMessage
+	forward_QueueService_ListSchedules_0            = runtime.ForwardResponseMessage
+	forward_QueueService_GetScheduleHistory_0       = runtime.ForwardResponseMessage
+	forward_QueueService_PauseSchedule_0            = runtime.ForwardResponseMessage
+	forward_QueueService_ResumeSchedule_0           = runtime.ForwardResponseMessage
+	forward_QueueService_GetDLQMessages_0           = runtime.ForwardResponseMessage
+	forward_QueueService_RequeueFromDLQ_0           = runtime.ForwardResponseMessage
+	forward_QueueService_DeleteFromDLQ_0            = runtime.ForwardResponseMessage
+	forward_QueueService_PurgeDLQ_0                 = runtime.ForwardResponseMessage
+	forward_QueueService_GetDLQStats_0              = runtime.ForwardResponseMessage
+	forward_QueueService_ValidateCalendarSchedule_0 = runtime.ForwardResponseMessage
+	forward_QueueService_PreviewCalendarSchedule_0  = runtime.ForwardResponseMessage
 )

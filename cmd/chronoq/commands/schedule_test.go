@@ -17,7 +17,7 @@ func TestNewScheduleCommand(t *testing.T) {
 
 	// Check that subcommands are properly added
 	subcommands := cmd.Commands()
-	assert.Len(t, subcommands, 6)
+	assert.Len(t, subcommands, 8) // Updated to 8 after adding calendar schedule commands
 
 	// Check subcommand names
 	subcommandNames := make([]string, len(subcommands))
@@ -32,6 +32,8 @@ func TestNewScheduleCommand(t *testing.T) {
 		"get <schedule-id>",
 		"pause <schedule-id>",
 		"resume <schedule-id>",
+		"validate-calendar [calendar-schedule-json]",
+		"preview-calendar [calendar-schedule-json]",
 	}
 
 	for _, expected := range expectedCommands {

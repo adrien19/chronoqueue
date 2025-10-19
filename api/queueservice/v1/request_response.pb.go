@@ -2162,6 +2162,309 @@ func (x *GetDLQStatsResponse) GetUpdatedAt() int64 {
 	return 0
 }
 
+// Validate a calendar schedule configuration
+type ValidateCalendarScheduleRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	CalendarSchedule *v12.CalendarSchedule  `protobuf:"bytes,1,opt,name=calendar_schedule,json=calendarSchedule,proto3" json:"calendar_schedule,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ValidateCalendarScheduleRequest) Reset() {
+	*x = ValidateCalendarScheduleRequest{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateCalendarScheduleRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateCalendarScheduleRequest) ProtoMessage() {}
+
+func (x *ValidateCalendarScheduleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateCalendarScheduleRequest.ProtoReflect.Descriptor instead.
+func (*ValidateCalendarScheduleRequest) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *ValidateCalendarScheduleRequest) GetCalendarSchedule() *v12.CalendarSchedule {
+	if x != nil {
+		return x.CalendarSchedule
+	}
+	return nil
+}
+
+type ValidateCalendarScheduleResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Valid            bool                   `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`
+	ErrorMessage     string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	ValidationIssues []*ValidationIssue     `protobuf:"bytes,3,rep,name=validation_issues,json=validationIssues,proto3" json:"validation_issues,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ValidateCalendarScheduleResponse) Reset() {
+	*x = ValidateCalendarScheduleResponse{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateCalendarScheduleResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateCalendarScheduleResponse) ProtoMessage() {}
+
+func (x *ValidateCalendarScheduleResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateCalendarScheduleResponse.ProtoReflect.Descriptor instead.
+func (*ValidateCalendarScheduleResponse) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *ValidateCalendarScheduleResponse) GetValid() bool {
+	if x != nil {
+		return x.Valid
+	}
+	return false
+}
+
+func (x *ValidateCalendarScheduleResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *ValidateCalendarScheduleResponse) GetValidationIssues() []*ValidationIssue {
+	if x != nil {
+		return x.ValidationIssues
+	}
+	return nil
+}
+
+// Preview upcoming execution times for a calendar schedule
+type PreviewCalendarScheduleRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	CalendarSchedule *v12.CalendarSchedule  `protobuf:"bytes,1,opt,name=calendar_schedule,json=calendarSchedule,proto3" json:"calendar_schedule,omitempty"`
+	Count            int32                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"` // Number of execution times to preview (default: 10, max: 100)
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *PreviewCalendarScheduleRequest) Reset() {
+	*x = PreviewCalendarScheduleRequest{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreviewCalendarScheduleRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreviewCalendarScheduleRequest) ProtoMessage() {}
+
+func (x *PreviewCalendarScheduleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreviewCalendarScheduleRequest.ProtoReflect.Descriptor instead.
+func (*PreviewCalendarScheduleRequest) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *PreviewCalendarScheduleRequest) GetCalendarSchedule() *v12.CalendarSchedule {
+	if x != nil {
+		return x.CalendarSchedule
+	}
+	return nil
+}
+
+func (x *PreviewCalendarScheduleRequest) GetCount() int32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+type PreviewCalendarScheduleResponse struct {
+	state          protoimpl.MessageState   `protogen:"open.v1"`
+	ExecutionTimes []*timestamppb.Timestamp `protobuf:"bytes,1,rep,name=execution_times,json=executionTimes,proto3" json:"execution_times,omitempty"`
+	Timezone       string                   `protobuf:"bytes,2,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	PreviewStart   *timestamppb.Timestamp   `protobuf:"bytes,3,opt,name=preview_start,json=previewStart,proto3" json:"preview_start,omitempty"`
+	TotalCount     int32                    `protobuf:"varint,4,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *PreviewCalendarScheduleResponse) Reset() {
+	*x = PreviewCalendarScheduleResponse{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreviewCalendarScheduleResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreviewCalendarScheduleResponse) ProtoMessage() {}
+
+func (x *PreviewCalendarScheduleResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreviewCalendarScheduleResponse.ProtoReflect.Descriptor instead.
+func (*PreviewCalendarScheduleResponse) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *PreviewCalendarScheduleResponse) GetExecutionTimes() []*timestamppb.Timestamp {
+	if x != nil {
+		return x.ExecutionTimes
+	}
+	return nil
+}
+
+func (x *PreviewCalendarScheduleResponse) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
+func (x *PreviewCalendarScheduleResponse) GetPreviewStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PreviewStart
+	}
+	return nil
+}
+
+func (x *PreviewCalendarScheduleResponse) GetTotalCount() int32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+// Validation issue details
+type ValidationIssue struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Severity      string                 `protobuf:"bytes,1,opt,name=severity,proto3" json:"severity,omitempty"`                     // "error", "warning", "info"
+	RuleIndex     int32                  `protobuf:"varint,2,opt,name=rule_index,json=ruleIndex,proto3" json:"rule_index,omitempty"` // -1 for global issues
+	Field         string                 `protobuf:"bytes,3,opt,name=field,proto3" json:"field,omitempty"`
+	Message       string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	Suggestion    string                 `protobuf:"bytes,5,opt,name=suggestion,proto3" json:"suggestion,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidationIssue) Reset() {
+	*x = ValidationIssue{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidationIssue) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidationIssue) ProtoMessage() {}
+
+func (x *ValidationIssue) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidationIssue.ProtoReflect.Descriptor instead.
+func (*ValidationIssue) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *ValidationIssue) GetSeverity() string {
+	if x != nil {
+		return x.Severity
+	}
+	return ""
+}
+
+func (x *ValidationIssue) GetRuleIndex() int32 {
+	if x != nil {
+		return x.RuleIndex
+	}
+	return 0
+}
+
+func (x *ValidationIssue) GetField() string {
+	if x != nil {
+		return x.Field
+	}
+	return ""
+}
+
+func (x *ValidationIssue) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *ValidationIssue) GetSuggestion() string {
+	if x != nil {
+		return x.Suggestion
+	}
+	return ""
+}
+
 type PeekQueueMessagesRequest_PriorityRange struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Min           int64                  `protobuf:"varint,1,opt,name=min,proto3" json:"min,omitempty"`
@@ -2172,7 +2475,7 @@ type PeekQueueMessagesRequest_PriorityRange struct {
 
 func (x *PeekQueueMessagesRequest_PriorityRange) Reset() {
 	*x = PeekQueueMessagesRequest_PriorityRange{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[44]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2184,7 +2487,7 @@ func (x *PeekQueueMessagesRequest_PriorityRange) String() string {
 func (*PeekQueueMessagesRequest_PriorityRange) ProtoMessage() {}
 
 func (x *PeekQueueMessagesRequest_PriorityRange) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[44]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2355,7 +2658,31 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x03 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"updated_at\x18\x04 \x01(\x03R\tupdatedAtBBZ@github.com/adrien19/chronoqueue/api/queueservice/v1;queueserviceb\x06proto3"
+	"updated_at\x18\x04 \x01(\x03R\tupdatedAt\"}\n" +
+	"\x1fValidateCalendarScheduleRequest\x12Z\n" +
+	"\x11calendar_schedule\x18\x01 \x01(\v2-.chronoqueue.api.schedule.v1.CalendarScheduleR\x10calendarSchedule\"\xbc\x01\n" +
+	" ValidateCalendarScheduleResponse\x12\x14\n" +
+	"\x05valid\x18\x01 \x01(\bR\x05valid\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12]\n" +
+	"\x11validation_issues\x18\x03 \x03(\v20.chronoqueue.api.queueservice.v1.ValidationIssueR\x10validationIssues\"\x92\x01\n" +
+	"\x1ePreviewCalendarScheduleRequest\x12Z\n" +
+	"\x11calendar_schedule\x18\x01 \x01(\v2-.chronoqueue.api.schedule.v1.CalendarScheduleR\x10calendarSchedule\x12\x14\n" +
+	"\x05count\x18\x02 \x01(\x05R\x05count\"\xe4\x01\n" +
+	"\x1fPreviewCalendarScheduleResponse\x12C\n" +
+	"\x0fexecution_times\x18\x01 \x03(\v2\x1a.google.protobuf.TimestampR\x0eexecutionTimes\x12\x1a\n" +
+	"\btimezone\x18\x02 \x01(\tR\btimezone\x12?\n" +
+	"\rpreview_start\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\fpreviewStart\x12\x1f\n" +
+	"\vtotal_count\x18\x04 \x01(\x05R\n" +
+	"totalCount\"\x9c\x01\n" +
+	"\x0fValidationIssue\x12\x1a\n" +
+	"\bseverity\x18\x01 \x01(\tR\bseverity\x12\x1d\n" +
+	"\n" +
+	"rule_index\x18\x02 \x01(\x05R\truleIndex\x12\x14\n" +
+	"\x05field\x18\x03 \x01(\tR\x05field\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\x12\x1e\n" +
+	"\n" +
+	"suggestion\x18\x05 \x01(\tR\n" +
+	"suggestionBBZ@github.com/adrien19/chronoqueue/api/queueservice/v1;queueserviceb\x06proto3"
 
 var (
 	file_proto_queueservice_v1_request_response_proto_rawDescOnce sync.Once
@@ -2369,7 +2696,7 @@ func file_proto_queueservice_v1_request_response_proto_rawDescGZIP() []byte {
 	return file_proto_queueservice_v1_request_response_proto_rawDescData
 }
 
-var file_proto_queueservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
+var file_proto_queueservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
 var file_proto_queueservice_v1_request_response_proto_goTypes = []any{
 	(*CreateQueueRequest)(nil),                     // 0: chronoqueue.api.queueservice.v1.CreateQueueRequest
 	(*CreateQueueResponse)(nil),                    // 1: chronoqueue.api.queueservice.v1.CreateQueueResponse
@@ -2415,43 +2742,54 @@ var file_proto_queueservice_v1_request_response_proto_goTypes = []any{
 	(*PurgeDLQResponse)(nil),                       // 41: chronoqueue.api.queueservice.v1.PurgeDLQResponse
 	(*GetDLQStatsRequest)(nil),                     // 42: chronoqueue.api.queueservice.v1.GetDLQStatsRequest
 	(*GetDLQStatsResponse)(nil),                    // 43: chronoqueue.api.queueservice.v1.GetDLQStatsResponse
-	(*PeekQueueMessagesRequest_PriorityRange)(nil), // 44: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
-	nil,                             // 45: chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
-	(*v1.QueueMetadata)(nil),        // 46: chronoqueue.api.queue.v1.QueueMetadata
-	(*v11.Message)(nil),             // 47: chronoqueue.api.message.v1.Message
-	(*durationpb.Duration)(nil),     // 48: google.protobuf.Duration
-	(v11.Message_Metadata_State)(0), // 49: chronoqueue.api.message.v1.Message.Metadata.State
-	(*timestamppb.Timestamp)(nil),   // 50: google.protobuf.Timestamp
-	(*v1.Queue)(nil),                // 51: chronoqueue.api.queue.v1.Queue
-	(*v12.Schedule)(nil),            // 52: chronoqueue.api.schedule.v1.Schedule
-	(*v12.ScheduleHistory)(nil),     // 53: chronoqueue.api.schedule.v1.ScheduleHistory
+	(*ValidateCalendarScheduleRequest)(nil),        // 44: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleRequest
+	(*ValidateCalendarScheduleResponse)(nil),       // 45: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleResponse
+	(*PreviewCalendarScheduleRequest)(nil),         // 46: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleRequest
+	(*PreviewCalendarScheduleResponse)(nil),        // 47: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse
+	(*ValidationIssue)(nil),                        // 48: chronoqueue.api.queueservice.v1.ValidationIssue
+	(*PeekQueueMessagesRequest_PriorityRange)(nil), // 49: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
+	nil,                             // 50: chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
+	(*v1.QueueMetadata)(nil),        // 51: chronoqueue.api.queue.v1.QueueMetadata
+	(*v11.Message)(nil),             // 52: chronoqueue.api.message.v1.Message
+	(*durationpb.Duration)(nil),     // 53: google.protobuf.Duration
+	(v11.Message_Metadata_State)(0), // 54: chronoqueue.api.message.v1.Message.Metadata.State
+	(*timestamppb.Timestamp)(nil),   // 55: google.protobuf.Timestamp
+	(*v1.Queue)(nil),                // 56: chronoqueue.api.queue.v1.Queue
+	(*v12.Schedule)(nil),            // 57: chronoqueue.api.schedule.v1.Schedule
+	(*v12.ScheduleHistory)(nil),     // 58: chronoqueue.api.schedule.v1.ScheduleHistory
+	(*v12.CalendarSchedule)(nil),    // 59: chronoqueue.api.schedule.v1.CalendarSchedule
 }
 var file_proto_queueservice_v1_request_response_proto_depIdxs = []int32{
-	46, // 0: chronoqueue.api.queueservice.v1.CreateQueueRequest.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
-	47, // 1: chronoqueue.api.queueservice.v1.PostMessageRequest.message:type_name -> chronoqueue.api.message.v1.Message
-	48, // 2: chronoqueue.api.queueservice.v1.GetNextMessageRequest.lease_duration:type_name -> google.protobuf.Duration
-	47, // 3: chronoqueue.api.queueservice.v1.GetNextMessageResponse.message:type_name -> chronoqueue.api.message.v1.Message
-	49, // 4: chronoqueue.api.queueservice.v1.AcknowledgeMessageRequest.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	48, // 5: chronoqueue.api.queueservice.v1.RenewMessageLeaseRequest.lease_duration:type_name -> google.protobuf.Duration
-	48, // 6: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.remaining_time:type_name -> google.protobuf.Duration
-	49, // 7: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	44, // 8: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.priority_range:type_name -> chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
-	47, // 9: chronoqueue.api.queueservice.v1.PeekQueueMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
-	45, // 10: chronoqueue.api.queueservice.v1.GetQueueStateResponse.state_counts:type_name -> chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
-	50, // 11: chronoqueue.api.queueservice.v1.GetQueueStateResponse.earliest_deadline:type_name -> google.protobuf.Timestamp
-	48, // 12: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.remaining_time:type_name -> google.protobuf.Duration
-	49, // 13: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	51, // 14: chronoqueue.api.queueservice.v1.ListQueuesResponse.queues:type_name -> chronoqueue.api.queue.v1.Queue
-	52, // 15: chronoqueue.api.queueservice.v1.CreateScheduleRequest.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
-	52, // 16: chronoqueue.api.queueservice.v1.GetScheduleResponse.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
-	52, // 17: chronoqueue.api.queueservice.v1.ListSchedulesResponse.schedules:type_name -> chronoqueue.api.schedule.v1.Schedule
-	53, // 18: chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse.schedule_history:type_name -> chronoqueue.api.schedule.v1.ScheduleHistory
-	47, // 19: chronoqueue.api.queueservice.v1.GetDLQMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
-	20, // [20:20] is the sub-list for method output_type
-	20, // [20:20] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	51, // 0: chronoqueue.api.queueservice.v1.CreateQueueRequest.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
+	52, // 1: chronoqueue.api.queueservice.v1.PostMessageRequest.message:type_name -> chronoqueue.api.message.v1.Message
+	53, // 2: chronoqueue.api.queueservice.v1.GetNextMessageRequest.lease_duration:type_name -> google.protobuf.Duration
+	52, // 3: chronoqueue.api.queueservice.v1.GetNextMessageResponse.message:type_name -> chronoqueue.api.message.v1.Message
+	54, // 4: chronoqueue.api.queueservice.v1.AcknowledgeMessageRequest.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
+	53, // 5: chronoqueue.api.queueservice.v1.RenewMessageLeaseRequest.lease_duration:type_name -> google.protobuf.Duration
+	53, // 6: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.remaining_time:type_name -> google.protobuf.Duration
+	54, // 7: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
+	49, // 8: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.priority_range:type_name -> chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
+	52, // 9: chronoqueue.api.queueservice.v1.PeekQueueMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
+	50, // 10: chronoqueue.api.queueservice.v1.GetQueueStateResponse.state_counts:type_name -> chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
+	55, // 11: chronoqueue.api.queueservice.v1.GetQueueStateResponse.earliest_deadline:type_name -> google.protobuf.Timestamp
+	53, // 12: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.remaining_time:type_name -> google.protobuf.Duration
+	54, // 13: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
+	56, // 14: chronoqueue.api.queueservice.v1.ListQueuesResponse.queues:type_name -> chronoqueue.api.queue.v1.Queue
+	57, // 15: chronoqueue.api.queueservice.v1.CreateScheduleRequest.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
+	57, // 16: chronoqueue.api.queueservice.v1.GetScheduleResponse.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
+	57, // 17: chronoqueue.api.queueservice.v1.ListSchedulesResponse.schedules:type_name -> chronoqueue.api.schedule.v1.Schedule
+	58, // 18: chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse.schedule_history:type_name -> chronoqueue.api.schedule.v1.ScheduleHistory
+	52, // 19: chronoqueue.api.queueservice.v1.GetDLQMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
+	59, // 20: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleRequest.calendar_schedule:type_name -> chronoqueue.api.schedule.v1.CalendarSchedule
+	48, // 21: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleResponse.validation_issues:type_name -> chronoqueue.api.queueservice.v1.ValidationIssue
+	59, // 22: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleRequest.calendar_schedule:type_name -> chronoqueue.api.schedule.v1.CalendarSchedule
+	55, // 23: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse.execution_times:type_name -> google.protobuf.Timestamp
+	55, // 24: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse.preview_start:type_name -> google.protobuf.Timestamp
+	25, // [25:25] is the sub-list for method output_type
+	25, // [25:25] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_proto_queueservice_v1_request_response_proto_init() }
@@ -2467,7 +2805,7 @@ func file_proto_queueservice_v1_request_response_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_queueservice_v1_request_response_proto_rawDesc), len(file_proto_queueservice_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   46,
+			NumMessages:   51,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

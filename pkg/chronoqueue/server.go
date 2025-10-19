@@ -252,6 +252,49 @@ func (s *ChronoQueueServer) ResumeSchedule(ctx context.Context, req *queueservic
 	return resp, nil
 }
 
+// Calendar Schedule Operations
+
+func (s *ChronoQueueServer) ValidateCalendarSchedule(ctx context.Context, req *queueservice_pb.ValidateCalendarScheduleRequest) (*queueservice_pb.ValidateCalendarScheduleResponse, error) {
+	s.logger.InfoWithFields("ValidateCalendarSchedule called", "schedule", req.GetCalendarSchedule())
+
+	err := s.storage.ValidateCalendarSchedule(ctx, req.GetCalendarSchedule())
+	if err != nil {
+		s.logger.ErrorWithFields("Calendar schedule validation failed", "error", err)
+		// Return validation error details
+		return &queueservice_pb.ValidateCalendarScheduleResponse{
+			Valid:        false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	s.logger.InfoWithFields("Calendar schedule validated successfully")
+	return &queueservice_pb.ValidateCalendarScheduleResponse{
+		Valid: true,
+	}, nil
+}
+
+func (s *ChronoQueueServer) PreviewCalendarSchedule(ctx context.Context, req *queueservice_pb.PreviewCalendarScheduleRequest) (*queueservice_pb.PreviewCalendarScheduleResponse, error) {
+	s.logger.InfoWithFields("PreviewCalendarSchedule called", "schedule", req.GetCalendarSchedule(), "count", req.GetCount())
+
+	// Default to 10 if not specified
+	count := req.GetCount()
+	if count == 0 {
+		count = 10
+	}
+	if count > 100 {
+		count = 100
+	}
+
+	preview, err := s.storage.GetCalendarSchedulePreview(ctx, req.GetCalendarSchedule(), int(count))
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to generate calendar schedule preview", "error", err)
+		return nil, fmt.Errorf("failed to generate preview: %w", err)
+	}
+
+	s.logger.InfoWithFields("Calendar schedule preview generated successfully", "execution_count", len(preview.ExecutionTimes))
+	return preview, nil
+}
+
 // Dead Letter Queue Management Methods
 
 func (s *ChronoQueueServer) GetDLQMessages(ctx context.Context, req *queueservice_pb.GetDLQMessagesRequest) (*queueservice_pb.GetDLQMessagesResponse, error) {

@@ -21,28 +21,30 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	QueueService_CreateQueue_FullMethodName          = "/chronoqueue.api.queueservice.v1.QueueService/CreateQueue"
-	QueueService_DeleteQueue_FullMethodName          = "/chronoqueue.api.queueservice.v1.QueueService/DeleteQueue"
-	QueueService_ListQueues_FullMethodName           = "/chronoqueue.api.queueservice.v1.QueueService/ListQueues"
-	QueueService_GetQueueState_FullMethodName        = "/chronoqueue.api.queueservice.v1.QueueService/GetQueueState"
-	QueueService_PostMessage_FullMethodName          = "/chronoqueue.api.queueservice.v1.QueueService/PostMessage"
-	QueueService_GetNextMessage_FullMethodName       = "/chronoqueue.api.queueservice.v1.QueueService/GetNextMessage"
-	QueueService_AcknowledgeMessage_FullMethodName   = "/chronoqueue.api.queueservice.v1.QueueService/AcknowledgeMessage"
-	QueueService_RenewMessageLease_FullMethodName    = "/chronoqueue.api.queueservice.v1.QueueService/RenewMessageLease"
-	QueueService_PeekQueueMessages_FullMethodName    = "/chronoqueue.api.queueservice.v1.QueueService/PeekQueueMessages"
-	QueueService_SendMessageHeartBeat_FullMethodName = "/chronoqueue.api.queueservice.v1.QueueService/SendMessageHeartBeat"
-	QueueService_CreateSchedule_FullMethodName       = "/chronoqueue.api.queueservice.v1.QueueService/CreateSchedule"
-	QueueService_DeleteSchedule_FullMethodName       = "/chronoqueue.api.queueservice.v1.QueueService/DeleteSchedule"
-	QueueService_GetSchedule_FullMethodName          = "/chronoqueue.api.queueservice.v1.QueueService/GetSchedule"
-	QueueService_ListSchedules_FullMethodName        = "/chronoqueue.api.queueservice.v1.QueueService/ListSchedules"
-	QueueService_GetScheduleHistory_FullMethodName   = "/chronoqueue.api.queueservice.v1.QueueService/GetScheduleHistory"
-	QueueService_PauseSchedule_FullMethodName        = "/chronoqueue.api.queueservice.v1.QueueService/PauseSchedule"
-	QueueService_ResumeSchedule_FullMethodName       = "/chronoqueue.api.queueservice.v1.QueueService/ResumeSchedule"
-	QueueService_GetDLQMessages_FullMethodName       = "/chronoqueue.api.queueservice.v1.QueueService/GetDLQMessages"
-	QueueService_RequeueFromDLQ_FullMethodName       = "/chronoqueue.api.queueservice.v1.QueueService/RequeueFromDLQ"
-	QueueService_DeleteFromDLQ_FullMethodName        = "/chronoqueue.api.queueservice.v1.QueueService/DeleteFromDLQ"
-	QueueService_PurgeDLQ_FullMethodName             = "/chronoqueue.api.queueservice.v1.QueueService/PurgeDLQ"
-	QueueService_GetDLQStats_FullMethodName          = "/chronoqueue.api.queueservice.v1.QueueService/GetDLQStats"
+	QueueService_CreateQueue_FullMethodName              = "/chronoqueue.api.queueservice.v1.QueueService/CreateQueue"
+	QueueService_DeleteQueue_FullMethodName              = "/chronoqueue.api.queueservice.v1.QueueService/DeleteQueue"
+	QueueService_ListQueues_FullMethodName               = "/chronoqueue.api.queueservice.v1.QueueService/ListQueues"
+	QueueService_GetQueueState_FullMethodName            = "/chronoqueue.api.queueservice.v1.QueueService/GetQueueState"
+	QueueService_PostMessage_FullMethodName              = "/chronoqueue.api.queueservice.v1.QueueService/PostMessage"
+	QueueService_GetNextMessage_FullMethodName           = "/chronoqueue.api.queueservice.v1.QueueService/GetNextMessage"
+	QueueService_AcknowledgeMessage_FullMethodName       = "/chronoqueue.api.queueservice.v1.QueueService/AcknowledgeMessage"
+	QueueService_RenewMessageLease_FullMethodName        = "/chronoqueue.api.queueservice.v1.QueueService/RenewMessageLease"
+	QueueService_PeekQueueMessages_FullMethodName        = "/chronoqueue.api.queueservice.v1.QueueService/PeekQueueMessages"
+	QueueService_SendMessageHeartBeat_FullMethodName     = "/chronoqueue.api.queueservice.v1.QueueService/SendMessageHeartBeat"
+	QueueService_CreateSchedule_FullMethodName           = "/chronoqueue.api.queueservice.v1.QueueService/CreateSchedule"
+	QueueService_DeleteSchedule_FullMethodName           = "/chronoqueue.api.queueservice.v1.QueueService/DeleteSchedule"
+	QueueService_GetSchedule_FullMethodName              = "/chronoqueue.api.queueservice.v1.QueueService/GetSchedule"
+	QueueService_ListSchedules_FullMethodName            = "/chronoqueue.api.queueservice.v1.QueueService/ListSchedules"
+	QueueService_GetScheduleHistory_FullMethodName       = "/chronoqueue.api.queueservice.v1.QueueService/GetScheduleHistory"
+	QueueService_PauseSchedule_FullMethodName            = "/chronoqueue.api.queueservice.v1.QueueService/PauseSchedule"
+	QueueService_ResumeSchedule_FullMethodName           = "/chronoqueue.api.queueservice.v1.QueueService/ResumeSchedule"
+	QueueService_GetDLQMessages_FullMethodName           = "/chronoqueue.api.queueservice.v1.QueueService/GetDLQMessages"
+	QueueService_RequeueFromDLQ_FullMethodName           = "/chronoqueue.api.queueservice.v1.QueueService/RequeueFromDLQ"
+	QueueService_DeleteFromDLQ_FullMethodName            = "/chronoqueue.api.queueservice.v1.QueueService/DeleteFromDLQ"
+	QueueService_PurgeDLQ_FullMethodName                 = "/chronoqueue.api.queueservice.v1.QueueService/PurgeDLQ"
+	QueueService_GetDLQStats_FullMethodName              = "/chronoqueue.api.queueservice.v1.QueueService/GetDLQStats"
+	QueueService_ValidateCalendarSchedule_FullMethodName = "/chronoqueue.api.queueservice.v1.QueueService/ValidateCalendarSchedule"
+	QueueService_PreviewCalendarSchedule_FullMethodName  = "/chronoqueue.api.queueservice.v1.QueueService/PreviewCalendarSchedule"
 )
 
 // QueueServiceClient is the client API for QueueService service.
@@ -75,6 +77,9 @@ type QueueServiceClient interface {
 	DeleteFromDLQ(ctx context.Context, in *DeleteFromDLQRequest, opts ...grpc.CallOption) (*DeleteFromDLQResponse, error)
 	PurgeDLQ(ctx context.Context, in *PurgeDLQRequest, opts ...grpc.CallOption) (*PurgeDLQResponse, error)
 	GetDLQStats(ctx context.Context, in *GetDLQStatsRequest, opts ...grpc.CallOption) (*GetDLQStatsResponse, error)
+	// Calendar Schedule Operations
+	ValidateCalendarSchedule(ctx context.Context, in *ValidateCalendarScheduleRequest, opts ...grpc.CallOption) (*ValidateCalendarScheduleResponse, error)
+	PreviewCalendarSchedule(ctx context.Context, in *PreviewCalendarScheduleRequest, opts ...grpc.CallOption) (*PreviewCalendarScheduleResponse, error)
 }
 
 type queueServiceClient struct {
@@ -305,6 +310,26 @@ func (c *queueServiceClient) GetDLQStats(ctx context.Context, in *GetDLQStatsReq
 	return out, nil
 }
 
+func (c *queueServiceClient) ValidateCalendarSchedule(ctx context.Context, in *ValidateCalendarScheduleRequest, opts ...grpc.CallOption) (*ValidateCalendarScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ValidateCalendarScheduleResponse)
+	err := c.cc.Invoke(ctx, QueueService_ValidateCalendarSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) PreviewCalendarSchedule(ctx context.Context, in *PreviewCalendarScheduleRequest, opts ...grpc.CallOption) (*PreviewCalendarScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PreviewCalendarScheduleResponse)
+	err := c.cc.Invoke(ctx, QueueService_PreviewCalendarSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // QueueServiceServer is the server API for QueueService service.
 // All implementations should embed UnimplementedQueueServiceServer
 // for forward compatibility.
@@ -335,6 +360,9 @@ type QueueServiceServer interface {
 	DeleteFromDLQ(context.Context, *DeleteFromDLQRequest) (*DeleteFromDLQResponse, error)
 	PurgeDLQ(context.Context, *PurgeDLQRequest) (*PurgeDLQResponse, error)
 	GetDLQStats(context.Context, *GetDLQStatsRequest) (*GetDLQStatsResponse, error)
+	// Calendar Schedule Operations
+	ValidateCalendarSchedule(context.Context, *ValidateCalendarScheduleRequest) (*ValidateCalendarScheduleResponse, error)
+	PreviewCalendarSchedule(context.Context, *PreviewCalendarScheduleRequest) (*PreviewCalendarScheduleResponse, error)
 }
 
 // UnimplementedQueueServiceServer should be embedded to have
@@ -409,6 +437,12 @@ func (UnimplementedQueueServiceServer) PurgeDLQ(context.Context, *PurgeDLQReques
 }
 func (UnimplementedQueueServiceServer) GetDLQStats(context.Context, *GetDLQStatsRequest) (*GetDLQStatsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDLQStats not implemented")
+}
+func (UnimplementedQueueServiceServer) ValidateCalendarSchedule(context.Context, *ValidateCalendarScheduleRequest) (*ValidateCalendarScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ValidateCalendarSchedule not implemented")
+}
+func (UnimplementedQueueServiceServer) PreviewCalendarSchedule(context.Context, *PreviewCalendarScheduleRequest) (*PreviewCalendarScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PreviewCalendarSchedule not implemented")
 }
 func (UnimplementedQueueServiceServer) testEmbeddedByValue() {}
 
@@ -826,6 +860,42 @@ func _QueueService_GetDLQStats_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _QueueService_ValidateCalendarSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ValidateCalendarScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).ValidateCalendarSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_ValidateCalendarSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).ValidateCalendarSchedule(ctx, req.(*ValidateCalendarScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_PreviewCalendarSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PreviewCalendarScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).PreviewCalendarSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_PreviewCalendarSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).PreviewCalendarSchedule(ctx, req.(*PreviewCalendarScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // QueueService_ServiceDesc is the grpc.ServiceDesc for QueueService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -920,6 +990,14 @@ var QueueService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetDLQStats",
 			Handler:    _QueueService_GetDLQStats_Handler,
+		},
+		{
+			MethodName: "ValidateCalendarSchedule",
+			Handler:    _QueueService_ValidateCalendarSchedule_Handler,
+		},
+		{
+			MethodName: "PreviewCalendarSchedule",
+			Handler:    _QueueService_PreviewCalendarSchedule_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

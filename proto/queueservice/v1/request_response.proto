@@ -218,3 +218,36 @@ message GetDLQStatsResponse {
     int64 created_at = 3;
     int64 updated_at = 4;
 }
+
+// Calendar Schedule Operations
+
+// Validate a calendar schedule configuration
+message ValidateCalendarScheduleRequest {
+    chronoqueue.api.schedule.v1.CalendarSchedule calendar_schedule = 1;
+}
+message ValidateCalendarScheduleResponse {
+    bool valid = 1;
+    string error_message = 2;
+    repeated ValidationIssue validation_issues = 3;
+}
+
+// Preview upcoming execution times for a calendar schedule
+message PreviewCalendarScheduleRequest {
+    chronoqueue.api.schedule.v1.CalendarSchedule calendar_schedule = 1;
+    int32 count = 2; // Number of execution times to preview (default: 10, max: 100)
+}
+message PreviewCalendarScheduleResponse {
+    repeated google.protobuf.Timestamp execution_times = 1;
+    string timezone = 2;
+    google.protobuf.Timestamp preview_start = 3;
+    int32 total_count = 4;
+}
+
+// Validation issue details
+message ValidationIssue {
+    string severity = 1; // "error", "warning", "info"
+    int32 rule_index = 2; // -1 for global issues
+    string field = 3;
+    string message = 4;
+    string suggestion = 5;
+}

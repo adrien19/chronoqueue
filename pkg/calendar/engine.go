@@ -102,6 +102,10 @@ func DefaultCalendarEngineConfig() *CalendarEngineConfig {
 		DefaultTimezone:          "UTC",
 		MaxFutureCalculations:    1000,
 		EnablePerformanceMetrics: false,
+		MaxPreviewCount:          100,                  // Maximum number of executions to preview
+		MaxLookahead:             365 * 24 * time.Hour, // Look ahead 1 year
+		EnableCaching:            true,
+		CacheTTL:                 24 * time.Hour, // Cache for 24 hours
 		CacheConfig: &types.CacheConfig{
 			Enabled:         true,
 			TTL:             time.Hour * 24, // 24 hours

@@ -157,4 +157,19 @@ service QueueService {
             get: "/v1/dlq/{dlq_name=*}/stats"
         };
     }
+
+    // Calendar Schedule Operations
+    rpc ValidateCalendarSchedule(ValidateCalendarScheduleRequest) returns (ValidateCalendarScheduleResponse) {
+        option (google.api.http) = {
+            post: "/v1/calendar-schedules:validate"
+            body: "*"
+        };
+    }
+
+    rpc PreviewCalendarSchedule(PreviewCalendarScheduleRequest) returns (PreviewCalendarScheduleResponse) {
+        option (google.api.http) = {
+            post: "/v1/calendar-schedules:preview"
+            body: "*"
+        };
+    }
 }

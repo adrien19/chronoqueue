@@ -27,7 +27,7 @@ var File_proto_queueservice_v1_service_proto protoreflect.FileDescriptor
 
 const file_proto_queueservice_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"#proto/queueservice/v1/service.proto\x12\x1fchronoqueue.api.queueservice.v1\x1a\"proto/google/api/annotations.proto\x1a,proto/queueservice/v1/request_response.proto2\x9d\x1e\n" +
+	"#proto/queueservice/v1/service.proto\x12\x1fchronoqueue.api.queueservice.v1\x1a\"proto/google/api/annotations.proto\x1a,proto/queueservice/v1/request_response.proto2\xb5!\n" +
 	"\fQueueService\x12\x8f\x01\n" +
 	"\vCreateQueue\x123.chronoqueue.api.queueservice.v1.CreateQueueRequest\x1a4.chronoqueue.api.queueservice.v1.CreateQueueResponse\"\x15\x82\xd3\xe4\x93\x02\x0f:\x01*\"\n" +
 	"/v1/queues\x12\x95\x01\n" +
@@ -53,53 +53,59 @@ const file_proto_queueservice_v1_service_proto_rawDesc = "" +
 	"\x0eRequeueFromDLQ\x126.chronoqueue.api.queueservice.v1.RequeueFromDLQRequest\x1a7.chronoqueue.api.queueservice.v1.RequeueFromDLQResponse\"?\x82\xd3\xe4\x93\x029:\x01*\"4/v1/dlq/{dlq_name=*}/messages/{message_id=*}:requeue\x12\xb4\x01\n" +
 	"\rDeleteFromDLQ\x125.chronoqueue.api.queueservice.v1.DeleteFromDLQRequest\x1a6.chronoqueue.api.queueservice.v1.DeleteFromDLQResponse\"4\x82\xd3\xe4\x93\x02.*,/v1/dlq/{dlq_name=*}/messages/{message_id=*}\x12\x96\x01\n" +
 	"\bPurgeDLQ\x120.chronoqueue.api.queueservice.v1.PurgeDLQRequest\x1a1.chronoqueue.api.queueservice.v1.PurgeDLQResponse\"%\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/v1/dlq/{dlq_name=*}:purge\x12\x9c\x01\n" +
-	"\vGetDLQStats\x123.chronoqueue.api.queueservice.v1.GetDLQStatsRequest\x1a4.chronoqueue.api.queueservice.v1.GetDLQStatsResponse\"\"\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/dlq/{dlq_name=*}/statsBBZ@github.com/adrien19/chronoqueue/api/queueservice/v1;queueserviceb\x06proto3"
+	"\vGetDLQStats\x123.chronoqueue.api.queueservice.v1.GetDLQStatsRequest\x1a4.chronoqueue.api.queueservice.v1.GetDLQStatsResponse\"\"\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/dlq/{dlq_name=*}/stats\x12\xcb\x01\n" +
+	"\x18ValidateCalendarSchedule\x12@.chronoqueue.api.queueservice.v1.ValidateCalendarScheduleRequest\x1aA.chronoqueue.api.queueservice.v1.ValidateCalendarScheduleResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/v1/calendar-schedules:validate\x12\xc7\x01\n" +
+	"\x17PreviewCalendarSchedule\x12?.chronoqueue.api.queueservice.v1.PreviewCalendarScheduleRequest\x1a@.chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse\")\x82\xd3\xe4\x93\x02#:\x01*\"\x1e/v1/calendar-schedules:previewBBZ@github.com/adrien19/chronoqueue/api/queueservice/v1;queueserviceb\x06proto3"
 
 var file_proto_queueservice_v1_service_proto_goTypes = []any{
-	(*CreateQueueRequest)(nil),           // 0: chronoqueue.api.queueservice.v1.CreateQueueRequest
-	(*DeleteQueueRequest)(nil),           // 1: chronoqueue.api.queueservice.v1.DeleteQueueRequest
-	(*ListQueuesRequest)(nil),            // 2: chronoqueue.api.queueservice.v1.ListQueuesRequest
-	(*GetQueueStateRequest)(nil),         // 3: chronoqueue.api.queueservice.v1.GetQueueStateRequest
-	(*PostMessageRequest)(nil),           // 4: chronoqueue.api.queueservice.v1.PostMessageRequest
-	(*GetNextMessageRequest)(nil),        // 5: chronoqueue.api.queueservice.v1.GetNextMessageRequest
-	(*AcknowledgeMessageRequest)(nil),    // 6: chronoqueue.api.queueservice.v1.AcknowledgeMessageRequest
-	(*RenewMessageLeaseRequest)(nil),     // 7: chronoqueue.api.queueservice.v1.RenewMessageLeaseRequest
-	(*PeekQueueMessagesRequest)(nil),     // 8: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest
-	(*SendMessageHeartBeatRequest)(nil),  // 9: chronoqueue.api.queueservice.v1.SendMessageHeartBeatRequest
-	(*CreateScheduleRequest)(nil),        // 10: chronoqueue.api.queueservice.v1.CreateScheduleRequest
-	(*DeleteScheduleRequest)(nil),        // 11: chronoqueue.api.queueservice.v1.DeleteScheduleRequest
-	(*GetScheduleRequest)(nil),           // 12: chronoqueue.api.queueservice.v1.GetScheduleRequest
-	(*ListSchedulesRequest)(nil),         // 13: chronoqueue.api.queueservice.v1.ListSchedulesRequest
-	(*GetScheduleHistoryRequest)(nil),    // 14: chronoqueue.api.queueservice.v1.GetScheduleHistoryRequest
-	(*PauseScheduleRequest)(nil),         // 15: chronoqueue.api.queueservice.v1.PauseScheduleRequest
-	(*ResumeScheduleRequest)(nil),        // 16: chronoqueue.api.queueservice.v1.ResumeScheduleRequest
-	(*GetDLQMessagesRequest)(nil),        // 17: chronoqueue.api.queueservice.v1.GetDLQMessagesRequest
-	(*RequeueFromDLQRequest)(nil),        // 18: chronoqueue.api.queueservice.v1.RequeueFromDLQRequest
-	(*DeleteFromDLQRequest)(nil),         // 19: chronoqueue.api.queueservice.v1.DeleteFromDLQRequest
-	(*PurgeDLQRequest)(nil),              // 20: chronoqueue.api.queueservice.v1.PurgeDLQRequest
-	(*GetDLQStatsRequest)(nil),           // 21: chronoqueue.api.queueservice.v1.GetDLQStatsRequest
-	(*CreateQueueResponse)(nil),          // 22: chronoqueue.api.queueservice.v1.CreateQueueResponse
-	(*DeleteQueueResponse)(nil),          // 23: chronoqueue.api.queueservice.v1.DeleteQueueResponse
-	(*ListQueuesResponse)(nil),           // 24: chronoqueue.api.queueservice.v1.ListQueuesResponse
-	(*GetQueueStateResponse)(nil),        // 25: chronoqueue.api.queueservice.v1.GetQueueStateResponse
-	(*PostMessageResponse)(nil),          // 26: chronoqueue.api.queueservice.v1.PostMessageResponse
-	(*GetNextMessageResponse)(nil),       // 27: chronoqueue.api.queueservice.v1.GetNextMessageResponse
-	(*AcknowledgeMessageResponse)(nil),   // 28: chronoqueue.api.queueservice.v1.AcknowledgeMessageResponse
-	(*RenewMessageLeaseResponse)(nil),    // 29: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse
-	(*PeekQueueMessagesResponse)(nil),    // 30: chronoqueue.api.queueservice.v1.PeekQueueMessagesResponse
-	(*SendMessageHeartBeatResponse)(nil), // 31: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse
-	(*CreateScheduleResponse)(nil),       // 32: chronoqueue.api.queueservice.v1.CreateScheduleResponse
-	(*DeleteScheduleResponse)(nil),       // 33: chronoqueue.api.queueservice.v1.DeleteScheduleResponse
-	(*GetScheduleResponse)(nil),          // 34: chronoqueue.api.queueservice.v1.GetScheduleResponse
-	(*ListSchedulesResponse)(nil),        // 35: chronoqueue.api.queueservice.v1.ListSchedulesResponse
-	(*GetScheduleHistoryResponse)(nil),   // 36: chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse
-	(*PauseScheduleResponse)(nil),        // 37: chronoqueue.api.queueservice.v1.PauseScheduleResponse
-	(*ResumeScheduleResponse)(nil),       // 38: chronoqueue.api.queueservice.v1.ResumeScheduleResponse
-	(*GetDLQMessagesResponse)(nil),       // 39: chronoqueue.api.queueservice.v1.GetDLQMessagesResponse
-	(*RequeueFromDLQResponse)(nil),       // 40: chronoqueue.api.queueservice.v1.RequeueFromDLQResponse
-	(*DeleteFromDLQResponse)(nil),        // 41: chronoqueue.api.queueservice.v1.DeleteFromDLQResponse
-	(*PurgeDLQResponse)(nil),             // 42: chronoqueue.api.queueservice.v1.PurgeDLQResponse
-	(*GetDLQStatsResponse)(nil),          // 43: chronoqueue.api.queueservice.v1.GetDLQStatsResponse
+	(*CreateQueueRequest)(nil),               // 0: chronoqueue.api.queueservice.v1.CreateQueueRequest
+	(*DeleteQueueRequest)(nil),               // 1: chronoqueue.api.queueservice.v1.DeleteQueueRequest
+	(*ListQueuesRequest)(nil),                // 2: chronoqueue.api.queueservice.v1.ListQueuesRequest
+	(*GetQueueStateRequest)(nil),             // 3: chronoqueue.api.queueservice.v1.GetQueueStateRequest
+	(*PostMessageRequest)(nil),               // 4: chronoqueue.api.queueservice.v1.PostMessageRequest
+	(*GetNextMessageRequest)(nil),            // 5: chronoqueue.api.queueservice.v1.GetNextMessageRequest
+	(*AcknowledgeMessageRequest)(nil),        // 6: chronoqueue.api.queueservice.v1.AcknowledgeMessageRequest
+	(*RenewMessageLeaseRequest)(nil),         // 7: chronoqueue.api.queueservice.v1.RenewMessageLeaseRequest
+	(*PeekQueueMessagesRequest)(nil),         // 8: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest
+	(*SendMessageHeartBeatRequest)(nil),      // 9: chronoqueue.api.queueservice.v1.SendMessageHeartBeatRequest
+	(*CreateScheduleRequest)(nil),            // 10: chronoqueue.api.queueservice.v1.CreateScheduleRequest
+	(*DeleteScheduleRequest)(nil),            // 11: chronoqueue.api.queueservice.v1.DeleteScheduleRequest
+	(*GetScheduleRequest)(nil),               // 12: chronoqueue.api.queueservice.v1.GetScheduleRequest
+	(*ListSchedulesRequest)(nil),             // 13: chronoqueue.api.queueservice.v1.ListSchedulesRequest
+	(*GetScheduleHistoryRequest)(nil),        // 14: chronoqueue.api.queueservice.v1.GetScheduleHistoryRequest
+	(*PauseScheduleRequest)(nil),             // 15: chronoqueue.api.queueservice.v1.PauseScheduleRequest
+	(*ResumeScheduleRequest)(nil),            // 16: chronoqueue.api.queueservice.v1.ResumeScheduleRequest
+	(*GetDLQMessagesRequest)(nil),            // 17: chronoqueue.api.queueservice.v1.GetDLQMessagesRequest
+	(*RequeueFromDLQRequest)(nil),            // 18: chronoqueue.api.queueservice.v1.RequeueFromDLQRequest
+	(*DeleteFromDLQRequest)(nil),             // 19: chronoqueue.api.queueservice.v1.DeleteFromDLQRequest
+	(*PurgeDLQRequest)(nil),                  // 20: chronoqueue.api.queueservice.v1.PurgeDLQRequest
+	(*GetDLQStatsRequest)(nil),               // 21: chronoqueue.api.queueservice.v1.GetDLQStatsRequest
+	(*ValidateCalendarScheduleRequest)(nil),  // 22: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleRequest
+	(*PreviewCalendarScheduleRequest)(nil),   // 23: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleRequest
+	(*CreateQueueResponse)(nil),              // 24: chronoqueue.api.queueservice.v1.CreateQueueResponse
+	(*DeleteQueueResponse)(nil),              // 25: chronoqueue.api.queueservice.v1.DeleteQueueResponse
+	(*ListQueuesResponse)(nil),               // 26: chronoqueue.api.queueservice.v1.ListQueuesResponse
+	(*GetQueueStateResponse)(nil),            // 27: chronoqueue.api.queueservice.v1.GetQueueStateResponse
+	(*PostMessageResponse)(nil),              // 28: chronoqueue.api.queueservice.v1.PostMessageResponse
+	(*GetNextMessageResponse)(nil),           // 29: chronoqueue.api.queueservice.v1.GetNextMessageResponse
+	(*AcknowledgeMessageResponse)(nil),       // 30: chronoqueue.api.queueservice.v1.AcknowledgeMessageResponse
+	(*RenewMessageLeaseResponse)(nil),        // 31: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse
+	(*PeekQueueMessagesResponse)(nil),        // 32: chronoqueue.api.queueservice.v1.PeekQueueMessagesResponse
+	(*SendMessageHeartBeatResponse)(nil),     // 33: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse
+	(*CreateScheduleResponse)(nil),           // 34: chronoqueue.api.queueservice.v1.CreateScheduleResponse
+	(*DeleteScheduleResponse)(nil),           // 35: chronoqueue.api.queueservice.v1.DeleteScheduleResponse
+	(*GetScheduleResponse)(nil),              // 36: chronoqueue.api.queueservice.v1.GetScheduleResponse
+	(*ListSchedulesResponse)(nil),            // 37: chronoqueue.api.queueservice.v1.ListSchedulesResponse
+	(*GetScheduleHistoryResponse)(nil),       // 38: chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse
+	(*PauseScheduleResponse)(nil),            // 39: chronoqueue.api.queueservice.v1.PauseScheduleResponse
+	(*ResumeScheduleResponse)(nil),           // 40: chronoqueue.api.queueservice.v1.ResumeScheduleResponse
+	(*GetDLQMessagesResponse)(nil),           // 41: chronoqueue.api.queueservice.v1.GetDLQMessagesResponse
+	(*RequeueFromDLQResponse)(nil),           // 42: chronoqueue.api.queueservice.v1.RequeueFromDLQResponse
+	(*DeleteFromDLQResponse)(nil),            // 43: chronoqueue.api.queueservice.v1.DeleteFromDLQResponse
+	(*PurgeDLQResponse)(nil),                 // 44: chronoqueue.api.queueservice.v1.PurgeDLQResponse
+	(*GetDLQStatsResponse)(nil),              // 45: chronoqueue.api.queueservice.v1.GetDLQStatsResponse
+	(*ValidateCalendarScheduleResponse)(nil), // 46: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleResponse
+	(*PreviewCalendarScheduleResponse)(nil),  // 47: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse
 }
 var file_proto_queueservice_v1_service_proto_depIdxs = []int32{
 	0,  // 0: chronoqueue.api.queueservice.v1.QueueService.CreateQueue:input_type -> chronoqueue.api.queueservice.v1.CreateQueueRequest
@@ -124,30 +130,34 @@ var file_proto_queueservice_v1_service_proto_depIdxs = []int32{
 	19, // 19: chronoqueue.api.queueservice.v1.QueueService.DeleteFromDLQ:input_type -> chronoqueue.api.queueservice.v1.DeleteFromDLQRequest
 	20, // 20: chronoqueue.api.queueservice.v1.QueueService.PurgeDLQ:input_type -> chronoqueue.api.queueservice.v1.PurgeDLQRequest
 	21, // 21: chronoqueue.api.queueservice.v1.QueueService.GetDLQStats:input_type -> chronoqueue.api.queueservice.v1.GetDLQStatsRequest
-	22, // 22: chronoqueue.api.queueservice.v1.QueueService.CreateQueue:output_type -> chronoqueue.api.queueservice.v1.CreateQueueResponse
-	23, // 23: chronoqueue.api.queueservice.v1.QueueService.DeleteQueue:output_type -> chronoqueue.api.queueservice.v1.DeleteQueueResponse
-	24, // 24: chronoqueue.api.queueservice.v1.QueueService.ListQueues:output_type -> chronoqueue.api.queueservice.v1.ListQueuesResponse
-	25, // 25: chronoqueue.api.queueservice.v1.QueueService.GetQueueState:output_type -> chronoqueue.api.queueservice.v1.GetQueueStateResponse
-	26, // 26: chronoqueue.api.queueservice.v1.QueueService.PostMessage:output_type -> chronoqueue.api.queueservice.v1.PostMessageResponse
-	27, // 27: chronoqueue.api.queueservice.v1.QueueService.GetNextMessage:output_type -> chronoqueue.api.queueservice.v1.GetNextMessageResponse
-	28, // 28: chronoqueue.api.queueservice.v1.QueueService.AcknowledgeMessage:output_type -> chronoqueue.api.queueservice.v1.AcknowledgeMessageResponse
-	29, // 29: chronoqueue.api.queueservice.v1.QueueService.RenewMessageLease:output_type -> chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse
-	30, // 30: chronoqueue.api.queueservice.v1.QueueService.PeekQueueMessages:output_type -> chronoqueue.api.queueservice.v1.PeekQueueMessagesResponse
-	31, // 31: chronoqueue.api.queueservice.v1.QueueService.SendMessageHeartBeat:output_type -> chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse
-	32, // 32: chronoqueue.api.queueservice.v1.QueueService.CreateSchedule:output_type -> chronoqueue.api.queueservice.v1.CreateScheduleResponse
-	33, // 33: chronoqueue.api.queueservice.v1.QueueService.DeleteSchedule:output_type -> chronoqueue.api.queueservice.v1.DeleteScheduleResponse
-	34, // 34: chronoqueue.api.queueservice.v1.QueueService.GetSchedule:output_type -> chronoqueue.api.queueservice.v1.GetScheduleResponse
-	35, // 35: chronoqueue.api.queueservice.v1.QueueService.ListSchedules:output_type -> chronoqueue.api.queueservice.v1.ListSchedulesResponse
-	36, // 36: chronoqueue.api.queueservice.v1.QueueService.GetScheduleHistory:output_type -> chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse
-	37, // 37: chronoqueue.api.queueservice.v1.QueueService.PauseSchedule:output_type -> chronoqueue.api.queueservice.v1.PauseScheduleResponse
-	38, // 38: chronoqueue.api.queueservice.v1.QueueService.ResumeSchedule:output_type -> chronoqueue.api.queueservice.v1.ResumeScheduleResponse
-	39, // 39: chronoqueue.api.queueservice.v1.QueueService.GetDLQMessages:output_type -> chronoqueue.api.queueservice.v1.GetDLQMessagesResponse
-	40, // 40: chronoqueue.api.queueservice.v1.QueueService.RequeueFromDLQ:output_type -> chronoqueue.api.queueservice.v1.RequeueFromDLQResponse
-	41, // 41: chronoqueue.api.queueservice.v1.QueueService.DeleteFromDLQ:output_type -> chronoqueue.api.queueservice.v1.DeleteFromDLQResponse
-	42, // 42: chronoqueue.api.queueservice.v1.QueueService.PurgeDLQ:output_type -> chronoqueue.api.queueservice.v1.PurgeDLQResponse
-	43, // 43: chronoqueue.api.queueservice.v1.QueueService.GetDLQStats:output_type -> chronoqueue.api.queueservice.v1.GetDLQStatsResponse
-	22, // [22:44] is the sub-list for method output_type
-	0,  // [0:22] is the sub-list for method input_type
+	22, // 22: chronoqueue.api.queueservice.v1.QueueService.ValidateCalendarSchedule:input_type -> chronoqueue.api.queueservice.v1.ValidateCalendarScheduleRequest
+	23, // 23: chronoqueue.api.queueservice.v1.QueueService.PreviewCalendarSchedule:input_type -> chronoqueue.api.queueservice.v1.PreviewCalendarScheduleRequest
+	24, // 24: chronoqueue.api.queueservice.v1.QueueService.CreateQueue:output_type -> chronoqueue.api.queueservice.v1.CreateQueueResponse
+	25, // 25: chronoqueue.api.queueservice.v1.QueueService.DeleteQueue:output_type -> chronoqueue.api.queueservice.v1.DeleteQueueResponse
+	26, // 26: chronoqueue.api.queueservice.v1.QueueService.ListQueues:output_type -> chronoqueue.api.queueservice.v1.ListQueuesResponse
+	27, // 27: chronoqueue.api.queueservice.v1.QueueService.GetQueueState:output_type -> chronoqueue.api.queueservice.v1.GetQueueStateResponse
+	28, // 28: chronoqueue.api.queueservice.v1.QueueService.PostMessage:output_type -> chronoqueue.api.queueservice.v1.PostMessageResponse
+	29, // 29: chronoqueue.api.queueservice.v1.QueueService.GetNextMessage:output_type -> chronoqueue.api.queueservice.v1.GetNextMessageResponse
+	30, // 30: chronoqueue.api.queueservice.v1.QueueService.AcknowledgeMessage:output_type -> chronoqueue.api.queueservice.v1.AcknowledgeMessageResponse
+	31, // 31: chronoqueue.api.queueservice.v1.QueueService.RenewMessageLease:output_type -> chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse
+	32, // 32: chronoqueue.api.queueservice.v1.QueueService.PeekQueueMessages:output_type -> chronoqueue.api.queueservice.v1.PeekQueueMessagesResponse
+	33, // 33: chronoqueue.api.queueservice.v1.QueueService.SendMessageHeartBeat:output_type -> chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse
+	34, // 34: chronoqueue.api.queueservice.v1.QueueService.CreateSchedule:output_type -> chronoqueue.api.queueservice.v1.CreateScheduleResponse
+	35, // 35: chronoqueue.api.queueservice.v1.QueueService.DeleteSchedule:output_type -> chronoqueue.api.queueservice.v1.DeleteScheduleResponse
+	36, // 36: chronoqueue.api.queueservice.v1.QueueService.GetSchedule:output_type -> chronoqueue.api.queueservice.v1.GetScheduleResponse
+	37, // 37: chronoqueue.api.queueservice.v1.QueueService.ListSchedules:output_type -> chronoqueue.api.queueservice.v1.ListSchedulesResponse
+	38, // 38: chronoqueue.api.queueservice.v1.QueueService.GetScheduleHistory:output_type -> chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse
+	39, // 39: chronoqueue.api.queueservice.v1.QueueService.PauseSchedule:output_type -> chronoqueue.api.queueservice.v1.PauseScheduleResponse
+	40, // 40: chronoqueue.api.queueservice.v1.QueueService.ResumeSchedule:output_type -> chronoqueue.api.queueservice.v1.ResumeScheduleResponse
+	41, // 41: chronoqueue.api.queueservice.v1.QueueService.GetDLQMessages:output_type -> chronoqueue.api.queueservice.v1.GetDLQMessagesResponse
+	42, // 42: chronoqueue.api.queueservice.v1.QueueService.RequeueFromDLQ:output_type -> chronoqueue.api.queueservice.v1.RequeueFromDLQResponse
+	43, // 43: chronoqueue.api.queueservice.v1.QueueService.DeleteFromDLQ:output_type -> chronoqueue.api.queueservice.v1.DeleteFromDLQResponse
+	44, // 44: chronoqueue.api.queueservice.v1.QueueService.PurgeDLQ:output_type -> chronoqueue.api.queueservice.v1.PurgeDLQResponse
+	45, // 45: chronoqueue.api.queueservice.v1.QueueService.GetDLQStats:output_type -> chronoqueue.api.queueservice.v1.GetDLQStatsResponse
+	46, // 46: chronoqueue.api.queueservice.v1.QueueService.ValidateCalendarSchedule:output_type -> chronoqueue.api.queueservice.v1.ValidateCalendarScheduleResponse
+	47, // 47: chronoqueue.api.queueservice.v1.QueueService.PreviewCalendarSchedule:output_type -> chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse
+	24, // [24:48] is the sub-list for method output_type
+	0,  // [0:24] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name

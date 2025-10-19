@@ -16,6 +16,71 @@
     "application/json"
   ],
   "paths": {
+    "/v1/calendar-schedules:preview": {
+      "post": {
+        "operationId": "QueueService_PreviewCalendarSchedule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PreviewCalendarScheduleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1PreviewCalendarScheduleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/calendar-schedules:validate": {
+      "post": {
+        "summary": "Calendar Schedule Operations",
+        "operationId": "QueueService_ValidateCalendarSchedule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ValidateCalendarScheduleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1ValidateCalendarScheduleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
     "/v1/dlq/{dlqName}/messages": {
       "get": {
         "summary": "Dead Letter Queue Management Operations",
@@ -833,6 +898,39 @@
     }
   },
   "definitions": {
+    "CalendarExceptionExceptionType": {
+      "type": "string",
+      "enum": [
+        "SKIP",
+        "RESCHEDULE",
+        "EXTRA"
+      ],
+      "default": "SKIP",
+      "title": "- SKIP: skip execution on this date\n - RESCHEDULE: move execution to different date\n - EXTRA: add extra execution on this date"
+    },
+    "CalendarScheduleScheduleType": {
+      "type": "string",
+      "enum": [
+        "MONTHLY",
+        "WEEKLY",
+        "DAILY",
+        "YEARLY",
+        "BUSINESS_DAYS",
+        "CUSTOM"
+      ],
+      "default": "MONTHLY"
+    },
+    "MonthlyRuleDayType": {
+      "type": "string",
+      "enum": [
+        "DAY_OF_MONTH",
+        "WEEKDAY_OF_MONTH",
+        "LAST_WEEKDAY",
+        "LAST_DAY"
+      ],
+      "default": "DAY_OF_MONTH",
+      "title": "- DAY_OF_MONTH: e.g., 15th of every month\n - WEEKDAY_OF_MONTH: e.g., first Monday of month\n - LAST_WEEKDAY: e.g., last Friday of month\n - LAST_DAY: last day of month"
+    },
     "PeekQueueMessagesRequestPriorityRange": {
       "type": "object",
       "properties": {
@@ -950,6 +1048,150 @@
         }
       }
     },
+    "v1BusinessCalendar": {
+      "type": "object",
+      "properties": {
+        "calendarId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "holidays": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Holiday"
+          }
+        },
+        "weekendDays": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": "1=Monday, 7=Sunday"
+        },
+        "timezone": {
+          "type": "string"
+        }
+      }
+    },
+    "v1BusinessDaysRule": {
+      "type": "object",
+      "properties": {
+        "businessCalendarId": {
+          "type": "string",
+          "title": "reference to business calendar"
+        },
+        "dayOffset": {
+          "type": "integer",
+          "format": "int32",
+          "title": "offset from business day (e.g., -1 for day before)"
+        }
+      }
+    },
+    "v1CalendarException": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "type": {
+          "$ref": "#/definitions/CalendarExceptionExceptionType"
+        },
+        "rescheduleTo": {
+          "type": "string",
+          "format": "date-time",
+          "title": "for RESCHEDULE type"
+        },
+        "extraTimes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1TimeOfDay"
+          },
+          "title": "for EXTRA type"
+        },
+        "reason": {
+          "type": "string",
+          "title": "optional description"
+        }
+      }
+    },
+    "v1CalendarRule": {
+      "type": "object",
+      "properties": {
+        "monthly": {
+          "$ref": "#/definitions/v1MonthlyRule"
+        },
+        "weekly": {
+          "$ref": "#/definitions/v1WeeklyRule"
+        },
+        "daily": {
+          "$ref": "#/definitions/v1DailyRule"
+        },
+        "yearly": {
+          "$ref": "#/definitions/v1YearlyRule"
+        },
+        "businessDays": {
+          "$ref": "#/definitions/v1BusinessDaysRule"
+        },
+        "custom": {
+          "$ref": "#/definitions/v1CustomRule"
+        },
+        "executionTimes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1TimeOfDay"
+          },
+          "title": "Time of day for execution"
+        },
+        "validFrom": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Optional date range for rule validity"
+        },
+        "validUntil": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v1CalendarSchedule": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/CalendarScheduleScheduleType"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1CalendarRule"
+          }
+        },
+        "timezone": {
+          "type": "string"
+        },
+        "businessCalendar": {
+          "$ref": "#/definitions/v1BusinessCalendar"
+        },
+        "exceptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1CalendarException"
+          }
+        }
+      },
+      "title": "Calendar-based scheduling definitions"
+    },
     "v1CreateQueueRequest": {
       "type": "object",
       "properties": {
@@ -987,6 +1229,45 @@
         }
       }
     },
+    "v1CustomRule": {
+      "type": "object",
+      "properties": {
+        "expression": {
+          "type": "string",
+          "title": "custom expression for complex rules"
+        },
+        "ruleType": {
+          "type": "string",
+          "title": "identifier for custom rule processor"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "rule-specific parameters"
+        }
+      }
+    },
+    "v1DailyRule": {
+      "type": "object",
+      "properties": {
+        "dayInterval": {
+          "type": "integer",
+          "format": "int32",
+          "title": "every N days (default: 1)"
+        },
+        "weekdaysOnly": {
+          "type": "boolean",
+          "title": "exclude weekends"
+        },
+        "startDate": {
+          "type": "string",
+          "format": "date-time",
+          "title": "reference date for intervals"
+        }
+      }
+    },
     "v1DeleteFromDLQResponse": {
       "type": "object",
       "properties": {
@@ -1008,6 +1289,31 @@
       "properties": {
         "success": {
           "type": "boolean"
+        }
+      }
+    },
+    "v1EasterOffset": {
+      "type": "object",
+      "properties": {
+        "daysOffset": {
+          "type": "integer",
+          "format": "int32",
+          "title": "days from Easter Sunday"
+        }
+      }
+    },
+    "v1FixedDate": {
+      "type": "object",
+      "properties": {
+        "month": {
+          "type": "integer",
+          "format": "int32",
+          "title": "1-12"
+        },
+        "day": {
+          "type": "integer",
+          "format": "int32",
+          "title": "1-31"
         }
       }
     },
@@ -1080,6 +1386,39 @@
       "properties": {
         "schedule": {
           "$ref": "#/definitions/v1Schedule"
+        }
+      }
+    },
+    "v1Holiday": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "recurringYearly": {
+          "type": "boolean"
+        },
+        "rule": {
+          "$ref": "#/definitions/v1HolidayRule",
+          "title": "for complex holidays like \"first Monday in May\""
+        }
+      }
+    },
+    "v1HolidayRule": {
+      "type": "object",
+      "properties": {
+        "fixed": {
+          "$ref": "#/definitions/v1FixedDate"
+        },
+        "relative": {
+          "$ref": "#/definitions/v1RelativeDate"
+        },
+        "easterOffset": {
+          "$ref": "#/definitions/v1EasterOffset"
         }
       }
     },
@@ -1171,6 +1510,32 @@
       ],
       "default": "INVISIBLE"
     },
+    "v1MonthlyRule": {
+      "type": "object",
+      "properties": {
+        "dayType": {
+          "$ref": "#/definitions/MonthlyRuleDayType"
+        },
+        "dayValue": {
+          "type": "integer",
+          "format": "int32",
+          "title": "day number (1-31) or weekday (1-7)"
+        },
+        "occurrence": {
+          "type": "integer",
+          "format": "int32",
+          "description": "for WEEKDAY_OF_MONTH: 1=first, 2=second, etc."
+        },
+        "months": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": "specific months (1-12), empty = all months"
+        }
+      }
+    },
     "v1PauseScheduleResponse": {
       "type": "object",
       "properties": {
@@ -1208,6 +1573,43 @@
       "properties": {
         "success": {
           "type": "boolean"
+        }
+      }
+    },
+    "v1PreviewCalendarScheduleRequest": {
+      "type": "object",
+      "properties": {
+        "calendarSchedule": {
+          "$ref": "#/definitions/v1CalendarSchedule"
+        },
+        "count": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Number of execution times to preview (default: 10, max: 100)"
+        }
+      },
+      "title": "Preview upcoming execution times for a calendar schedule"
+    },
+    "v1PreviewCalendarScheduleResponse": {
+      "type": "object",
+      "properties": {
+        "executionTimes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "timezone": {
+          "type": "string"
+        },
+        "previewStart": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "totalCount": {
+          "type": "integer",
+          "format": "int32"
         }
       }
     },
@@ -1264,6 +1666,26 @@
         "EXCLUSIVE"
       ],
       "default": "SIMPLE"
+    },
+    "v1RelativeDate": {
+      "type": "object",
+      "properties": {
+        "month": {
+          "type": "integer",
+          "format": "int32",
+          "title": "1-12"
+        },
+        "weekday": {
+          "type": "integer",
+          "format": "int32",
+          "title": "1=Monday, 7=Sunday"
+        },
+        "occurrence": {
+          "type": "integer",
+          "format": "int32",
+          "title": "1=first, 2=second, -1=last"
+        }
+      }
     },
     "v1RenewMessageLeaseResponse": {
       "type": "object",
@@ -1344,7 +1766,12 @@
           "$ref": "#/definitions/v1ScheduleMetadataState"
         },
         "cronSchedule": {
-          "type": "string"
+          "type": "string",
+          "title": "legacy cron-based scheduling"
+        },
+        "calendarSchedule": {
+          "$ref": "#/definitions/v1CalendarSchedule",
+          "title": "new calendar-based scheduling"
         },
         "queueName": {
           "type": "string"
@@ -1390,6 +1817,19 @@
         },
         "leaseDuration": {
           "type": "string"
+        },
+        "timezone": {
+          "type": "string",
+          "description": "timezone for calendar calculations",
+          "title": "Calendar scheduling metadata"
+        },
+        "nextRuns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "title": "precomputed next execution times"
         }
       }
     },
@@ -1411,6 +1851,119 @@
         },
         "state": {
           "$ref": "#/definitions/v1MessageMetadataState"
+        }
+      }
+    },
+    "v1TimeOfDay": {
+      "type": "object",
+      "properties": {
+        "hour": {
+          "type": "integer",
+          "format": "int32",
+          "title": "0-23"
+        },
+        "minute": {
+          "type": "integer",
+          "format": "int32",
+          "title": "0-59"
+        },
+        "second": {
+          "type": "integer",
+          "format": "int32",
+          "title": "0-59 (optional, default: 0)"
+        }
+      }
+    },
+    "v1ValidateCalendarScheduleRequest": {
+      "type": "object",
+      "properties": {
+        "calendarSchedule": {
+          "$ref": "#/definitions/v1CalendarSchedule"
+        }
+      },
+      "title": "Validate a calendar schedule configuration"
+    },
+    "v1ValidateCalendarScheduleResponse": {
+      "type": "object",
+      "properties": {
+        "valid": {
+          "type": "boolean"
+        },
+        "errorMessage": {
+          "type": "string"
+        },
+        "validationIssues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ValidationIssue"
+          }
+        }
+      }
+    },
+    "v1ValidationIssue": {
+      "type": "object",
+      "properties": {
+        "severity": {
+          "type": "string",
+          "title": "\"error\", \"warning\", \"info\""
+        },
+        "ruleIndex": {
+          "type": "integer",
+          "format": "int32",
+          "title": "-1 for global issues"
+        },
+        "field": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "suggestion": {
+          "type": "string"
+        }
+      },
+      "title": "Validation issue details"
+    },
+    "v1WeeklyRule": {
+      "type": "object",
+      "properties": {
+        "daysOfWeek": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": "1=Monday, 7=Sunday"
+        },
+        "weekInterval": {
+          "type": "integer",
+          "format": "int32",
+          "title": "every N weeks (default: 1)"
+        },
+        "startWeek": {
+          "type": "string",
+          "format": "date-time",
+          "title": "reference week for intervals"
+        }
+      }
+    },
+    "v1YearlyRule": {
+      "type": "object",
+      "properties": {
+        "month": {
+          "type": "integer",
+          "format": "int32",
+          "title": "month (1-12)"
+        },
+        "day": {
+          "type": "integer",
+          "format": "int32",
+          "title": "day of month (1-31)"
+        },
+        "adjustForLeapYear": {
+          "type": "boolean",
+          "title": "handle Feb 29 on non-leap years"
         }
       }
     }

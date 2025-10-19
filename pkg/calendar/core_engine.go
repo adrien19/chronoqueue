@@ -252,10 +252,20 @@ func (e *DefaultEngine) ValidateSchedule(ctx context.Context, calendarSchedule *
 
 // PreviewSchedule generates a preview of execution times for testing/debugging
 func (e *DefaultEngine) PreviewSchedule(ctx context.Context, calendarSchedule *schedule.CalendarSchedule, from time.Time, count int) (*SchedulePreview, error) {
-	if count > e.config.MaxPreviewCount {
-		count = e.config.MaxPreviewCount
+	fmt.Printf("DEBUG PreviewSchedule: received count=%d\n", count)
+
+	// Default to 10 if count not specified
+	if count <= 0 {
+		count = 10
+		fmt.Printf("DEBUG PreviewSchedule: defaulted count to 10\n")
 	}
 
+	if count > e.config.MaxPreviewCount {
+		count = e.config.MaxPreviewCount
+		fmt.Printf("DEBUG PreviewSchedule: capped count to MaxPreviewCount=%d\n", e.config.MaxPreviewCount)
+	}
+
+	fmt.Printf("DEBUG PreviewSchedule: calling CalculateNextRuns with count=%d\n", count)
 	// Calculate execution times
 	executionTimes, err := e.CalculateNextRuns(ctx, calendarSchedule, from, count)
 	if err != nil {

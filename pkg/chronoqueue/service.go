@@ -25,6 +25,10 @@ type Service interface {
 	PauseSchedule(ctx context.Context, request *queueservice_pb.PauseScheduleRequest) (*queueservice_pb.PauseScheduleResponse, error)
 	ResumeSchedule(ctx context.Context, request *queueservice_pb.ResumeScheduleRequest) (*queueservice_pb.ResumeScheduleResponse, error)
 
+	// calendar-based scheduling operations
+	ValidateCalendarSchedule(ctx context.Context, request *queueservice_pb.ValidateCalendarScheduleRequest) (*queueservice_pb.ValidateCalendarScheduleResponse, error)
+	PreviewCalendarSchedule(ctx context.Context, request *queueservice_pb.PreviewCalendarScheduleRequest) (*queueservice_pb.PreviewCalendarScheduleResponse, error)
+
 	// Dead Letter Queue Management Operations
 	GetDLQMessages(ctx context.Context, request *queueservice_pb.GetDLQMessagesRequest) (*queueservice_pb.GetDLQMessagesResponse, error)
 	RequeueFromDLQ(ctx context.Context, request *queueservice_pb.RequeueFromDLQRequest) (*queueservice_pb.RequeueFromDLQResponse, error)

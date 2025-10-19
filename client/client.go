@@ -55,13 +55,14 @@ type (
 		Max int64 `json:"max,omitempty"`
 	}
 	ScheduleOptions struct {
-		Payload        Payload `json:"payload,omitempty"`
-		State          State   `json:"state,omitempty"`
-		CronSchedule   string  `json:"cronSchedule,omitempty"`
-		QueueName      string  `json:"queueName,omitempty"`
-		ExclusivityKey string  `json:"exclusivityKey,omitempty"`
-		MaxMessages    int64   `json:"maxMessages,omitempty"`
-		LeaseDuration  string  `json:"leaseDuration,omitempty"`
+		Payload          Payload                       `json:"payload,omitempty"`
+		State            State                         `json:"state,omitempty"`
+		CronSchedule     string                        `json:"cronSchedule,omitempty"`
+		CalendarSchedule *schedule_pb.CalendarSchedule `json:"calendarSchedule,omitempty"` // New: for calendar-based scheduling
+		QueueName        string                        `json:"queueName,omitempty"`
+		ExclusivityKey   string                        `json:"exclusivityKey,omitempty"`
+		MaxMessages      int64                         `json:"maxMessages,omitempty"`
+		LeaseDuration    string                        `json:"leaseDuration,omitempty"`
 	}
 
 	// DLQStats represents statistics about a Dead Letter Queue
@@ -543,24 +544,36 @@ func (client *ChronoQueueClient) CreateSchedule(ctx context.Context, scheduleId 
 	if err != nil {
 		return nil, err
 	}
+
+	// Prepare schedule metadata
+	metadata := &schedule_pb.Schedule_Metadata{
+		Payload: &common_pb.Payload{
+			Metadata: scheduleOptions.Payload.Metadata,
+			Data:     scheduleOptions.Payload.Data,
+		},
+		State:          schedule_pb.Schedule_Metadata_State(scheduleOptions.State),
+		QueueName:      scheduleOptions.QueueName,
+		ExclusivityKey: scheduleOptions.ExclusivityKey,
+		HasMaxMessages: scheduleOptions.MaxMessages > 0,
+		MaxMessages:    scheduleOptions.MaxMessages,
+		LeaseDuration:  leaseDurationpb,
+	}
+
+	// Set schedule config (cron or calendar)
+	if scheduleOptions.CalendarSchedule != nil {
+		metadata.ScheduleConfig = &schedule_pb.Schedule_Metadata_CalendarSchedule{
+			CalendarSchedule: scheduleOptions.CalendarSchedule,
+		}
+	} else {
+		metadata.ScheduleConfig = &schedule_pb.Schedule_Metadata_CronSchedule{
+			CronSchedule: scheduleOptions.CronSchedule,
+		}
+	}
+
 	req := &queueservice_pb.CreateScheduleRequest{
 		Schedule: &schedule_pb.Schedule{
 			ScheduleId: scheduleId,
-			Metadata: &schedule_pb.Schedule_Metadata{
-				Payload: &common_pb.Payload{
-					Metadata: scheduleOptions.Payload.Metadata,
-					Data:     scheduleOptions.Payload.Data,
-				},
-				State: schedule_pb.Schedule_Metadata_State(scheduleOptions.State),
-				ScheduleConfig: &schedule_pb.Schedule_Metadata_CronSchedule{
-					CronSchedule: scheduleOptions.CronSchedule,
-				},
-				QueueName:      scheduleOptions.QueueName,
-				ExclusivityKey: scheduleOptions.ExclusivityKey,
-				HasMaxMessages: scheduleOptions.MaxMessages > 0,
-				MaxMessages:    scheduleOptions.MaxMessages,
-				LeaseDuration:  leaseDurationpb,
-			},
+			Metadata:   metadata,
 		},
 	}
 	res, err := client.service.CreateSchedule(ctx, req)
@@ -649,6 +662,49 @@ func (client *ChronoQueueClient) ResumeSchedule(ctx context.Context, scheduleId 
 		ScheduleId: scheduleId,
 	}
 	res, err := client.service.ResumeSchedule(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// ValidateCalendarSchedule validates a calendar schedule configuration
+func (client *ChronoQueueClient) ValidateCalendarSchedule(ctx context.Context, calendarScheduleJSON string) (*queueservice_pb.ValidateCalendarScheduleResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	// Parse JSON into CalendarSchedule protobuf
+	var calendarSchedule schedule_pb.CalendarSchedule
+	if err := protojson.Unmarshal([]byte(calendarScheduleJSON), &calendarSchedule); err != nil {
+		return nil, fmt.Errorf("failed to parse calendar schedule JSON: %w", err)
+	}
+
+	req := &queueservice_pb.ValidateCalendarScheduleRequest{
+		CalendarSchedule: &calendarSchedule,
+	}
+	res, err := client.service.ValidateCalendarSchedule(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// PreviewCalendarSchedule previews execution times for a calendar schedule
+func (client *ChronoQueueClient) PreviewCalendarSchedule(ctx context.Context, calendarScheduleJSON string, count int32) (*queueservice_pb.PreviewCalendarScheduleResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	// Parse JSON into CalendarSchedule protobuf
+	var calendarSchedule schedule_pb.CalendarSchedule
+	if err := protojson.Unmarshal([]byte(calendarScheduleJSON), &calendarSchedule); err != nil {
+		return nil, fmt.Errorf("failed to parse calendar schedule JSON: %w", err)
+	}
+
+	req := &queueservice_pb.PreviewCalendarScheduleRequest{
+		CalendarSchedule: &calendarSchedule,
+		Count:            count,
+	}
+	res, err := client.service.PreviewCalendarSchedule(ctx, req)
 	if err != nil {
 		return nil, err
 	}

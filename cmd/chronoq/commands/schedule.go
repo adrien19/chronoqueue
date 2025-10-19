@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/client"
 	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -25,6 +27,8 @@ func NewScheduleCommand() *cobra.Command {
 	cmd.AddCommand(newScheduleGetCommand())
 	cmd.AddCommand(newSchedulePauseCommand())
 	cmd.AddCommand(newScheduleResumeCommand())
+	cmd.AddCommand(newCalendarScheduleValidateCommand())
+	cmd.AddCommand(newCalendarSchedulePreviewCommand())
 
 	return cmd
 }
@@ -44,6 +48,19 @@ func newScheduleCreateCommand() *cobra.Command {
 			cronExpr, err := cmd.Flags().GetString("cron")
 			if err != nil {
 				return fmt.Errorf("failed to get cron flag: %w", err)
+			}
+
+			calendarScheduleJSON, err := cmd.Flags().GetString("calendar")
+			if err != nil {
+				return fmt.Errorf("failed to get calendar flag: %w", err)
+			}
+
+			// Validate that either cron or calendar is provided, but not both
+			if cronExpr == "" && calendarScheduleJSON == "" {
+				return fmt.Errorf("either --cron or --calendar must be provided")
+			}
+			if cronExpr != "" && calendarScheduleJSON != "" {
+				return fmt.Errorf("cannot specify both --cron and --calendar")
 			}
 
 			leaseDuration, err := cmd.Flags().GetString("lease-duration")
@@ -106,8 +123,7 @@ func newScheduleCreateCommand() *cobra.Command {
 			}
 
 			// Use the client to create the schedule
-			cronOpts := client.ScheduleOptions{
-				CronSchedule:   cronExpr,
+			scheduleOpts := client.ScheduleOptions{
 				QueueName:      queueName,
 				ExclusivityKey: exclusivityKey,
 				MaxMessages:    maxMessages,
@@ -118,6 +134,18 @@ func newScheduleCreateCommand() *cobra.Command {
 				},
 			}
 
+			// Set either cron or calendar schedule
+			if calendarScheduleJSON != "" {
+				// Parse calendar schedule JSON
+				var calendarSchedule schedule_pb.CalendarSchedule
+				if err := protojson.Unmarshal([]byte(calendarScheduleJSON), &calendarSchedule); err != nil {
+					return fmt.Errorf("failed to parse calendar schedule JSON: %w", err)
+				}
+				scheduleOpts.CalendarSchedule = &calendarSchedule
+			} else {
+				scheduleOpts.CronSchedule = cronExpr
+			}
+
 			// Parse additional flags
 			scheduleID, _ := cmd.Flags().GetString("id")
 			if scheduleID == "" {
@@ -125,7 +153,7 @@ func newScheduleCreateCommand() *cobra.Command {
 			}
 
 			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
-				resp, err := client.CreateSchedule(cmd.Context(), scheduleID, cronOpts)
+				resp, err := client.CreateSchedule(cmd.Context(), scheduleID, scheduleOpts)
 				if err != nil {
 					return fmt.Errorf("failed to create schedule: %w", err)
 				}
@@ -138,11 +166,11 @@ func newScheduleCreateCommand() *cobra.Command {
 
 	cmd.Flags().StringP("id", "i", "", "Schedule ID (auto-generated if not provided)")
 	cmd.Flags().StringP("cron", "c", "", "Cron expression for the schedule")
+	cmd.Flags().StringP("calendar", "", "", "Calendar schedule configuration as JSON")
 	cmd.Flags().StringP("exclusivity-key", "k", "", "Exclusivity key for exclusive queues")
 	cmd.Flags().StringP("metadata", "d", "", "Message metadata as JSON")
 	cmd.Flags().Int64P("max-messages", "m", 1, "Maximum number of messages to send per schedule run")
 	cmd.Flags().StringP("lease-duration", "l", "30s", "Lease duration for the scheduled messages in seconds")
-	cmd.MarkFlagRequired("cron")
 
 	return cmd
 }
@@ -301,6 +329,96 @@ func newScheduleResumeCommand() *cobra.Command {
 			})
 		},
 	}
+
+	return cmd
+}
+
+// newCalendarScheduleValidateCommand creates the calendar schedule validate subcommand
+func newCalendarScheduleValidateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "validate-calendar [calendar-schedule-json]",
+		Short: "Validate a calendar schedule configuration",
+		Long:  `Validate a calendar schedule configuration before creating it. Accepts calendar schedule JSON.`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			calendarScheduleJSON := args[0]
+
+			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
+				ctx, cancel := CreateContext(cmd)
+				defer cancel()
+
+				response, err := client.ValidateCalendarSchedule(ctx, calendarScheduleJSON)
+				if err != nil {
+					return fmt.Errorf("failed to validate calendar schedule: %w", err)
+				}
+
+				if response.Valid {
+					outputs.PrintSuccess("Calendar schedule is valid")
+				} else {
+					outputs.PrintError(fmt.Sprintf("Calendar schedule validation failed: %s", response.ErrorMessage))
+					if len(response.ValidationIssues) > 0 {
+						fmt.Println("\nValidation Issues:")
+						for _, issue := range response.ValidationIssues {
+							fmt.Printf("  [%s] %s: %s\n", issue.Severity, issue.Field, issue.Message)
+							if issue.Suggestion != "" {
+								fmt.Printf("    Suggestion: %s\n", issue.Suggestion)
+							}
+						}
+					}
+					return fmt.Errorf("validation failed")
+				}
+
+				return nil
+			})
+		},
+	}
+
+	return cmd
+}
+
+// newCalendarSchedulePreviewCommand creates the calendar schedule preview subcommand
+func newCalendarSchedulePreviewCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "preview-calendar [calendar-schedule-json]",
+		Short: "Preview execution times for a calendar schedule",
+		Long:  `Preview upcoming execution times for a calendar schedule configuration. Accepts calendar schedule JSON.`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			calendarScheduleJSON := args[0]
+
+			count, err := cmd.Flags().GetInt32("count")
+			if err != nil {
+				return err
+			}
+
+			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
+				ctx, cancel := CreateContext(cmd)
+				defer cancel()
+
+				response, err := client.PreviewCalendarSchedule(ctx, calendarScheduleJSON, count)
+				if err != nil {
+					return fmt.Errorf("failed to preview calendar schedule: %w", err)
+				}
+
+				outputs.PrintSuccess(fmt.Sprintf("Calendar Schedule Preview (%d executions)", response.TotalCount))
+				fmt.Printf("\nTimezone: %s\n", response.Timezone)
+				fmt.Printf("Preview Start: %s\n\n", response.PreviewStart.AsTime().Format(time.RFC3339))
+
+				if len(response.ExecutionTimes) > 0 {
+					fmt.Println("Upcoming Execution Times:")
+					for i, ts := range response.ExecutionTimes {
+						fmt.Printf("  %2d. %s\n", i+1, ts.AsTime().Format(time.RFC3339))
+					}
+				} else {
+					fmt.Println("No execution times found in the preview period.")
+				}
+
+				return nil
+			})
+		},
+	}
+
+	cmd.Flags().Int32("count", 10, "Number of execution times to preview (max 100)")
 
 	return cmd
 }

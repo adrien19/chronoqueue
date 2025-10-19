@@ -54,6 +54,10 @@ type Storage interface {
 	PauseSchedule(ctx context.Context, request *queueservice_pb.PauseScheduleRequest) (*queueservice_pb.PauseScheduleResponse, error)
 	ResumeSchedule(ctx context.Context, request *queueservice_pb.ResumeScheduleRequest) (*queueservice_pb.ResumeScheduleResponse, error)
 
+	// Calendar schedule operations
+	ValidateCalendarSchedule(ctx context.Context, calendarSchedule *schedule_pb.CalendarSchedule) error
+	GetCalendarSchedulePreview(ctx context.Context, calendarSchedule *schedule_pb.CalendarSchedule, count int) (*queueservice_pb.PreviewCalendarScheduleResponse, error)
+
 	// Message processing methods
 	ProcessExpiredInvisibleMessages(ctx context.Context) error
 	ProcessExpiredRunningMessages(ctx context.Context) error

@@ -253,7 +253,7 @@ func (as *storage) ValidateCalendarSchedule(ctx context.Context, calendarSchedul
 }
 
 // GetCalendarSchedulePreview generates a preview of upcoming execution times
-func (as *storage) GetCalendarSchedulePreview(ctx context.Context, calendarSchedule *schedule_pb.CalendarSchedule, count int) (*calendar.SchedulePreview, error) {
+func (as *storage) GetCalendarSchedulePreview(ctx context.Context, calendarSchedule *schedule_pb.CalendarSchedule, count int) (*queueservice_pb.PreviewCalendarScheduleResponse, error) {
 	if calendarSchedule == nil {
 		return nil, fmt.Errorf("calendar schedule cannot be nil")
 	}
@@ -264,10 +264,22 @@ func (as *storage) GetCalendarSchedulePreview(ctx context.Context, calendarSched
 	}
 
 	// Generate preview from now
-	preview, err := engine.PreviewSchedule(ctx, calendarSchedule, time.Now(), count)
+	now := time.Now()
+	preview, err := engine.PreviewSchedule(ctx, calendarSchedule, now, count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate schedule preview: %w", err)
 	}
 
-	return preview, nil
+	// Convert to protobuf response
+	executionTimes := make([]*timestamppb.Timestamp, len(preview.ExecutionTimes))
+	for i, et := range preview.ExecutionTimes {
+		executionTimes[i] = timestamppb.New(et.Time)
+	}
+
+	return &queueservice_pb.PreviewCalendarScheduleResponse{
+		ExecutionTimes: executionTimes,
+		Timezone:       preview.Timezone,
+		PreviewStart:   timestamppb.New(now),
+		TotalCount:     int32(len(executionTimes)),
+	}, nil
 }
