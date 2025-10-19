@@ -6,7 +6,7 @@ import (
 	"time"
 
 	schedule "github.com/adrien19/chronoqueue/api/schedule/v1"
-	"github.com/adrien19/chronoqueue/pkg/calendar"
+	"github.com/adrien19/chronoqueue/pkg/calendar/types"
 )
 
 // MonthlyEvaluator handles monthly calendar rules
@@ -21,7 +21,7 @@ func NewMonthlyEvaluator() *MonthlyEvaluator {
 func (e *MonthlyEvaluator) Evaluate(ctx context.Context, rule *schedule.CalendarRule, from time.Time, timezone *time.Location) (*time.Time, error) {
 	monthlyRule := rule.GetMonthly()
 	if monthlyRule == nil {
-		return nil, calendar.ErrInvalidRule.WithDetails("monthly rule is nil")
+		return nil, types.ErrInvalidRule.WithDetails("monthly rule is nil")
 	}
 
 	// Convert from time to the specified timezone
@@ -39,7 +39,7 @@ func (e *MonthlyEvaluator) Evaluate(ctx context.Context, rule *schedule.Calendar
 		fromLocal = rule.ValidFrom.AsTime().In(timezone)
 	}
 	if rule.ValidUntil != nil && from.After(rule.ValidUntil.AsTime()) {
-		return nil, calendar.ErrNoExecutionTime.WithDetails("rule validity period has expired")
+		return nil, types.ErrNoExecutionTime.WithDetails("rule validity period has expired")
 	}
 
 	// Find next execution time based on rule type
@@ -53,7 +53,7 @@ func (e *MonthlyEvaluator) Evaluate(ctx context.Context, rule *schedule.Calendar
 	case schedule.MonthlyRule_LAST_DAY:
 		return e.evaluateLastDay(monthlyRule, fromLocal, executionTimes, timezone)
 	default:
-		return nil, calendar.ErrInvalidRule.WithDetails(fmt.Sprintf("unknown monthly rule day type: %v", monthlyRule.DayType))
+		return nil, types.ErrInvalidRule.WithDetails(fmt.Sprintf("unknown monthly rule day type: %v", monthlyRule.DayType))
 	}
 }
 
@@ -65,7 +65,7 @@ func (e *MonthlyEvaluator) EvaluateMultiple(ctx context.Context, rule *schedule.
 	for len(results) < count {
 		next, err := e.Evaluate(ctx, rule, current, timezone)
 		if err != nil {
-			if err == calendar.ErrNoExecutionTime {
+			if err == types.ErrNoExecutionTime {
 				break // No more execution times available
 			}
 			return nil, err
@@ -85,36 +85,36 @@ func (e *MonthlyEvaluator) EvaluateMultiple(ctx context.Context, rule *schedule.
 func (e *MonthlyEvaluator) Validate(ctx context.Context, rule *schedule.CalendarRule) error {
 	monthlyRule := rule.GetMonthly()
 	if monthlyRule == nil {
-		return calendar.ErrInvalidRule.WithDetails("monthly rule is nil")
+		return types.ErrInvalidRule.WithDetails("monthly rule is nil")
 	}
 
 	// Validate day type specific constraints
 	switch monthlyRule.DayType {
 	case schedule.MonthlyRule_DAY_OF_MONTH:
 		if monthlyRule.DayValue < 1 || monthlyRule.DayValue > 31 {
-			return calendar.ErrInvalidRule.WithDetails("day_value must be between 1 and 31 for DAY_OF_MONTH")
+			return types.ErrInvalidRule.WithDetails("day_value must be between 1 and 31 for DAY_OF_MONTH")
 		}
 	case schedule.MonthlyRule_WEEKDAY_OF_MONTH:
 		if monthlyRule.DayValue < 1 || monthlyRule.DayValue > 7 {
-			return calendar.ErrInvalidRule.WithDetails("day_value must be between 1 and 7 for WEEKDAY_OF_MONTH")
+			return types.ErrInvalidRule.WithDetails("day_value must be between 1 and 7 for WEEKDAY_OF_MONTH")
 		}
 		if monthlyRule.Occurrence < 1 || monthlyRule.Occurrence > 5 {
-			return calendar.ErrInvalidRule.WithDetails("occurrence must be between 1 and 5 for WEEKDAY_OF_MONTH")
+			return types.ErrInvalidRule.WithDetails("occurrence must be between 1 and 5 for WEEKDAY_OF_MONTH")
 		}
 	case schedule.MonthlyRule_LAST_WEEKDAY:
 		if monthlyRule.DayValue < 1 || monthlyRule.DayValue > 7 {
-			return calendar.ErrInvalidRule.WithDetails("day_value must be between 1 and 7 for LAST_WEEKDAY")
+			return types.ErrInvalidRule.WithDetails("day_value must be between 1 and 7 for LAST_WEEKDAY")
 		}
 	case schedule.MonthlyRule_LAST_DAY:
 		// No additional validation needed for LAST_DAY
 	default:
-		return calendar.ErrInvalidRule.WithDetails(fmt.Sprintf("unknown day type: %v", monthlyRule.DayType))
+		return types.ErrInvalidRule.WithDetails(fmt.Sprintf("unknown day type: %v", monthlyRule.DayType))
 	}
 
 	// Validate months if specified
 	for _, month := range monthlyRule.Months {
 		if month < 1 || month > 12 {
-			return calendar.ErrInvalidRule.WithDetails(fmt.Sprintf("invalid month: %d", month))
+			return types.ErrInvalidRule.WithDetails(fmt.Sprintf("invalid month: %d", month))
 		}
 	}
 
@@ -129,8 +129,8 @@ func (e *MonthlyEvaluator) Validate(ctx context.Context, rule *schedule.Calendar
 }
 
 // GetRuleType returns the type of rule this evaluator handles
-func (e *MonthlyEvaluator) GetRuleType() calendar.RuleType {
-	return calendar.RuleTypeMonthly
+func (e *MonthlyEvaluator) GetRuleType() types.RuleType {
+	return types.RuleTypeMonthly
 }
 
 // evaluateDayOfMonth handles DAY_OF_MONTH rule type
@@ -186,7 +186,7 @@ func (e *MonthlyEvaluator) evaluateDayOfMonth(rule *schedule.MonthlyRule, from t
 		}
 	}
 
-	return nil, calendar.ErrNoExecutionTime.WithDetails("no valid execution time found within 2 years")
+	return nil, types.ErrNoExecutionTime.WithDetails("no valid execution time found within 2 years")
 }
 
 // evaluateWeekdayOfMonth handles WEEKDAY_OF_MONTH rule type
@@ -253,7 +253,7 @@ func (e *MonthlyEvaluator) evaluateWeekdayOfMonth(rule *schedule.MonthlyRule, fr
 		}
 	}
 
-	return nil, calendar.ErrNoExecutionTime.WithDetails("no valid execution time found within 2 years")
+	return nil, types.ErrNoExecutionTime.WithDetails("no valid execution time found within 2 years")
 }
 
 // evaluateLastWeekday handles LAST_WEEKDAY rule type
@@ -313,7 +313,7 @@ func (e *MonthlyEvaluator) evaluateLastWeekday(rule *schedule.MonthlyRule, from 
 		}
 	}
 
-	return nil, calendar.ErrNoExecutionTime.WithDetails("no valid execution time found within 2 years")
+	return nil, types.ErrNoExecutionTime.WithDetails("no valid execution time found within 2 years")
 }
 
 // evaluateLastDay handles LAST_DAY rule type
@@ -364,19 +364,19 @@ func (e *MonthlyEvaluator) evaluateLastDay(rule *schedule.MonthlyRule, from time
 		}
 	}
 
-	return nil, calendar.ErrNoExecutionTime.WithDetails("no valid execution time found within 2 years")
+	return nil, types.ErrNoExecutionTime.WithDetails("no valid execution time found within 2 years")
 }
 
 // validateTimeOfDay validates a time of day specification
 func validateTimeOfDay(timeOfDay *schedule.TimeOfDay) error {
 	if timeOfDay.Hour < 0 || timeOfDay.Hour > 23 {
-		return calendar.ErrInvalidRule.WithDetails(fmt.Sprintf("invalid hour: %d", timeOfDay.Hour))
+		return types.ErrInvalidRule.WithDetails(fmt.Sprintf("invalid hour: %d", timeOfDay.Hour))
 	}
 	if timeOfDay.Minute < 0 || timeOfDay.Minute > 59 {
-		return calendar.ErrInvalidRule.WithDetails(fmt.Sprintf("invalid minute: %d", timeOfDay.Minute))
+		return types.ErrInvalidRule.WithDetails(fmt.Sprintf("invalid minute: %d", timeOfDay.Minute))
 	}
 	if timeOfDay.Second < 0 || timeOfDay.Second > 59 {
-		return calendar.ErrInvalidRule.WithDetails(fmt.Sprintf("invalid second: %d", timeOfDay.Second))
+		return types.ErrInvalidRule.WithDetails(fmt.Sprintf("invalid second: %d", timeOfDay.Second))
 	}
 	return nil
 }

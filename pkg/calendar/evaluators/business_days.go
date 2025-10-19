@@ -6,16 +6,16 @@ import (
 	"time"
 
 	schedule "github.com/adrien19/chronoqueue/api/schedule/v1"
-	"github.com/adrien19/chronoqueue/pkg/calendar"
+	"github.com/adrien19/chronoqueue/pkg/calendar/types"
 )
 
 // BusinessDaysEvaluator handles business days calendar rules
 type BusinessDaysEvaluator struct {
-	businessCalendarProvider calendar.BusinessCalendarProvider
+	businessCalendarProvider types.BusinessCalendarProvider
 }
 
-// NewBusinessDaysEvaluator creates a new business days rule evaluator
-func NewBusinessDaysEvaluator(provider calendar.BusinessCalendarProvider) *BusinessDaysEvaluator {
+// NewBusinessDaysEvaluator creates a new business days evaluator
+func NewBusinessDaysEvaluator(provider types.BusinessCalendarProvider) *BusinessDaysEvaluator {
 	return &BusinessDaysEvaluator{
 		businessCalendarProvider: provider,
 	}
@@ -25,7 +25,7 @@ func NewBusinessDaysEvaluator(provider calendar.BusinessCalendarProvider) *Busin
 func (e *BusinessDaysEvaluator) Evaluate(ctx context.Context, rule *schedule.CalendarRule, from time.Time, timezone *time.Location) (*time.Time, error) {
 	businessRule := rule.GetBusinessDays()
 	if businessRule == nil {
-		return nil, calendar.ErrInvalidRule.WithDetails("business days rule is nil")
+		return nil, types.ErrInvalidRule.WithDetails("business days rule is nil")
 	}
 
 	// Convert from time to the specified timezone
@@ -43,7 +43,7 @@ func (e *BusinessDaysEvaluator) Evaluate(ctx context.Context, rule *schedule.Cal
 		fromLocal = rule.ValidFrom.AsTime().In(timezone)
 	}
 	if rule.ValidUntil != nil && from.After(rule.ValidUntil.AsTime()) {
-		return nil, calendar.ErrNoExecutionTime.WithDetails("rule validity period has expired")
+		return nil, types.ErrNoExecutionTime.WithDetails("rule validity period has expired")
 	}
 
 	// Get business calendar
@@ -74,7 +74,7 @@ func (e *BusinessDaysEvaluator) EvaluateMultiple(ctx context.Context, rule *sche
 	for len(results) < count {
 		next, err := e.Evaluate(ctx, rule, current, timezone)
 		if err != nil {
-			if err == calendar.ErrNoExecutionTime {
+			if err == types.ErrNoExecutionTime {
 				break // No more execution times available
 			}
 			return nil, err
@@ -94,12 +94,12 @@ func (e *BusinessDaysEvaluator) EvaluateMultiple(ctx context.Context, rule *sche
 func (e *BusinessDaysEvaluator) Validate(ctx context.Context, rule *schedule.CalendarRule) error {
 	businessRule := rule.GetBusinessDays()
 	if businessRule == nil {
-		return calendar.ErrInvalidRule.WithDetails("business days rule is nil")
+		return types.ErrInvalidRule.WithDetails("business days rule is nil")
 	}
 
 	// Validate day offset
 	if businessRule.DayOffset < -365 || businessRule.DayOffset > 365 {
-		return calendar.ErrInvalidRule.WithDetails(fmt.Sprintf("day offset out of range: %d", businessRule.DayOffset))
+		return types.ErrInvalidRule.WithDetails(fmt.Sprintf("day offset out of range: %d", businessRule.DayOffset))
 	}
 
 	// Validate business calendar if specified
@@ -107,7 +107,7 @@ func (e *BusinessDaysEvaluator) Validate(ctx context.Context, rule *schedule.Cal
 		if e.businessCalendarProvider != nil {
 			_, err := e.businessCalendarProvider.GetBusinessCalendar(ctx, businessRule.BusinessCalendarId)
 			if err != nil {
-				return calendar.ErrBusinessCalendarNotFound.WithDetails(fmt.Sprintf("business calendar not found: %s", businessRule.BusinessCalendarId))
+				return types.ErrBusinessCalendarNotFound.WithDetails(fmt.Sprintf("business calendar not found: %s", businessRule.BusinessCalendarId))
 			}
 		}
 	}
@@ -123,8 +123,8 @@ func (e *BusinessDaysEvaluator) Validate(ctx context.Context, rule *schedule.Cal
 }
 
 // GetRuleType returns the type of rule this evaluator handles
-func (e *BusinessDaysEvaluator) GetRuleType() calendar.RuleType {
-	return calendar.RuleTypeBusinessDays
+func (e *BusinessDaysEvaluator) GetRuleType() types.RuleType {
+	return types.RuleTypeBusinessDays
 }
 
 // findNextExecution finds the next execution time based on business days rule parameters
@@ -173,7 +173,7 @@ func (e *BusinessDaysEvaluator) findNextExecution(ctx context.Context, from time
 		currentDate = currentDate.Add(24 * time.Hour)
 	}
 
-	return nil, calendar.ErrNoExecutionTime.WithDetails("no valid execution time found within 1 year")
+	return nil, types.ErrNoExecutionTime.WithDetails("no valid execution time found within 1 year")
 }
 
 // isBusinessDay checks if a date is a business day according to the business calendar

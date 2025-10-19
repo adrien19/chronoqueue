@@ -551,8 +551,10 @@ func (client *ChronoQueueClient) CreateSchedule(ctx context.Context, scheduleId 
 					Metadata: scheduleOptions.Payload.Metadata,
 					Data:     scheduleOptions.Payload.Data,
 				},
-				State:          schedule_pb.Schedule_Metadata_State(scheduleOptions.State),
-				CronSchedule:   scheduleOptions.CronSchedule,
+				State: schedule_pb.Schedule_Metadata_State(scheduleOptions.State),
+				ScheduleConfig: &schedule_pb.Schedule_Metadata_CronSchedule{
+					CronSchedule: scheduleOptions.CronSchedule,
+				},
 				QueueName:      scheduleOptions.QueueName,
 				ExclusivityKey: scheduleOptions.ExclusivityKey,
 				HasMaxMessages: scheduleOptions.MaxMessages > 0,

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	schedule "github.com/adrien19/chronoqueue/api/schedule/v1"
-	"github.com/adrien19/chronoqueue/pkg/calendar"
+	"github.com/adrien19/chronoqueue/pkg/calendar/types"
 )
 
 // DailyEvaluator handles daily calendar rules
@@ -20,7 +20,7 @@ func NewDailyEvaluator() *DailyEvaluator {
 func (e *DailyEvaluator) Evaluate(ctx context.Context, rule *schedule.CalendarRule, from time.Time, timezone *time.Location) (*time.Time, error) {
 	dailyRule := rule.GetDaily()
 	if dailyRule == nil {
-		return nil, calendar.ErrInvalidRule.WithDetails("daily rule is nil")
+		return nil, types.ErrInvalidRule.WithDetails("daily rule is nil")
 	}
 
 	// Convert from time to the specified timezone
@@ -38,7 +38,7 @@ func (e *DailyEvaluator) Evaluate(ctx context.Context, rule *schedule.CalendarRu
 		fromLocal = rule.ValidFrom.AsTime().In(timezone)
 	}
 	if rule.ValidUntil != nil && from.After(rule.ValidUntil.AsTime()) {
-		return nil, calendar.ErrNoExecutionTime.WithDetails("rule validity period has expired")
+		return nil, types.ErrNoExecutionTime.WithDetails("rule validity period has expired")
 	}
 
 	// Get day interval (default to 1)
@@ -67,7 +67,7 @@ func (e *DailyEvaluator) EvaluateMultiple(ctx context.Context, rule *schedule.Ca
 	for len(results) < count {
 		next, err := e.Evaluate(ctx, rule, current, timezone)
 		if err != nil {
-			if err == calendar.ErrNoExecutionTime {
+			if err == types.ErrNoExecutionTime {
 				break // No more execution times available
 			}
 			return nil, err
@@ -87,12 +87,12 @@ func (e *DailyEvaluator) EvaluateMultiple(ctx context.Context, rule *schedule.Ca
 func (e *DailyEvaluator) Validate(ctx context.Context, rule *schedule.CalendarRule) error {
 	dailyRule := rule.GetDaily()
 	if dailyRule == nil {
-		return calendar.ErrInvalidRule.WithDetails("daily rule is nil")
+		return types.ErrInvalidRule.WithDetails("daily rule is nil")
 	}
 
 	// Validate day interval
 	if dailyRule.DayInterval < 0 {
-		return calendar.ErrInvalidRule.WithDetails("day interval cannot be negative")
+		return types.ErrInvalidRule.WithDetails("day interval cannot be negative")
 	}
 
 	// Validate execution times
@@ -106,8 +106,8 @@ func (e *DailyEvaluator) Validate(ctx context.Context, rule *schedule.CalendarRu
 }
 
 // GetRuleType returns the type of rule this evaluator handles
-func (e *DailyEvaluator) GetRuleType() calendar.RuleType {
-	return calendar.RuleTypeDaily
+func (e *DailyEvaluator) GetRuleType() types.RuleType {
+	return types.RuleTypeDaily
 }
 
 // findNextExecution finds the next execution time based on daily rule parameters
@@ -142,7 +142,7 @@ func (e *DailyEvaluator) findNextExecution(from time.Time, dayInterval int, refe
 		currentDate = currentDate.Add(24 * time.Hour)
 	}
 
-	return nil, calendar.ErrNoExecutionTime.WithDetails("no valid execution time found within 1 year")
+	return nil, types.ErrNoExecutionTime.WithDetails("no valid execution time found within 1 year")
 }
 
 // isValidDay checks if the given date falls on a valid day according to the interval

@@ -61,6 +61,17 @@ func (as *storage) CreateSchedule(ctx context.Context, request *queueservice_pb.
 		}, chronoErr.GRPCStatus()
 	}
 
+	// Validate calendar schedule if present
+	if scheduleInfo.GetMetadata().GetCalendarSchedule() != nil {
+		if err := as.ValidateCalendarSchedule(ctx, scheduleInfo.GetMetadata().GetCalendarSchedule()); err != nil {
+			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Invalid calendar schedule configuration")
+			return &queueservice_pb.CreateScheduleResponse{
+				Success: false,
+			}, chronoErr.GRPCStatus()
+		}
+		as.logger.InfoWithFields("Calendar schedule validated successfully", "scheduleID", scheduleInfo.GetScheduleId())
+	}
+
 	exists, err := as.checkScheduleExistence(ctx, scheduleInfo.GetScheduleId())
 	if err != nil {
 		return &queueservice_pb.CreateScheduleResponse{

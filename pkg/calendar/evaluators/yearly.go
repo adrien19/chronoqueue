@@ -6,7 +6,7 @@ import (
 	"time"
 
 	schedule "github.com/adrien19/chronoqueue/api/schedule/v1"
-	"github.com/adrien19/chronoqueue/pkg/calendar"
+	"github.com/adrien19/chronoqueue/pkg/calendar/types"
 )
 
 // YearlyEvaluator handles yearly calendar rules
@@ -21,7 +21,7 @@ func NewYearlyEvaluator() *YearlyEvaluator {
 func (e *YearlyEvaluator) Evaluate(ctx context.Context, rule *schedule.CalendarRule, from time.Time, timezone *time.Location) (*time.Time, error) {
 	yearlyRule := rule.GetYearly()
 	if yearlyRule == nil {
-		return nil, calendar.ErrInvalidRule.WithDetails("yearly rule is nil")
+		return nil, types.ErrInvalidRule.WithDetails("yearly rule is nil")
 	}
 
 	// Convert from time to the specified timezone
@@ -39,7 +39,7 @@ func (e *YearlyEvaluator) Evaluate(ctx context.Context, rule *schedule.CalendarR
 		fromLocal = rule.ValidFrom.AsTime().In(timezone)
 	}
 	if rule.ValidUntil != nil && from.After(rule.ValidUntil.AsTime()) {
-		return nil, calendar.ErrNoExecutionTime.WithDetails("rule validity period has expired")
+		return nil, types.ErrNoExecutionTime.WithDetails("rule validity period has expired")
 	}
 
 	return e.findNextExecution(fromLocal, yearlyRule, executionTimes)
@@ -53,7 +53,7 @@ func (e *YearlyEvaluator) EvaluateMultiple(ctx context.Context, rule *schedule.C
 	for len(results) < count {
 		next, err := e.Evaluate(ctx, rule, current, timezone)
 		if err != nil {
-			if err == calendar.ErrNoExecutionTime {
+			if err == types.ErrNoExecutionTime {
 				break // No more execution times available
 			}
 			return nil, err
@@ -73,22 +73,22 @@ func (e *YearlyEvaluator) EvaluateMultiple(ctx context.Context, rule *schedule.C
 func (e *YearlyEvaluator) Validate(ctx context.Context, rule *schedule.CalendarRule) error {
 	yearlyRule := rule.GetYearly()
 	if yearlyRule == nil {
-		return calendar.ErrInvalidRule.WithDetails("yearly rule is nil")
+		return types.ErrInvalidRule.WithDetails("yearly rule is nil")
 	}
 
 	// Validate month
 	if yearlyRule.Month < 1 || yearlyRule.Month > 12 {
-		return calendar.ErrInvalidRule.WithDetails(fmt.Sprintf("invalid month: %d (must be 1-12)", yearlyRule.Month))
+		return types.ErrInvalidRule.WithDetails(fmt.Sprintf("invalid month: %d (must be 1-12)", yearlyRule.Month))
 	}
 
 	// Validate day
 	if yearlyRule.Day < 1 || yearlyRule.Day > 31 {
-		return calendar.ErrInvalidRule.WithDetails(fmt.Sprintf("invalid day: %d (must be 1-31)", yearlyRule.Day))
+		return types.ErrInvalidRule.WithDetails(fmt.Sprintf("invalid day: %d (must be 1-31)", yearlyRule.Day))
 	}
 
 	// Special validation for February 29
 	if yearlyRule.Month == 2 && yearlyRule.Day == 29 && !yearlyRule.AdjustForLeapYear {
-		return calendar.ErrInvalidRule.WithDetails("February 29 requires adjust_for_leap_year to be true")
+		return types.ErrInvalidRule.WithDetails("February 29 requires adjust_for_leap_year to be true")
 	}
 
 	// Validate execution times
@@ -102,8 +102,8 @@ func (e *YearlyEvaluator) Validate(ctx context.Context, rule *schedule.CalendarR
 }
 
 // GetRuleType returns the type of rule this evaluator handles
-func (e *YearlyEvaluator) GetRuleType() calendar.RuleType {
-	return calendar.RuleTypeYearly
+func (e *YearlyEvaluator) GetRuleType() types.RuleType {
+	return types.RuleTypeYearly
 }
 
 // findNextExecution finds the next execution time based on yearly rule parameters
@@ -155,7 +155,7 @@ func (e *YearlyEvaluator) findNextExecution(from time.Time, yearlyRule *schedule
 		currentYear++
 	}
 
-	return nil, calendar.ErrNoExecutionTime.WithDetails("no valid execution time found within 10 years")
+	return nil, types.ErrNoExecutionTime.WithDetails("no valid execution time found within 10 years")
 }
 
 // isLeapYear checks if a year is a leap year

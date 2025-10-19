@@ -6,7 +6,7 @@ import (
 	"time"
 
 	schedule "github.com/adrien19/chronoqueue/api/schedule/v1"
-	"github.com/adrien19/chronoqueue/pkg/calendar"
+	"github.com/adrien19/chronoqueue/pkg/calendar/types"
 )
 
 // WeeklyEvaluator handles weekly calendar rules
@@ -21,7 +21,7 @@ func NewWeeklyEvaluator() *WeeklyEvaluator {
 func (e *WeeklyEvaluator) Evaluate(ctx context.Context, rule *schedule.CalendarRule, from time.Time, timezone *time.Location) (*time.Time, error) {
 	weeklyRule := rule.GetWeekly()
 	if weeklyRule == nil {
-		return nil, calendar.ErrInvalidRule.WithDetails("weekly rule is nil")
+		return nil, types.ErrInvalidRule.WithDetails("weekly rule is nil")
 	}
 
 	// Convert from time to the specified timezone
@@ -39,7 +39,7 @@ func (e *WeeklyEvaluator) Evaluate(ctx context.Context, rule *schedule.CalendarR
 		fromLocal = rule.ValidFrom.AsTime().In(timezone)
 	}
 	if rule.ValidUntil != nil && from.After(rule.ValidUntil.AsTime()) {
-		return nil, calendar.ErrNoExecutionTime.WithDetails("rule validity period has expired")
+		return nil, types.ErrNoExecutionTime.WithDetails("rule validity period has expired")
 	}
 
 	// Get week interval (default to 1)
@@ -60,7 +60,7 @@ func (e *WeeklyEvaluator) Evaluate(ctx context.Context, rule *schedule.CalendarR
 	// Get days of week to execute (1=Monday, 7=Sunday)
 	daysOfWeek := weeklyRule.DaysOfWeek
 	if len(daysOfWeek) == 0 {
-		return nil, calendar.ErrInvalidRule.WithDetails("no days of week specified")
+		return nil, types.ErrInvalidRule.WithDetails("no days of week specified")
 	}
 
 	return e.findNextExecution(fromLocal, daysOfWeek, weekInterval, referenceWeek, executionTimes)
@@ -74,7 +74,7 @@ func (e *WeeklyEvaluator) EvaluateMultiple(ctx context.Context, rule *schedule.C
 	for len(results) < count {
 		next, err := e.Evaluate(ctx, rule, current, timezone)
 		if err != nil {
-			if err == calendar.ErrNoExecutionTime {
+			if err == types.ErrNoExecutionTime {
 				break // No more execution times available
 			}
 			return nil, err
@@ -94,23 +94,23 @@ func (e *WeeklyEvaluator) EvaluateMultiple(ctx context.Context, rule *schedule.C
 func (e *WeeklyEvaluator) Validate(ctx context.Context, rule *schedule.CalendarRule) error {
 	weeklyRule := rule.GetWeekly()
 	if weeklyRule == nil {
-		return calendar.ErrInvalidRule.WithDetails("weekly rule is nil")
+		return types.ErrInvalidRule.WithDetails("weekly rule is nil")
 	}
 
 	// Validate days of week
 	if len(weeklyRule.DaysOfWeek) == 0 {
-		return calendar.ErrInvalidRule.WithDetails("no days of week specified")
+		return types.ErrInvalidRule.WithDetails("no days of week specified")
 	}
 
 	for _, day := range weeklyRule.DaysOfWeek {
 		if day < 1 || day > 7 {
-			return calendar.ErrInvalidRule.WithDetails(fmt.Sprintf("invalid day of week: %d (must be 1-7)", day))
+			return types.ErrInvalidRule.WithDetails(fmt.Sprintf("invalid day of week: %d (must be 1-7)", day))
 		}
 	}
 
 	// Validate week interval
 	if weeklyRule.WeekInterval < 0 {
-		return calendar.ErrInvalidRule.WithDetails("week interval cannot be negative")
+		return types.ErrInvalidRule.WithDetails("week interval cannot be negative")
 	}
 
 	// Validate execution times
@@ -124,8 +124,8 @@ func (e *WeeklyEvaluator) Validate(ctx context.Context, rule *schedule.CalendarR
 }
 
 // GetRuleType returns the type of rule this evaluator handles
-func (e *WeeklyEvaluator) GetRuleType() calendar.RuleType {
-	return calendar.RuleTypeWeekly
+func (e *WeeklyEvaluator) GetRuleType() types.RuleType {
+	return types.RuleTypeWeekly
 }
 
 // findNextExecution finds the next execution time based on weekly rule parameters
@@ -177,7 +177,7 @@ func (e *WeeklyEvaluator) findNextExecution(from time.Time, daysOfWeek []int32, 
 		currentDate = currentDate.Add(24 * time.Hour)
 	}
 
-	return nil, calendar.ErrNoExecutionTime.WithDetails("no valid execution time found within search window")
+	return nil, types.ErrNoExecutionTime.WithDetails("no valid execution time found within search window")
 }
 
 // isValidWeek checks if the given date falls in a valid week according to the interval

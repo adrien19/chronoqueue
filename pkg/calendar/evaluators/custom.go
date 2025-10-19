@@ -6,7 +6,7 @@ import (
 	"time"
 
 	schedule "github.com/adrien19/chronoqueue/api/schedule/v1"
-	"github.com/adrien19/chronoqueue/pkg/calendar"
+	"github.com/adrien19/chronoqueue/pkg/calendar/types"
 )
 
 // CustomEvaluator handles custom calendar rules
@@ -60,7 +60,7 @@ func (e *CustomEvaluator) GetRegisteredProcessors() []string {
 func (e *CustomEvaluator) Evaluate(ctx context.Context, rule *schedule.CalendarRule, from time.Time, timezone *time.Location) (*time.Time, error) {
 	customRule := rule.GetCustom()
 	if customRule == nil {
-		return nil, calendar.ErrInvalidRule.WithDetails("custom rule is nil")
+		return nil, types.ErrInvalidRule.WithDetails("custom rule is nil")
 	}
 
 	// Check if rule is valid for the current time range
@@ -68,13 +68,13 @@ func (e *CustomEvaluator) Evaluate(ctx context.Context, rule *schedule.CalendarR
 		from = rule.ValidFrom.AsTime()
 	}
 	if rule.ValidUntil != nil && from.After(rule.ValidUntil.AsTime()) {
-		return nil, calendar.ErrNoExecutionTime.WithDetails("rule validity period has expired")
+		return nil, types.ErrNoExecutionTime.WithDetails("rule validity period has expired")
 	}
 
 	// Find the appropriate processor
 	processor, exists := e.processors[customRule.RuleType]
 	if !exists {
-		return nil, calendar.ErrRuleEvaluatorNotFound.WithDetails(fmt.Sprintf("no processor found for custom rule type: %s", customRule.RuleType))
+		return nil, types.ErrRuleEvaluatorNotFound.WithDetails(fmt.Sprintf("no processor found for custom rule type: %s", customRule.RuleType))
 	}
 
 	return processor.Process(ctx, customRule, from, timezone)
@@ -84,7 +84,7 @@ func (e *CustomEvaluator) Evaluate(ctx context.Context, rule *schedule.CalendarR
 func (e *CustomEvaluator) EvaluateMultiple(ctx context.Context, rule *schedule.CalendarRule, from time.Time, timezone *time.Location, count int) ([]time.Time, error) {
 	customRule := rule.GetCustom()
 	if customRule == nil {
-		return nil, calendar.ErrInvalidRule.WithDetails("custom rule is nil")
+		return nil, types.ErrInvalidRule.WithDetails("custom rule is nil")
 	}
 
 	// Check if rule is valid for the current time range
@@ -92,13 +92,13 @@ func (e *CustomEvaluator) EvaluateMultiple(ctx context.Context, rule *schedule.C
 		from = rule.ValidFrom.AsTime()
 	}
 	if rule.ValidUntil != nil && from.After(rule.ValidUntil.AsTime()) {
-		return nil, calendar.ErrNoExecutionTime.WithDetails("rule validity period has expired")
+		return nil, types.ErrNoExecutionTime.WithDetails("rule validity period has expired")
 	}
 
 	// Find the appropriate processor
 	processor, exists := e.processors[customRule.RuleType]
 	if !exists {
-		return nil, calendar.ErrRuleEvaluatorNotFound.WithDetails(fmt.Sprintf("no processor found for custom rule type: %s", customRule.RuleType))
+		return nil, types.ErrRuleEvaluatorNotFound.WithDetails(fmt.Sprintf("no processor found for custom rule type: %s", customRule.RuleType))
 	}
 
 	return processor.ProcessMultiple(ctx, customRule, from, timezone, count)
@@ -108,18 +108,18 @@ func (e *CustomEvaluator) EvaluateMultiple(ctx context.Context, rule *schedule.C
 func (e *CustomEvaluator) Validate(ctx context.Context, rule *schedule.CalendarRule) error {
 	customRule := rule.GetCustom()
 	if customRule == nil {
-		return calendar.ErrInvalidRule.WithDetails("custom rule is nil")
+		return types.ErrInvalidRule.WithDetails("custom rule is nil")
 	}
 
 	// Validate rule type
 	if customRule.RuleType == "" {
-		return calendar.ErrInvalidRule.WithDetails("custom rule type is required")
+		return types.ErrInvalidRule.WithDetails("custom rule type is required")
 	}
 
 	// Check if processor exists
 	processor, exists := e.processors[customRule.RuleType]
 	if !exists {
-		return calendar.ErrRuleEvaluatorNotFound.WithDetails(fmt.Sprintf("no processor found for custom rule type: %s", customRule.RuleType))
+		return types.ErrRuleEvaluatorNotFound.WithDetails(fmt.Sprintf("no processor found for custom rule type: %s", customRule.RuleType))
 	}
 
 	// Validate with the specific processor
@@ -127,8 +127,8 @@ func (e *CustomEvaluator) Validate(ctx context.Context, rule *schedule.CalendarR
 }
 
 // GetRuleType returns the type of rule this evaluator handles
-func (e *CustomEvaluator) GetRuleType() calendar.RuleType {
-	return calendar.RuleTypeCustom
+func (e *CustomEvaluator) GetRuleType() types.RuleType {
+	return types.RuleTypeCustom
 }
 
 // Example custom rule processors
@@ -156,7 +156,7 @@ func (p *CronExpressionProcessor) ProcessMultiple(ctx context.Context, rule *sch
 // Validate validates a cron expression custom rule
 func (p *CronExpressionProcessor) Validate(ctx context.Context, rule *schedule.CustomRule) error {
 	if rule.Expression == "" {
-		return calendar.ErrInvalidRule.WithDetails("cron expression is required")
+		return types.ErrInvalidRule.WithDetails("cron expression is required")
 	}
 	// Additional cron expression validation would go here
 	return nil
@@ -179,7 +179,7 @@ func NewIntervalProcessor() *IntervalProcessor {
 func (p *IntervalProcessor) Process(ctx context.Context, rule *schedule.CustomRule, from time.Time, timezone *time.Location) (*time.Time, error) {
 	intervalStr, exists := rule.Parameters["interval"]
 	if !exists {
-		return nil, calendar.ErrInvalidRule.WithDetails("interval parameter is required")
+		return nil, types.ErrInvalidRule.WithDetails("interval parameter is required")
 	}
 
 	// Parse interval (e.g., "30m", "1h", "2d")
@@ -195,7 +195,7 @@ func (p *IntervalProcessor) Process(ctx context.Context, rule *schedule.CustomRu
 		next := from.Add(48 * time.Hour)
 		return &next, nil
 	default:
-		return nil, calendar.ErrInvalidRule.WithDetails(fmt.Sprintf("unsupported interval: %s", intervalStr))
+		return nil, types.ErrInvalidRule.WithDetails(fmt.Sprintf("unsupported interval: %s", intervalStr))
 	}
 }
 
@@ -224,7 +224,7 @@ func (p *IntervalProcessor) ProcessMultiple(ctx context.Context, rule *schedule.
 func (p *IntervalProcessor) Validate(ctx context.Context, rule *schedule.CustomRule) error {
 	intervalStr, exists := rule.Parameters["interval"]
 	if !exists {
-		return calendar.ErrInvalidRule.WithDetails("interval parameter is required")
+		return types.ErrInvalidRule.WithDetails("interval parameter is required")
 	}
 
 	// Validate supported intervals
@@ -235,7 +235,7 @@ func (p *IntervalProcessor) Validate(ctx context.Context, rule *schedule.CustomR
 	}
 
 	if !supportedIntervals[intervalStr] {
-		return calendar.ErrInvalidRule.WithDetails(fmt.Sprintf("unsupported interval: %s", intervalStr))
+		return types.ErrInvalidRule.WithDetails(fmt.Sprintf("unsupported interval: %s", intervalStr))
 	}
 
 	return nil

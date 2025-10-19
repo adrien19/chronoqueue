@@ -314,9 +314,10 @@ func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, me
 		}
 	}()
 
-	if metadata.CronSchedule != "" && (metadata.LastRun == nil || (metadata.LastRun.AsTime().Before(time.Now()) && metadata.NextRun.AsTime().Before(time.Now()))) {
+	cronSchedule := metadata.GetCronSchedule()
+	if cronSchedule != "" && (metadata.LastRun == nil || (metadata.LastRun.AsTime().Before(time.Now()) && metadata.NextRun.AsTime().Before(time.Now()))) {
 		// Calculate the next run time for this message
-		nextRunTime, err := calculateNextRunTime(metadata.CronSchedule)
+		nextRunTime, err := calculateNextRunTime(cronSchedule)
 		if err != nil {
 			return err
 		}
@@ -409,9 +410,21 @@ func (as *storage) updateAllCronSchedules(ctx context.Context) error {
 				return err
 			}
 			if metadata.State == schedule_pb.Schedule_Metadata_SCHEDULED {
-				err = as.updateMessageCronSchedule(ctx, key, metadata)
-				if err != nil {
-					return err
+				// Process cron schedules
+				if metadata.GetCronSchedule() != "" {
+					err = as.updateMessageCronSchedule(ctx, key, metadata)
+					if err != nil {
+						return err
+					}
+				}
+				// Process calendar schedules
+				if metadata.GetCalendarSchedule() != nil {
+					err = as.updateMessageCalendarSchedule(ctx, key, metadata)
+					if err != nil {
+						as.logger.ErrorWithFields("Failed to update calendar schedule", err, "key", key)
+						// Continue processing other schedules even if one fails
+						continue
+					}
 				}
 			}
 		}
