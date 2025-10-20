@@ -122,7 +122,7 @@ func (as *storage) getMetadata(ctx context.Context, key string, metadata interfa
 	return nil
 }
 
-func (as *storage) getQueueMetadata(ctx context.Context, queueName string) (*queue_pb.QueueMetadata, error) {
+func (as *storage) GetQueueMetadata(ctx context.Context, queueName string) (*queue_pb.QueueMetadata, error) {
 	queueMetaKey := fmt.Sprintf("queue:%s:meta", queueName)
 	var queueMeta queue_pb.QueueMetadata
 	if err := as.getMetadata(ctx, queueMetaKey, &queueMeta); err != nil {

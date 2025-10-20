@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,8 +48,11 @@ type (
 		Priority             int64   `json:"Priority,omitempty"`
 	}
 	Payload struct {
-		Metadata map[string]*structpb.Value `json:"metadata,omitempty"`
-		Data     *structpb.Struct           `json:"data,omitempty"`
+		Metadata      map[string]*structpb.Value `json:"metadata,omitempty"`
+		Data          *structpb.Struct           `json:"data,omitempty"`
+		ContentType   string                     `json:"contentType,omitempty"`   // NEW: MIME type
+		SchemaID      string                     `json:"schemaId,omitempty"`      // NEW: Schema reference
+		SchemaVersion int32                      `json:"schemaVersion,omitempty"` // NEW: Schema version
 	}
 	TimeRangeOption struct {
 		Min int64 `json:"min,omitempty"`
@@ -340,8 +344,11 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 			MessageId: messageId,
 			Metadata: &message_pb.Message_Metadata{
 				Payload: &common_pb.Payload{
-					Metadata: messageOptions.Payload.Metadata,
-					Data:     messageOptions.Payload.Data,
+					Metadata:      messageOptions.Payload.Metadata,
+					Data:          messageOptions.Payload.Data,
+					ContentType:   messageOptions.Payload.ContentType,
+					SchemaId:      messageOptions.Payload.SchemaID,
+					SchemaVersion: messageOptions.Payload.SchemaVersion,
 				},
 				AttemptsLeft:         messageOptions.AttemptsLeft,
 				MaxAttempts:          messageOptions.MaxAttempts,
@@ -790,6 +797,155 @@ func (client *ChronoQueueClient) GetDLQStats(ctx context.Context, dlqName string
 		return nil, err
 	}
 	return res, nil
+}
+
+// Schema Management Methods (Client-side implementation)
+// Note: These methods will work once server-side schema service is implemented
+
+// SchemaOptions contains options for schema registration
+type SchemaOptions struct {
+	Name        string            // Human-readable schema name
+	Description string            // Schema description
+	Content     string            // JSON Schema content
+	ContentType string            // Schema type (default: "json-schema")
+	Metadata    map[string]string // Additional metadata
+}
+
+// RegisterSchema registers a new schema or creates a new version of an existing schema
+// This is a client-side implementation that will work once server-side methods are added
+func (client *ChronoQueueClient) RegisterSchema(ctx context.Context, schemaID string, options SchemaOptions) error {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	if options.ContentType == "" {
+		options.ContentType = "json-schema"
+	}
+
+	req := &queueservice_pb.RegisterSchemaRequest{
+		SchemaId:    schemaID,
+		Name:        options.Name,
+		Description: options.Description,
+		Content:     options.Content,
+		ContentType: options.ContentType,
+		Metadata:    options.Metadata,
+	}
+	res, err := client.service.RegisterSchema(ctx, req)
+	if err != nil {
+		return err
+	}
+	log.Printf("Schema registered successfully: %s, version: %d", res.GetSchemaId(), res.GetVersion())
+	return nil
+}
+
+// GetSchema retrieves a schema by ID and optional version
+// version = 0 means get the latest version
+func (client *ChronoQueueClient) GetSchema(ctx context.Context, schemaID string, version int32) (map[string]interface{}, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	req := &queueservice_pb.GetSchemaRequest{
+		SchemaId: schemaID,
+		Version:  version,
+	}
+	res, err := client.service.GetSchema(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if res.Schema == nil {
+		return nil, fmt.Errorf("schema not found: %s", schemaID)
+	}
+
+	// Convert to map for easier handling
+	schema := map[string]interface{}{
+		"schema_id":    res.Schema.SchemaId,
+		"version":      res.Schema.Version,
+		"name":         res.Schema.Name,
+		"description":  res.Schema.Description,
+		"content":      res.Schema.Content,
+		"content_type": res.Schema.ContentType,
+		"created_at":   res.Schema.CreatedAt,
+		"updated_at":   res.Schema.UpdatedAt,
+		"is_active":    res.Schema.IsActive,
+		"metadata":     res.Schema.Metadata,
+	}
+	return schema, nil
+}
+
+// ListSchemas returns all schemas matching the criteria
+func (client *ChronoQueueClient) ListSchemas(ctx context.Context, prefix string, limit int32, activeOnly bool) ([]map[string]interface{}, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	req := &queueservice_pb.ListSchemasRequest{
+		Prefix:     prefix,
+		Limit:      limit,
+		ActiveOnly: activeOnly,
+	}
+	res, err := client.service.ListSchemas(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	schemas := make([]map[string]interface{}, len(res.Schemas))
+	for i, schema := range res.Schemas {
+		schemas[i] = map[string]interface{}{
+			"schema_id":   schema.GetSchemaId(),
+			"name":        schema.GetName(),
+			"version":     schema.GetLatestVersion(),
+			"versions":    schema.GetVersionCount(),
+			"description": schema.GetDescription(),
+			// "content_type": schema.GetContentType(),
+			"created_at": schema.GetCreatedAt(),
+			"is_active":  schema.GetIsActive(),
+		}
+	}
+	return schemas, nil
+}
+
+// DeleteSchema removes a schema version or all versions
+// version = 0 means delete all versions
+func (client *ChronoQueueClient) DeleteSchema(ctx context.Context, schemaID string, version int32) error {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	req := &queueservice_pb.DeleteSchemaRequest{
+		SchemaId: schemaID,
+		Version:  version,
+	}
+	res, err := client.service.DeleteSchema(ctx, req)
+	if err != nil {
+		return err
+	}
+	if !res.Success {
+		return fmt.Errorf("failed to delete schema: %s", schemaID)
+	}
+
+	log.Printf("Schema deleted successfully: %s, version: %d", schemaID, version)
+	return nil
+}
+
+// ValidatePayload validates a payload against a schema
+func (client *ChronoQueueClient) ValidatePayload(ctx context.Context, schemaID string, version int32, payloadJSON string) error {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	defer cancel()
+
+	req := &queueservice_pb.ValidatePayloadRequest{
+		SchemaId: schemaID,
+		Version:  version,
+		Payload:  payloadJSON,
+	}
+	res, err := client.service.ValidatePayload(ctx, req)
+	if err != nil {
+		return err
+	}
+	if res != nil && !res.Valid {
+		var errMsgs []string
+		for _, valErr := range res.Errors {
+			errMsgs = append(errMsgs, fmt.Sprintf("%s: %s", valErr.Field, valErr.Message))
+		}
+		return fmt.Errorf("validation failed:\n  - %s", strings.Join(errMsgs, "\n  - "))
+	}
+	return nil
 }
 
 // Close closes the client

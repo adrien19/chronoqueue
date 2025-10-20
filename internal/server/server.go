@@ -22,6 +22,7 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
 	"github.com/adrien19/chronoqueue/pkg/repository"
+	"github.com/adrien19/chronoqueue/pkg/schema"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 )
@@ -34,6 +35,7 @@ type Server struct {
 	encryptionKeyManager *keymanager.EncryptionKeyManager
 	grpcServer           *chronoqueue.ChronoQueueServer
 	database             repository.Storage
+	schemaRegistry       schema.Registry
 }
 
 // New creates a new server instance with the given configuration
@@ -72,14 +74,19 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.encryptionKeyManager = encryptionKeyManager
 
+	// Initialize schema registry
+	schemaRegistry := schema.NewRedisRegistry(s.redisClient, s.logger)
+	s.logger.Info("Schema registry initialized")
+
 	// Initialize metrics
 	gateway.InitMetrics()
 
-	// Initialize storage layer (database)
+	// Initialize storage layer (database) with schema registry
 	s.database = repository.NewQueueStorage(ctx, s.redisClient, s.encryptionKeyManager, s.logger)
+	s.schemaRegistry = schemaRegistry
 
 	// Initialize gRPC server directly with storage
-	s.grpcServer = chronoqueue.NewChronoQueueServer(s.database, s.logger)
+	s.grpcServer = chronoqueue.NewChronoQueueServer(s.database, s.schemaRegistry, s.logger)
 
 	// Print startup information
 	s.printStartupInfo()

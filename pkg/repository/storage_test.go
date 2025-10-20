@@ -40,7 +40,6 @@ func setup() {
 func teardown() {
 	redisServer.Close()
 }
-
 func TestNewQueueStorage(t *testing.T) {
 	type args struct {
 		ctx                  context.Context
@@ -274,7 +273,7 @@ func Test_storage_CreateQueueMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := as.CreateQueueMessage(tt.args.ctx, tt.args.request)
+			got, err := as.CreateQueueMessage(tt.args.ctx, tt.args.request, nil)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("storage.CreateQueueMessage() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -339,7 +338,7 @@ func Test_storage_GetQueueMessage(t *testing.T) {
 				Priority: 0,
 			},
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Errorf("storage.CreateQueueMessage() error = %v", err)
 		return
@@ -408,7 +407,7 @@ func Test_storage_DeleteQueueMessage(t *testing.T) {
 				Priority: 0,
 			},
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Errorf("storage.CreateQueueMessage() error = %v", err)
 		return
@@ -476,7 +475,7 @@ func Test_storage_AcknowledgeMessage(t *testing.T) {
 				Priority: 0,
 			},
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Errorf("storage.CreateQueueMessage() error = %v", err)
 		return
@@ -549,7 +548,7 @@ func Test_storage_RenewMessageLease(t *testing.T) {
 				Priority: 0,
 			},
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Errorf("storage.CreateQueueMessage() error = %v", err)
 		return
@@ -621,7 +620,7 @@ func Test_storage_PeekQueueMessages(t *testing.T) {
 				Priority: time.Now().Unix(),
 			},
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Errorf("storage.CreateQueueMessage() error = %v", err)
 		return
@@ -692,7 +691,7 @@ func Test_storage_GetQueueState(t *testing.T) {
 				Priority: time.Now().Unix(),
 			},
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Errorf("storage.CreateQueueMessage() error = %v", err)
 		return

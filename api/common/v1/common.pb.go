@@ -28,6 +28,9 @@ type Payload struct {
 	state         protoimpl.MessageState     `protogen:"open.v1"`
 	Metadata      map[string]*structpb.Value `protobuf:"bytes,1,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Data          *structpb.Struct           `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	ContentType   string                     `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`        // MIME type (e.g., application/json, text/plain)
+	SchemaId      string                     `protobuf:"bytes,4,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`                 // Optional schema reference for validation
+	SchemaVersion int32                      `protobuf:"varint,5,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"` // Schema version number
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -76,14 +79,38 @@ func (x *Payload) GetData() *structpb.Struct {
 	return nil
 }
 
+func (x *Payload) GetContentType() string {
+	if x != nil {
+		return x.ContentType
+	}
+	return ""
+}
+
+func (x *Payload) GetSchemaId() string {
+	if x != nil {
+		return x.SchemaId
+	}
+	return ""
+}
+
+func (x *Payload) GetSchemaVersion() int32 {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return 0
+}
+
 var File_proto_common_v1_common_proto protoreflect.FileDescriptor
 
 const file_proto_common_v1_common_proto_rawDesc = "" +
 	"\n" +
-	"\x1cproto/common/v1/common.proto\x12\x19chronoqueue.api.common.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xd9\x01\n" +
+	"\x1cproto/common/v1/common.proto\x12\x19chronoqueue.api.common.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xc0\x02\n" +
 	"\aPayload\x12L\n" +
 	"\bmetadata\x18\x01 \x03(\v20.chronoqueue.api.common.v1.Payload.MetadataEntryR\bmetadata\x12+\n" +
-	"\x04data\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x04data\x1aS\n" +
+	"\x04data\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x04data\x12!\n" +
+	"\fcontent_type\x18\x03 \x01(\tR\vcontentType\x12\x1b\n" +
+	"\tschema_id\x18\x04 \x01(\tR\bschemaId\x12%\n" +
+	"\x0eschema_version\x18\x05 \x01(\x05R\rschemaVersion\x1aS\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01B6Z4github.com/adrien19/chronoqueue/api/common/v1;commonb\x06proto3"

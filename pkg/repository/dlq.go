@@ -24,7 +24,7 @@ func (as *storage) requeueFromDLQ(ctx context.Context, dlqName string, messageID
 	// Prepare message for requeue
 	if resetRetries {
 		// Get target queue metadata to reset retry counts
-		targetQueueMeta, err := as.getQueueMetadata(ctx, targetQueueName)
+		targetQueueMeta, err := as.GetQueueMetadata(ctx, targetQueueName)
 		if err != nil {
 			return fmt.Errorf("failed to get target queue metadata: %w", err)
 		}
@@ -52,7 +52,7 @@ func (as *storage) requeueFromDLQ(ctx context.Context, dlqName string, messageID
 		Message:   message,
 	}
 
-	_, err = as.CreateQueueMessage(ctx, requeueRequest)
+	_, err = as.CreateQueueMessage(ctx, requeueRequest, nil)
 	if err != nil {
 		return fmt.Errorf("failed to requeue message to %s: %w", targetQueueName, err)
 	}

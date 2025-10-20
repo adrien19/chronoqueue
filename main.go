@@ -57,7 +57,8 @@ Examples:
 	rootCmd.AddCommand(commands.NewMessageCommand())
 	rootCmd.AddCommand(commands.NewScheduleCommand())
 	rootCmd.AddCommand(commands.NewDLQCommand())
-	rootCmd.AddCommand(commands.NewStartCommand()) // Legacy compatibility
+	rootCmd.AddCommand(commands.NewSchemaCommand()) // Schema registry commands
+	rootCmd.AddCommand(commands.NewStartCommand())  // Legacy compatibility
 
 	// Execute root command
 	if err := rootCmd.ExecuteContext(ctx); err != nil {

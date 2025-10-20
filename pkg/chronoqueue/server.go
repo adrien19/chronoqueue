@@ -5,23 +5,28 @@ import (
 	"fmt"
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	schema_pb "github.com/adrien19/chronoqueue/api/schema/v1"
 	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/adrien19/chronoqueue/pkg/repository"
+	"github.com/adrien19/chronoqueue/pkg/schema"
+	"github.com/adrien19/chronoqueue/pkg/validator"
 )
 
 // ChronoQueueServer implements the gRPC QueueService interface directly
 // using the storage layer without intermediate service abstractions
 type ChronoQueueServer struct {
-	storage repository.Storage
-	logger  *log.Logger
+	storage        repository.Storage
+	logger         *log.Logger
+	schemaRegistry schema.Registry
 	queueservice_pb.UnimplementedQueueServiceServer
 }
 
 // NewChronoQueueServer creates a new gRPC server instance
-func NewChronoQueueServer(storage repository.Storage, logger *log.Logger) *ChronoQueueServer {
+func NewChronoQueueServer(storage repository.Storage, schemaRegistry schema.Registry, logger *log.Logger) *ChronoQueueServer {
 	return &ChronoQueueServer{
-		storage: storage,
-		logger:  logger,
+		storage:        storage,
+		logger:         logger,
+		schemaRegistry: schemaRegistry,
 	}
 }
 
@@ -82,7 +87,15 @@ func (s *ChronoQueueServer) GetQueueState(ctx context.Context, req *queueservice
 func (s *ChronoQueueServer) PostMessage(ctx context.Context, req *queueservice_pb.PostMessageRequest) (*queueservice_pb.PostMessageResponse, error) {
 	s.logger.InfoWithFields("PostMessage called", "queue_name", req.GetQueueName())
 
-	resp, err := s.storage.CreateQueueMessage(ctx, req)
+	queueMeta, err := s.storage.GetQueueMetadata(ctx, req.GetQueueName())
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to get queue metadata", "queue_name", req.GetQueueName(), "error", err)
+		return nil, fmt.Errorf("failed to get queue metadata: %w", err)
+	}
+
+	validator := validator.NewPayloadValidator(queueMeta, s.schemaRegistry)
+
+	resp, err := s.storage.CreateQueueMessage(ctx, req, validator)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to post message", "queue_name", req.GetQueueName(), "error", err)
 		return nil, fmt.Errorf("failed to post message: %w", err)
@@ -389,5 +402,105 @@ func (s *ChronoQueueServer) GetDLQStats(ctx context.Context, req *queueservice_p
 		MessageCount: stats.MessageCount,
 		CreatedAt:    stats.CreatedAt,
 		UpdatedAt:    stats.UpdatedAt,
+	}, nil
+}
+
+// Schema Management Methods
+
+func (s *ChronoQueueServer) RegisterSchema(ctx context.Context, req *queueservice_pb.RegisterSchemaRequest) (*queueservice_pb.RegisterSchemaResponse, error) {
+	s.logger.InfoWithFields("RegisterSchema called", "schema_id", req.GetSchemaId())
+
+	reqSchema := &schema_pb.Schema{
+		SchemaId:    req.GetSchemaId(),
+		Name:        req.GetName(),
+		Content:     req.GetContent(),
+		Description: req.GetDescription(),
+		ContentType: req.GetContentType(),
+		Metadata:    req.GetMetadata(),
+	}
+
+	registryResp, err := s.schemaRegistry.Register(ctx, reqSchema)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to register schema", "schema_id", req.GetSchemaId(), "error", err)
+		return nil, fmt.Errorf("failed to register schema: %w", err)
+	}
+
+	s.logger.InfoWithFields("Schema registered successfully", "schema_id", req.GetSchemaId())
+	resp := &queueservice_pb.RegisterSchemaResponse{
+		SchemaId: registryResp.SchemaID,
+		Version:  registryResp.LatestVersion,
+	}
+	return resp, nil
+}
+
+func (s *ChronoQueueServer) GetSchema(ctx context.Context, req *queueservice_pb.GetSchemaRequest) (*queueservice_pb.GetSchemaResponse, error) {
+	s.logger.InfoWithFields("GetSchema called", "schema_id", req.GetSchemaId())
+
+	resp, err := s.schemaRegistry.Get(ctx, req.SchemaId, req.Version)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to get schema", "schema_id", req.GetSchemaId(), "error", err)
+		return nil, fmt.Errorf("failed to get schema: %w", err)
+	}
+
+	return &queueservice_pb.GetSchemaResponse{
+		Schema: resp,
+	}, nil
+}
+
+func (s *ChronoQueueServer) ListSchemas(ctx context.Context, req *queueservice_pb.ListSchemasRequest) (*queueservice_pb.ListSchemasResponse, error) {
+	s.logger.Info("ListSchemas called")
+
+	resp, err := s.schemaRegistry.List(ctx)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to list schemas", "error", err)
+		return nil, fmt.Errorf("failed to list schemas: %w", err)
+	}
+
+	schemasInfo := make([]*queueservice_pb.SchemaInfo, 0, len(resp))
+	for _, schema := range resp {
+		schemasInfo = append(schemasInfo, &queueservice_pb.SchemaInfo{
+			Name:          schema.Name,
+			SchemaId:      schema.SchemaId,
+			Description:   schema.Description,
+			LatestVersion: schema.Version,
+			IsActive:      schema.IsActive,
+		})
+	}
+
+	return &queueservice_pb.ListSchemasResponse{
+		Schemas: schemasInfo,
+	}, nil
+}
+
+func (s *ChronoQueueServer) DeleteSchema(ctx context.Context, req *queueservice_pb.DeleteSchemaRequest) (*queueservice_pb.DeleteSchemaResponse, error) {
+	s.logger.InfoWithFields("DeleteSchema called", "schema_id", req.GetSchemaId())
+
+	err := s.schemaRegistry.Deactivate(ctx, req.GetSchemaId(), req.GetVersion())
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to delete schema", "schema_id", req.GetSchemaId(), "error", err)
+		return nil, fmt.Errorf("failed to delete schema: %w", err)
+	}
+
+	s.logger.InfoWithFields("Schema deleted successfully", "schema_id", req.GetSchemaId())
+	return &queueservice_pb.DeleteSchemaResponse{
+		Success:         true,
+		VersionsDeleted: req.GetVersion(),
+	}, nil
+}
+
+func (s *ChronoQueueServer) ValidatePayload(ctx context.Context, req *queueservice_pb.ValidatePayloadRequest) (*queueservice_pb.ValidatePayloadResponse, error) {
+	s.logger.InfoWithFields("ValidatePayload called", "schema_id", req.GetSchemaId())
+
+	resp, err := s.schemaRegistry.Validate(ctx, req.GetSchemaId(), req.GetVersion(), []byte(req.GetPayload()))
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to validate payload", "schema_id", req.GetSchemaId(), "error", err)
+		return nil, fmt.Errorf("failed to validate payload: %w", err)
+	}
+
+	return &queueservice_pb.ValidatePayloadResponse{
+		Valid:         resp.Valid,
+		Errors:        resp.Errors,
+		SchemaId:      req.SchemaId,
+		SchemaVersion: req.Version,
 	}, nil
 }

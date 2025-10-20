@@ -131,7 +131,7 @@ func TestRedisBasicMessageOperations(t *testing.T) {
 			},
 		}
 
-		response, err := storage.CreateQueueMessage(ctx, request)
+		response, err := storage.CreateQueueMessage(ctx, request, nil)
 		require.NoError(t, err, "Message creation should succeed")
 		assert.NotNil(t, response, "Response should not be nil")
 		t.Logf("Created message response: %+v", response)
@@ -148,7 +148,7 @@ func TestRedisBasicMessageOperations(t *testing.T) {
 			},
 		}
 
-		response, err := storage.CreateQueueMessage(ctx, request)
+		response, err := storage.CreateQueueMessage(ctx, request, nil)
 		// This should fail according to existing tests
 		if err != nil {
 			t.Logf("Message creation without ID failed as expected: %v", err)
@@ -193,7 +193,7 @@ func TestRedisErrorConditions(t *testing.T) {
 			},
 		}
 
-		_, err := storage.CreateQueueMessage(ctx, request)
+		_, err := storage.CreateQueueMessage(ctx, request, nil)
 		assert.Error(t, err, "Should fail for non-existent queue")
 		t.Logf("Expected error for non-existent queue: %v", err)
 	})
@@ -263,7 +263,7 @@ func TestRedisDataPersistence(t *testing.T) {
 		},
 	}
 
-	_, err = storage.CreateQueueMessage(ctx, postMessageRequest)
+	_, err = storage.CreateQueueMessage(ctx, postMessageRequest, nil)
 	if err != nil {
 		t.Logf("Message creation failed (may be expected): %v", err)
 	} else {
@@ -304,7 +304,7 @@ func BenchmarkRedisOperations(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			request.Message.MessageId = string(rune(i)) // Simple ID generation
-			_, err := storage.CreateQueueMessage(ctx, request)
+			_, err := storage.CreateQueueMessage(ctx, request, nil)
 			if err != nil {
 				b.Logf("Message creation failed: %v", err)
 			}

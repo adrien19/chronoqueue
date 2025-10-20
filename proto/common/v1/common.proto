@@ -10,4 +10,7 @@ option go_package = "github.com/adrien19/chronoqueue/api/common/v1;common";
 message Payload {
     map<string, google.protobuf.Value> metadata = 1;
     google.protobuf.Struct data = 2;
+    string content_type = 3;  // MIME type (e.g., application/json, text/plain)
+    string schema_id = 4;     // Optional schema reference for validation
+    int32 schema_version = 5; // Schema version number
 }

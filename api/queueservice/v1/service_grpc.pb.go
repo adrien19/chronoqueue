@@ -45,6 +45,11 @@ const (
 	QueueService_GetDLQStats_FullMethodName              = "/chronoqueue.api.queueservice.v1.QueueService/GetDLQStats"
 	QueueService_ValidateCalendarSchedule_FullMethodName = "/chronoqueue.api.queueservice.v1.QueueService/ValidateCalendarSchedule"
 	QueueService_PreviewCalendarSchedule_FullMethodName  = "/chronoqueue.api.queueservice.v1.QueueService/PreviewCalendarSchedule"
+	QueueService_RegisterSchema_FullMethodName           = "/chronoqueue.api.queueservice.v1.QueueService/RegisterSchema"
+	QueueService_GetSchema_FullMethodName                = "/chronoqueue.api.queueservice.v1.QueueService/GetSchema"
+	QueueService_ListSchemas_FullMethodName              = "/chronoqueue.api.queueservice.v1.QueueService/ListSchemas"
+	QueueService_DeleteSchema_FullMethodName             = "/chronoqueue.api.queueservice.v1.QueueService/DeleteSchema"
+	QueueService_ValidatePayload_FullMethodName          = "/chronoqueue.api.queueservice.v1.QueueService/ValidatePayload"
 )
 
 // QueueServiceClient is the client API for QueueService service.
@@ -80,6 +85,12 @@ type QueueServiceClient interface {
 	// Calendar Schedule Operations
 	ValidateCalendarSchedule(ctx context.Context, in *ValidateCalendarScheduleRequest, opts ...grpc.CallOption) (*ValidateCalendarScheduleResponse, error)
 	PreviewCalendarSchedule(ctx context.Context, in *PreviewCalendarScheduleRequest, opts ...grpc.CallOption) (*PreviewCalendarScheduleResponse, error)
+	// Schema Management Operations
+	RegisterSchema(ctx context.Context, in *RegisterSchemaRequest, opts ...grpc.CallOption) (*RegisterSchemaResponse, error)
+	GetSchema(ctx context.Context, in *GetSchemaRequest, opts ...grpc.CallOption) (*GetSchemaResponse, error)
+	ListSchemas(ctx context.Context, in *ListSchemasRequest, opts ...grpc.CallOption) (*ListSchemasResponse, error)
+	DeleteSchema(ctx context.Context, in *DeleteSchemaRequest, opts ...grpc.CallOption) (*DeleteSchemaResponse, error)
+	ValidatePayload(ctx context.Context, in *ValidatePayloadRequest, opts ...grpc.CallOption) (*ValidatePayloadResponse, error)
 }
 
 type queueServiceClient struct {
@@ -330,6 +341,56 @@ func (c *queueServiceClient) PreviewCalendarSchedule(ctx context.Context, in *Pr
 	return out, nil
 }
 
+func (c *queueServiceClient) RegisterSchema(ctx context.Context, in *RegisterSchemaRequest, opts ...grpc.CallOption) (*RegisterSchemaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterSchemaResponse)
+	err := c.cc.Invoke(ctx, QueueService_RegisterSchema_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) GetSchema(ctx context.Context, in *GetSchemaRequest, opts ...grpc.CallOption) (*GetSchemaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSchemaResponse)
+	err := c.cc.Invoke(ctx, QueueService_GetSchema_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) ListSchemas(ctx context.Context, in *ListSchemasRequest, opts ...grpc.CallOption) (*ListSchemasResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSchemasResponse)
+	err := c.cc.Invoke(ctx, QueueService_ListSchemas_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) DeleteSchema(ctx context.Context, in *DeleteSchemaRequest, opts ...grpc.CallOption) (*DeleteSchemaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteSchemaResponse)
+	err := c.cc.Invoke(ctx, QueueService_DeleteSchema_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) ValidatePayload(ctx context.Context, in *ValidatePayloadRequest, opts ...grpc.CallOption) (*ValidatePayloadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ValidatePayloadResponse)
+	err := c.cc.Invoke(ctx, QueueService_ValidatePayload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // QueueServiceServer is the server API for QueueService service.
 // All implementations should embed UnimplementedQueueServiceServer
 // for forward compatibility.
@@ -363,6 +424,12 @@ type QueueServiceServer interface {
 	// Calendar Schedule Operations
 	ValidateCalendarSchedule(context.Context, *ValidateCalendarScheduleRequest) (*ValidateCalendarScheduleResponse, error)
 	PreviewCalendarSchedule(context.Context, *PreviewCalendarScheduleRequest) (*PreviewCalendarScheduleResponse, error)
+	// Schema Management Operations
+	RegisterSchema(context.Context, *RegisterSchemaRequest) (*RegisterSchemaResponse, error)
+	GetSchema(context.Context, *GetSchemaRequest) (*GetSchemaResponse, error)
+	ListSchemas(context.Context, *ListSchemasRequest) (*ListSchemasResponse, error)
+	DeleteSchema(context.Context, *DeleteSchemaRequest) (*DeleteSchemaResponse, error)
+	ValidatePayload(context.Context, *ValidatePayloadRequest) (*ValidatePayloadResponse, error)
 }
 
 // UnimplementedQueueServiceServer should be embedded to have
@@ -443,6 +510,21 @@ func (UnimplementedQueueServiceServer) ValidateCalendarSchedule(context.Context,
 }
 func (UnimplementedQueueServiceServer) PreviewCalendarSchedule(context.Context, *PreviewCalendarScheduleRequest) (*PreviewCalendarScheduleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PreviewCalendarSchedule not implemented")
+}
+func (UnimplementedQueueServiceServer) RegisterSchema(context.Context, *RegisterSchemaRequest) (*RegisterSchemaResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterSchema not implemented")
+}
+func (UnimplementedQueueServiceServer) GetSchema(context.Context, *GetSchemaRequest) (*GetSchemaResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSchema not implemented")
+}
+func (UnimplementedQueueServiceServer) ListSchemas(context.Context, *ListSchemasRequest) (*ListSchemasResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSchemas not implemented")
+}
+func (UnimplementedQueueServiceServer) DeleteSchema(context.Context, *DeleteSchemaRequest) (*DeleteSchemaResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteSchema not implemented")
+}
+func (UnimplementedQueueServiceServer) ValidatePayload(context.Context, *ValidatePayloadRequest) (*ValidatePayloadResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ValidatePayload not implemented")
 }
 func (UnimplementedQueueServiceServer) testEmbeddedByValue() {}
 
@@ -896,6 +978,96 @@ func _QueueService_PreviewCalendarSchedule_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _QueueService_RegisterSchema_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterSchemaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).RegisterSchema(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_RegisterSchema_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).RegisterSchema(ctx, req.(*RegisterSchemaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_GetSchema_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSchemaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).GetSchema(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_GetSchema_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).GetSchema(ctx, req.(*GetSchemaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_ListSchemas_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSchemasRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).ListSchemas(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_ListSchemas_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).ListSchemas(ctx, req.(*ListSchemasRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_DeleteSchema_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteSchemaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).DeleteSchema(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_DeleteSchema_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).DeleteSchema(ctx, req.(*DeleteSchemaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_ValidatePayload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ValidatePayloadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).ValidatePayload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_ValidatePayload_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).ValidatePayload(ctx, req.(*ValidatePayloadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // QueueService_ServiceDesc is the grpc.ServiceDesc for QueueService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -998,6 +1170,26 @@ var QueueService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PreviewCalendarSchedule",
 			Handler:    _QueueService_PreviewCalendarSchedule_Handler,
+		},
+		{
+			MethodName: "RegisterSchema",
+			Handler:    _QueueService_RegisterSchema_Handler,
+		},
+		{
+			MethodName: "GetSchema",
+			Handler:    _QueueService_GetSchema_Handler,
+		},
+		{
+			MethodName: "ListSchemas",
+			Handler:    _QueueService_ListSchemas_Handler,
+		},
+		{
+			MethodName: "DeleteSchema",
+			Handler:    _QueueService_DeleteSchema_Handler,
+		},
+		{
+			MethodName: "ValidatePayload",
+			Handler:    _QueueService_ValidatePayload_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

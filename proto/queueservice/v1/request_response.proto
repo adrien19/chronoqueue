@@ -12,6 +12,7 @@ import "google/protobuf/duration.proto";
 import "proto/queue/v1/queue.proto";
 import "proto/message/v1/message.proto";
 import "proto/schedule/v1/schedule.proto";
+import "proto/schema/v1/schema.proto";
 
 // Create queue
 message CreateQueueRequest {
@@ -251,3 +252,77 @@ message ValidationIssue {
     string message = 4;
     string suggestion = 5;
 }
+
+// Schema Management Operations
+
+// Register a new schema or schema version
+message RegisterSchemaRequest {
+    string schema_id = 1;           // Unique schema identifier
+    string name = 2;                // Human-readable schema name
+    string description = 3;         // Schema description
+    string content = 4;             // JSON Schema content
+    string content_type = 5;        // Schema type (default: "json-schema")
+    map<string, string> metadata = 6; // Additional metadata
+}
+message RegisterSchemaResponse {
+    string schema_id = 1;           // Schema identifier
+    int32 version = 2;              // Assigned schema version
+    int64 created_at = 3;           // Creation timestamp
+}
+
+// Get a specific schema version
+message GetSchemaRequest {
+    string schema_id = 1;           // Schema identifier
+    int32 version = 2;              // Schema version (0 = latest)
+}
+message GetSchemaResponse {
+    chronoqueue.api.schema.v1.Schema schema = 1; // Full schema object
+}
+
+// List schemas with optional filtering
+message ListSchemasRequest {
+    string prefix = 1;              // Filter by schema_id prefix
+    int32 limit = 2;                // Maximum number of results (default: 100)
+    bool active_only = 3;           // Only return active schemas
+}
+message ListSchemasResponse {
+    repeated SchemaInfo schemas = 1;
+    int32 total_count = 2;
+}
+
+// Schema information for list responses
+// Note: This is a summary view with aggregated version info, different from schema.v1.Schema
+message SchemaInfo {
+    string schema_id = 1;
+    int32 latest_version = 2;       // Latest version number
+    string name = 3;
+    string description = 4;
+    int64 created_at = 5;
+    int64 updated_at = 6;
+    int32 version_count = 7;        // Total number of versions
+    bool is_active = 8;
+}
+
+// Delete a schema or specific version
+message DeleteSchemaRequest {
+    string schema_id = 1;           // Schema identifier
+    int32 version = 2;              // Schema version (0 = delete all versions)
+}
+message DeleteSchemaResponse {
+    bool success = 1;
+    int32 versions_deleted = 2;     // Number of versions deleted
+}
+
+// Validate a payload against a schema
+message ValidatePayloadRequest {
+    string schema_id = 1;           // Schema identifier
+    int32 version = 2;              // Schema version (0 = latest)
+    string payload = 3;             // JSON payload to validate
+}
+message ValidatePayloadResponse {
+    bool valid = 1;
+    repeated chronoqueue.api.schema.v1.ValidationError errors = 2; // Validation errors from schema.proto
+    string schema_id = 3;
+    int32 schema_version = 4;
+}
+

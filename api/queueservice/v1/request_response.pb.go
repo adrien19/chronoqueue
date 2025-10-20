@@ -12,6 +12,7 @@ import (
 	v11 "github.com/adrien19/chronoqueue/api/message/v1"
 	v1 "github.com/adrien19/chronoqueue/api/queue/v1"
 	v12 "github.com/adrien19/chronoqueue/api/schedule/v1"
+	v13 "github.com/adrien19/chronoqueue/api/schema/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -2465,6 +2466,697 @@ func (x *ValidationIssue) GetSuggestion() string {
 	return ""
 }
 
+// Register a new schema or schema version
+type RegisterSchemaRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SchemaId      string                 `protobuf:"bytes,1,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`                                                           // Unique schema identifier
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                                                                                   // Human-readable schema name
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`                                                                     // Schema description
+	Content       string                 `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`                                                                             // JSON Schema content
+	ContentType   string                 `protobuf:"bytes,5,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`                                                  // Schema type (default: "json-schema")
+	Metadata      map[string]string      `protobuf:"bytes,6,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Additional metadata
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterSchemaRequest) Reset() {
+	*x = RegisterSchemaRequest{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterSchemaRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterSchemaRequest) ProtoMessage() {}
+
+func (x *RegisterSchemaRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterSchemaRequest.ProtoReflect.Descriptor instead.
+func (*RegisterSchemaRequest) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *RegisterSchemaRequest) GetSchemaId() string {
+	if x != nil {
+		return x.SchemaId
+	}
+	return ""
+}
+
+func (x *RegisterSchemaRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *RegisterSchemaRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *RegisterSchemaRequest) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *RegisterSchemaRequest) GetContentType() string {
+	if x != nil {
+		return x.ContentType
+	}
+	return ""
+}
+
+func (x *RegisterSchemaRequest) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+type RegisterSchemaResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SchemaId      string                 `protobuf:"bytes,1,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`     // Schema identifier
+	Version       int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`                      // Assigned schema version
+	CreatedAt     int64                  `protobuf:"varint,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"` // Creation timestamp
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterSchemaResponse) Reset() {
+	*x = RegisterSchemaResponse{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterSchemaResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterSchemaResponse) ProtoMessage() {}
+
+func (x *RegisterSchemaResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterSchemaResponse.ProtoReflect.Descriptor instead.
+func (*RegisterSchemaResponse) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *RegisterSchemaResponse) GetSchemaId() string {
+	if x != nil {
+		return x.SchemaId
+	}
+	return ""
+}
+
+func (x *RegisterSchemaResponse) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *RegisterSchemaResponse) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+// Get a specific schema version
+type GetSchemaRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SchemaId      string                 `protobuf:"bytes,1,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"` // Schema identifier
+	Version       int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`                  // Schema version (0 = latest)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSchemaRequest) Reset() {
+	*x = GetSchemaRequest{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSchemaRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSchemaRequest) ProtoMessage() {}
+
+func (x *GetSchemaRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSchemaRequest.ProtoReflect.Descriptor instead.
+func (*GetSchemaRequest) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *GetSchemaRequest) GetSchemaId() string {
+	if x != nil {
+		return x.SchemaId
+	}
+	return ""
+}
+
+func (x *GetSchemaRequest) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+type GetSchemaResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Schema        *v13.Schema            `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"` // Full schema object
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSchemaResponse) Reset() {
+	*x = GetSchemaResponse{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSchemaResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSchemaResponse) ProtoMessage() {}
+
+func (x *GetSchemaResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSchemaResponse.ProtoReflect.Descriptor instead.
+func (*GetSchemaResponse) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *GetSchemaResponse) GetSchema() *v13.Schema {
+	if x != nil {
+		return x.Schema
+	}
+	return nil
+}
+
+// List schemas with optional filtering
+type ListSchemasRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Prefix        string                 `protobuf:"bytes,1,opt,name=prefix,proto3" json:"prefix,omitempty"`                            // Filter by schema_id prefix
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`                             // Maximum number of results (default: 100)
+	ActiveOnly    bool                   `protobuf:"varint,3,opt,name=active_only,json=activeOnly,proto3" json:"active_only,omitempty"` // Only return active schemas
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSchemasRequest) Reset() {
+	*x = ListSchemasRequest{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSchemasRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSchemasRequest) ProtoMessage() {}
+
+func (x *ListSchemasRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSchemasRequest.ProtoReflect.Descriptor instead.
+func (*ListSchemasRequest) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *ListSchemasRequest) GetPrefix() string {
+	if x != nil {
+		return x.Prefix
+	}
+	return ""
+}
+
+func (x *ListSchemasRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *ListSchemasRequest) GetActiveOnly() bool {
+	if x != nil {
+		return x.ActiveOnly
+	}
+	return false
+}
+
+type ListSchemasResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Schemas       []*SchemaInfo          `protobuf:"bytes,1,rep,name=schemas,proto3" json:"schemas,omitempty"`
+	TotalCount    int32                  `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSchemasResponse) Reset() {
+	*x = ListSchemasResponse{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSchemasResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSchemasResponse) ProtoMessage() {}
+
+func (x *ListSchemasResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSchemasResponse.ProtoReflect.Descriptor instead.
+func (*ListSchemasResponse) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *ListSchemasResponse) GetSchemas() []*SchemaInfo {
+	if x != nil {
+		return x.Schemas
+	}
+	return nil
+}
+
+func (x *ListSchemasResponse) GetTotalCount() int32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+// Schema information for list responses
+// Note: This is a summary view with aggregated version info, different from schema.v1.Schema
+type SchemaInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SchemaId      string                 `protobuf:"bytes,1,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`
+	LatestVersion int32                  `protobuf:"varint,2,opt,name=latest_version,json=latestVersion,proto3" json:"latest_version,omitempty"` // Latest version number
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	CreatedAt     int64                  `protobuf:"varint,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     int64                  `protobuf:"varint,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	VersionCount  int32                  `protobuf:"varint,7,opt,name=version_count,json=versionCount,proto3" json:"version_count,omitempty"` // Total number of versions
+	IsActive      bool                   `protobuf:"varint,8,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SchemaInfo) Reset() {
+	*x = SchemaInfo{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SchemaInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SchemaInfo) ProtoMessage() {}
+
+func (x *SchemaInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SchemaInfo.ProtoReflect.Descriptor instead.
+func (*SchemaInfo) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *SchemaInfo) GetSchemaId() string {
+	if x != nil {
+		return x.SchemaId
+	}
+	return ""
+}
+
+func (x *SchemaInfo) GetLatestVersion() int32 {
+	if x != nil {
+		return x.LatestVersion
+	}
+	return 0
+}
+
+func (x *SchemaInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SchemaInfo) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *SchemaInfo) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *SchemaInfo) GetUpdatedAt() int64 {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return 0
+}
+
+func (x *SchemaInfo) GetVersionCount() int32 {
+	if x != nil {
+		return x.VersionCount
+	}
+	return 0
+}
+
+func (x *SchemaInfo) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+// Delete a schema or specific version
+type DeleteSchemaRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SchemaId      string                 `protobuf:"bytes,1,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"` // Schema identifier
+	Version       int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`                  // Schema version (0 = delete all versions)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteSchemaRequest) Reset() {
+	*x = DeleteSchemaRequest{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteSchemaRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteSchemaRequest) ProtoMessage() {}
+
+func (x *DeleteSchemaRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteSchemaRequest.ProtoReflect.Descriptor instead.
+func (*DeleteSchemaRequest) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *DeleteSchemaRequest) GetSchemaId() string {
+	if x != nil {
+		return x.SchemaId
+	}
+	return ""
+}
+
+func (x *DeleteSchemaRequest) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+type DeleteSchemaResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Success         bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	VersionsDeleted int32                  `protobuf:"varint,2,opt,name=versions_deleted,json=versionsDeleted,proto3" json:"versions_deleted,omitempty"` // Number of versions deleted
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *DeleteSchemaResponse) Reset() {
+	*x = DeleteSchemaResponse{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteSchemaResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteSchemaResponse) ProtoMessage() {}
+
+func (x *DeleteSchemaResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteSchemaResponse.ProtoReflect.Descriptor instead.
+func (*DeleteSchemaResponse) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *DeleteSchemaResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *DeleteSchemaResponse) GetVersionsDeleted() int32 {
+	if x != nil {
+		return x.VersionsDeleted
+	}
+	return 0
+}
+
+// Validate a payload against a schema
+type ValidatePayloadRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SchemaId      string                 `protobuf:"bytes,1,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"` // Schema identifier
+	Version       int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`                  // Schema version (0 = latest)
+	Payload       string                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`                   // JSON payload to validate
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidatePayloadRequest) Reset() {
+	*x = ValidatePayloadRequest{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidatePayloadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidatePayloadRequest) ProtoMessage() {}
+
+func (x *ValidatePayloadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidatePayloadRequest.ProtoReflect.Descriptor instead.
+func (*ValidatePayloadRequest) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *ValidatePayloadRequest) GetSchemaId() string {
+	if x != nil {
+		return x.SchemaId
+	}
+	return ""
+}
+
+func (x *ValidatePayloadRequest) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *ValidatePayloadRequest) GetPayload() string {
+	if x != nil {
+		return x.Payload
+	}
+	return ""
+}
+
+type ValidatePayloadResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Valid         bool                   `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`
+	Errors        []*v13.ValidationError `protobuf:"bytes,2,rep,name=errors,proto3" json:"errors,omitempty"` // Validation errors from schema.proto
+	SchemaId      string                 `protobuf:"bytes,3,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`
+	SchemaVersion int32                  `protobuf:"varint,4,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidatePayloadResponse) Reset() {
+	*x = ValidatePayloadResponse{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidatePayloadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidatePayloadResponse) ProtoMessage() {}
+
+func (x *ValidatePayloadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidatePayloadResponse.ProtoReflect.Descriptor instead.
+func (*ValidatePayloadResponse) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *ValidatePayloadResponse) GetValid() bool {
+	if x != nil {
+		return x.Valid
+	}
+	return false
+}
+
+func (x *ValidatePayloadResponse) GetErrors() []*v13.ValidationError {
+	if x != nil {
+		return x.Errors
+	}
+	return nil
+}
+
+func (x *ValidatePayloadResponse) GetSchemaId() string {
+	if x != nil {
+		return x.SchemaId
+	}
+	return ""
+}
+
+func (x *ValidatePayloadResponse) GetSchemaVersion() int32 {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return 0
+}
+
 type PeekQueueMessagesRequest_PriorityRange struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Min           int64                  `protobuf:"varint,1,opt,name=min,proto3" json:"min,omitempty"`
@@ -2475,7 +3167,7 @@ type PeekQueueMessagesRequest_PriorityRange struct {
 
 func (x *PeekQueueMessagesRequest_PriorityRange) Reset() {
 	*x = PeekQueueMessagesRequest_PriorityRange{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[49]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2487,7 +3179,7 @@ func (x *PeekQueueMessagesRequest_PriorityRange) String() string {
 func (*PeekQueueMessagesRequest_PriorityRange) ProtoMessage() {}
 
 func (x *PeekQueueMessagesRequest_PriorityRange) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[49]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2521,7 +3213,7 @@ var File_proto_queueservice_v1_request_response_proto protoreflect.FileDescripto
 
 const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	",proto/queueservice/v1/request_response.proto\x12\x1fchronoqueue.api.queueservice.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1aproto/queue/v1/queue.proto\x1a\x1eproto/message/v1/message.proto\x1a proto/schedule/v1/schedule.proto\"\x7f\n" +
+	",proto/queueservice/v1/request_response.proto\x12\x1fchronoqueue.api.queueservice.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1aproto/queue/v1/queue.proto\x1a\x1eproto/message/v1/message.proto\x1a proto/schedule/v1/schedule.proto\x1a\x1cproto/schema/v1/schema.proto\"\x7f\n" +
 	"\x12CreateQueueRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12H\n" +
 	"\bmetadata\x18\x02 \x01(\v2'.chronoqueue.api.queue.v1.QueueMetadataH\x00R\bmetadata\x88\x01\x01B\v\n" +
@@ -2682,7 +3374,63 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\amessage\x18\x04 \x01(\tR\amessage\x12\x1e\n" +
 	"\n" +
 	"suggestion\x18\x05 \x01(\tR\n" +
-	"suggestionBBZ@github.com/adrien19/chronoqueue/api/queueservice/v1;queueserviceb\x06proto3"
+	"suggestion\"\xc6\x02\n" +
+	"\x15RegisterSchemaRequest\x12\x1b\n" +
+	"\tschema_id\x18\x01 \x01(\tR\bschemaId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x18\n" +
+	"\acontent\x18\x04 \x01(\tR\acontent\x12!\n" +
+	"\fcontent_type\x18\x05 \x01(\tR\vcontentType\x12`\n" +
+	"\bmetadata\x18\x06 \x03(\v2D.chronoqueue.api.queueservice.v1.RegisterSchemaRequest.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"n\n" +
+	"\x16RegisterSchemaResponse\x12\x1b\n" +
+	"\tschema_id\x18\x01 \x01(\tR\bschemaId\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x03 \x01(\x03R\tcreatedAt\"I\n" +
+	"\x10GetSchemaRequest\x12\x1b\n" +
+	"\tschema_id\x18\x01 \x01(\tR\bschemaId\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\"N\n" +
+	"\x11GetSchemaResponse\x129\n" +
+	"\x06schema\x18\x01 \x01(\v2!.chronoqueue.api.schema.v1.SchemaR\x06schema\"c\n" +
+	"\x12ListSchemasRequest\x12\x16\n" +
+	"\x06prefix\x18\x01 \x01(\tR\x06prefix\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1f\n" +
+	"\vactive_only\x18\x03 \x01(\bR\n" +
+	"activeOnly\"}\n" +
+	"\x13ListSchemasResponse\x12E\n" +
+	"\aschemas\x18\x01 \x03(\v2+.chronoqueue.api.queueservice.v1.SchemaInfoR\aschemas\x12\x1f\n" +
+	"\vtotal_count\x18\x02 \x01(\x05R\n" +
+	"totalCount\"\x86\x02\n" +
+	"\n" +
+	"SchemaInfo\x12\x1b\n" +
+	"\tschema_id\x18\x01 \x01(\tR\bschemaId\x12%\n" +
+	"\x0elatest_version\x18\x02 \x01(\x05R\rlatestVersion\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x05 \x01(\x03R\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\x06 \x01(\x03R\tupdatedAt\x12#\n" +
+	"\rversion_count\x18\a \x01(\x05R\fversionCount\x12\x1b\n" +
+	"\tis_active\x18\b \x01(\bR\bisActive\"L\n" +
+	"\x13DeleteSchemaRequest\x12\x1b\n" +
+	"\tschema_id\x18\x01 \x01(\tR\bschemaId\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\"[\n" +
+	"\x14DeleteSchemaResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12)\n" +
+	"\x10versions_deleted\x18\x02 \x01(\x05R\x0fversionsDeleted\"i\n" +
+	"\x16ValidatePayloadRequest\x12\x1b\n" +
+	"\tschema_id\x18\x01 \x01(\tR\bschemaId\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x18\n" +
+	"\apayload\x18\x03 \x01(\tR\apayload\"\xb7\x01\n" +
+	"\x17ValidatePayloadResponse\x12\x14\n" +
+	"\x05valid\x18\x01 \x01(\bR\x05valid\x12B\n" +
+	"\x06errors\x18\x02 \x03(\v2*.chronoqueue.api.schema.v1.ValidationErrorR\x06errors\x12\x1b\n" +
+	"\tschema_id\x18\x03 \x01(\tR\bschemaId\x12%\n" +
+	"\x0eschema_version\x18\x04 \x01(\x05R\rschemaVersionBBZ@github.com/adrien19/chronoqueue/api/queueservice/v1;queueserviceb\x06proto3"
 
 var (
 	file_proto_queueservice_v1_request_response_proto_rawDescOnce sync.Once
@@ -2696,7 +3444,7 @@ func file_proto_queueservice_v1_request_response_proto_rawDescGZIP() []byte {
 	return file_proto_queueservice_v1_request_response_proto_rawDescData
 }
 
-var file_proto_queueservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
+var file_proto_queueservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 63)
 var file_proto_queueservice_v1_request_response_proto_goTypes = []any{
 	(*CreateQueueRequest)(nil),                     // 0: chronoqueue.api.queueservice.v1.CreateQueueRequest
 	(*CreateQueueResponse)(nil),                    // 1: chronoqueue.api.queueservice.v1.CreateQueueResponse
@@ -2747,49 +3495,67 @@ var file_proto_queueservice_v1_request_response_proto_goTypes = []any{
 	(*PreviewCalendarScheduleRequest)(nil),         // 46: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleRequest
 	(*PreviewCalendarScheduleResponse)(nil),        // 47: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse
 	(*ValidationIssue)(nil),                        // 48: chronoqueue.api.queueservice.v1.ValidationIssue
-	(*PeekQueueMessagesRequest_PriorityRange)(nil), // 49: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
-	nil,                             // 50: chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
-	(*v1.QueueMetadata)(nil),        // 51: chronoqueue.api.queue.v1.QueueMetadata
-	(*v11.Message)(nil),             // 52: chronoqueue.api.message.v1.Message
-	(*durationpb.Duration)(nil),     // 53: google.protobuf.Duration
-	(v11.Message_Metadata_State)(0), // 54: chronoqueue.api.message.v1.Message.Metadata.State
-	(*timestamppb.Timestamp)(nil),   // 55: google.protobuf.Timestamp
-	(*v1.Queue)(nil),                // 56: chronoqueue.api.queue.v1.Queue
-	(*v12.Schedule)(nil),            // 57: chronoqueue.api.schedule.v1.Schedule
-	(*v12.ScheduleHistory)(nil),     // 58: chronoqueue.api.schedule.v1.ScheduleHistory
-	(*v12.CalendarSchedule)(nil),    // 59: chronoqueue.api.schedule.v1.CalendarSchedule
+	(*RegisterSchemaRequest)(nil),                  // 49: chronoqueue.api.queueservice.v1.RegisterSchemaRequest
+	(*RegisterSchemaResponse)(nil),                 // 50: chronoqueue.api.queueservice.v1.RegisterSchemaResponse
+	(*GetSchemaRequest)(nil),                       // 51: chronoqueue.api.queueservice.v1.GetSchemaRequest
+	(*GetSchemaResponse)(nil),                      // 52: chronoqueue.api.queueservice.v1.GetSchemaResponse
+	(*ListSchemasRequest)(nil),                     // 53: chronoqueue.api.queueservice.v1.ListSchemasRequest
+	(*ListSchemasResponse)(nil),                    // 54: chronoqueue.api.queueservice.v1.ListSchemasResponse
+	(*SchemaInfo)(nil),                             // 55: chronoqueue.api.queueservice.v1.SchemaInfo
+	(*DeleteSchemaRequest)(nil),                    // 56: chronoqueue.api.queueservice.v1.DeleteSchemaRequest
+	(*DeleteSchemaResponse)(nil),                   // 57: chronoqueue.api.queueservice.v1.DeleteSchemaResponse
+	(*ValidatePayloadRequest)(nil),                 // 58: chronoqueue.api.queueservice.v1.ValidatePayloadRequest
+	(*ValidatePayloadResponse)(nil),                // 59: chronoqueue.api.queueservice.v1.ValidatePayloadResponse
+	(*PeekQueueMessagesRequest_PriorityRange)(nil), // 60: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
+	nil,                             // 61: chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
+	nil,                             // 62: chronoqueue.api.queueservice.v1.RegisterSchemaRequest.MetadataEntry
+	(*v1.QueueMetadata)(nil),        // 63: chronoqueue.api.queue.v1.QueueMetadata
+	(*v11.Message)(nil),             // 64: chronoqueue.api.message.v1.Message
+	(*durationpb.Duration)(nil),     // 65: google.protobuf.Duration
+	(v11.Message_Metadata_State)(0), // 66: chronoqueue.api.message.v1.Message.Metadata.State
+	(*timestamppb.Timestamp)(nil),   // 67: google.protobuf.Timestamp
+	(*v1.Queue)(nil),                // 68: chronoqueue.api.queue.v1.Queue
+	(*v12.Schedule)(nil),            // 69: chronoqueue.api.schedule.v1.Schedule
+	(*v12.ScheduleHistory)(nil),     // 70: chronoqueue.api.schedule.v1.ScheduleHistory
+	(*v12.CalendarSchedule)(nil),    // 71: chronoqueue.api.schedule.v1.CalendarSchedule
+	(*v13.Schema)(nil),              // 72: chronoqueue.api.schema.v1.Schema
+	(*v13.ValidationError)(nil),     // 73: chronoqueue.api.schema.v1.ValidationError
 }
 var file_proto_queueservice_v1_request_response_proto_depIdxs = []int32{
-	51, // 0: chronoqueue.api.queueservice.v1.CreateQueueRequest.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
-	52, // 1: chronoqueue.api.queueservice.v1.PostMessageRequest.message:type_name -> chronoqueue.api.message.v1.Message
-	53, // 2: chronoqueue.api.queueservice.v1.GetNextMessageRequest.lease_duration:type_name -> google.protobuf.Duration
-	52, // 3: chronoqueue.api.queueservice.v1.GetNextMessageResponse.message:type_name -> chronoqueue.api.message.v1.Message
-	54, // 4: chronoqueue.api.queueservice.v1.AcknowledgeMessageRequest.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	53, // 5: chronoqueue.api.queueservice.v1.RenewMessageLeaseRequest.lease_duration:type_name -> google.protobuf.Duration
-	53, // 6: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.remaining_time:type_name -> google.protobuf.Duration
-	54, // 7: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	49, // 8: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.priority_range:type_name -> chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
-	52, // 9: chronoqueue.api.queueservice.v1.PeekQueueMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
-	50, // 10: chronoqueue.api.queueservice.v1.GetQueueStateResponse.state_counts:type_name -> chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
-	55, // 11: chronoqueue.api.queueservice.v1.GetQueueStateResponse.earliest_deadline:type_name -> google.protobuf.Timestamp
-	53, // 12: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.remaining_time:type_name -> google.protobuf.Duration
-	54, // 13: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	56, // 14: chronoqueue.api.queueservice.v1.ListQueuesResponse.queues:type_name -> chronoqueue.api.queue.v1.Queue
-	57, // 15: chronoqueue.api.queueservice.v1.CreateScheduleRequest.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
-	57, // 16: chronoqueue.api.queueservice.v1.GetScheduleResponse.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
-	57, // 17: chronoqueue.api.queueservice.v1.ListSchedulesResponse.schedules:type_name -> chronoqueue.api.schedule.v1.Schedule
-	58, // 18: chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse.schedule_history:type_name -> chronoqueue.api.schedule.v1.ScheduleHistory
-	52, // 19: chronoqueue.api.queueservice.v1.GetDLQMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
-	59, // 20: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleRequest.calendar_schedule:type_name -> chronoqueue.api.schedule.v1.CalendarSchedule
+	63, // 0: chronoqueue.api.queueservice.v1.CreateQueueRequest.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
+	64, // 1: chronoqueue.api.queueservice.v1.PostMessageRequest.message:type_name -> chronoqueue.api.message.v1.Message
+	65, // 2: chronoqueue.api.queueservice.v1.GetNextMessageRequest.lease_duration:type_name -> google.protobuf.Duration
+	64, // 3: chronoqueue.api.queueservice.v1.GetNextMessageResponse.message:type_name -> chronoqueue.api.message.v1.Message
+	66, // 4: chronoqueue.api.queueservice.v1.AcknowledgeMessageRequest.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
+	65, // 5: chronoqueue.api.queueservice.v1.RenewMessageLeaseRequest.lease_duration:type_name -> google.protobuf.Duration
+	65, // 6: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.remaining_time:type_name -> google.protobuf.Duration
+	66, // 7: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
+	60, // 8: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.priority_range:type_name -> chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
+	64, // 9: chronoqueue.api.queueservice.v1.PeekQueueMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
+	61, // 10: chronoqueue.api.queueservice.v1.GetQueueStateResponse.state_counts:type_name -> chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
+	67, // 11: chronoqueue.api.queueservice.v1.GetQueueStateResponse.earliest_deadline:type_name -> google.protobuf.Timestamp
+	65, // 12: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.remaining_time:type_name -> google.protobuf.Duration
+	66, // 13: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
+	68, // 14: chronoqueue.api.queueservice.v1.ListQueuesResponse.queues:type_name -> chronoqueue.api.queue.v1.Queue
+	69, // 15: chronoqueue.api.queueservice.v1.CreateScheduleRequest.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
+	69, // 16: chronoqueue.api.queueservice.v1.GetScheduleResponse.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
+	69, // 17: chronoqueue.api.queueservice.v1.ListSchedulesResponse.schedules:type_name -> chronoqueue.api.schedule.v1.Schedule
+	70, // 18: chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse.schedule_history:type_name -> chronoqueue.api.schedule.v1.ScheduleHistory
+	64, // 19: chronoqueue.api.queueservice.v1.GetDLQMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
+	71, // 20: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleRequest.calendar_schedule:type_name -> chronoqueue.api.schedule.v1.CalendarSchedule
 	48, // 21: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleResponse.validation_issues:type_name -> chronoqueue.api.queueservice.v1.ValidationIssue
-	59, // 22: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleRequest.calendar_schedule:type_name -> chronoqueue.api.schedule.v1.CalendarSchedule
-	55, // 23: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse.execution_times:type_name -> google.protobuf.Timestamp
-	55, // 24: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse.preview_start:type_name -> google.protobuf.Timestamp
-	25, // [25:25] is the sub-list for method output_type
-	25, // [25:25] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	71, // 22: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleRequest.calendar_schedule:type_name -> chronoqueue.api.schedule.v1.CalendarSchedule
+	67, // 23: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse.execution_times:type_name -> google.protobuf.Timestamp
+	67, // 24: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse.preview_start:type_name -> google.protobuf.Timestamp
+	62, // 25: chronoqueue.api.queueservice.v1.RegisterSchemaRequest.metadata:type_name -> chronoqueue.api.queueservice.v1.RegisterSchemaRequest.MetadataEntry
+	72, // 26: chronoqueue.api.queueservice.v1.GetSchemaResponse.schema:type_name -> chronoqueue.api.schema.v1.Schema
+	55, // 27: chronoqueue.api.queueservice.v1.ListSchemasResponse.schemas:type_name -> chronoqueue.api.queueservice.v1.SchemaInfo
+	73, // 28: chronoqueue.api.queueservice.v1.ValidatePayloadResponse.errors:type_name -> chronoqueue.api.schema.v1.ValidationError
+	29, // [29:29] is the sub-list for method output_type
+	29, // [29:29] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_proto_queueservice_v1_request_response_proto_init() }
@@ -2805,7 +3571,7 @@ func file_proto_queueservice_v1_request_response_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_queueservice_v1_request_response_proto_rawDesc), len(file_proto_queueservice_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   51,
+			NumMessages:   63,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -79,6 +79,10 @@ type QueueMetadata struct {
 	InvisibilityDuration *durationpb.Duration   `protobuf:"bytes,5,opt,name=invisibility_duration,json=invisibilityDuration,proto3" json:"invisibility_duration,omitempty"`
 	DeadLetterQueueName  string                 `protobuf:"bytes,6,opt,name=dead_letter_queue_name,json=deadLetterQueueName,proto3" json:"dead_letter_queue_name,omitempty"`
 	AutoCreateDlq        bool                   `protobuf:"varint,7,opt,name=auto_create_dlq,json=autoCreateDlq,proto3" json:"auto_create_dlq,omitempty"`
+	SchemaId             string                 `protobuf:"bytes,8,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`                                     // Default schema for queue messages
+	SchemaRequired       bool                   `protobuf:"varint,9,opt,name=schema_required,json=schemaRequired,proto3" json:"schema_required,omitempty"`                  // Require schema validation for messages
+	MaxPayloadSize       int32                  `protobuf:"varint,10,opt,name=max_payload_size,json=maxPayloadSize,proto3" json:"max_payload_size,omitempty"`               // Override default max payload size (bytes)
+	AllowedContentTypes  []string               `protobuf:"bytes,11,rep,name=allowed_content_types,json=allowedContentTypes,proto3" json:"allowed_content_types,omitempty"` // Allowed MIME types (empty = all allowed)
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -162,6 +166,34 @@ func (x *QueueMetadata) GetAutoCreateDlq() bool {
 	return false
 }
 
+func (x *QueueMetadata) GetSchemaId() string {
+	if x != nil {
+		return x.SchemaId
+	}
+	return ""
+}
+
+func (x *QueueMetadata) GetSchemaRequired() bool {
+	if x != nil {
+		return x.SchemaRequired
+	}
+	return false
+}
+
+func (x *QueueMetadata) GetMaxPayloadSize() int32 {
+	if x != nil {
+		return x.MaxPayloadSize
+	}
+	return 0
+}
+
+func (x *QueueMetadata) GetAllowedContentTypes() []string {
+	if x != nil {
+		return x.AllowedContentTypes
+	}
+	return nil
+}
+
 type Queue struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -218,7 +250,7 @@ var File_proto_queue_v1_queue_proto protoreflect.FileDescriptor
 
 const file_proto_queue_v1_queue_proto_rawDesc = "" +
 	"\n" +
-	"\x1aproto/queue/v1/queue.proto\x12\x18chronoqueue.api.queue.v1\x1a\x1egoogle/protobuf/duration.proto\"\x92\x03\n" +
+	"\x1aproto/queue/v1/queue.proto\x12\x18chronoqueue.api.queue.v1\x1a\x1egoogle/protobuf/duration.proto\"\xb6\x04\n" +
 	"\rQueueMetadata\x127\n" +
 	"\x04type\x18\x01 \x01(\x0e2#.chronoqueue.api.queue.v1.QueueTypeR\x04type\x120\n" +
 	"\x14default_max_attempts\x18\x02 \x01(\x05R\x12defaultMaxAttempts\x12@\n" +
@@ -226,7 +258,12 @@ const file_proto_queue_v1_queue_proto_rawDesc = "" +
 	"\x0fexclusivity_key\x18\x04 \x01(\tR\x0eexclusivityKey\x12N\n" +
 	"\x15invisibility_duration\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x14invisibilityDuration\x123\n" +
 	"\x16dead_letter_queue_name\x18\x06 \x01(\tR\x13deadLetterQueueName\x12&\n" +
-	"\x0fauto_create_dlq\x18\a \x01(\bR\rautoCreateDlq\"`\n" +
+	"\x0fauto_create_dlq\x18\a \x01(\bR\rautoCreateDlq\x12\x1b\n" +
+	"\tschema_id\x18\b \x01(\tR\bschemaId\x12'\n" +
+	"\x0fschema_required\x18\t \x01(\bR\x0eschemaRequired\x12(\n" +
+	"\x10max_payload_size\x18\n" +
+	" \x01(\x05R\x0emaxPayloadSize\x122\n" +
+	"\x15allowed_content_types\x18\v \x03(\tR\x13allowedContentTypes\"`\n" +
 	"\x05Queue\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12C\n" +
 	"\bmetadata\x18\x02 \x01(\v2'.chronoqueue.api.queue.v1.QueueMetadataR\bmetadata*&\n" +

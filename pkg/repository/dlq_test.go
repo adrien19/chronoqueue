@@ -70,7 +70,7 @@ func TestDLQImplementation(t *testing.T) {
 				},
 			},
 		}
-		_, err = storage.CreateQueueMessage(ctx, messageReq)
+		_, err = storage.CreateQueueMessage(ctx, messageReq, nil)
 		require.NoError(t, err)
 
 		// Wait for message to become PENDING
@@ -162,7 +162,7 @@ func TestDLQImplementation(t *testing.T) {
 				},
 			},
 		}
-		_, err = storage.CreateQueueMessage(ctx, messageReq)
+		_, err = storage.CreateQueueMessage(ctx, messageReq, nil)
 		require.NoError(t, err)
 
 		// Wait and process to move to DLQ
@@ -229,7 +229,7 @@ func TestDLQImplementation(t *testing.T) {
 				},
 			},
 		}
-		_, err = storage.CreateQueueMessage(ctx, messageReq)
+		_, err = storage.CreateQueueMessage(ctx, messageReq, nil)
 		require.NoError(t, err)
 
 		// Process multiple times (should keep retrying)
@@ -295,7 +295,7 @@ func TestDLQImplementation(t *testing.T) {
 				},
 			},
 		}
-		_, err = storage.CreateQueueMessage(ctx, messageReq)
+		_, err = storage.CreateQueueMessage(ctx, messageReq, nil)
 		require.NoError(t, err)
 
 		// Process to DLQ
@@ -373,7 +373,7 @@ func TestDLQImplementation(t *testing.T) {
 				},
 			},
 		}
-		_, err = storage.CreateQueueMessage(ctx, messageReq)
+		_, err = storage.CreateQueueMessage(ctx, messageReq, nil)
 		require.NoError(t, err)
 
 		// Process to exhaustion

@@ -166,7 +166,7 @@ func (as *storage) updateMessageCalendarSchedule(ctx context.Context, key string
 			Metadata:  &runMessageInstanceMetadata,
 		},
 		QueueName: queueID,
-	})
+	}, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create queue message for schedule %s: %w", scheduleID, err)
 	}

@@ -172,4 +172,37 @@ service QueueService {
             body: "*"
         };
     }
+
+    // Schema Management Operations
+    rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse) {
+        option (google.api.http) = {
+            post: "/v1/schemas"
+            body: "*"
+        };
+    }
+
+    rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse) {
+        option (google.api.http) = {
+            get: "/v1/schemas/{schema_id=*}/versions/{version=*}"
+        };
+    }
+
+    rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse) {
+        option (google.api.http) = {
+            get: "/v1/schemas"
+        };
+    }
+
+    rpc DeleteSchema(DeleteSchemaRequest) returns (DeleteSchemaResponse) {
+        option (google.api.http) = {
+            delete: "/v1/schemas/{schema_id=*}/versions/{version=*}"
+        };
+    }
+
+    rpc ValidatePayload(ValidatePayloadRequest) returns (ValidatePayloadResponse) {
+        option (google.api.http) = {
+            post: "/v1/schemas/{schema_id=*}/versions/{version=*}:validate"
+            body: "*"
+        };
+    }
 }

@@ -1,0 +1,56 @@
+// ./proto/schema/v1/schema.proto
+
+syntax = "proto3";
+
+package chronoqueue.api.schema.v1;
+
+option go_package = "github.com/adrien19/chronoqueue/api/schema/v1;schema";
+
+// Schema defines a message validation schema
+message Schema {
+    string schema_id = 1;           // Unique schema identifier
+    int32 version = 2;              // Schema version number
+    string name = 3;                // Human-readable schema name
+    string description = 4;         // Schema description
+    string content = 5;             // JSON Schema content
+    string content_type = 6;        // Schema type (default: json-schema)
+    int64 created_at = 7;           // Creation timestamp (Unix milliseconds)
+    int64 updated_at = 8;           // Last update timestamp (Unix milliseconds)
+    bool is_active = 9;             // Whether this schema version is active
+    map<string, string> metadata = 10; // Additional metadata
+}
+
+// ValidationResult contains the outcome of validation
+message ValidationResult {
+    bool valid = 1;                 // Whether validation passed
+    repeated ValidationError errors = 2; // List of validation errors
+    int64 validated_at = 3;         // Validation timestamp
+    string schema_id = 4;           // Schema used for validation
+    int32 schema_version = 5;       // Schema version used
+}
+
+// ValidationError provides detailed error information
+message ValidationError {
+    string field = 1;               // Field path (e.g., "payload.data.orderId")
+    string error_code = 2;          // Error code (e.g., REQUIRED_FIELD_MISSING)
+    string message = 3;             // Human-readable error message
+    map<string, string> details = 4; // Additional error details
+}
+
+// ErrorCode enum for standardized validation errors
+enum ErrorCode {
+    UNKNOWN_ERROR = 0;
+    REQUIRED_FIELD_MISSING = 1;
+    INVALID_TYPE = 2;
+    INVALID_FORMAT = 3;
+    PATTERN_MISMATCH = 4;
+    VALUE_OUT_OF_RANGE = 5;
+    ARRAY_LENGTH_INVALID = 6;
+    OBJECT_PROPERTIES_INVALID = 7;
+    ADDITIONAL_PROPERTIES_NOT_ALLOWED = 8;
+    ENUM_VALUE_INVALID = 9;
+    SCHEMA_NOT_FOUND = 10;
+    CONTENT_TYPE_INVALID = 11;
+    PAYLOAD_SIZE_EXCEEDED = 12;
+    SCHEMA_VALIDATION_FAILED = 13;
+}

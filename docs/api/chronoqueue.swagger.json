@@ -895,6 +895,212 @@
           "QueueService"
         ]
       }
+    },
+    "/v1/schemas": {
+      "get": {
+        "operationId": "QueueService_ListSchemas",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListSchemasResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "prefix",
+            "description": "Filter by schema_id prefix",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "limit",
+            "description": "Maximum number of results (default: 100)",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "activeOnly",
+            "description": "Only return active schemas",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      },
+      "post": {
+        "summary": "Schema Management Operations",
+        "operationId": "QueueService_RegisterSchema",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RegisterSchemaResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1RegisterSchemaRequest"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schemas/{schemaId}/versions/{version}": {
+      "get": {
+        "operationId": "QueueService_GetSchema",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetSchemaResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "schemaId",
+            "description": "Schema identifier",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "version",
+            "description": "Schema version (0 = latest)",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "format": "int32",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      },
+      "delete": {
+        "operationId": "QueueService_DeleteSchema",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteSchemaResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "schemaId",
+            "description": "Schema identifier",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "version",
+            "description": "Schema version (0 = delete all versions)",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "format": "int32",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schemas/{schemaId}/versions/{version}:validate": {
+      "post": {
+        "operationId": "QueueService_ValidatePayload",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ValidatePayloadResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "schemaId",
+            "description": "Schema identifier",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "version",
+            "description": "Schema version (0 = latest)",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "format": "int32",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceValidatePayloadBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
     }
   },
   "definitions": {
@@ -1003,6 +1209,16 @@
         }
       },
       "title": "send a heartbeat to the queue"
+    },
+    "QueueServiceValidatePayloadBody": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "string",
+          "title": "JSON payload to validate"
+        }
+      },
+      "title": "Validate a payload against a schema"
     },
     "protobufAny": {
       "type": "object",
@@ -1292,6 +1508,19 @@
         }
       }
     },
+    "v1DeleteSchemaResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "versionsDeleted": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Number of versions deleted"
+        }
+      }
+    },
     "v1EasterOffset": {
       "type": "object",
       "properties": {
@@ -1389,6 +1618,15 @@
         }
       }
     },
+    "v1GetSchemaResponse": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "$ref": "#/definitions/v1Schema",
+          "title": "Full schema object"
+        }
+      }
+    },
     "v1Holiday": {
       "type": "object",
       "properties": {
@@ -1443,6 +1681,22 @@
             "type": "object",
             "$ref": "#/definitions/v1Schedule"
           }
+        }
+      }
+    },
+    "v1ListSchemasResponse": {
+      "type": "object",
+      "properties": {
+        "schemas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1SchemaInfo"
+          }
+        },
+        "totalCount": {
+          "type": "integer",
+          "format": "int32"
         }
       }
     },
@@ -1553,6 +1807,19 @@
         },
         "data": {
           "type": "object"
+        },
+        "contentType": {
+          "type": "string",
+          "title": "MIME type (e.g., application/json, text/plain)"
+        },
+        "schemaId": {
+          "type": "string",
+          "title": "Optional schema reference for validation"
+        },
+        "schemaVersion": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Schema version number"
         }
       }
     },
@@ -1656,6 +1923,26 @@
         },
         "autoCreateDlq": {
           "type": "boolean"
+        },
+        "schemaId": {
+          "type": "string",
+          "title": "Default schema for queue messages"
+        },
+        "schemaRequired": {
+          "type": "boolean",
+          "title": "Require schema validation for messages"
+        },
+        "maxPayloadSize": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Override default max payload size (bytes)"
+        },
+        "allowedContentTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed MIME types (empty = all allowed)"
         }
       }
     },
@@ -1666,6 +1953,58 @@
         "EXCLUSIVE"
       ],
       "default": "SIMPLE"
+    },
+    "v1RegisterSchemaRequest": {
+      "type": "object",
+      "properties": {
+        "schemaId": {
+          "type": "string",
+          "title": "Unique schema identifier"
+        },
+        "name": {
+          "type": "string",
+          "title": "Human-readable schema name"
+        },
+        "description": {
+          "type": "string",
+          "title": "Schema description"
+        },
+        "content": {
+          "type": "string",
+          "title": "JSON Schema content"
+        },
+        "contentType": {
+          "type": "string",
+          "title": "Schema type (default: \"json-schema\")"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Additional metadata"
+        }
+      },
+      "title": "Register a new schema or schema version"
+    },
+    "v1RegisterSchemaResponse": {
+      "type": "object",
+      "properties": {
+        "schemaId": {
+          "type": "string",
+          "title": "Schema identifier"
+        },
+        "version": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Assigned schema version"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "int64",
+          "title": "Creation timestamp"
+        }
+      }
     },
     "v1RelativeDate": {
       "type": "object",
@@ -1843,6 +2182,94 @@
       ],
       "default": "SCHEDULED"
     },
+    "v1Schema": {
+      "type": "object",
+      "properties": {
+        "schemaId": {
+          "type": "string",
+          "title": "Unique schema identifier"
+        },
+        "version": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Schema version number"
+        },
+        "name": {
+          "type": "string",
+          "title": "Human-readable schema name"
+        },
+        "description": {
+          "type": "string",
+          "title": "Schema description"
+        },
+        "content": {
+          "type": "string",
+          "title": "JSON Schema content"
+        },
+        "contentType": {
+          "type": "string",
+          "title": "Schema type (default: json-schema)"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "int64",
+          "title": "Creation timestamp (Unix milliseconds)"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "int64",
+          "title": "Last update timestamp (Unix milliseconds)"
+        },
+        "isActive": {
+          "type": "boolean",
+          "title": "Whether this schema version is active"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Additional metadata"
+        }
+      },
+      "title": "Schema defines a message validation schema"
+    },
+    "v1SchemaInfo": {
+      "type": "object",
+      "properties": {
+        "schemaId": {
+          "type": "string"
+        },
+        "latestVersion": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Latest version number"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "int64"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "int64"
+        },
+        "versionCount": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Total number of versions"
+        },
+        "isActive": {
+          "type": "boolean"
+        }
+      },
+      "title": "Schema information for list responses\nNote: This is a summary view with aggregated version info, different from schema.v1.Schema"
+    },
     "v1SendMessageHeartBeatResponse": {
       "type": "object",
       "properties": {
@@ -1900,6 +2327,54 @@
           }
         }
       }
+    },
+    "v1ValidatePayloadResponse": {
+      "type": "object",
+      "properties": {
+        "valid": {
+          "type": "boolean"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ValidationError"
+          },
+          "title": "Validation errors from schema.proto"
+        },
+        "schemaId": {
+          "type": "string"
+        },
+        "schemaVersion": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1ValidationError": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string",
+          "title": "Field path (e.g., \"payload.data.orderId\")"
+        },
+        "errorCode": {
+          "type": "string",
+          "title": "Error code (e.g., REQUIRED_FIELD_MISSING)"
+        },
+        "message": {
+          "type": "string",
+          "title": "Human-readable error message"
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Additional error details"
+        }
+      },
+      "title": "ValidationError provides detailed error information"
     },
     "v1ValidationIssue": {
       "type": "object",

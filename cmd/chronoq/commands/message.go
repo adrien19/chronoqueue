@@ -3,6 +3,8 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/adrien19/chronoqueue/client"
 	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
@@ -31,13 +33,47 @@ func NewMessageCommand() *cobra.Command {
 // newMessagePostCommand creates the message post subcommand
 func newMessagePostCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "post <queue-name> <message-data>",
+		Use:   "post <queue-name> [message-data]",
 		Short: "Post a message to a queue",
-		Long:  `Post a new message to the specified queue.`,
-		Args:  cobra.ExactArgs(2),
+		Long: `Post a new message to the specified queue.
+
+Message data can be provided in three ways:
+  1. Inline JSON: chronoq message post orders '{"key":"value"}'
+  2. From file:   chronoq message post orders --file /path/to/data.json
+  3. From stdin:  cat data.json | chronoq message post orders -
+  
+The --file flag takes precedence if both inline and file are provided.`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			queueName := args[0]
-			messageData := args[1]
+
+			// Get message data from --file flag, inline argument, or stdin
+			filePath, _ := cmd.Flags().GetString("file")
+			var messageData string
+			var err error
+
+			if filePath != "" {
+				// Read from file
+				data, err := os.ReadFile(filePath)
+				if err != nil {
+					return fmt.Errorf("failed to read file %s: %w", filePath, err)
+				}
+				messageData = string(data)
+			} else if len(args) == 2 {
+				// Use inline argument
+				messageData = args[1]
+
+				// Support stdin with "-" convention
+				if messageData == "-" {
+					data, err := io.ReadAll(os.Stdin)
+					if err != nil {
+						return fmt.Errorf("failed to read from stdin: %w", err)
+					}
+					messageData = string(data)
+				}
+			} else {
+				return fmt.Errorf("message data required: provide inline JSON, use --file flag, or pipe to stdin with '-'")
+			}
 
 			messageId, err := cmd.Flags().GetString("id")
 			if err != nil {
@@ -60,6 +96,18 @@ func newMessagePostCommand() *cobra.Command {
 				return err
 			}
 			metadataStr, err := cmd.Flags().GetString("metadata")
+			if err != nil {
+				return err
+			}
+			contentType, err := cmd.Flags().GetString("content-type")
+			if err != nil {
+				return err
+			}
+			schemaID, err := cmd.Flags().GetString("schema-id")
+			if err != nil {
+				return err
+			}
+			schemaVersion, err := cmd.Flags().GetInt32("schema-version")
 			if err != nil {
 				return err
 			}
@@ -105,8 +153,11 @@ func newMessagePostCommand() *cobra.Command {
 
 			messageOpts := client.MessageOptions{
 				Payload: client.Payload{
-					Data:     dataStruct,
-					Metadata: metadataMap,
+					Data:          dataStruct,
+					Metadata:      metadataMap,
+					ContentType:   contentType,
+					SchemaID:      schemaID,
+					SchemaVersion: schemaVersion,
 				},
 				InvisibilityDuration: invisibilityDuration,
 				LeaseDuration:        leaseDuration,
@@ -126,11 +177,15 @@ func newMessagePostCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringP("id", "i", "", "Message ID (auto-generated if not provided)")
+	cmd.Flags().StringP("file", "f", "", "Path to file containing message data (JSON)")
 	cmd.Flags().StringP("lease-duration", "l", "", "Message lease duration")
 	cmd.Flags().StringP("invisibility-duration", "v", "", "Message invisibility duration")
 	cmd.Flags().Int32P("max-attempts", "a", -1, "Maximum message processing attempts")
 	cmd.Flags().Int64P("priority", "p", 0, "Message priority")
 	cmd.Flags().StringP("metadata", "m", "", "Message metadata as JSON")
+	cmd.Flags().StringP("content-type", "t", "application/json", "Content type (MIME type)")
+	cmd.Flags().StringP("schema-id", "s", "", "Schema ID for validation")
+	cmd.Flags().Int32("schema-version", 0, "Schema version")
 
 	return cmd
 }

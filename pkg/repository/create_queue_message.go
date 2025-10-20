@@ -11,6 +11,7 @@ import (
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption"
 	"github.com/adrien19/chronoqueue/internal/util"
+	"github.com/adrien19/chronoqueue/pkg/validator"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -70,7 +71,7 @@ func (as *storage) encryptMetadataPayload(metadata *message_pb.Message_Metadata)
 	return nil
 }
 
-func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice_pb.PostMessageRequest) (*queueservice_pb.PostMessageResponse, error) {
+func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice_pb.PostMessageRequest, validator validator.Validator) (*queueservice_pb.PostMessageResponse, error) {
 	queueName := request.GetQueueName()
 	message := request.GetMessage()
 
@@ -81,28 +82,25 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	exists, err := as.checkQueueExistence(ctx, queueName)
-	if err != nil {
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while checking queue existence")
-		return nil, chronoErr.GRPCStatus()
-	}
-	if !exists {
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Message's queue does not exist")
-		return nil, chronoErr.GRPCStatus()
-	}
+	if validator != nil {
+		// NEW: Comprehensive payload validation with schema registry support
+		validationResult := validator.Validate(ctx, message)
 
-	// // avoid double encryption for schedule messages.
-	// if message.Metadata.GetCronSchedule() == "" {
-	// 	err = as.encryptMetadataPayload(message.Metadata)
-	// 	if err != nil {
-	// 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while encrypting message payload")
-	// 		return nil, chronoErr.GRPCStatus()
-	// 	}
-	// }
+		if !validationResult.Valid {
+			// Build detailed error message
+			errorDetails := "Message validation failed:"
+			for _, valErr := range validationResult.Errors {
+				errorDetails += fmt.Sprintf("\n  - %s: %s", valErr.Field, valErr.Message)
+			}
+			err := errors.New(errorDetails)
+			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Message validation failed")
+			return nil, chronoErr.GRPCStatus()
+		}
+	}
 
 	// Set the message invisibility expiry
-	invisibity_expiry := time.Now().Add(message.Metadata.InvisibilityDuration.AsDuration())
-	message.Metadata.InvisibilityExpiry = invisibity_expiry.UnixMilli()
+	invisibilityExpiry := time.Now().Add(message.Metadata.InvisibilityDuration.AsDuration())
+	message.Metadata.InvisibilityExpiry = invisibilityExpiry.UnixMilli()
 	message.Metadata.State = message_pb.Message_Metadata_INVISIBLE
 
 	priority := message.Metadata.GetPriority()
@@ -125,7 +123,7 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice
 
 	// Add the message to the queue
 	prefixedQueueName := "queue:" + queueName
-	_, err = txPipeline.ZAdd(ctx, prefixedQueueName, redis.Z{
+	_, err := txPipeline.ZAdd(ctx, prefixedQueueName, redis.Z{
 		Score:  float64(priorityScore),
 		Member: message.GetMessageId(),
 	}).Result()

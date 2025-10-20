@@ -43,7 +43,7 @@ func (as *storage) getNextPendingMessage(ctx context.Context, queueName string, 
 }
 
 func (as *storage) GetQueueMessage(ctx context.Context, request *queueservice_pb.GetNextMessageRequest) (*queueservice_pb.GetNextMessageResponse, error) {
-	queueMeta, err := as.getQueueMetadata(ctx, request.GetQueueName())
+	queueMeta, err := as.GetQueueMetadata(ctx, request.GetQueueName())
 	if err != nil {
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Failed to get queue's metadata.").GRPCStatus()
 	}

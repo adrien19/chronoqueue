@@ -35,4 +35,11 @@ type Service interface {
 	DeleteFromDLQ(ctx context.Context, request *queueservice_pb.DeleteFromDLQRequest) (*queueservice_pb.DeleteFromDLQResponse, error)
 	PurgeDLQ(ctx context.Context, request *queueservice_pb.PurgeDLQRequest) (*queueservice_pb.PurgeDLQResponse, error)
 	GetDLQStats(ctx context.Context, request *queueservice_pb.GetDLQStatsRequest) (*queueservice_pb.GetDLQStatsResponse, error)
+
+	// Schema Management Operations
+	RegisterSchema(ctx context.Context, request *queueservice_pb.RegisterSchemaRequest) (*queueservice_pb.RegisterSchemaResponse, error)
+	GetSchema(ctx context.Context, request *queueservice_pb.GetSchemaRequest) (*queueservice_pb.GetSchemaResponse, error)
+	ListSchemas(ctx context.Context, request *queueservice_pb.ListSchemasRequest) (*queueservice_pb.ListSchemasResponse, error)
+	DeleteSchema(ctx context.Context, request *queueservice_pb.DeleteSchemaRequest) (*queueservice_pb.DeleteSchemaResponse, error)
+	ValidatePayload(ctx context.Context, request *queueservice_pb.ValidatePayloadRequest) (*queueservice_pb.ValidatePayloadResponse, error)
 }
