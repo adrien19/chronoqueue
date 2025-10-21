@@ -8,17 +8,19 @@ WORKDIR /go/src/chronoqueuesvr
 
 # Copy the server code
 COPY api api
-COPY cmd/server cmd/server
+COPY cmd/chronoq cmd/chronoq
+COPY client client
 # COPY client client
 COPY internal internal
 COPY pkg pkg
 
+COPY main.go ./
 COPY go.mod go.sum ./
 RUN go mod download
 # && go mod verify
 
 # building server binary
-RUN go build -o chronoqueue ./cmd/server/main.go
+RUN go build -o chronoqueue main.go
 
 ## Using the multi-stage image to just run the binary
 FROM alpine:latest as final
@@ -32,7 +34,7 @@ RUN mkdir /secrets
 COPY --from=base /go/src/chronoqueuesvr/chronoqueue .
 
 # just an indication that this port will be exposed by this container
-EXPOSE 9000 9001
+EXPOSE 9000 8080
 
 # command to run at the immediate start of the container
-ENTRYPOINT ["./chronoqueue"]
+ENTRYPOINT ["./chronoqueue", "server", "--production"]

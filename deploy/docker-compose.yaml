@@ -12,6 +12,11 @@ services:
       - HOST=chronoqueue_container
       - AUTH_SERVICE_HOST=authentication
       - REDIS_HOST=host.docker.internal
+      - REDIS_ADDR=host.docker.internal:6379
+      - REDIS_PASSWORD=
+      - REDIS_USERNAME=
+      - REDIS_DB=0
+      - REDIS_TLS_ENABLED=false
       - SERVER_CERT_PATH=/secrets/server.crt
       - SERVER_KEY_PATH=/secrets/server.key
       - CA_CERT_PATH=/secrets/ca.crt

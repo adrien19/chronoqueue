@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -163,17 +164,32 @@ func (s *Server) initializeLogger() (*log.Logger, error) {
 
 // initializeRedis creates and tests the Redis connection
 func (s *Server) initializeRedis(ctx context.Context) (*redis.Client, error) {
-	client := redis.NewClient(&redis.Options{
-		Addr: s.config.RedisAddr,
-	})
+	opts := &redis.Options{
+		Addr:     s.config.RedisAddr,
+		Password: s.config.RedisPassword,
+		Username: s.config.RedisUsername,
+		DB:       s.config.RedisDB,
+	}
 
-	// Test connection
+	// Configure TLS if enabled
+	if s.config.RedisTLS {
+		opts.TLSConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		}
+	}
+
+	client := redis.NewClient(opts)
+
+	// Test connection with timeout
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
 	_, err := client.Ping(ctx).Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Redis at %s: %w", s.config.RedisAddr, err)
 	}
 
-	s.logger.InfoWithFields("Connected to Redis", "addr", s.config.RedisAddr)
+	s.logger.InfoWithFields("Connected to Redis", "addr", s.config.RedisAddr, "db", s.config.RedisDB)
 	return client, nil
 }
 

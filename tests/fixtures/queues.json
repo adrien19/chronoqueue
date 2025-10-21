@@ -1,0 +1,55 @@
+{
+    "simple_queue": {
+        "name": "orders-queue",
+        "metadata": {
+            "type": "SIMPLE",
+            "default_max_attempts": 3,
+            "lease_duration": "30s",
+            "invisibility_duration": "5m",
+            "auto_create_dlq": true
+        }
+    },
+    "exclusive_queue": {
+        "name": "notifications-queue",
+        "metadata": {
+            "type": "EXCLUSIVE",
+            "default_max_attempts": 5,
+            "exclusivity_key": "notification_key",
+            "lease_duration": "60s",
+            "invisibility_duration": "10m",
+            "auto_create_dlq": true
+        }
+    },
+    "priority_queue": {
+        "name": "alerts-queue",
+        "metadata": {
+            "type": "SIMPLE",
+            "default_max_attempts": 3,
+            "lease_duration": "30s",
+            "invisibility_duration": "5m",
+            "auto_create_dlq": true,
+            "max_priority": 100
+        }
+    },
+    "schema_enforced_queue": {
+        "name": "events-queue",
+        "metadata": {
+            "type": "SIMPLE",
+            "schema_id": "event-schema-v1",
+            "schema_required": true,
+            "default_max_attempts": 3,
+            "lease_duration": "30s",
+            "invisibility_duration": "5m"
+        }
+    },
+    "no_dlq_queue": {
+        "name": "ephemeral-queue",
+        "metadata": {
+            "type": "SIMPLE",
+            "default_max_attempts": 1,
+            "lease_duration": "15s",
+            "invisibility_duration": "1m",
+            "auto_create_dlq": false
+        }
+    }
+}
