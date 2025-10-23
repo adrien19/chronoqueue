@@ -30,7 +30,7 @@ vendor/**/*_test.go
 **/.project
 
 **/.settings
-
+**/.pnpm-store
 .vscode/*
 
 # editor and IDE paraphernalia

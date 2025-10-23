@@ -81,13 +81,13 @@ type (
 )
 
 const (
-	STATE_UNDEFINED State = iota
-	MESSAGE_INVISIBLE
-	MESSAGE_PENDING
-	MESSAGE_RUNNING
-	MESSAGE_COMPLETED
-	MESSAGE_CANCELED
-	MESSAGE_ERRORED
+	// Message states match the proto enum values
+	MESSAGE_INVISIBLE State = 0
+	MESSAGE_PENDING   State = 1
+	MESSAGE_RUNNING   State = 2
+	MESSAGE_COMPLETED State = 3
+	MESSAGE_CANCELED  State = 4
+	MESSAGE_ERRORED   State = 5
 )
 
 const (
@@ -196,16 +196,18 @@ func DefaultServerConnector(address string, opts ClientOptions) (queueservice_pb
 		var conn *grpc.ClientConn
 		var err error
 		if opts.TLSCredentials != nil {
-			conn, err = grpc.NewClient(address, grpc.WithTransportCredentials(opts.TLSCredentials))
+			conn, err = grpc.Dial(address, grpc.WithTransportCredentials(opts.TLSCredentials))
 		} else {
-			conn, err = grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			conn, err = grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		}
 
 		if err == nil {
-			return queueservice_pb.NewQueueServiceClient(conn), conn, nil
+			// Connection successful, return the client
+			service := queueservice_pb.NewQueueServiceClient(conn)
+			return service, conn, nil
 		}
 
-		// Log or handle error, then retry
+		// Log the error and retry
 		log.Printf("Failed to connect to %s (attempt %d/%d): %v", address, i+1, opts.MaxRetries, err)
 
 		// Sleep for backoff duration, then increase backoff, adding jitter
@@ -281,7 +283,9 @@ func ParseMessageState(state string) (State, error) {
 func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, queueOptions QueueOptions) (*queueservice_pb.CreateQueueResponse, error) {
 
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	leaseDuration, err := parseDurationToProto(queueOptions.LeaseDuration)
 	if err != nil {
@@ -314,7 +318,9 @@ func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, q
 // DeleteQueue deletes a queue and returns empty response
 func (client *ChronoQueueClient) DeleteQueue(ctx context.Context, name string) (*queueservice_pb.DeleteQueueResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	req := &queueservice_pb.DeleteQueueRequest{Name: name}
 	res, err := client.service.DeleteQueue(ctx, req)
@@ -327,7 +333,9 @@ func (client *ChronoQueueClient) DeleteQueue(ctx context.Context, name string) (
 // PostMessage create adds a message to the queue and returns empty response
 func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, messageId string, messageOptions MessageOptions) (*queueservice_pb.PostMessageResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	leaseDuration, err := parseDurationToProto(messageOptions.LeaseDuration)
 	if err != nil {
@@ -385,7 +393,9 @@ func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName
 			}
 
 			ctx, cancel := client.setDefaultContextTimeout(ctx)
-			defer cancel()
+			if cancel != nil {
+				defer cancel()
+			}
 
 			_, err := client.SendMessageHeartbeat(ctx, queueName, messageId)
 			if err != nil {
@@ -419,7 +429,9 @@ func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName
 // GetNextMessage returns next message on a queue
 func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue string, leaseDuration string, enableHeartbeat bool) (*queueservice_pb.GetNextMessageResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	leaseDurationpb, err := parseDurationToProto(leaseDuration)
 	if err != nil {
@@ -444,7 +456,9 @@ func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue strin
 // PeekQueueMessages returns messages on a queue that are in pending state
 func (client *ChronoQueueClient) PeekQueueMessages(ctx context.Context, queue string, limit int32, timeRange TimeRangeOption) (*queueservice_pb.PeekQueueMessagesResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	var priorityRange queueservice_pb.PeekQueueMessagesRequest_PriorityRange
 	priorityRangeBytes, err := json.Marshal(timeRange)
@@ -468,7 +482,9 @@ func (client *ChronoQueueClient) PeekQueueMessages(ctx context.Context, queue st
 // GetQueueState returns state of a queue
 func (client *ChronoQueueClient) GetQueueState(ctx context.Context, queue string) (*queueservice_pb.GetQueueStateResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	req := &queueservice_pb.GetQueueStateRequest{QueueName: queue}
 	res, err := client.service.GetQueueState(ctx, req)
@@ -481,7 +497,9 @@ func (client *ChronoQueueClient) GetQueueState(ctx context.Context, queue string
 // RenewMessageLease updates a message's lease duration and returns empty response
 func (client *ChronoQueueClient) RenewMessageLease(ctx context.Context, queue string, messageId string, leaseDuration string) (*queueservice_pb.RenewMessageLeaseResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	leaseDurationpb, err := parseDurationToProto(leaseDuration)
 	if err != nil {
@@ -498,7 +516,9 @@ func (client *ChronoQueueClient) RenewMessageLease(ctx context.Context, queue st
 // AcknowledgeMessage updates state of a message and empty response
 func (client *ChronoQueueClient) AcknowledgeMessage(ctx context.Context, queue string, messageId string, state State) (*queueservice_pb.AcknowledgeMessageResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	req := &queueservice_pb.AcknowledgeMessageRequest{QueueName: queue, MessageId: messageId, State: message_pb.Message_Metadata_State(state)}
 	res, err := client.service.AcknowledgeMessage(ctx, req)
@@ -514,7 +534,9 @@ func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queue
 		return client.opts.SendMessageHeartbeatFunc(ctx, queueName, messageId)
 	}
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	req := &queueservice_pb.SendMessageHeartBeatRequest{
 		QueueName: queueName,
@@ -530,7 +552,9 @@ func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queue
 // ListQueues returns list of available queues.
 func (client *ChronoQueueClient) ListQueues(ctx context.Context, prefix string) (*queueservice_pb.ListQueuesResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	req := &queueservice_pb.ListQueuesRequest{
 		Prefix: prefix,
@@ -545,7 +569,9 @@ func (client *ChronoQueueClient) ListQueues(ctx context.Context, prefix string) 
 // CreateSchedule creates a schedule and returns an empty response
 func (client *ChronoQueueClient) CreateSchedule(ctx context.Context, scheduleId string, scheduleOptions ScheduleOptions) (*queueservice_pb.CreateScheduleResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	leaseDurationpb, err := parseDurationToProto(scheduleOptions.LeaseDuration)
 	if err != nil {
@@ -593,7 +619,9 @@ func (client *ChronoQueueClient) CreateSchedule(ctx context.Context, scheduleId 
 // DeleteSchedule deletes a schedule and returns an empty response
 func (client *ChronoQueueClient) DeleteSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.DeleteScheduleResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 	req := &queueservice_pb.DeleteScheduleRequest{
 		ScheduleId: scheduleId,
 	}
@@ -607,7 +635,9 @@ func (client *ChronoQueueClient) DeleteSchedule(ctx context.Context, scheduleId 
 // GetSchedule returns a schedule
 func (client *ChronoQueueClient) GetSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.GetScheduleResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 	req := &queueservice_pb.GetScheduleRequest{
 		ScheduleId: scheduleId,
 	}
@@ -621,7 +651,9 @@ func (client *ChronoQueueClient) GetSchedule(ctx context.Context, scheduleId str
 // ListSchedules returns list of schedules
 func (client *ChronoQueueClient) ListSchedules(ctx context.Context, prefix string) (*queueservice_pb.ListSchedulesResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 	req := &queueservice_pb.ListSchedulesRequest{
 		Prefix: prefix,
 	}
@@ -635,7 +667,9 @@ func (client *ChronoQueueClient) ListSchedules(ctx context.Context, prefix strin
 // GetScheduleHistory returns the history of a schedule
 func (client *ChronoQueueClient) GetScheduleHistory(ctx context.Context, scheduleId string, limit int64) (*queueservice_pb.GetScheduleHistoryResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 	req := &queueservice_pb.GetScheduleHistoryRequest{
 		ScheduleId: scheduleId,
 		Limit:      limit,
@@ -650,7 +684,9 @@ func (client *ChronoQueueClient) GetScheduleHistory(ctx context.Context, schedul
 // PauseSchedule pauses a schedule
 func (client *ChronoQueueClient) PauseSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.PauseScheduleResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 	req := &queueservice_pb.PauseScheduleRequest{
 		ScheduleId: scheduleId,
 	}
@@ -664,7 +700,9 @@ func (client *ChronoQueueClient) PauseSchedule(ctx context.Context, scheduleId s
 // ResumeSchedule resumes a schedule
 func (client *ChronoQueueClient) ResumeSchedule(ctx context.Context, scheduleId string) (*queueservice_pb.ResumeScheduleResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 	req := &queueservice_pb.ResumeScheduleRequest{
 		ScheduleId: scheduleId,
 	}
@@ -678,7 +716,9 @@ func (client *ChronoQueueClient) ResumeSchedule(ctx context.Context, scheduleId 
 // ValidateCalendarSchedule validates a calendar schedule configuration
 func (client *ChronoQueueClient) ValidateCalendarSchedule(ctx context.Context, calendarScheduleJSON string) (*queueservice_pb.ValidateCalendarScheduleResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	// Parse JSON into CalendarSchedule protobuf
 	var calendarSchedule schedule_pb.CalendarSchedule
@@ -699,7 +739,9 @@ func (client *ChronoQueueClient) ValidateCalendarSchedule(ctx context.Context, c
 // PreviewCalendarSchedule previews execution times for a calendar schedule
 func (client *ChronoQueueClient) PreviewCalendarSchedule(ctx context.Context, calendarScheduleJSON string, count int32) (*queueservice_pb.PreviewCalendarScheduleResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	// Parse JSON into CalendarSchedule protobuf
 	var calendarSchedule schedule_pb.CalendarSchedule
@@ -723,7 +765,9 @@ func (client *ChronoQueueClient) PreviewCalendarSchedule(ctx context.Context, ca
 // GetDLQMessages retrieves messages from a Dead Letter Queue
 func (client *ChronoQueueClient) GetDLQMessages(ctx context.Context, dlqName string, limit int32) (*queueservice_pb.GetDLQMessagesResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	req := &queueservice_pb.GetDLQMessagesRequest{
 		DlqName: dlqName,
@@ -739,7 +783,9 @@ func (client *ChronoQueueClient) GetDLQMessages(ctx context.Context, dlqName str
 // RequeueFromDLQ moves a message from DLQ back to its original queue or specified target queue
 func (client *ChronoQueueClient) RequeueFromDLQ(ctx context.Context, dlqName string, messageId string, targetQueue string) (*queueservice_pb.RequeueFromDLQResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	req := &queueservice_pb.RequeueFromDLQRequest{
 		DlqName:     dlqName,
@@ -756,7 +802,9 @@ func (client *ChronoQueueClient) RequeueFromDLQ(ctx context.Context, dlqName str
 // DeleteFromDLQ permanently deletes a message from a DLQ
 func (client *ChronoQueueClient) DeleteFromDLQ(ctx context.Context, dlqName string, messageId string) (*queueservice_pb.DeleteFromDLQResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	req := &queueservice_pb.DeleteFromDLQRequest{
 		DlqName:   dlqName,
@@ -772,7 +820,9 @@ func (client *ChronoQueueClient) DeleteFromDLQ(ctx context.Context, dlqName stri
 // PurgeDLQ removes all messages from a DLQ
 func (client *ChronoQueueClient) PurgeDLQ(ctx context.Context, dlqName string) (*queueservice_pb.PurgeDLQResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	req := &queueservice_pb.PurgeDLQRequest{
 		DlqName: dlqName,
@@ -787,7 +837,9 @@ func (client *ChronoQueueClient) PurgeDLQ(ctx context.Context, dlqName string) (
 // GetDLQStats returns statistics about a DLQ
 func (client *ChronoQueueClient) GetDLQStats(ctx context.Context, dlqName string) (*queueservice_pb.GetDLQStatsResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	req := &queueservice_pb.GetDLQStatsRequest{
 		DlqName: dlqName,
@@ -799,8 +851,7 @@ func (client *ChronoQueueClient) GetDLQStats(ctx context.Context, dlqName string
 	return res, nil
 }
 
-// Schema Management Methods (Client-side implementation)
-// Note: These methods will work once server-side schema service is implemented
+// Schema Management Methods
 
 // SchemaOptions contains options for schema registration
 type SchemaOptions struct {
@@ -815,7 +866,9 @@ type SchemaOptions struct {
 // This is a client-side implementation that will work once server-side methods are added
 func (client *ChronoQueueClient) RegisterSchema(ctx context.Context, schemaID string, options SchemaOptions) error {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	if options.ContentType == "" {
 		options.ContentType = "json-schema"
@@ -841,7 +894,9 @@ func (client *ChronoQueueClient) RegisterSchema(ctx context.Context, schemaID st
 // version = 0 means get the latest version
 func (client *ChronoQueueClient) GetSchema(ctx context.Context, schemaID string, version int32) (map[string]interface{}, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	req := &queueservice_pb.GetSchemaRequest{
 		SchemaId: schemaID,
@@ -874,7 +929,9 @@ func (client *ChronoQueueClient) GetSchema(ctx context.Context, schemaID string,
 // ListSchemas returns all schemas matching the criteria
 func (client *ChronoQueueClient) ListSchemas(ctx context.Context, prefix string, limit int32, activeOnly bool) ([]map[string]interface{}, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	req := &queueservice_pb.ListSchemasRequest{
 		Prefix:     prefix,
@@ -894,7 +951,7 @@ func (client *ChronoQueueClient) ListSchemas(ctx context.Context, prefix string,
 			"version":     schema.GetLatestVersion(),
 			"versions":    schema.GetVersionCount(),
 			"description": schema.GetDescription(),
-			// "content_type": schema.GetContentType(),
+			"content_type": schema.GetContentType(),
 			"created_at": schema.GetCreatedAt(),
 			"is_active":  schema.GetIsActive(),
 		}
@@ -906,7 +963,9 @@ func (client *ChronoQueueClient) ListSchemas(ctx context.Context, prefix string,
 // version = 0 means delete all versions
 func (client *ChronoQueueClient) DeleteSchema(ctx context.Context, schemaID string, version int32) error {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	req := &queueservice_pb.DeleteSchemaRequest{
 		SchemaId: schemaID,
@@ -927,7 +986,9 @@ func (client *ChronoQueueClient) DeleteSchema(ctx context.Context, schemaID stri
 // ValidatePayload validates a payload against a schema
 func (client *ChronoQueueClient) ValidatePayload(ctx context.Context, schemaID string, version int32, payloadJSON string) error {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	req := &queueservice_pb.ValidatePayloadRequest{
 		SchemaId: schemaID,
