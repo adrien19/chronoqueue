@@ -158,7 +158,7 @@ func (as *storage) updateMessageStateAndLease(message *message_pb.Message, reque
 		// Use queue default if message doesn't specify max attempts
 		message.Metadata.MaxAttempts = queueMeta.GetDefaultMaxAttempts()
 		message.Metadata.AttemptsLeft = message.Metadata.MaxAttempts
-	} else if message.Metadata.AttemptsLeft == -1 && message.Metadata.MaxAttempts > 0 {
+	} else if message.Metadata.AttemptsLeft == 0 && message.Metadata.MaxAttempts > 0 {
 		// Message specified max_attempts but attempts_left wasn't initialized
 		as.logger.InfoWithFields(
 			"Initializing attempts left for message:",
