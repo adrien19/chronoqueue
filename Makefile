@@ -154,6 +154,19 @@ $(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EX
 
 
 ################################################################################
+# Target: ci-build (optimized binary builds for CI)                            #
+################################################################################
+.PHONY: ci-build
+ci-build:
+	@echo "Building optimized binaries for CI..."
+	mkdir -p dist
+	CGO_ENABLED=$(CGO) GOOS=$(GOOS) GOARCH=$(GOARCH) \
+		go build -v -trimpath \
+		-ldflags="-s -w" \
+		-o dist/chronoqueue-$(GOOS)-$(GOARCH)$(BINARY_EXT) \
+		.
+
+################################################################################
 # Target: build-linux                                                          #
 ################################################################################
 BUILD_LINUX_BINS:=$(foreach ITEM,$(BINARIES),$(CHRONOQUEUE_LINUX_OUT_DIR)/$(ITEM))
@@ -187,6 +200,21 @@ test: check-gotestsum
 			-- \
 				./pkg/... ./internal/... ./cmd/... ./client/...\
 				$(COVERAGE_OPTS)
+
+################################################################################
+# Target: ci-test (optimized for CI with coverage)                             #
+################################################################################
+.PHONY: ci-test
+ci-test: check-gotestsum
+	CGO_ENABLED=$(CGO) \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json \
+			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_unit.xml \
+			--format standard-verbose \
+			-- \
+				-coverprofile=coverage.out \
+				-covermode=atomic \
+				./pkg/... ./internal/... ./cmd/... ./client/...
 
 
 .PHONY: test-no-gotestsum
@@ -223,6 +251,78 @@ test-race:
 		go test -race
 
 ################################################################################
+# Target: test-integration                                                     #
+################################################################################
+.PHONY: test-integration
+test-integration: check-gotestsum
+	@echo "Running integration tests (requires Docker for testcontainers)..."
+	CGO_ENABLED=$(CGO) \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
+			--format pkgname-and-test-fails \
+			-- \
+				-timeout 30m \
+				./tests/integration/... \
+				$(COVERAGE_OPTS)
+
+################################################################################
+# Target: ci-test-integration (optimized for CI)                               #
+################################################################################
+.PHONY: ci-test-integration
+ci-test-integration: check-gotestsum
+	@echo "Running integration tests in CI mode..."
+	CGO_ENABLED=$(CGO) \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
+			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_integration.xml \
+			--format standard-verbose \
+			-- \
+				-timeout 30m \
+				./tests/integration/...
+
+################################################################################
+# Target: test-e2e                                                             #
+################################################################################
+.PHONY: test-e2e
+test-e2e: check-gotestsum
+	@echo "Running E2E tests (requires Docker for testcontainers)..."
+	CGO_ENABLED=$(CGO) \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json \
+			--format pkgname-and-test-fails \
+			-- \
+				-timeout 45m \
+				./tests/e2e/... \
+				$(COVERAGE_OPTS)
+
+################################################################################
+# Target: ci-test-e2e (optimized for CI)                                       #
+################################################################################
+.PHONY: ci-test-e2e
+ci-test-e2e: check-gotestsum
+	@echo "Running E2E tests in CI mode..."
+	CGO_ENABLED=$(CGO) \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json \
+			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml \
+			--format standard-verbose \
+			-- \
+				-timeout 45m \
+				./tests/e2e/...
+
+################################################################################
+# Target: test-all                                                             #
+################################################################################
+.PHONY: test-all
+test-all: test test-integration test-e2e
+
+################################################################################
+# Target: ci-test-all (run all tests in CI mode)                               #
+################################################################################
+.PHONY: ci-test-all
+ci-test-all: ci-test ci-test-integration ci-test-e2e
+
+################################################################################
 # Target: check-linter                                                         #
 ################################################################################
 .PHONY: check-linter
@@ -240,6 +340,13 @@ check-linter:
 .PHONY: lint
 lint: check-linter
 	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
+
+################################################################################
+# Target: ci-lint (optimized for CI with GitHub Actions format)                #
+################################################################################
+.PHONY: ci-lint
+ci-lint: check-linter
+	$(GOLANGCI_LINT) run --out-format=github-actions --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
 
 ################################################################################
 # Target: modtidy-all                                                          #
@@ -346,7 +453,7 @@ $(foreach ITEM,$(GRPC_PROTOS),$(eval $(call genProtoc,$(ITEM))))
 GEN_PROTOS:=$(foreach ITEM,$(filter-out google,$(GRPC_PROTOS)),gen-proto-$(ITEM))
 
 .PHONY: gen-proto
-gen-proto: check-proto-version $(GEN_PROTOS) modtidy
+gen-proto: init-proto check-proto-version $(GEN_PROTOS) modtidy
 
 ################################################################################
 # Target: check-diff                                                           #

@@ -951,7 +951,7 @@ func (client *ChronoQueueClient) ListSchemas(ctx context.Context, prefix string,
 			"version":     schema.GetLatestVersion(),
 			"versions":    schema.GetVersionCount(),
 			"description": schema.GetDescription(),
-			"content_type": schema.GetContentType(),
+			// "content_type": schema.GetContentType(),
 			"created_at": schema.GetCreatedAt(),
 			"is_active":  schema.GetIsActive(),
 		}

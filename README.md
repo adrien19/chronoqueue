@@ -1,5 +1,10 @@
 # ChronoQueue
 
+[![CI](https://github.com/adrien19/chronoqueue/actions/workflows/ci.yml/badge.svg)](https://github.com/adrien19/chronoqueue/actions/workflows/ci.yml)
+[![Release](https://github.com/adrien19/chronoqueue/actions/workflows/release.yml/badge.svg)](https://github.com/adrien19/chronoqueue/actions/workflows/release.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/adrien19/chronoqueue)](https://goreportcard.com/report/github.com/adrien19/chronoqueue)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+
 ChronoQueue is queue management system designed to handle high-volume message processing with efficiency and reliability. It offers a priority-based messaging system, real-time monitoring, and flexible scheduling options, making it an ideal solution for complex asynchronous task management.
 
 ## Features
@@ -26,7 +31,7 @@ ChronoQueue is queue management system designed to handle high-volume message pr
 
 - [Redis](https://redis.io/)
 - [Go](https://golang.org/) (for server-side & client-side SDK)
-- [Python](https://www.python.org/) (for client-side SDKs)
+- [Python (WIP)](https://www.python.org/) (for client-side SDKs)
 
 ### Installation
 
@@ -79,11 +84,51 @@ If you choose to use mTLS option, you will need to generate certificates. You ca
 
 ## Documentation
 
-For detailed documentation, including API references and usage examples, visit [ChronoQueue Docs]()
+For detailed documentation, including API references and usage examples, visit [ChronoQueue Docs](./docs/)
 
-## Contribution
+## Examples & Use Cases
 
-We welcome contributions! Please read our [Contributing Guidelines]() for more information.
+The [`examples/`](./examples/) directory contains comprehensive real-world applications demonstrating ChronoQueue features and best practices:
+
+### 🎯 Featured Example: Interview Evaluation Platform
+
+A complete sample application showcasing **all ChronoQueue capabilities** through a practical interview evaluation system:
+
+- **Priority Queues**: Urgent vs standard evaluation processing
+- **Scheduled Messages**: Business hours-based message delivery
+- **Calendar Schedules**: Automated daily/weekly analytics reports
+- **DLQ & Retry Logic**: Robust error handling and retry mechanisms
+- **Schema Validation**: Structured message validation
+- **Multi-tenant Isolation**: Secure tenant data separation
+- **Heartbeat & Lease Renewal**: Worker health monitoring
+- **Real-time Updates**: Server-Sent Events (SSE) integration
+
+**Tech Stack**: Next.js 14, Go, SQLite, Clerk Auth, Tailwind CSS
+
+**[View All Examples →](./examples/README.md)**
+
+Whether you're a beginner learning the basics or an advanced user exploring multi-tenant patterns, the examples provide production-ready code and architectural guidance to help you build queue-based applications effectively.
+
+## Contributing
+
+We welcome contributions! Please read our **[Contributing Guidelines](./CONTRIBUTING.md)** for detailed information on:
+
+- 🚀 **Development Setup** - Using dev containers for consistent development
+- 🧪 **Testing Guidelines** - Unit, integration, and E2E test patterns
+- 📝 **Code Standards** - Go style guide and best practices
+- 🔄 **Pull Request Process** - Workflow and review expectations
+- 🏗️ **CI/CD Pipeline** - Understanding automated checks
+
+**Quick Start for Contributors**:
+
+1. **Use the Dev Container** (Recommended) - Zero configuration, everything pre-installed
+2. **Fork and clone** the repository
+3. **Create a feature branch** from `develop`
+4. **Make your changes** with tests
+5. **Run tests locally**: `make test-all`
+6. **Submit a pull request** with clear description
+
+For questions or discussions, feel free to open an issue or join our community channels.
 
 ## License
 
