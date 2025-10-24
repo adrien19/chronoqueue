@@ -22,7 +22,13 @@ message Schedule {
             PAUSED = 3;
         }
         Schedule.Metadata.State state = 2;
-        string cron_schedule = 3;
+        
+        // Schedule configuration - supports both cron and calendar scheduling
+        oneof schedule_config {
+            string cron_schedule = 3;           // legacy cron-based scheduling
+            CalendarSchedule calendar_schedule = 16;  // new calendar-based scheduling
+        }
+        
         string queue_name = 4;
         repeated string message_ids = 5;
         google.protobuf.Timestamp next_run = 6;
@@ -35,6 +41,10 @@ message Schedule {
         bool has_max_messages = 13;
         int64 max_messages = 14;
         google.protobuf.Duration lease_duration = 15;
+        
+        // Calendar scheduling metadata
+        string timezone = 17;                   // timezone for calendar calculations
+        repeated google.protobuf.Timestamp next_runs = 18;  // precomputed next execution times
     }
     Schedule.Metadata metadata = 2;
 }
@@ -46,4 +56,141 @@ message ScheduleHistory {
     google.protobuf.Timestamp last_run = 4;
     google.protobuf.Timestamp created_at = 5;
     google.protobuf.Timestamp updated_at = 6;
+}
+
+// Calendar-based scheduling definitions
+message CalendarSchedule {
+    enum ScheduleType {
+        MONTHLY = 0;
+        WEEKLY = 1;
+        DAILY = 2;
+        YEARLY = 3;
+        BUSINESS_DAYS = 4;
+        CUSTOM = 5;
+    }
+    
+    ScheduleType type = 1;
+    repeated CalendarRule rules = 2;
+    string timezone = 3;
+    BusinessCalendar business_calendar = 4;
+    repeated CalendarException exceptions = 5;
+}
+
+message CalendarRule {
+    oneof rule {
+        MonthlyRule monthly = 1;
+        WeeklyRule weekly = 2;
+        DailyRule daily = 3;
+        YearlyRule yearly = 4;
+        BusinessDaysRule business_days = 5;
+        CustomRule custom = 6;
+    }
+    
+    // Time of day for execution
+    repeated TimeOfDay execution_times = 7;
+    
+    // Optional date range for rule validity
+    google.protobuf.Timestamp valid_from = 8;
+    google.protobuf.Timestamp valid_until = 9;
+}
+
+message MonthlyRule {
+    enum DayType {
+        DAY_OF_MONTH = 0;        // e.g., 15th of every month
+        WEEKDAY_OF_MONTH = 1;    // e.g., first Monday of month
+        LAST_WEEKDAY = 2;        // e.g., last Friday of month
+        LAST_DAY = 3;            // last day of month
+    }
+    
+    DayType day_type = 1;
+    int32 day_value = 2;         // day number (1-31) or weekday (1-7)
+    int32 occurrence = 3;        // for WEEKDAY_OF_MONTH: 1=first, 2=second, etc.
+    repeated int32 months = 4;   // specific months (1-12), empty = all months
+}
+
+message WeeklyRule {
+    repeated int32 days_of_week = 1;  // 1=Monday, 7=Sunday
+    int32 week_interval = 2;          // every N weeks (default: 1)
+    google.protobuf.Timestamp start_week = 3;  // reference week for intervals
+}
+
+message DailyRule {
+    int32 day_interval = 1;           // every N days (default: 1)
+    bool weekdays_only = 2;           // exclude weekends
+    google.protobuf.Timestamp start_date = 3;  // reference date for intervals
+}
+
+message YearlyRule {
+    int32 month = 1;                  // month (1-12)
+    int32 day = 2;                    // day of month (1-31)
+    bool adjust_for_leap_year = 3;    // handle Feb 29 on non-leap years
+}
+
+message BusinessDaysRule {
+    string business_calendar_id = 1;  // reference to business calendar
+    int32 day_offset = 2;             // offset from business day (e.g., -1 for day before)
+}
+
+message CustomRule {
+    string expression = 1;            // custom expression for complex rules
+    string rule_type = 2;             // identifier for custom rule processor
+    map<string, string> parameters = 3;  // rule-specific parameters
+}
+
+message TimeOfDay {
+    int32 hour = 1;      // 0-23
+    int32 minute = 2;    // 0-59
+    int32 second = 3;    // 0-59 (optional, default: 0)
+}
+
+message BusinessCalendar {
+    string calendar_id = 1;
+    string name = 2;
+    string description = 3;
+    repeated Holiday holidays = 4;
+    repeated int32 weekend_days = 5;  // 1=Monday, 7=Sunday
+    string timezone = 6;
+}
+
+message Holiday {
+    string name = 1;
+    google.protobuf.Timestamp date = 2;
+    bool recurring_yearly = 3;
+    HolidayRule rule = 4;  // for complex holidays like "first Monday in May"
+}
+
+message HolidayRule {
+    oneof rule {
+        FixedDate fixed = 1;
+        RelativeDate relative = 2;
+        EasterOffset easter_offset = 3;
+    }
+}
+
+message FixedDate {
+    int32 month = 1;  // 1-12
+    int32 day = 2;    // 1-31
+}
+
+message RelativeDate {
+    int32 month = 1;        // 1-12
+    int32 weekday = 2;      // 1=Monday, 7=Sunday
+    int32 occurrence = 3;   // 1=first, 2=second, -1=last
+}
+
+message EasterOffset {
+    int32 days_offset = 1;  // days from Easter Sunday
+}
+
+message CalendarException {
+    google.protobuf.Timestamp date = 1;
+    enum ExceptionType {
+        SKIP = 0;           // skip execution on this date
+        RESCHEDULE = 1;     // move execution to different date
+        EXTRA = 2;          // add extra execution on this date
+    }
+    ExceptionType type = 2;
+    google.protobuf.Timestamp reschedule_to = 3;  // for RESCHEDULE type
+    repeated TimeOfDay extra_times = 4;           // for EXTRA type
+    string reason = 5;      // optional description
 }

@@ -24,4 +24,22 @@ type Service interface {
 	GetScheduleHistory(ctx context.Context, request *queueservice_pb.GetScheduleHistoryRequest) (*queueservice_pb.GetScheduleHistoryResponse, error)
 	PauseSchedule(ctx context.Context, request *queueservice_pb.PauseScheduleRequest) (*queueservice_pb.PauseScheduleResponse, error)
 	ResumeSchedule(ctx context.Context, request *queueservice_pb.ResumeScheduleRequest) (*queueservice_pb.ResumeScheduleResponse, error)
+
+	// calendar-based scheduling operations
+	ValidateCalendarSchedule(ctx context.Context, request *queueservice_pb.ValidateCalendarScheduleRequest) (*queueservice_pb.ValidateCalendarScheduleResponse, error)
+	PreviewCalendarSchedule(ctx context.Context, request *queueservice_pb.PreviewCalendarScheduleRequest) (*queueservice_pb.PreviewCalendarScheduleResponse, error)
+
+	// Dead Letter Queue Management Operations
+	GetDLQMessages(ctx context.Context, request *queueservice_pb.GetDLQMessagesRequest) (*queueservice_pb.GetDLQMessagesResponse, error)
+	RequeueFromDLQ(ctx context.Context, request *queueservice_pb.RequeueFromDLQRequest) (*queueservice_pb.RequeueFromDLQResponse, error)
+	DeleteFromDLQ(ctx context.Context, request *queueservice_pb.DeleteFromDLQRequest) (*queueservice_pb.DeleteFromDLQResponse, error)
+	PurgeDLQ(ctx context.Context, request *queueservice_pb.PurgeDLQRequest) (*queueservice_pb.PurgeDLQResponse, error)
+	GetDLQStats(ctx context.Context, request *queueservice_pb.GetDLQStatsRequest) (*queueservice_pb.GetDLQStatsResponse, error)
+
+	// Schema Management Operations
+	RegisterSchema(ctx context.Context, request *queueservice_pb.RegisterSchemaRequest) (*queueservice_pb.RegisterSchemaResponse, error)
+	GetSchema(ctx context.Context, request *queueservice_pb.GetSchemaRequest) (*queueservice_pb.GetSchemaResponse, error)
+	ListSchemas(ctx context.Context, request *queueservice_pb.ListSchemasRequest) (*queueservice_pb.ListSchemasResponse, error)
+	DeleteSchema(ctx context.Context, request *queueservice_pb.DeleteSchemaRequest) (*queueservice_pb.DeleteSchemaResponse, error)
+	ValidatePayload(ctx context.Context, request *queueservice_pb.ValidatePayloadRequest) (*queueservice_pb.ValidatePayloadResponse, error)
 }

@@ -2,8 +2,8 @@
 # and adapted for ChronoQueue development
 
 # [Choice] Go version: 1, 1.21, etc
-ARG GOVERSION=1.21
-FROM golang:${GOVERSION}-bullseye
+ARG GOVERSION=1.25
+FROM golang:${GOVERSION}rc3-bullseye
 
 # [Option] Install zsh
 ARG INSTALL_ZSH="true"
@@ -12,10 +12,10 @@ ARG INSTALL_ZSH="true"
 ARG KUBECTL_VERSION="latest"
 ARG HELM_VERSION="latest"
 ARG MINIKUBE_VERSION="latest"
-ARG PROTOC_VERSION="24.4"
-ARG PROTOC_GEN_GO_VERSION="1.32.0"
-ARG PROTOC_GEN_GO_GRPC_VERSION="1.3.0"
-ARG GOLANGCI_LINT_VERSION="1.55.2"
+ARG PROTOC_VERSION="32.0"
+ARG PROTOC_GEN_GO_VERSION="1.36.9"
+ARG PROTOC_GEN_GO_GRPC_VERSION="1.5.1"
+ARG GOLANGCI_LINT_VERSION="2.5.0"
 
 # This Dockerfile adds a non-root 'chronoqueue' user with sudo access. However, for Linux,
 # this user's GID/UID must match your local user UID/GID to avoid permission issues
@@ -30,6 +30,12 @@ ENV GO111MODULE=auto
 ENV CGO_ENABLED=0
 ENV DOCKER_BUILDKIT=1
 ENV DEFAULT_IMAGE_REGISTRY=DOCKER
+
+# Fixing vulnerability issue by upgrading svn to 1.14.5. Ref https://subversion.apache.org/security/CVE-2024-46901-advisory.txt
+COPY cve-scripts/install-subversion.sh /tmp/install-subversion.sh
+RUN chmod +x /tmp/install-subversion.sh
+RUN /tmp/install-subversion.sh \
+  && rm -f /tmp/install-subversion.sh
 
 # Setup image using library scripts and configure non-root user.
 COPY library-scripts/* custom-scripts/* welcome-notice.txt /tmp/staging/

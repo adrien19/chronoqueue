@@ -1,0 +1,258 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g., v1.0.0)"
+        required: true
+        type: string
+
+env:
+  GO_VERSION: "1.25"
+  DOCKER_REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREVIOUS_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "First release - no previous tag found"
+            CHANGELOG="## Initial Release 🎉"
+          else
+            echo "Generating changelog from $PREVIOUS_TAG to ${{ steps.version.outputs.version }}"
+            CHANGELOG=$(git log ${PREVIOUS_TAG}..${{ steps.version.outputs.version }} \
+              --pretty=format:"- %s (%h)" \
+              --reverse)
+          fi
+
+          # Save changelog to file
+          cat << EOF > CHANGELOG.md
+          ## What's Changed in ${{ steps.version.outputs.version }}
+
+          ${CHANGELOG}
+
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...${{ steps.version.outputs.version }}
+          EOF
+
+          cat CHANGELOG.md
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          release_name: Release ${{ steps.version.outputs.version }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, 'rc') || contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'alpha') }}
+
+  build-release-binaries:
+    name: Build Release Binaries
+    runs-on: ubuntu-latest
+    needs: [prepare-release]
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: linux
+            goarch: arm
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build binary
+        run: |
+          mkdir -p dist
+          BINARY_NAME="chronoqueue-${{ needs.prepare-release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          if [ "${{ matrix.goos }}" == "windows" ]; then
+            BINARY_NAME="${BINARY_NAME}.exe"
+          fi
+
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 \
+            go build -v -trimpath \
+            -ldflags="-s -w -X main.version=${{ needs.prepare-release.outputs.version }} -X main.commit=${{ github.sha }} -X main.buildDate=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            -o dist/${BINARY_NAME} \
+            .
+
+          # Create checksums
+          cd dist
+          sha256sum ${BINARY_NAME} > ${BINARY_NAME}.sha256
+
+          # Create tarball (except for Windows)
+          if [ "${{ matrix.goos }}" != "windows" ]; then
+            tar -czf ${BINARY_NAME}.tar.gz ${BINARY_NAME}
+            sha256sum ${BINARY_NAME}.tar.gz > ${BINARY_NAME}.tar.gz.sha256
+          else
+            zip ${BINARY_NAME}.zip ${BINARY_NAME}
+            sha256sum ${BINARY_NAME}.zip > ${BINARY_NAME}.zip.sha256
+          fi
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.prepare-release.outputs.upload_url }}
+          asset_path: ./dist/chronoqueue-${{ needs.prepare-release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.zip' || '.tar.gz' }}
+          asset_name: chronoqueue-${{ needs.prepare-release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.zip' || '.tar.gz' }}
+          asset_content_type: application/octet-stream
+
+      - name: Upload Checksum
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.prepare-release.outputs.upload_url }}
+          asset_path: ./dist/chronoqueue-${{ needs.prepare-release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.zip.sha256' || '.tar.gz.sha256' }}
+          asset_name: chronoqueue-${{ needs.prepare-release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.zip.sha256' || '.tar.gz.sha256' }}
+          asset_content_type: text/plain
+
+  build-release-docker:
+    name: Build & Push Release Docker Images
+    runs-on: ubuntu-latest
+    needs: [prepare-release]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.prepare-release.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.prepare-release.outputs.version }}
+            type=semver,pattern={{major}},value=${{ needs.prepare-release.outputs.version }}
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./images/Dockerfile
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          build-args: |
+            VERSION=${{ needs.prepare-release.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+
+      - name: Generate SBOM for release
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare-release.outputs.version }}
+          format: spdx-json
+          output-file: sbom-${{ needs.prepare-release.outputs.version }}.spdx.json
+
+      - name: Upload SBOM to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.prepare-release.outputs.upload_url }}
+          asset_path: sbom-${{ needs.prepare-release.outputs.version }}.spdx.json
+          asset_name: sbom-${{ needs.prepare-release.outputs.version }}.spdx.json
+          asset_content_type: application/json
+
+  release-verification:
+    name: Verify Release
+    runs-on: ubuntu-latest
+    needs: [prepare-release, build-release-binaries, build-release-docker]
+    steps:
+      - name: Verify Docker image
+        run: |
+          docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare-release.outputs.version }}
+          docker images | grep chronoqueue
+
+      - name: Test Docker image
+        run: |
+          docker run --rm ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare-release.outputs.version }} --version || true
+
+      - name: Release Summary
+        run: |
+          echo "## Release ${{ needs.prepare-release.outputs.version }} Published! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Docker Images" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare-release.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Binaries" >> $GITHUB_STEP_SUMMARY
+          echo "Available for:" >> $GITHUB_STEP_SUMMARY
+          echo "- Linux (amd64, arm64, arm)" >> $GITHUB_STEP_SUMMARY
+          echo "- macOS (amd64, arm64)" >> $GITHUB_STEP_SUMMARY
+          echo "- Windows (amd64)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📦 View release: https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY

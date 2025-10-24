@@ -1,0 +1,58 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://example.com/schemas/notification.json",
+    "title": "Notification",
+    "description": "Schema for notification messages",
+    "type": "object",
+    "required": [
+        "notification_id",
+        "user_id",
+        "title",
+        "type"
+    ],
+    "properties": {
+        "notification_id": {
+            "type": "string",
+            "pattern": "^NOTIF-[0-9]+$",
+            "description": "Unique notification identifier"
+        },
+        "user_id": {
+            "type": "string",
+            "pattern": "^USER-[0-9]+$",
+            "description": "Target user identifier"
+        },
+        "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Notification title"
+        },
+        "body": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "Notification body text"
+        },
+        "type": {
+            "type": "string",
+            "enum": [
+                "INFO",
+                "WARNING",
+                "ERROR",
+                "SHIPPING",
+                "PAYMENT"
+            ],
+            "description": "Notification type"
+        },
+        "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Notification creation timestamp"
+        },
+        "priority": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Notification priority"
+        }
+    }
+}

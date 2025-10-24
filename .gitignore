@@ -30,7 +30,7 @@ vendor/**/*_test.go
 **/.project
 
 **/.settings
-
+**/.pnpm-store
 .vscode/*
 
 # editor and IDE paraphernalia
@@ -178,3 +178,12 @@ deploy/olm-catalog/k8s-triliovault/.DS_Store
 .DS_Store
 
 certs/*
+*.log
+logs/*
+*.crt
+*.key
+*.pem
+*.p12
+*.jks
+*.pfx
+*_unit.json

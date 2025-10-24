@@ -11,7 +11,7 @@ GIT_COMMIT  = $(shell git rev-list -1 HEAD)
 GIT_VERSION ?= $(shell git describe --always --abbrev=7 --dirty)
 # By default, disable CGO_ENABLED. See the details on https://golang.org/cmd/cgo
 CGO         ?= 0
-BINARIES    ?= server
+BINARIES    ?= chronoqueue
 
 # Add latest tag if LATEST_RELEASE is true
 LATEST_RELEASE ?=
@@ -20,8 +20,8 @@ PROTOC ?= protoc
 
 # Version of "protoc" to use
 # Must also specify a protobuf "suite" version from https://github.com/protocolbuffers/protobuf/releases
-PROTOC_VERSION = 24.4
-PROTOBUF_SUITE_VERSION = 24.4
+PROTOC_VERSION = 32.0
+PROTOBUF_SUITE_VERSION = 32.0
 
 # name of protoc-gen-go when protoc-gen-go --version is run.
 PROTOC_GEN_GO_NAME = "protoc-gen-go"
@@ -64,8 +64,8 @@ else
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
 
-PROTOC_GEN_GO_VERSION = v1.32.0
-PROTOC_GEN_GO_GRPC_VERSION = 1.3.0
+PROTOC_GEN_GO_VERSION = v1.36.9
+PROTOC_GEN_GO_GRPC_VERSION = 1.5.1
 
 # Default docker container and e2e test targets.
 TARGET_OS ?= linux
@@ -82,6 +82,7 @@ else
 	GOLANGCI_LINT:=golangci-lint
 	export ARCHIVE_EXT = .tar.gz
 endif
+GOLANGCI_LINT_VERSION ?= v2.5.0
 
 export BINARY_EXT ?= $(BINARY_EXT_LOCAL)
 
@@ -127,11 +128,21 @@ build: $(CHRONOQUEUE_BINS)
 
 # Generate builds for chronoqueue binaries for the target
 # Params:
-# $(1): the binary name for the target
-# $(2): the binary main directory
-# $(3): the target os
-# $(4): the target arch
+# $(1): the file name for the target
+# $(2): the binary name for the target
+# $(3): the goos for the target
+# $(4): the goarch for the target
 # $(5): the output directory
+define genBinariesForTarget
+.PHONY: $(5)/$(1)
+$(5)/$(1):
+	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags="" -tags=$(CHRONOQUEUE_GO_BUILD_TAGS) \
+	  -o $(5)/$(1) \
+	  .
+endef
+
+# Generate binary targets
+$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EXT),.,$(GOOS),$(GOARCH),$(CHRONOQUEUE_OUT_DIR))))
 define genBinariesForTarget
 .PHONY: $(5)/$(1)
 $(5)/$(1):
@@ -140,8 +151,21 @@ $(5)/$(1):
 endef
 
 # Generate binary targets
-$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EXT),./cmd/$(ITEM),$(GOOS),$(GOARCH),$(CHRONOQUEUE_OUT_DIR))))
+$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EXT),.,$(GOOS),$(GOARCH),$(CHRONOQUEUE_OUT_DIR))))
 
+
+################################################################################
+# Target: ci-build (optimized binary builds for CI)                            #
+################################################################################
+.PHONY: ci-build
+ci-build:
+	@echo "Building optimized binaries for CI..."
+	mkdir -p dist
+	CGO_ENABLED=$(CGO) GOOS=$(GOOS) GOARCH=$(GOARCH) \
+		go build -v -trimpath \
+		-ldflags="-s -w" \
+		-o dist/chronoqueue-$(GOOS)-$(GOARCH)$(BINARY_EXT) \
+		.
 
 ################################################################################
 # Target: build-linux                                                          #
@@ -151,15 +175,25 @@ build-linux: $(BUILD_LINUX_BINS)
 
 # Generate linux binaries targets to build linux docker image
 ifneq ($(GOOS), linux)
-$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM),./cmd/$(ITEM),linux,$(GOARCH),$(CHRONOQUEUE_LINUX_OUT_DIR))))
+# Linux targets are handled by the main target now
 endif
 
+
+################################################################################
+# Target: check-gotestsum                                                      #
+################################################################################
+.PHONY: check-gotestsum
+check-gotestsum:
+	@which gotestsum > /dev/null || { \
+		echo "Installing gotestsum..."; \
+		go install gotest.tools/gotestsum@latest; \
+	}
 
 ################################################################################
 # Target: test                                                                 #
 ################################################################################
 .PHONY: test
-test:
+test: check-gotestsum
 	CGO_ENABLED=$(CGO) \
 		gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json \
@@ -167,8 +201,47 @@ test:
 			-- \
 				./pkg/... ./internal/... ./cmd/... ./client/...\
 				$(COVERAGE_OPTS)
+
+################################################################################
+# Target: ci-test (optimized for CI with coverage)                             #
+################################################################################
+.PHONY: ci-test
+ci-test: check-gotestsum
 	CGO_ENABLED=$(CGO) \
-		go test ./tests/...
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json \
+			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_unit.xml \
+			--format standard-verbose \
+			-- \
+				-coverprofile=coverage.out \
+				-covermode=atomic \
+				./pkg/... ./internal/... ./cmd/... ./client/...
+
+
+.PHONY: test-no-gotestsum
+test-no-gotestsum:
+.PHONY: test-no-gotestsum
+test-no-gotestsum:
+	CGO_ENABLED=$(CGO) \
+		go test -v \
+				./pkg/... ./internal/... ./cmd/... ./client/... \
+				$(COVERAGE_OPTS)
+
+.PHONY: test-stable
+test-stable:
+	CGO_ENABLED=$(CGO) \
+		go test -v \
+				./client ./pkg/chronoqueue ./pkg/gateway ./pkg/metrics ./internal/server ./internal/util ./internal/encryption/... ./pkg/log \
+				$(COVERAGE_OPTS)
+
+.PHONY: test-stable-gotestsum
+test-stable-gotestsum: check-gotestsum
+	CGO_ENABLED=$(CGO) gotestsum \
+		--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_stable.json \
+		--format pkgname-and-test-fails \
+		-- \
+		./client ./pkg/chronoqueue ./pkg/gateway ./pkg/metrics ./internal/server ./internal/util ./internal/encryption/... ./pkg/log \
+		$(COVERAGE_OPTS)
 
 ################################################################################
 # Target: test-race                                                            #
@@ -177,6 +250,88 @@ test:
 test-race:
 	CGO_ENABLED=1 ./pkg/... ./internal/... ./cmd/... ./client/... | xargs \
 		go test -race
+
+################################################################################
+# Target: test-integration                                                     #
+################################################################################
+.PHONY: test-integration
+test-integration: check-gotestsum
+	@echo "Running integration tests (requires Docker for testcontainers)..."
+	CGO_ENABLED=$(CGO) \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
+			--format pkgname-and-test-fails \
+			-- \
+				-timeout 30m \
+				./tests/integration/... \
+				$(COVERAGE_OPTS)
+
+################################################################################
+# Target: ci-test-integration (optimized for CI)                               #
+################################################################################
+.PHONY: ci-test-integration
+ci-test-integration: check-gotestsum
+	@echo "Running integration tests in CI mode..."
+	CGO_ENABLED=$(CGO) \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
+			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_integration.xml \
+			--format standard-verbose \
+			-- \
+				-timeout 30m \
+				./tests/integration/...
+
+################################################################################
+# Target: test-e2e                                                             #
+################################################################################
+.PHONY: test-e2e
+test-e2e: check-gotestsum
+	@echo "Running E2E tests (requires Docker for testcontainers)..."
+	CGO_ENABLED=$(CGO) \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json \
+			--format pkgname-and-test-fails \
+			-- \
+				-timeout 45m \
+				./tests/e2e/... \
+				$(COVERAGE_OPTS)
+
+################################################################################
+# Target: ci-test-e2e (optimized for CI)                                       #
+################################################################################
+.PHONY: ci-test-e2e
+ci-test-e2e: check-gotestsum
+	@echo "Running E2E tests in CI mode..."
+	CGO_ENABLED=$(CGO) \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json \
+			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml \
+			--format standard-verbose \
+			-- \
+				-timeout 45m \
+				./tests/e2e/...
+
+################################################################################
+# Target: test-all                                                             #
+################################################################################
+.PHONY: test-all
+test-all: test test-integration test-e2e
+
+################################################################################
+# Target: ci-test-all (run all tests in CI mode)                               #
+################################################################################
+.PHONY: ci-test-all
+ci-test-all: ci-test ci-test-integration ci-test-e2e
+
+################################################################################
+# Target: check-linter                                                         #
+################################################################################
+.PHONY: check-linter
+check-linter:
+	@which $(GOLANGCI_LINT) > /dev/null || { \
+		echo "Installing golangci-lint..."; \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin $(GOLANGCI_LINT_VERSION); \
+	}
 
 ################################################################################
 # Target: lint                                                                 #
@@ -188,6 +343,22 @@ lint: check-linter
 	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
 
 ################################################################################
+# Target: deps (download Go dependencies)                                      #
+################################################################################
+.PHONY: deps
+deps:
+	@echo "Downloading Go dependencies..."
+	@go mod download
+
+################################################################################
+# Target: ci-lint (optimized for CI)                                           #
+################################################################################
+.PHONY: ci-lint
+ci-lint: check-linter
+	@$(GOLANGCI_LINT) cache clean
+	@CGO_ENABLED=0 $(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
+
+################################################################################
 # Target: modtidy-all                                                          #
 ################################################################################
 MODFILES := $(shell find . -name go.mod)
@@ -195,7 +366,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.21; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.25; cd -
 endef
 
 # Generate modtidy target action for each go.mod file
@@ -220,7 +391,18 @@ modtidy:
 ################################################################################
 .PHONY: format
 format: modtidy-all
-	gofumpt -l -w . && goimports -local github.com/adrien19/ -w $(shell find ./pkg -type f -name '*.go' -not -path "./api/chronoqueue/v1/*")
+	# check if gofumpt and goimports are installed
+	@which gofumpt > /dev/null || { \
+		echo "Installing gofumpt..."; \
+		go install mvdan.cc/gofumpt@latest; \
+	}
+	@which goimports > /dev/null || { \
+		echo "Installing goimports..."; \
+		go install golang.org/x/tools/cmd/goimports@latest; \
+	}
+	# run gofumpt and goimports on all Go files (excluding generated api files)
+	gofumpt -l -w .
+	find . -type f -name '*.go' -not -path "./api/*" -not -path "./vendor/*" | xargs goimports -local github.com/adrien19/ -w
 
 ################################################################################
 # Target: check                                                                #
@@ -229,6 +411,24 @@ format: modtidy-all
 check: format test lint
 	git status && [[ -z `git status -s` ]]
 
+
+# Download Google API proto files (required for HTTP annotations)
+################################################################################
+# Target: get-googleapis                                                       #
+################################################################################
+.PHONY: get-googleapis
+get-googleapis: ## Download Google API proto files for annotations
+	@echo "Downloading Google API proto files..."
+	@mkdir -p ./proto/google/api
+	@curl -sSL https://raw.githubusercontent.com/googleapis/googleapis/master/google/api/annotations.proto \
+		> ./proto/google/api/annotations.proto
+	@curl -sSL https://raw.githubusercontent.com/googleapis/googleapis/master/google/api/http.proto \
+		> ./proto/google/api/http.proto
+	@curl -sSL https://raw.githubusercontent.com/googleapis/googleapis/master/google/api/field_behavior.proto \
+		> ./proto/google/api/field_behavior.proto
+	@echo "Google API proto files downloaded!"
+
+
 ################################################################################
 # Target: init-proto                                                           #
 ################################################################################
@@ -236,6 +436,9 @@ check: format test lint
 init-proto:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v$(PROTOC_GEN_GO_GRPC_VERSION)
+	go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@latest
+	go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@latest
+	@echo "init-proto completed!"
 
 
 ################################################################################
@@ -250,14 +453,28 @@ define genProtoc
 .PHONY: gen-proto-$(1)
 gen-proto-$(1):
 	$(PROTOC) --go_out=. --go_opt=module=$(PROTO_PREFIX) --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,module=$(PROTO_PREFIX) ./proto/$(1)/v1/*.proto
+	# Generate gRPC-Gateway reverse proxy code (only for queueservice)
+	@if [ "$(1)" = "queueservice" ]; then \
+		mkdir -p docs/api && \
+		$(PROTOC) --grpc-gateway_out=. \
+			--grpc-gateway_opt=module=$(PROTO_PREFIX) \
+			--grpc-gateway_opt=generate_unbound_methods=true \
+			./proto/$(1)/v1/service.proto; \
+	fi
+	# Generate OpenAPI v2 documentation (only for queueservice)
+	@if [ "$(1)" = "queueservice" ]; then \
+		$(PROTOC) --openapiv2_out=docs/api \
+			--openapiv2_opt=allow_merge=true,merge_file_name=chronoqueue \
+			./proto/$(1)/v1/service.proto; \
+	fi
 endef
 
 $(foreach ITEM,$(GRPC_PROTOS),$(eval $(call genProtoc,$(ITEM))))
 
-GEN_PROTOS:=$(foreach ITEM,$(GRPC_PROTOS),gen-proto-$(ITEM))
+GEN_PROTOS:=$(foreach ITEM,$(filter-out google,$(GRPC_PROTOS)),gen-proto-$(ITEM))
 
 .PHONY: gen-proto
-gen-proto: check-proto-version $(GEN_PROTOS) modtidy
+gen-proto: init-proto check-proto-version $(GEN_PROTOS) modtidy
 
 ################################################################################
 # Target: check-diff                                                           #

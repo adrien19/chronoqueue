@@ -7,21 +7,23 @@ import (
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption"
 	"github.com/adrien19/chronoqueue/internal/util"
-	"github.com/redis/go-redis/v9"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // Serialize the metadata payload into JSON
 func (as *storage) encryptScheduleMetadataPayload(metadata *schedule_pb.Schedule_Metadata) error {
-	if !as.encryptionKeyManager.Enabled {
+	// Handle nil encryption key manager (used in testing)
+	if as.encryptionKeyManager == nil || !as.encryptionKeyManager.Enabled {
 		return nil
 	}
 	// Get the payload data from the message
@@ -59,6 +61,17 @@ func (as *storage) CreateSchedule(ctx context.Context, request *queueservice_pb.
 		return &queueservice_pb.CreateScheduleResponse{
 			Success: false,
 		}, chronoErr.GRPCStatus()
+	}
+
+	// Validate calendar schedule if present
+	if scheduleInfo.GetMetadata().GetCalendarSchedule() != nil {
+		if err := as.ValidateCalendarSchedule(ctx, scheduleInfo.GetMetadata().GetCalendarSchedule()); err != nil {
+			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Invalid calendar schedule configuration")
+			return &queueservice_pb.CreateScheduleResponse{
+				Success: false,
+			}, chronoErr.GRPCStatus()
+		}
+		as.logger.InfoWithFields("Calendar schedule validated successfully", "scheduleID", scheduleInfo.GetScheduleId())
 	}
 
 	exists, err := as.checkScheduleExistence(ctx, scheduleInfo.GetScheduleId())
@@ -152,7 +165,6 @@ func (as *storage) setPausedScheduleMetadata(ctx context.Context, scheduleInfo *
 }
 
 func (as *storage) DeleteSchedule(ctx context.Context, request *queueservice_pb.DeleteScheduleRequest) (*queueservice_pb.DeleteScheduleResponse, error) {
-
 	// Create or fetch the mutex for this specific schedule
 	scheduleMutex := as.rs.NewMutex("mutex:" + request.GetScheduleId())
 

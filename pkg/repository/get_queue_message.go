@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 
+	"google.golang.org/grpc/codes"
+
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
-	"google.golang.org/grpc/codes"
 )
 
 func (as *storage) validateExclusivity(queueMeta *queue_pb.QueueMetadata, exclusivityKey string) error {
@@ -43,7 +44,7 @@ func (as *storage) getNextPendingMessage(ctx context.Context, queueName string, 
 }
 
 func (as *storage) GetQueueMessage(ctx context.Context, request *queueservice_pb.GetNextMessageRequest) (*queueservice_pb.GetNextMessageResponse, error) {
-	queueMeta, err := as.getQueueMetadata(ctx, request.GetQueueName())
+	queueMeta, err := as.GetQueueMetadata(ctx, request.GetQueueName())
 	if err != nil {
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Failed to get queue's metadata.").GRPCStatus()
 	}
@@ -52,7 +53,7 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *queueservice_pb
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Error occured while validating the exclusivity key.").GRPCStatus()
 	}
 
-	members, err := as.fetchQueueMembersBeforeNow(ctx, request.GetQueueName())
+	members, err := as.fetchQueueMembersByPriority(ctx, request.GetQueueName(), 50)
 	if err != nil {
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Failed to get queue members.").GRPCStatus()
 	}
@@ -71,9 +72,15 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *queueservice_pb
 	}
 
 	// Update the message's state to "Running" and restore the message
+	oldState := message.Metadata.State // Capture old state before update (should be PENDING)
+	as.logger.InfoWithFields(
+		"Leasing message:",
+		"message Id", message.GetMessageId(),
+		"old state", oldState,
+	)
 	as.updateMessageStateAndLease(message, request, queueMeta)
 
-	if err := as.saveMessageWithMetadata(ctx, request.GetQueueName(), message); err != nil {
+	if err := as.saveMessageWithMetadataAndOldState(ctx, request.GetQueueName(), message, oldState); err != nil {
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to save message's metadata.").GRPCStatus()
 	}
 

@@ -6,15 +6,17 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption"
 	"github.com/adrien19/chronoqueue/internal/util"
-	"github.com/redis/go-redis/v9"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
+	"github.com/adrien19/chronoqueue/pkg/validator"
 )
 
 const (
@@ -40,7 +42,8 @@ func (as *storage) serializeMetadataPayload(payload *common_pb.Payload) ([]byte,
 
 // Serialize the metadata payload into JSON
 func (as *storage) encryptMetadataPayload(metadata *message_pb.Message_Metadata) error {
-	if !as.encryptionKeyManager.Enabled {
+	// Handle nil encryption key manager (used in testing)
+	if as.encryptionKeyManager == nil || !as.encryptionKeyManager.Enabled {
 		return nil
 	}
 	// Get the payload data from the message
@@ -70,7 +73,7 @@ func (as *storage) encryptMetadataPayload(metadata *message_pb.Message_Metadata)
 	return nil
 }
 
-func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice_pb.PostMessageRequest) (*queueservice_pb.PostMessageResponse, error) {
+func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice_pb.PostMessageRequest, validator validator.Validator) (*queueservice_pb.PostMessageResponse, error) {
 	queueName := request.GetQueueName()
 	message := request.GetMessage()
 
@@ -81,28 +84,25 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	exists, err := as.checkQueueExistence(ctx, queueName)
-	if err != nil {
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while checking queue existence")
-		return nil, chronoErr.GRPCStatus()
-	}
-	if !exists {
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Message's queue does not exist")
-		return nil, chronoErr.GRPCStatus()
-	}
+	if validator != nil {
+		// NEW: Comprehensive payload validation with schema registry support
+		validationResult := validator.Validate(ctx, message)
 
-	// // avoid double encryption for schedule messages.
-	// if message.Metadata.GetCronSchedule() == "" {
-	// 	err = as.encryptMetadataPayload(message.Metadata)
-	// 	if err != nil {
-	// 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while encrypting message payload")
-	// 		return nil, chronoErr.GRPCStatus()
-	// 	}
-	// }
+		if !validationResult.Valid {
+			// Build detailed error message
+			errorDetails := "Message validation failed:"
+			for _, valErr := range validationResult.Errors {
+				errorDetails += fmt.Sprintf("\n  - %s: %s", valErr.Field, valErr.Message)
+			}
+			err := errors.New(errorDetails)
+			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Message validation failed")
+			return nil, chronoErr.GRPCStatus()
+		}
+	}
 
 	// Set the message invisibility expiry
-	invisibity_expiry := time.Now().Add(message.Metadata.InvisibilityDuration.AsDuration())
-	message.Metadata.InvisibilityExpiry = invisibity_expiry.UnixMilli()
+	invisibilityExpiry := time.Now().Add(message.Metadata.InvisibilityDuration.AsDuration())
+	message.Metadata.InvisibilityExpiry = invisibilityExpiry.UnixMilli()
 	message.Metadata.State = message_pb.Message_Metadata_INVISIBLE
 
 	priority := message.Metadata.GetPriority()
@@ -112,15 +112,20 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice
 		priority = MinPriority
 	}
 	// Calculate the message's priority score
-	// The score is calculated as the current time plus the message's priority
-	// This ensures that messages with a higher priority are processed first
-	priorityScore := time.Now().Add(time.Duration(int64(MaxPriority-priority))).UnixNano() / int64(time.Millisecond)
+	// Priority-based scoring: Higher priority = Lower score for Redis sorted set ordering
+	// Score format: priority_component + timestamp_component
+	// Priority component: (MaxPriority - priority) * 1e10 (to ensure priority dominates)
+	// Timestamp component: current timestamp in milliseconds (for FIFO within same priority)
+	priorityComponent := int64(MaxPriority-priority) * 1e10
+	timestampComponent := time.Now().UnixMilli()
+	priorityScore := priorityComponent + timestampComponent
 
 	// Begin transaction pipeline
 	txPipeline := as.redisClient.TxPipeline()
 
 	// Add the message to the queue
-	_, err = txPipeline.ZAdd(ctx, queueName, redis.Z{
+	prefixedQueueName := "queue:" + queueName
+	_, err := txPipeline.ZAdd(ctx, prefixedQueueName, redis.Z{
 		Score:  float64(priorityScore),
 		Member: message.GetMessageId(),
 	}).Result()
@@ -139,6 +144,17 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice
 	_, err = txPipeline.HSet(ctx, fmt.Sprintf("%s:%s:meta", queueName, message.MessageId), "metadata", string(messageMetadataByte)).Result()
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while saving message metadata")
+		return nil, chronoErr.GRPCStatus()
+	}
+
+	// Add message to state-based index (INVISIBLE state)
+	messageKey := fmt.Sprintf("%s:%s:meta", queueName, message.MessageId)
+	_, err = txPipeline.ZAdd(ctx, "invisible_messages", redis.Z{
+		Score:  float64(message.Metadata.InvisibilityExpiry),
+		Member: messageKey,
+	}).Result()
+	if err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while adding message to invisible index")
 		return nil, chronoErr.GRPCStatus()
 	}
 

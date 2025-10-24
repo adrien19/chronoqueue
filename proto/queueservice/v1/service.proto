@@ -3,26 +3,206 @@
 syntax = "proto3";
 package chronoqueue.api.queueservice.v1;
 
+
 option go_package = "github.com/adrien19/chronoqueue/api/queueservice/v1;queueservice";
 
+import "proto/google/api/annotations.proto";
+// import "proto/google/api/field_behavior.proto";
 import "proto/queueservice/v1/request_response.proto";
 
 service QueueService {
-    rpc CreateQueue (CreateQueueRequest) returns (CreateQueueResponse);
-    rpc DeleteQueue (DeleteQueueRequest) returns (DeleteQueueResponse);
-    rpc PostMessage (PostMessageRequest) returns (PostMessageResponse);
-    rpc GetNextMessage (GetNextMessageRequest) returns (GetNextMessageResponse);
-    rpc AcknowledgeMessage (AcknowledgeMessageRequest) returns (AcknowledgeMessageResponse);
-    rpc RenewMessageLease (RenewMessageLeaseRequest) returns (RenewMessageLeaseResponse);
-    rpc PeekQueueMessages (PeekQueueMessagesRequest) returns (PeekQueueMessagesResponse);
-    rpc GetQueueState (GetQueueStateRequest) returns (GetQueueStateResponse);
-    rpc SendMessageHeartBeat(SendMessageHeartBeatRequest) returns (SendMessageHeartBeatResponse);
-    rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse);
-    rpc CreateSchedule (CreateScheduleRequest) returns (CreateScheduleResponse);
-    rpc DeleteSchedule (DeleteScheduleRequest) returns (DeleteScheduleResponse);
-    rpc PauseSchedule (PauseScheduleRequest) returns (PauseScheduleResponse);
-    rpc ResumeSchedule (ResumeScheduleRequest) returns (ResumeScheduleResponse);
-    rpc GetSchedule (GetScheduleRequest) returns (GetScheduleResponse);
-    rpc ListSchedules (ListSchedulesRequest) returns (ListSchedulesResponse);
-    rpc GetScheduleHistory (GetScheduleHistoryRequest) returns (GetScheduleHistoryResponse);
+    // Queue Management Operations
+    rpc CreateQueue(CreateQueueRequest) returns (CreateQueueResponse) {
+        option (google.api.http) = {
+            post: "/v1/queues"
+            body: "*"
+        };
+    }
+
+    rpc DeleteQueue(DeleteQueueRequest) returns (DeleteQueueResponse) {
+        option (google.api.http) = {
+            delete: "/v1/queues/{name=*}"
+        };
+    }
+
+    rpc ListQueues(ListQueuesRequest) returns (ListQueuesResponse) {
+        option (google.api.http) = {
+            get: "/v1/queues"
+        };
+    }
+
+    rpc GetQueueState(GetQueueStateRequest) returns (GetQueueStateResponse) {
+        option (google.api.http) = {
+            get: "/v1/queues/{queue_name=*}/state"
+        };
+    }
+
+    // Message Operations
+    rpc PostMessage(PostMessageRequest) returns (PostMessageResponse) {
+        option (google.api.http) = {
+            post: "/v1/queues/{queue_name=*}/messages"
+            body: "message"
+        };
+    }
+
+    rpc GetNextMessage(GetNextMessageRequest) returns (GetNextMessageResponse) {
+        option (google.api.http) = {
+            post: "/v1/queues/{queue_name=*}/messages:getNext"
+            body: "*"
+        };
+    }
+
+    rpc AcknowledgeMessage(AcknowledgeMessageRequest) returns (AcknowledgeMessageResponse) {
+        option (google.api.http) = {
+            post: "/v1/queues/{queue_name=*}/messages/{message_id=*}:acknowledge"
+            body: "*"
+        };
+    }
+
+    rpc RenewMessageLease(RenewMessageLeaseRequest) returns (RenewMessageLeaseResponse) {
+        option (google.api.http) = {
+            post: "/v1/queues/{queue_name=*}/messages/{message_id=*}:renewLease"
+            body: "*"
+        };
+    }
+
+    rpc PeekQueueMessages(PeekQueueMessagesRequest) returns (PeekQueueMessagesResponse) {
+        option (google.api.http) = {
+            get: "/v1/queues/{queue_name=*}/messages:peek"
+        };
+    }
+
+    rpc SendMessageHeartBeat(SendMessageHeartBeatRequest) returns (SendMessageHeartBeatResponse) {
+        option (google.api.http) = {
+            post: "/v1/queues/{queue_name=*}/messages:heartbeat"
+            body: "*"
+        };
+    }
+
+    // Schedule Management Operations
+    rpc CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse) {
+        option (google.api.http) = {
+            post: "/v1/schedules"
+            body: "*"
+        };
+    }
+
+    rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse) {
+        option (google.api.http) = {
+            delete: "/v1/schedules/{schedule_id=*}"
+        };
+    }
+
+    rpc GetSchedule(GetScheduleRequest) returns (GetScheduleResponse) {
+        option (google.api.http) = {
+            get: "/v1/schedules/{schedule_id=*}"
+        };
+    }
+
+    rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse) {
+        option (google.api.http) = {
+            get: "/v1/schedules"
+        };
+    }
+
+    rpc GetScheduleHistory(GetScheduleHistoryRequest) returns (GetScheduleHistoryResponse) {
+        option (google.api.http) = {
+            get: "/v1/schedules/{schedule_id=*}/history"
+        };
+    }
+
+    rpc PauseSchedule(PauseScheduleRequest) returns (PauseScheduleResponse) {
+        option (google.api.http) = {
+            post: "/v1/schedules/{schedule_id=*}:pause"
+            body: "*"
+        };
+    }
+
+    rpc ResumeSchedule(ResumeScheduleRequest) returns (ResumeScheduleResponse) {
+        option (google.api.http) = {
+            post: "/v1/schedules/{schedule_id=*}:resume"
+            body: "*"
+        };
+    }
+
+    // Dead Letter Queue Management Operations
+    rpc GetDLQMessages(GetDLQMessagesRequest) returns (GetDLQMessagesResponse) {
+        option (google.api.http) = {
+            get: "/v1/dlq/{dlq_name=*}/messages"
+        };
+    }
+
+    rpc RequeueFromDLQ(RequeueFromDLQRequest) returns (RequeueFromDLQResponse) {
+        option (google.api.http) = {
+            post: "/v1/dlq/{dlq_name=*}/messages/{message_id=*}:requeue"
+            body: "*"
+        };
+    }
+
+    rpc DeleteFromDLQ(DeleteFromDLQRequest) returns (DeleteFromDLQResponse) {
+        option (google.api.http) = {
+            delete: "/v1/dlq/{dlq_name=*}/messages/{message_id=*}"
+        };
+    }
+
+    rpc PurgeDLQ(PurgeDLQRequest) returns (PurgeDLQResponse) {
+        option (google.api.http) = {
+            post: "/v1/dlq/{dlq_name=*}:purge"
+            body: "*"
+        };
+    }
+
+    rpc GetDLQStats(GetDLQStatsRequest) returns (GetDLQStatsResponse) {
+        option (google.api.http) = {
+            get: "/v1/dlq/{dlq_name=*}/stats"
+        };
+    }
+
+    // Calendar Schedule Operations
+    rpc ValidateCalendarSchedule(ValidateCalendarScheduleRequest) returns (ValidateCalendarScheduleResponse) {
+        option (google.api.http) = {
+            post: "/v1/calendar-schedules:validate"
+            body: "*"
+        };
+    }
+
+    rpc PreviewCalendarSchedule(PreviewCalendarScheduleRequest) returns (PreviewCalendarScheduleResponse) {
+        option (google.api.http) = {
+            post: "/v1/calendar-schedules:preview"
+            body: "*"
+        };
+    }
+
+    // Schema Management Operations
+    rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse) {
+        option (google.api.http) = {
+            post: "/v1/schemas"
+            body: "*"
+        };
+    }
+
+    rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse) {
+        option (google.api.http) = {
+            get: "/v1/schemas/{schema_id=*}/versions/{version=*}"
+        };
+    }
+
+    rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse) {
+        option (google.api.http) = {
+            get: "/v1/schemas"
+        };
+    }
+
+    rpc DeleteSchema(DeleteSchemaRequest) returns (DeleteSchemaResponse) {
+        option (google.api.http) = {
+            delete: "/v1/schemas/{schema_id=*}/versions/{version=*}"
+        };
+    }
+
+    rpc ValidatePayload(ValidatePayloadRequest) returns (ValidatePayloadResponse) {
+        option (google.api.http) = {
+            post: "/v1/schemas/{schema_id=*}/versions/{version=*}:validate"
+            body: "*"
+        };
+    }
 }

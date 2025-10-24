@@ -1,0 +1,2446 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "proto/queueservice/v1/service.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "QueueService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/calendar-schedules:preview": {
+      "post": {
+        "operationId": "QueueService_PreviewCalendarSchedule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PreviewCalendarScheduleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1PreviewCalendarScheduleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/calendar-schedules:validate": {
+      "post": {
+        "summary": "Calendar Schedule Operations",
+        "operationId": "QueueService_ValidateCalendarSchedule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ValidateCalendarScheduleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1ValidateCalendarScheduleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/dlq/{dlqName}/messages": {
+      "get": {
+        "summary": "Dead Letter Queue Management Operations",
+        "operationId": "QueueService_GetDLQMessages",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetDLQMessagesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "dlqName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/dlq/{dlqName}/messages/{messageId}": {
+      "delete": {
+        "operationId": "QueueService_DeleteFromDLQ",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteFromDLQResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "dlqName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/dlq/{dlqName}/messages/{messageId}:requeue": {
+      "post": {
+        "operationId": "QueueService_RequeueFromDLQ",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RequeueFromDLQResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "dlqName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceRequeueFromDLQBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/dlq/{dlqName}/stats": {
+      "get": {
+        "operationId": "QueueService_GetDLQStats",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetDLQStatsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "dlqName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/dlq/{dlqName}:purge": {
+      "post": {
+        "operationId": "QueueService_PurgeDLQ",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PurgeDLQResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "dlqName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServicePurgeDLQBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues": {
+      "get": {
+        "operationId": "QueueService_ListQueues",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListQueuesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "prefix",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      },
+      "post": {
+        "summary": "Queue Management Operations",
+        "operationId": "QueueService_CreateQueue",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CreateQueueResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateQueueRequest"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{name}": {
+      "delete": {
+        "operationId": "QueueService_DeleteQueue",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteQueueResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{queueName}/messages": {
+      "post": {
+        "summary": "Message Operations",
+        "operationId": "QueueService_PostMessage",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PostMessageResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "message",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1Message"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{queueName}/messages/{messageId}:acknowledge": {
+      "post": {
+        "operationId": "QueueService_AcknowledgeMessage",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1AcknowledgeMessageResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceAcknowledgeMessageBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{queueName}/messages/{messageId}:renewLease": {
+      "post": {
+        "operationId": "QueueService_RenewMessageLease",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RenewMessageLeaseResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceRenewMessageLeaseBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{queueName}/messages:getNext": {
+      "post": {
+        "operationId": "QueueService_GetNextMessage",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetNextMessageResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceGetNextMessageBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{queueName}/messages:heartbeat": {
+      "post": {
+        "operationId": "QueueService_SendMessageHeartBeat",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1SendMessageHeartBeatResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceSendMessageHeartBeatBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{queueName}/messages:peek": {
+      "get": {
+        "operationId": "QueueService_PeekQueueMessages",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PeekQueueMessagesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "priorityRange.min",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "priorityRange.max",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/queues/{queueName}/state": {
+      "get": {
+        "operationId": "QueueService_GetQueueState",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetQueueStateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schedules": {
+      "get": {
+        "operationId": "QueueService_ListSchedules",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListSchedulesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "prefix",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      },
+      "post": {
+        "summary": "Schedule Management Operations",
+        "operationId": "QueueService_CreateSchedule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CreateScheduleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateScheduleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schedules/{scheduleId}": {
+      "get": {
+        "operationId": "QueueService_GetSchedule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetScheduleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      },
+      "delete": {
+        "operationId": "QueueService_DeleteSchedule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteScheduleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schedules/{scheduleId}/history": {
+      "get": {
+        "operationId": "QueueService_GetScheduleHistory",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetScheduleHistoryResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schedules/{scheduleId}:pause": {
+      "post": {
+        "operationId": "QueueService_PauseSchedule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PauseScheduleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServicePauseScheduleBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schedules/{scheduleId}:resume": {
+      "post": {
+        "operationId": "QueueService_ResumeSchedule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ResumeScheduleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceResumeScheduleBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schemas": {
+      "get": {
+        "operationId": "QueueService_ListSchemas",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListSchemasResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "prefix",
+            "description": "Filter by schema_id prefix",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "limit",
+            "description": "Maximum number of results (default: 100)",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "activeOnly",
+            "description": "Only return active schemas",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      },
+      "post": {
+        "summary": "Schema Management Operations",
+        "operationId": "QueueService_RegisterSchema",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RegisterSchemaResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1RegisterSchemaRequest"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schemas/{schemaId}/versions/{version}": {
+      "get": {
+        "operationId": "QueueService_GetSchema",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetSchemaResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "schemaId",
+            "description": "Schema identifier",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "version",
+            "description": "Schema version (0 = latest)",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "format": "int32",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      },
+      "delete": {
+        "operationId": "QueueService_DeleteSchema",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteSchemaResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "schemaId",
+            "description": "Schema identifier",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "version",
+            "description": "Schema version (0 = delete all versions)",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "format": "int32",
+            "pattern": "[^/]+"
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
+    "/v1/schemas/{schemaId}/versions/{version}:validate": {
+      "post": {
+        "operationId": "QueueService_ValidatePayload",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ValidatePayloadResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "schemaId",
+            "description": "Schema identifier",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "version",
+            "description": "Schema version (0 = latest)",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "format": "int32",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceValidatePayloadBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "CalendarExceptionExceptionType": {
+      "type": "string",
+      "enum": [
+        "SKIP",
+        "RESCHEDULE",
+        "EXTRA"
+      ],
+      "default": "SKIP",
+      "title": "- SKIP: skip execution on this date\n - RESCHEDULE: move execution to different date\n - EXTRA: add extra execution on this date"
+    },
+    "CalendarScheduleScheduleType": {
+      "type": "string",
+      "enum": [
+        "MONTHLY",
+        "WEEKLY",
+        "DAILY",
+        "YEARLY",
+        "BUSINESS_DAYS",
+        "CUSTOM"
+      ],
+      "default": "MONTHLY"
+    },
+    "MonthlyRuleDayType": {
+      "type": "string",
+      "enum": [
+        "DAY_OF_MONTH",
+        "WEEKDAY_OF_MONTH",
+        "LAST_WEEKDAY",
+        "LAST_DAY"
+      ],
+      "default": "DAY_OF_MONTH",
+      "title": "- DAY_OF_MONTH: e.g., 15th of every month\n - WEEKDAY_OF_MONTH: e.g., first Monday of month\n - LAST_WEEKDAY: e.g., last Friday of month\n - LAST_DAY: last day of month"
+    },
+    "PeekQueueMessagesRequestPriorityRange": {
+      "type": "object",
+      "properties": {
+        "min": {
+          "type": "string",
+          "format": "int64"
+        },
+        "max": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "QueueServiceAcknowledgeMessageBody": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "$ref": "#/definitions/v1MessageMetadataState"
+        }
+      },
+      "title": "Acknowledge the message on the queue"
+    },
+    "QueueServiceGetNextMessageBody": {
+      "type": "object",
+      "properties": {
+        "leaseDuration": {
+          "type": "string"
+        },
+        "exclusivityKey": {
+          "type": "string"
+        }
+      },
+      "title": "Get the next message on the queue"
+    },
+    "QueueServicePauseScheduleBody": {
+      "type": "object",
+      "title": "Pause a schedule"
+    },
+    "QueueServicePurgeDLQBody": {
+      "type": "object",
+      "title": "Purge all messages from DLQ"
+    },
+    "QueueServiceRenewMessageLeaseBody": {
+      "type": "object",
+      "properties": {
+        "leaseDuration": {
+          "type": "string"
+        }
+      },
+      "title": "Renew lease period of a message"
+    },
+    "QueueServiceRequeueFromDLQBody": {
+      "type": "object",
+      "properties": {
+        "targetQueue": {
+          "type": "string"
+        }
+      },
+      "title": "Requeue message from DLQ back to original queue"
+    },
+    "QueueServiceResumeScheduleBody": {
+      "type": "object",
+      "title": "Resume a schedule"
+    },
+    "QueueServiceSendMessageHeartBeatBody": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string"
+        }
+      },
+      "title": "send a heartbeat to the queue"
+    },
+    "QueueServiceValidatePayloadBody": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "string",
+          "title": "JSON payload to validate"
+        }
+      },
+      "title": "Validate a payload against a schema"
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "protobufNullValue": {
+      "type": "string",
+      "enum": [
+        "NULL_VALUE"
+      ],
+      "default": "NULL_VALUE",
+      "description": "`NullValue` is a singleton enumeration to represent the null value for the\n`Value` type union.\n\nThe JSON representation for `NullValue` is JSON `null`.\n\n - NULL_VALUE: Null value."
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1AcknowledgeMessageResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1BusinessCalendar": {
+      "type": "object",
+      "properties": {
+        "calendarId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "holidays": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Holiday"
+          }
+        },
+        "weekendDays": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": "1=Monday, 7=Sunday"
+        },
+        "timezone": {
+          "type": "string"
+        }
+      }
+    },
+    "v1BusinessDaysRule": {
+      "type": "object",
+      "properties": {
+        "businessCalendarId": {
+          "type": "string",
+          "title": "reference to business calendar"
+        },
+        "dayOffset": {
+          "type": "integer",
+          "format": "int32",
+          "title": "offset from business day (e.g., -1 for day before)"
+        }
+      }
+    },
+    "v1CalendarException": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "type": {
+          "$ref": "#/definitions/CalendarExceptionExceptionType"
+        },
+        "rescheduleTo": {
+          "type": "string",
+          "format": "date-time",
+          "title": "for RESCHEDULE type"
+        },
+        "extraTimes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1TimeOfDay"
+          },
+          "title": "for EXTRA type"
+        },
+        "reason": {
+          "type": "string",
+          "title": "optional description"
+        }
+      }
+    },
+    "v1CalendarRule": {
+      "type": "object",
+      "properties": {
+        "monthly": {
+          "$ref": "#/definitions/v1MonthlyRule"
+        },
+        "weekly": {
+          "$ref": "#/definitions/v1WeeklyRule"
+        },
+        "daily": {
+          "$ref": "#/definitions/v1DailyRule"
+        },
+        "yearly": {
+          "$ref": "#/definitions/v1YearlyRule"
+        },
+        "businessDays": {
+          "$ref": "#/definitions/v1BusinessDaysRule"
+        },
+        "custom": {
+          "$ref": "#/definitions/v1CustomRule"
+        },
+        "executionTimes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1TimeOfDay"
+          },
+          "title": "Time of day for execution"
+        },
+        "validFrom": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Optional date range for rule validity"
+        },
+        "validUntil": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v1CalendarSchedule": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/CalendarScheduleScheduleType"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1CalendarRule"
+          }
+        },
+        "timezone": {
+          "type": "string"
+        },
+        "businessCalendar": {
+          "$ref": "#/definitions/v1BusinessCalendar"
+        },
+        "exceptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1CalendarException"
+          }
+        }
+      },
+      "title": "Calendar-based scheduling definitions"
+    },
+    "v1CreateQueueRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/definitions/v1QueueMetadata"
+        }
+      },
+      "title": "Create queue"
+    },
+    "v1CreateQueueResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1CreateScheduleRequest": {
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "$ref": "#/definitions/v1Schedule"
+        }
+      },
+      "title": "Create a schedule"
+    },
+    "v1CreateScheduleResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1CustomRule": {
+      "type": "object",
+      "properties": {
+        "expression": {
+          "type": "string",
+          "title": "custom expression for complex rules"
+        },
+        "ruleType": {
+          "type": "string",
+          "title": "identifier for custom rule processor"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "rule-specific parameters"
+        }
+      }
+    },
+    "v1DailyRule": {
+      "type": "object",
+      "properties": {
+        "dayInterval": {
+          "type": "integer",
+          "format": "int32",
+          "title": "every N days (default: 1)"
+        },
+        "weekdaysOnly": {
+          "type": "boolean",
+          "title": "exclude weekends"
+        },
+        "startDate": {
+          "type": "string",
+          "format": "date-time",
+          "title": "reference date for intervals"
+        }
+      }
+    },
+    "v1DeleteFromDLQResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1DeleteQueueResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1DeleteScheduleResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1DeleteSchemaResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "versionsDeleted": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Number of versions deleted"
+        }
+      }
+    },
+    "v1EasterOffset": {
+      "type": "object",
+      "properties": {
+        "daysOffset": {
+          "type": "integer",
+          "format": "int32",
+          "title": "days from Easter Sunday"
+        }
+      }
+    },
+    "v1FixedDate": {
+      "type": "object",
+      "properties": {
+        "month": {
+          "type": "integer",
+          "format": "int32",
+          "title": "1-12"
+        },
+        "day": {
+          "type": "integer",
+          "format": "int32",
+          "title": "1-31"
+        }
+      }
+    },
+    "v1GetDLQMessagesResponse": {
+      "type": "object",
+      "properties": {
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Message"
+          }
+        }
+      }
+    },
+    "v1GetDLQStatsResponse": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "messageCount": {
+          "type": "string",
+          "format": "int64"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "int64"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v1GetNextMessageResponse": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "$ref": "#/definitions/v1Message"
+        }
+      }
+    },
+    "v1GetQueueStateResponse": {
+      "type": "object",
+      "properties": {
+        "stateCounts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "earliestDeadline": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v1GetScheduleHistoryResponse": {
+      "type": "object",
+      "properties": {
+        "scheduleHistory": {
+          "$ref": "#/definitions/v1ScheduleHistory"
+        }
+      }
+    },
+    "v1GetScheduleResponse": {
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "$ref": "#/definitions/v1Schedule"
+        }
+      }
+    },
+    "v1GetSchemaResponse": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "$ref": "#/definitions/v1Schema",
+          "title": "Full schema object"
+        }
+      }
+    },
+    "v1Holiday": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "recurringYearly": {
+          "type": "boolean"
+        },
+        "rule": {
+          "$ref": "#/definitions/v1HolidayRule",
+          "title": "for complex holidays like \"first Monday in May\""
+        }
+      }
+    },
+    "v1HolidayRule": {
+      "type": "object",
+      "properties": {
+        "fixed": {
+          "$ref": "#/definitions/v1FixedDate"
+        },
+        "relative": {
+          "$ref": "#/definitions/v1RelativeDate"
+        },
+        "easterOffset": {
+          "$ref": "#/definitions/v1EasterOffset"
+        }
+      }
+    },
+    "v1ListQueuesResponse": {
+      "type": "object",
+      "properties": {
+        "queues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Queue"
+          }
+        }
+      }
+    },
+    "v1ListSchedulesResponse": {
+      "type": "object",
+      "properties": {
+        "schedules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Schedule"
+          }
+        }
+      }
+    },
+    "v1ListSchemasResponse": {
+      "type": "object",
+      "properties": {
+        "schemas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1SchemaInfo"
+          }
+        },
+        "totalCount": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1Message": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/definitions/v1MessageMetadata"
+        }
+      }
+    },
+    "v1MessageMetadata": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "$ref": "#/definitions/v1Payload"
+        },
+        "state": {
+          "$ref": "#/definitions/v1MessageMetadataState"
+        },
+        "invisibilityDuration": {
+          "type": "string"
+        },
+        "attemptsLeft": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "leaseDuration": {
+          "type": "string"
+        },
+        "leaseExpiry": {
+          "type": "string",
+          "format": "int64"
+        },
+        "leaseRenewalCount": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "invisibilityExpiry": {
+          "type": "string",
+          "format": "int64"
+        },
+        "priority": {
+          "type": "string",
+          "format": "int64"
+        },
+        "maxAttempts": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1MessageMetadataState": {
+      "type": "string",
+      "enum": [
+        "INVISIBLE",
+        "PENDING",
+        "RUNNING",
+        "COMPLETED",
+        "CANCELED",
+        "ERRORED"
+      ],
+      "default": "INVISIBLE"
+    },
+    "v1MonthlyRule": {
+      "type": "object",
+      "properties": {
+        "dayType": {
+          "$ref": "#/definitions/MonthlyRuleDayType"
+        },
+        "dayValue": {
+          "type": "integer",
+          "format": "int32",
+          "title": "day number (1-31) or weekday (1-7)"
+        },
+        "occurrence": {
+          "type": "integer",
+          "format": "int32",
+          "description": "for WEEKDAY_OF_MONTH: 1=first, 2=second, etc."
+        },
+        "months": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": "specific months (1-12), empty = all months"
+        }
+      }
+    },
+    "v1PauseScheduleResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1Payload": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "data": {
+          "type": "object"
+        },
+        "contentType": {
+          "type": "string",
+          "title": "MIME type (e.g., application/json, text/plain)"
+        },
+        "schemaId": {
+          "type": "string",
+          "title": "Optional schema reference for validation"
+        },
+        "schemaVersion": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Schema version number"
+        }
+      }
+    },
+    "v1PeekQueueMessagesResponse": {
+      "type": "object",
+      "properties": {
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Message"
+          }
+        }
+      }
+    },
+    "v1PostMessageResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1PreviewCalendarScheduleRequest": {
+      "type": "object",
+      "properties": {
+        "calendarSchedule": {
+          "$ref": "#/definitions/v1CalendarSchedule"
+        },
+        "count": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Number of execution times to preview (default: 10, max: 100)"
+        }
+      },
+      "title": "Preview upcoming execution times for a calendar schedule"
+    },
+    "v1PreviewCalendarScheduleResponse": {
+      "type": "object",
+      "properties": {
+        "executionTimes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "timezone": {
+          "type": "string"
+        },
+        "previewStart": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "totalCount": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1PurgeDLQResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1Queue": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/definitions/v1QueueMetadata"
+        }
+      }
+    },
+    "v1QueueMetadata": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/v1QueueType"
+        },
+        "defaultMaxAttempts": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "leaseDuration": {
+          "type": "string"
+        },
+        "exclusivityKey": {
+          "type": "string"
+        },
+        "invisibilityDuration": {
+          "type": "string"
+        },
+        "deadLetterQueueName": {
+          "type": "string"
+        },
+        "autoCreateDlq": {
+          "type": "boolean"
+        },
+        "schemaId": {
+          "type": "string",
+          "title": "Default schema for queue messages"
+        },
+        "schemaRequired": {
+          "type": "boolean",
+          "title": "Require schema validation for messages"
+        },
+        "maxPayloadSize": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Override default max payload size (bytes)"
+        },
+        "allowedContentTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed MIME types (empty = all allowed)"
+        }
+      }
+    },
+    "v1QueueType": {
+      "type": "string",
+      "enum": [
+        "SIMPLE",
+        "EXCLUSIVE"
+      ],
+      "default": "SIMPLE"
+    },
+    "v1RegisterSchemaRequest": {
+      "type": "object",
+      "properties": {
+        "schemaId": {
+          "type": "string",
+          "title": "Unique schema identifier"
+        },
+        "name": {
+          "type": "string",
+          "title": "Human-readable schema name"
+        },
+        "description": {
+          "type": "string",
+          "title": "Schema description"
+        },
+        "content": {
+          "type": "string",
+          "title": "JSON Schema content"
+        },
+        "contentType": {
+          "type": "string",
+          "title": "Schema type (default: \"json-schema\")"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Additional metadata"
+        }
+      },
+      "title": "Register a new schema or schema version"
+    },
+    "v1RegisterSchemaResponse": {
+      "type": "object",
+      "properties": {
+        "schemaId": {
+          "type": "string",
+          "title": "Schema identifier"
+        },
+        "version": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Assigned schema version"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "int64",
+          "title": "Creation timestamp"
+        }
+      }
+    },
+    "v1RelativeDate": {
+      "type": "object",
+      "properties": {
+        "month": {
+          "type": "integer",
+          "format": "int32",
+          "title": "1-12"
+        },
+        "weekday": {
+          "type": "integer",
+          "format": "int32",
+          "title": "1=Monday, 7=Sunday"
+        },
+        "occurrence": {
+          "type": "integer",
+          "format": "int32",
+          "title": "1=first, 2=second, -1=last"
+        }
+      }
+    },
+    "v1RenewMessageLeaseResponse": {
+      "type": "object",
+      "properties": {
+        "remainingTime": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/definitions/v1MessageMetadataState"
+        }
+      }
+    },
+    "v1RequeueFromDLQResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1ResumeScheduleResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1Schedule": {
+      "type": "object",
+      "properties": {
+        "scheduleId": {
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/definitions/v1ScheduleMetadata"
+        }
+      }
+    },
+    "v1ScheduleHistory": {
+      "type": "object",
+      "properties": {
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Message"
+          }
+        },
+        "scheduleId": {
+          "type": "string"
+        },
+        "nextRun": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastRun": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v1ScheduleMetadata": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "$ref": "#/definitions/v1Payload"
+        },
+        "state": {
+          "$ref": "#/definitions/v1ScheduleMetadataState"
+        },
+        "cronSchedule": {
+          "type": "string",
+          "title": "legacy cron-based scheduling"
+        },
+        "calendarSchedule": {
+          "$ref": "#/definitions/v1CalendarSchedule",
+          "title": "new calendar-based scheduling"
+        },
+        "queueName": {
+          "type": "string"
+        },
+        "messageIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "nextRun": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastRun": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "exclusivityKey": {
+          "type": "string"
+        },
+        "stateMessage": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "string",
+          "format": "int64"
+        },
+        "hasMaxMessages": {
+          "type": "boolean"
+        },
+        "maxMessages": {
+          "type": "string",
+          "format": "int64"
+        },
+        "leaseDuration": {
+          "type": "string"
+        },
+        "timezone": {
+          "type": "string",
+          "description": "timezone for calendar calculations",
+          "title": "Calendar scheduling metadata"
+        },
+        "nextRuns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "title": "precomputed next execution times"
+        }
+      }
+    },
+    "v1ScheduleMetadataState": {
+      "type": "string",
+      "enum": [
+        "SCHEDULED",
+        "CANCELED",
+        "ERRORED",
+        "PAUSED"
+      ],
+      "default": "SCHEDULED"
+    },
+    "v1Schema": {
+      "type": "object",
+      "properties": {
+        "schemaId": {
+          "type": "string",
+          "title": "Unique schema identifier"
+        },
+        "version": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Schema version number"
+        },
+        "name": {
+          "type": "string",
+          "title": "Human-readable schema name"
+        },
+        "description": {
+          "type": "string",
+          "title": "Schema description"
+        },
+        "content": {
+          "type": "string",
+          "title": "JSON Schema content"
+        },
+        "contentType": {
+          "type": "string",
+          "title": "Schema type (default: json-schema)"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "int64",
+          "title": "Creation timestamp (Unix milliseconds)"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "int64",
+          "title": "Last update timestamp (Unix milliseconds)"
+        },
+        "isActive": {
+          "type": "boolean",
+          "title": "Whether this schema version is active"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Additional metadata"
+        }
+      },
+      "title": "Schema defines a message validation schema"
+    },
+    "v1SchemaInfo": {
+      "type": "object",
+      "properties": {
+        "schemaId": {
+          "type": "string"
+        },
+        "latestVersion": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Latest version number"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "int64"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "int64"
+        },
+        "versionCount": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Total number of versions"
+        },
+        "isActive": {
+          "type": "boolean"
+        }
+      },
+      "title": "Schema information for list responses\nNote: This is a summary view with aggregated version info, different from schema.v1.Schema"
+    },
+    "v1SendMessageHeartBeatResponse": {
+      "type": "object",
+      "properties": {
+        "remainingTime": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/definitions/v1MessageMetadataState"
+        }
+      }
+    },
+    "v1TimeOfDay": {
+      "type": "object",
+      "properties": {
+        "hour": {
+          "type": "integer",
+          "format": "int32",
+          "title": "0-23"
+        },
+        "minute": {
+          "type": "integer",
+          "format": "int32",
+          "title": "0-59"
+        },
+        "second": {
+          "type": "integer",
+          "format": "int32",
+          "title": "0-59 (optional, default: 0)"
+        }
+      }
+    },
+    "v1ValidateCalendarScheduleRequest": {
+      "type": "object",
+      "properties": {
+        "calendarSchedule": {
+          "$ref": "#/definitions/v1CalendarSchedule"
+        }
+      },
+      "title": "Validate a calendar schedule configuration"
+    },
+    "v1ValidateCalendarScheduleResponse": {
+      "type": "object",
+      "properties": {
+        "valid": {
+          "type": "boolean"
+        },
+        "errorMessage": {
+          "type": "string"
+        },
+        "validationIssues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ValidationIssue"
+          }
+        }
+      }
+    },
+    "v1ValidatePayloadResponse": {
+      "type": "object",
+      "properties": {
+        "valid": {
+          "type": "boolean"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ValidationError"
+          },
+          "title": "Validation errors from schema.proto"
+        },
+        "schemaId": {
+          "type": "string"
+        },
+        "schemaVersion": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1ValidationError": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string",
+          "title": "Field path (e.g., \"payload.data.orderId\")"
+        },
+        "errorCode": {
+          "type": "string",
+          "title": "Error code (e.g., REQUIRED_FIELD_MISSING)"
+        },
+        "message": {
+          "type": "string",
+          "title": "Human-readable error message"
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Additional error details"
+        }
+      },
+      "title": "ValidationError provides detailed error information"
+    },
+    "v1ValidationIssue": {
+      "type": "object",
+      "properties": {
+        "severity": {
+          "type": "string",
+          "title": "\"error\", \"warning\", \"info\""
+        },
+        "ruleIndex": {
+          "type": "integer",
+          "format": "int32",
+          "title": "-1 for global issues"
+        },
+        "field": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "suggestion": {
+          "type": "string"
+        }
+      },
+      "title": "Validation issue details"
+    },
+    "v1WeeklyRule": {
+      "type": "object",
+      "properties": {
+        "daysOfWeek": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": "1=Monday, 7=Sunday"
+        },
+        "weekInterval": {
+          "type": "integer",
+          "format": "int32",
+          "title": "every N weeks (default: 1)"
+        },
+        "startWeek": {
+          "type": "string",
+          "format": "date-time",
+          "title": "reference week for intervals"
+        }
+      }
+    },
+    "v1YearlyRule": {
+      "type": "object",
+      "properties": {
+        "month": {
+          "type": "integer",
+          "format": "int32",
+          "title": "month (1-12)"
+        },
+        "day": {
+          "type": "integer",
+          "format": "int32",
+          "title": "day of month (1-31)"
+        },
+        "adjustForLeapYear": {
+          "type": "boolean",
+          "title": "handle Feb 29 on non-leap years"
+        }
+      }
+    }
+  }
+}

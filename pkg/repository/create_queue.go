@@ -5,17 +5,18 @@ import (
 	"errors"
 	"fmt"
 
-	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
-	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
-	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
+
+	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
 )
 
 func (as *storage) checkQueueExistence(ctx context.Context, queueName string) (bool, error) {
-	exists, err := as.redisClient.Exists(ctx, queueName, fmt.Sprintf("%s:meta", queueName)).Result()
-	return exists >= 2, err
+	exists, err := as.redisClient.Exists(ctx, queueName, fmt.Sprintf("queue:%s:meta", queueName)).Result()
+	return exists >= 1, err
 }
 
 func (as *storage) setQueueMetadata(ctx context.Context, request *queueservice_pb.CreateQueueRequest, txPipeline redis.Pipeliner) error {
@@ -27,7 +28,7 @@ func (as *storage) setQueueMetadata(ctx context.Context, request *queueservice_p
 		return err
 	}
 
-	_, err = txPipeline.HSet(ctx, fmt.Sprintf("%s:meta", request.GetName()), "metadata", string(queueMetadataByte)).Result()
+	_, err = txPipeline.HSet(ctx, fmt.Sprintf("queue:%s:meta", request.GetName()), "metadata", string(queueMetadataByte)).Result()
 	return err
 }
 
@@ -42,9 +43,10 @@ func (as *storage) CreateQueue(ctx context.Context, request *queueservice_pb.Cre
 
 	exists, err := as.checkQueueExistence(ctx, request.GetName())
 	if err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occurred while checking queue existence")
 		return &queueservice_pb.CreateQueueResponse{
 			Success: false,
-		}, err
+		}, chronoErr.GRPCStatus()
 	}
 	if exists {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.AlreadyExists, err, "Queue already exists")
@@ -54,7 +56,8 @@ func (as *storage) CreateQueue(ctx context.Context, request *queueservice_pb.Cre
 	}
 
 	txPipeline := as.redisClient.TxPipeline()
-	_, err = txPipeline.ZAdd(ctx, request.GetName(), redis.Z{}).Result()
+	queueID := "queue:" + request.GetName() // add prefix to avoid key collisions
+	_, err = txPipeline.ZAdd(ctx, queueID, redis.Z{}).Result()
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating queue")
 		return &queueservice_pb.CreateQueueResponse{
@@ -75,6 +78,39 @@ func (as *storage) CreateQueue(ctx context.Context, request *queueservice_pb.Cre
 		return &queueservice_pb.CreateQueueResponse{
 			Success: false,
 		}, chronoErr.GRPCStatus()
+	}
+
+	// create dlq if auto dlq is enabled
+	if request.GetMetadata().GetAutoCreateDlq() {
+		dlqName := fmt.Sprintf("%s_dlq", request.GetName())
+		if request.GetMetadata().GetDeadLetterQueueName() != "" {
+			dlqName = request.GetMetadata().GetDeadLetterQueueName()
+		}
+		dlqRequest := &queueservice_pb.CreateQueueRequest{
+			Name: dlqName,
+			Metadata: &queue_pb.QueueMetadata{
+				Type:                 request.GetMetadata().GetType(),
+				AutoCreateDlq:        false,
+				ExclusivityKey:       request.GetMetadata().GetExclusivityKey(),
+				LeaseDuration:        request.GetMetadata().GetLeaseDuration(),
+				InvisibilityDuration: request.GetMetadata().GetInvisibilityDuration(),
+				DefaultMaxAttempts:   request.GetMetadata().GetDefaultMaxAttempts(),
+			},
+		}
+		err = as.setQueueMetadata(ctx, dlqRequest, txPipeline)
+		if err != nil {
+			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating DLQ metadata")
+			return &queueservice_pb.CreateQueueResponse{
+				Success: false,
+			}, chronoErr.GRPCStatus()
+		}
+		_, err = txPipeline.ZAdd(ctx, "queue:"+dlqName, redis.Z{}).Result()
+		if err != nil {
+			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating DLQ")
+			return &queueservice_pb.CreateQueueResponse{
+				Success: false,
+			}, chronoErr.GRPCStatus()
+		}
 	}
 
 	_, err = txPipeline.Exec(ctx)

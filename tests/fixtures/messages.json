@@ -1,0 +1,105 @@
+{
+    "order_created": {
+        "content": {
+            "order_id": "ORD-12345",
+            "customer_id": "CUST-67890",
+            "items": [
+                {
+                    "sku": "ITEM-001",
+                    "quantity": 2,
+                    "price": 29.99
+                },
+                {
+                    "sku": "ITEM-002",
+                    "quantity": 1,
+                    "price": 49.99
+                }
+            ],
+            "total": 109.97,
+            "timestamp": "2025-10-20T10:00:00Z"
+        },
+        "content_type": "application/json",
+        "priority": 50
+    },
+    "high_priority_alert": {
+        "content": {
+            "alert_type": "CRITICAL",
+            "message": "System CPU usage exceeded 90%",
+            "severity": "HIGH",
+            "timestamp": "2025-10-20T10:05:00Z",
+            "host": "server-01",
+            "metrics": {
+                "cpu_usage": 92.5,
+                "memory_usage": 78.3
+            }
+        },
+        "content_type": "application/json",
+        "priority": 95
+    },
+    "medium_priority_event": {
+        "content": {
+            "event_type": "USER_REGISTERED",
+            "user_id": "USER-12345",
+            "email": "user@example.com",
+            "timestamp": "2025-10-20T09:30:00Z"
+        },
+        "content_type": "application/json",
+        "priority": 50
+    },
+    "low_priority_log": {
+        "content": "INFO: Background cleanup job started at 2025-10-20T08:00:00Z",
+        "content_type": "text/plain",
+        "priority": 10
+    },
+    "notification": {
+        "content": {
+            "notification_id": "NOTIF-001",
+            "user_id": "USER-12345",
+            "title": "Your order has shipped",
+            "body": "Order ORD-12345 has been shipped and is on its way.",
+            "type": "SHIPPING",
+            "timestamp": "2025-10-20T11:00:00Z"
+        },
+        "content_type": "application/json",
+        "priority": 30
+    },
+    "large_payload": {
+        "content": {
+            "transaction_id": "TXN-99999",
+            "data": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+            "metadata": {
+                "source": "api",
+                "version": "2.0",
+                "timestamp": "2025-10-20T12:00:00Z"
+            },
+            "items": []
+        },
+        "content_type": "application/json",
+        "priority": 50,
+        "note": "items array would be filled with many entries for large payload test"
+    },
+    "empty_payload": {
+        "content": "",
+        "content_type": "text/plain",
+        "priority": 20
+    },
+    "special_characters": {
+        "content": {
+            "message": "Special characters test: \n\t\"Hello World!\" 🚀 émojis & ünïcödë",
+            "symbols": "!@#$%^&*()_+-=[]{}|;:',.<>?/~`"
+        },
+        "content_type": "application/json",
+        "priority": 40
+    },
+    "xml_content": {
+        "content": "<?xml version=\"1.0\"?><root><item>Test</item></root>",
+        "content_type": "application/xml",
+        "priority": 30
+    },
+    "binary_content": {
+        "content": "SGVsbG8gV29ybGQh",
+        "content_type": "application/octet-stream",
+        "priority": 25,
+        "note": "Base64 encoded binary content"
+    }
+}

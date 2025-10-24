@@ -2,7 +2,6 @@ package util
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
@@ -13,7 +12,7 @@ var (
 	ErrUnknown = errors.New("unknown argument passed")
 
 	ErrInvalidArgument = errors.New("invalid argument passed")
-	log                *logrus.Logger
+	log                *logrus.Logger //nolint:unused
 )
 
 type ErrorLevel int
@@ -37,11 +36,10 @@ func (ce *ChronoError) Error() string {
 
 // Convert the ChronoError to a gRPC status error
 func (e *ChronoError) GRPCStatus() error {
-	errMsg := e.Message
 	if e.Err != nil {
-		errMsg = fmt.Sprintf("%s: %s", e.Message, e.Err.Error())
+		return status.Errorf(e.Code, "%s: %s", e.Message, e.Err.Error())
 	}
-	return status.Errorf(e.Code, errMsg)
+	return status.Errorf(e.Code, "%s", e.Message)
 }
 
 func NewChronoError(level ErrorLevel, code codes.Code, err error, msg string) *ChronoError {

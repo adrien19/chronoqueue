@@ -5,9 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
@@ -15,10 +19,6 @@ import (
 	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption"
 	"github.com/adrien19/chronoqueue/internal/util"
-	"github.com/redis/go-redis/v9"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type ChronoHandlerFunc func(ctx context.Context, req interface{}) (interface{}, error)
@@ -35,6 +35,14 @@ func (as *storage) decryptMessageMetadataPayload(metadata *message_pb.Message_Me
 	// Fetch the base64-encoded values from metadata
 	base64EncryptedPayload := metadata.Payload.Metadata["encryptedPayload"].GetStringValue()
 	base64Nonce := metadata.Payload.Metadata["nonce"].GetStringValue()
+
+	// Handle nil encryption key manager (used in testing)
+	if as.encryptionKeyManager == nil {
+		if base64EncryptedPayload != "" || base64Nonce != "" {
+			return errors.New("encrypted payload found but encryption not configured")
+		}
+		return nil
+	}
 
 	if !as.encryptionKeyManager.Enabled {
 		if base64EncryptedPayload != "" || base64Nonce != "" {
@@ -60,7 +68,6 @@ func (as *storage) decryptMessageMetadataPayload(metadata *message_pb.Message_Me
 
 // Fetches and deserializes the message metadata from Redis.
 func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, messageID string) (*message_pb.Message_Metadata, error) {
-
 	messageMutex := as.rs.NewMutex("mutex:" + messageID)
 	// Try to acquire the lock
 	if err := messageMutex.Lock(); err != nil {
@@ -81,11 +88,23 @@ func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, m
 		return nil, err
 	}
 
+	as.logger.DebugWithFields(
+		"Fetched metadata for message:",
+		"message Id", messageID,
+		"metadata", result,
+	)
+
 	var meta message_pb.Message_Metadata
 	err = protojson.Unmarshal([]byte(result), &meta)
 	if err != nil {
 		return nil, err
 	}
+
+	as.logger.DebugWithFields(
+		"Successfully unmarshaled metadata for message:",
+		"message Id", messageID,
+		"metadata", meta.Payload,
+	)
 
 	err = as.decryptMessageMetadataPayload(&meta)
 	if err != nil {
@@ -96,6 +115,7 @@ func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, m
 }
 
 func (as *storage) getMetadata(ctx context.Context, key string, metadata interface{}) error {
+	fmt.Printf("Fetching metadata for key: %s\n", key)
 	metaResult, err := as.redisClient.HGet(ctx, key, "metadata").Result()
 	if err != nil {
 		return err
@@ -110,8 +130,8 @@ func (as *storage) getMetadata(ctx context.Context, key string, metadata interfa
 	return nil
 }
 
-func (as *storage) getQueueMetadata(ctx context.Context, queueName string) (*queue_pb.QueueMetadata, error) {
-	queueMetaKey := fmt.Sprintf("%s:meta", queueName)
+func (as *storage) GetQueueMetadata(ctx context.Context, queueName string) (*queue_pb.QueueMetadata, error) {
+	queueMetaKey := fmt.Sprintf("queue:%s:meta", queueName)
 	var queueMeta queue_pb.QueueMetadata
 	if err := as.getMetadata(ctx, queueMetaKey, &queueMeta); err != nil {
 		return nil, err
@@ -141,13 +161,35 @@ func (as *storage) updateMessageStateAndLease(message *message_pb.Message, reque
 		}
 	}
 
+	// Initialize retry counts if not set
+	if message.Metadata.AttemptsLeft == 0 && message.Metadata.MaxAttempts == 0 {
+		// Use queue default if message doesn't specify max attempts
+		message.Metadata.MaxAttempts = queueMeta.GetDefaultMaxAttempts()
+		message.Metadata.AttemptsLeft = message.Metadata.MaxAttempts
+	} else if message.Metadata.AttemptsLeft == 0 && message.Metadata.MaxAttempts > 0 {
+		// Message specified max_attempts but attempts_left wasn't initialized
+		as.logger.InfoWithFields(
+			"Initializing attempts left for message:",
+			"message Id", message.GetMessageId(),
+			"old attempts left", message.Metadata.AttemptsLeft,
+			"max attempts", message.Metadata.MaxAttempts,
+		)
+		message.Metadata.AttemptsLeft = message.Metadata.MaxAttempts
+	} else if message.Metadata.AttemptsLeft == 0 && message.Metadata.MaxAttempts == -1 {
+		// Infinite retries: set attempts_left to -1 to indicate infinite
+		message.Metadata.AttemptsLeft = -1
+	}
+
 	// Add lease expiry data to the message metadata
 	expireDate := time.Now().Add(time.Duration(message.Metadata.GetLeaseDuration().AsDuration()))
 	message.Metadata.LeaseExpiry = expireDate.UnixNano() / int64(time.Millisecond)
 }
 
-func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string, message *message_pb.Message) error {
+func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string, message *message_pb.Message) error { //nolint:unused
+	return as.saveMessageWithMetadataAndOldState(ctx, queueName, message, message_pb.Message_Metadata_State(-1))
+}
 
+func (as *storage) saveMessageWithMetadataAndOldState(ctx context.Context, queueName string, message *message_pb.Message, oldState message_pb.Message_Metadata_State) error {
 	messageMutex := as.rs.NewMutex("mutex:" + message.MessageId)
 	// Try to acquire the lock
 	if err := messageMutex.Lock(); err != nil {
@@ -162,6 +204,20 @@ func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string
 		}
 	}()
 
+	key := fmt.Sprintf("%s:%s:meta", queueName, message.MessageId)
+
+	// If oldState is -1, we need to fetch the old state
+	if oldState == message_pb.Message_Metadata_State(-1) {
+		if oldMetadata, err := as.fetchMessageMetadata(ctx, queueName, message.MessageId); err == nil {
+			oldState = oldMetadata.State
+		} else {
+			// If we can't fetch old metadata, assume this is a new message
+			as.logger.Info("No existing metadata found for message, assuming new message", "messageID", message.MessageId, "queueName", queueName)
+			oldState = message_pb.Message_Metadata_State(-1)
+		}
+	} // Begin transaction pipeline for atomic updates
+	txPipeline := as.redisClient.TxPipeline()
+
 	// Create a proto message's metadata marshaller
 	m := protojson.MarshalOptions{
 		EmitUnpopulated: true,
@@ -172,23 +228,49 @@ func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string
 		return err
 	}
 
-	messageMetadataByte, err := m.Marshal(message.Metadata)
+	messageMetadataBytes, err := m.Marshal(message.Metadata)
 	if err != nil {
 		return err
 	}
 
-	key := fmt.Sprintf("%s:%s:meta", queueName, message.MessageId)
-	return as.redisClient.HSet(ctx, key, "metadata", string(messageMetadataByte)).Err()
+	// Update message metadata
+	_, err = txPipeline.HSet(ctx, key, "metadata", string(messageMetadataBytes)).Result()
+	if err != nil {
+		return err
+	}
+
+	// Handle state index transitions
+	newState := message.Metadata.State
+	if oldState != newState {
+		var newScore float64
+		switch newState {
+		case message_pb.Message_Metadata_RUNNING:
+			newScore = float64(message.Metadata.LeaseExpiry)
+		case message_pb.Message_Metadata_INVISIBLE:
+			newScore = float64(message.Metadata.InvisibilityExpiry)
+		}
+
+		if err := as.transitionStateIndex(ctx, txPipeline, key, oldState, newState, newScore); err != nil {
+			return fmt.Errorf("failed to update state indexes: %w", err)
+		}
+	}
+
+	// Commit the transaction
+	_, err = txPipeline.Exec(ctx)
+	return err
 }
 
-func (as *storage) fetchQueueMembersBeforeNow(ctx context.Context, queueName string) ([]string, error) {
-	max := strconv.FormatInt(time.Now().UnixMilli(), 10)
-	return as.redisClient.ZRangeByScore(ctx, queueName, &redis.ZRangeBy{
-		Min:    "-inf",
-		Max:    max,
-		Offset: 0,
-		Count:  10,
-	}).Result()
+func (as *storage) fetchQueueMembersByPriority(ctx context.Context, queueName string, limit int64) ([]string, error) {
+	prefixedQueueName := "queue:" + queueName
+	// Get messages ordered by priority (lowest score = highest priority)
+	return as.redisClient.ZRange(ctx, prefixedQueueName, 0, limit-1).Result()
+}
+
+func (as *storage) removeQueueMembersByPriority(ctx context.Context, queueName string, memberIDs []string) error {
+	prefixedQueueName := "queue:" + queueName
+	// Remove messages ordered by priority (lowest score = highest priority)
+	_, err := as.redisClient.ZRem(ctx, prefixedQueueName, memberIDs).Result()
+	return err
 }
 
 func (as *storage) listMetadataIDs(ctx context.Context, keyType string, prefix string, limit int64) ([]string, error) {
@@ -196,11 +278,13 @@ func (as *storage) listMetadataIDs(ctx context.Context, keyType string, prefix s
 	var cursor uint64
 	var err error
 	queryStr := ""
-	if keyType == "queue" {
-		queryStr = prefix + "*" + ":meta"
-	} else if keyType == "schedule" {
+	switch keyType {
+	case "queue":
+		fmt.Println("Listing queue metadata IDs with prefix:", prefix)
+		queryStr = "queue:" + prefix + "*" + ":meta"
+	case "schedule":
 		queryStr = "schedule:" + prefix + "*" + ":meta"
-	} else {
+	default:
 		return nil, errors.New("invalid key type: " + queryStr)
 	}
 	for {
@@ -215,4 +299,83 @@ func (as *storage) listMetadataIDs(ctx context.Context, keyType string, prefix s
 		}
 	}
 	return metadataIDs, nil
+}
+
+// State index management helpers for sorted sets optimization
+
+// addToStateIndex adds a message to the appropriate state-based sorted set
+func (as *storage) addToStateIndex(ctx context.Context, pipeline redis.Pipeliner, messageKey string, state message_pb.Message_Metadata_State, score float64) error {
+	var indexKey string
+	switch state {
+	case message_pb.Message_Metadata_INVISIBLE:
+		indexKey = "invisible_messages"
+	case message_pb.Message_Metadata_RUNNING:
+		indexKey = "running_messages"
+	case message_pb.Message_Metadata_PENDING:
+		// PENDING messages don't need indexing as they're handled by queue priority
+		return nil
+	case message_pb.Message_Metadata_COMPLETED, message_pb.Message_Metadata_CANCELED, message_pb.Message_Metadata_ERRORED:
+		// Terminal states don't need indexing
+		return nil
+	default:
+		return nil
+	}
+
+	if pipeline != nil {
+		_, err := pipeline.ZAdd(ctx, indexKey, redis.Z{
+			Score:  score,
+			Member: messageKey,
+		}).Result()
+		return err
+	} else {
+		_, err := as.redisClient.ZAdd(ctx, indexKey, redis.Z{
+			Score:  score,
+			Member: messageKey,
+		}).Result()
+		return err
+	}
+}
+
+// removeFromStateIndex removes a message from the appropriate state-based sorted set
+func (as *storage) removeFromStateIndex(ctx context.Context, pipeline redis.Pipeliner, messageKey string, state message_pb.Message_Metadata_State) error {
+	var indexKey string
+	switch state {
+	case message_pb.Message_Metadata_INVISIBLE:
+		indexKey = "invisible_messages"
+	case message_pb.Message_Metadata_RUNNING:
+		indexKey = "running_messages"
+	case message_pb.Message_Metadata_PENDING:
+		// PENDING messages don't need indexing
+		return nil
+	case message_pb.Message_Metadata_COMPLETED, message_pb.Message_Metadata_CANCELED, message_pb.Message_Metadata_ERRORED:
+		// Terminal states don't need indexing
+		return nil
+	default:
+		return nil
+	}
+
+	if pipeline != nil {
+		_, err := pipeline.ZRem(ctx, indexKey, messageKey).Result()
+		return err
+	} else {
+		_, err := as.redisClient.ZRem(ctx, indexKey, messageKey).Result()
+		return err
+	}
+}
+
+// transitionStateIndex handles state transitions by removing from old index and adding to new index
+func (as *storage) transitionStateIndex(ctx context.Context, pipeline redis.Pipeliner, messageKey string, oldState, newState message_pb.Message_Metadata_State, newScore float64) error {
+	// Remove from old state index (skip if oldState is -1, indicating no previous state)
+	if oldState != message_pb.Message_Metadata_State(-1) {
+		if err := as.removeFromStateIndex(ctx, pipeline, messageKey, oldState); err != nil {
+			return fmt.Errorf("failed to remove from old state index: %w", err)
+		}
+	}
+
+	// Add to new state index
+	if err := as.addToStateIndex(ctx, pipeline, messageKey, newState, newScore); err != nil {
+		return fmt.Errorf("failed to add to new state index: %w", err)
+	}
+
+	return nil
 }

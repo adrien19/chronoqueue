@@ -1,0 +1,210 @@
+{
+    "cron_every_minute": {
+        "type": "CRON",
+        "cron_expression": "* * * * *",
+        "queue_name": "scheduled-queue",
+        "message": {
+            "content": {
+                "task": "heartbeat"
+            },
+            "content_type": "application/json",
+            "priority": 50
+        },
+        "description": "Executes every minute"
+    },
+    "cron_hourly": {
+        "type": "CRON",
+        "cron_expression": "0 * * * *",
+        "queue_name": "scheduled-queue",
+        "message": {
+            "content": {
+                "task": "hourly_report"
+            },
+            "content_type": "application/json",
+            "priority": 60
+        },
+        "description": "Executes at the top of every hour"
+    },
+    "cron_daily_midnight": {
+        "type": "CRON",
+        "cron_expression": "0 0 * * *",
+        "queue_name": "scheduled-queue",
+        "message": {
+            "content": {
+                "task": "daily_backup"
+            },
+            "content_type": "application/json",
+            "priority": 70
+        },
+        "description": "Executes daily at midnight UTC"
+    },
+    "cron_weekdays_9am": {
+        "type": "CRON",
+        "cron_expression": "0 9 * * 1-5",
+        "queue_name": "scheduled-queue",
+        "message": {
+            "content": {
+                "task": "morning_report"
+            },
+            "content_type": "application/json",
+            "priority": 80
+        },
+        "description": "Executes Monday-Friday at 9 AM"
+    },
+    "calendar_business_days": {
+        "type": "CALENDAR",
+        "queue_name": "scheduled-queue",
+        "message": {
+            "content": {
+                "task": "business_day_task"
+            },
+            "content_type": "application/json",
+            "priority": 50
+        },
+        "calendar_rules": {
+            "timezone": "America/New_York",
+            "time": "09:00:00",
+            "rules": [
+                {
+                    "type": "WEEKDAY",
+                    "weekdays": [
+                        "MONDAY",
+                        "TUESDAY",
+                        "WEDNESDAY",
+                        "THURSDAY",
+                        "FRIDAY"
+                    ]
+                }
+            ]
+        },
+        "description": "Executes every business day at 9 AM EST"
+    },
+    "calendar_first_of_month": {
+        "type": "CALENDAR",
+        "queue_name": "scheduled-queue",
+        "message": {
+            "content": {
+                "task": "monthly_report"
+            },
+            "content_type": "application/json",
+            "priority": 90
+        },
+        "calendar_rules": {
+            "timezone": "UTC",
+            "time": "00:00:00",
+            "rules": [
+                {
+                    "type": "DAY_OF_MONTH",
+                    "days": [
+                        1
+                    ]
+                }
+            ]
+        },
+        "description": "Executes on the 1st of every month at midnight UTC"
+    },
+    "calendar_last_day_of_month": {
+        "type": "CALENDAR",
+        "queue_name": "scheduled-queue",
+        "message": {
+            "content": {
+                "task": "month_end_processing"
+            },
+            "content_type": "application/json",
+            "priority": 95
+        },
+        "calendar_rules": {
+            "timezone": "UTC",
+            "time": "23:00:00",
+            "rules": [
+                {
+                    "type": "DAY_OF_MONTH",
+                    "days": [
+                        -1
+                    ]
+                }
+            ]
+        },
+        "description": "Executes on the last day of every month at 11 PM UTC"
+    },
+    "calendar_first_monday": {
+        "type": "CALENDAR",
+        "queue_name": "scheduled-queue",
+        "message": {
+            "content": {
+                "task": "first_monday_meeting"
+            },
+            "content_type": "application/json",
+            "priority": 70
+        },
+        "calendar_rules": {
+            "timezone": "America/New_York",
+            "time": "10:00:00",
+            "rules": [
+                {
+                    "type": "WEEK_OF_MONTH",
+                    "week": 1,
+                    "weekday": "MONDAY"
+                }
+            ]
+        },
+        "description": "Executes on the first Monday of every month at 10 AM EST"
+    },
+    "calendar_with_holidays": {
+        "type": "CALENDAR",
+        "queue_name": "scheduled-queue",
+        "message": {
+            "content": {
+                "task": "business_day_no_holidays"
+            },
+            "content_type": "application/json",
+            "priority": 60
+        },
+        "calendar_rules": {
+            "timezone": "America/New_York",
+            "time": "09:00:00",
+            "rules": [
+                {
+                    "type": "WEEKDAY",
+                    "weekdays": [
+                        "MONDAY",
+                        "TUESDAY",
+                        "WEDNESDAY",
+                        "THURSDAY",
+                        "FRIDAY"
+                    ]
+                },
+                {
+                    "type": "EXCEPTION",
+                    "dates": [
+                        "2025-01-01",
+                        "2025-07-04",
+                        "2025-12-25"
+                    ]
+                }
+            ]
+        },
+        "description": "Business days excluding US holidays"
+    },
+    "calendar_every_3_hours": {
+        "type": "CALENDAR",
+        "queue_name": "scheduled-queue",
+        "message": {
+            "content": {
+                "task": "periodic_check"
+            },
+            "content_type": "application/json",
+            "priority": 40
+        },
+        "calendar_rules": {
+            "timezone": "UTC",
+            "rules": [
+                {
+                    "type": "INTERVAL",
+                    "interval_duration": "3h"
+                }
+            ]
+        },
+        "description": "Executes every 3 hours"
+    }
+}

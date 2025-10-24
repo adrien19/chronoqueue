@@ -11,13 +11,17 @@ import (
 const MaxMessageSize = 150 * 1024 // 150 KB
 
 // Estimations for variable-sized fields
-const averageMetadataKeySize = 50    // Assumption
-const averageMetadataValueSize = 100 // Assumption
+const (
+	averageMetadataKeySize   = 50  // Assumption
+	averageMetadataValueSize = 100 // Assumption
+)
 
 // Fixed sizes
-const sizeInt64 = 8
-const sizeInt32 = 4
-const sizeEnum = 2
+const (
+	sizeInt64 = 8
+	sizeInt32 = 4
+	sizeEnum  = 2
+)
 
 func ValidateMessageSize(msg *message_pb.Message) error {
 	// Compute total size for fixed fields

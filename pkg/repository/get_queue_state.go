@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
-	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
-	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
 )
 
 func (as *storage) GetQueueState(ctx context.Context, request *queueservice_pb.GetQueueStateRequest) (*queueservice_pb.GetQueueStateResponse, error) {
@@ -31,8 +32,9 @@ func (as *storage) GetQueueState(ctx context.Context, request *queueservice_pb.G
 		}
 	}()
 
+	prefixedQueueName := "queue:" + request.GetQueueName()
 	// Now we can safely compute the queue state as before
-	membersWithScores, err := as.redisClient.ZRangeByScoreWithScores(ctx, request.GetQueueName(), &redis.ZRangeBy{
+	membersWithScores, err := as.redisClient.ZRangeByScoreWithScores(ctx, prefixedQueueName, &redis.ZRangeBy{
 		Min:    "-inf",
 		Max:    "+inf",
 		Offset: 0,
@@ -44,10 +46,8 @@ func (as *storage) GetQueueState(ctx context.Context, request *queueservice_pb.G
 		return &queueservice_pb.GetQueueStateResponse{}, nil
 	}
 
-	// Assuming the first element of array is an empty string member
-	earliestDeadline := time.Unix(0, int64(membersWithScores[1].Score)*int64(time.Millisecond))
-
 	stateCounts := make(map[message_pb.Message_Metadata_State]int32)
+	var earliestDeadline time.Time
 
 	for _, member := range membersWithScores {
 		if len(member.Member.(string)) == 0 {
@@ -64,6 +64,14 @@ func (as *storage) GetQueueState(ctx context.Context, request *queueservice_pb.G
 		}
 
 		stateCounts[metadata.GetState()] += 1
+
+		// Calculate earliest deadline from message metadata
+		if metadata.LeaseExpiry > 0 {
+			leaseDeadline := time.Unix(0, metadata.LeaseExpiry*int64(time.Millisecond))
+			if earliestDeadline.IsZero() || leaseDeadline.Before(earliestDeadline) {
+				earliestDeadline = leaseDeadline
+			}
+		}
 	}
 
 	return &queueservice_pb.GetQueueStateResponse{

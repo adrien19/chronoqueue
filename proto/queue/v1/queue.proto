@@ -14,10 +14,16 @@ enum QueueType {
 
 message QueueMetadata {
     QueueType type = 1;
-    int32 dequeue_attempts = 2;
+    int32 default_max_attempts = 2;
     google.protobuf.Duration lease_duration = 3;
     string exclusivity_key = 4;
     google.protobuf.Duration invisibility_duration = 5;
+    string dead_letter_queue_name = 6;
+    bool auto_create_dlq = 7;
+    string schema_id = 8;           // Default schema for queue messages
+    bool schema_required = 9;       // Require schema validation for messages
+    int32 max_payload_size = 10;   // Override default max payload size (bytes)
+    repeated string allowed_content_types = 11; // Allowed MIME types (empty = all allowed)
 }
 
 message Queue {

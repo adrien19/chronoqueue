@@ -9,9 +9,6 @@ import (
 	"testing"
 	"time"
 
-	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
-	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
-	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -19,6 +16,10 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 )
 
 type mockChronoQueueServer struct {
@@ -46,6 +47,7 @@ func dialer() func(context.Context, string) (net.Conn, error) {
 func testConnector(dialer func(context.Context, string) (net.Conn, error)) Connector {
 	return func(address string, opts ClientOptions) (queueservice_pb.QueueServiceClient, *grpc.ClientConn, error) {
 		ctx := context.Background()
+		//nolint:staticcheck // Using deprecated DialContext for test compatibility with bufconn
 		conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(dialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			return nil, nil, err
@@ -196,6 +198,41 @@ func (*mockChronoQueueServer) ListQueues(ctx context.Context, req *queueservice_
 				Metadata: &queue_pb.QueueMetadata{},
 			},
 		},
+	}, nil
+}
+
+// DLQ Methods for mockChronoQueueServer
+func (*mockChronoQueueServer) GetDLQMessages(ctx context.Context, req *queueservice_pb.GetDLQMessagesRequest) (*queueservice_pb.GetDLQMessagesResponse, error) {
+	return &queueservice_pb.GetDLQMessagesResponse{
+		Messages: []*message_pb.Message{
+			{
+				MessageId: "test-dlq-msg-1",
+				Metadata: &message_pb.Message_Metadata{
+					State: message_pb.Message_Metadata_ERRORED,
+				},
+			},
+		},
+	}, nil
+}
+
+func (*mockChronoQueueServer) RequeueFromDLQ(ctx context.Context, req *queueservice_pb.RequeueFromDLQRequest) (*queueservice_pb.RequeueFromDLQResponse, error) {
+	return &queueservice_pb.RequeueFromDLQResponse{Success: true}, nil
+}
+
+func (*mockChronoQueueServer) DeleteFromDLQ(ctx context.Context, req *queueservice_pb.DeleteFromDLQRequest) (*queueservice_pb.DeleteFromDLQResponse, error) {
+	return &queueservice_pb.DeleteFromDLQResponse{Success: true}, nil
+}
+
+func (*mockChronoQueueServer) PurgeDLQ(ctx context.Context, req *queueservice_pb.PurgeDLQRequest) (*queueservice_pb.PurgeDLQResponse, error) {
+	return &queueservice_pb.PurgeDLQResponse{Success: true}, nil
+}
+
+func (*mockChronoQueueServer) GetDLQStats(ctx context.Context, req *queueservice_pb.GetDLQStatsRequest) (*queueservice_pb.GetDLQStatsResponse, error) {
+	return &queueservice_pb.GetDLQStatsResponse{
+		Name:         req.DlqName,
+		MessageCount: 5,
+		CreatedAt:    1640995200, // Example timestamp
+		UpdatedAt:    1640995200,
 	}, nil
 }
 
@@ -1426,4 +1463,94 @@ func TestChronoQueueClient_Close(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestChronoQueueClient_DLQMethods tests all DLQ operations
+func TestChronoQueueClient_DLQMethods(t *testing.T) {
+	opts := ClientOptions{
+		Connector: testConnector(dialer()),
+	}
+	client, err := NewChronoQueueClient("bufnet", opts)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	defer client.Close()
+
+	ctx := context.Background()
+	dlqName := "test-dlq"
+	messageId := "test-msg-1"
+	targetQueue := "target-queue"
+
+	// Test GetDLQMessages
+	t.Run("GetDLQMessages", func(t *testing.T) {
+		resp, err := client.GetDLQMessages(ctx, dlqName, 10)
+		if err != nil {
+			t.Fatalf("GetDLQMessages failed: %v", err)
+		}
+		if resp == nil {
+			t.Fatal("Response is nil")
+		}
+		if len(resp.Messages) == 0 {
+			t.Error("Expected messages, got empty slice")
+		}
+	})
+
+	// Test RequeueFromDLQ
+	t.Run("RequeueFromDLQ", func(t *testing.T) {
+		resp, err := client.RequeueFromDLQ(ctx, dlqName, messageId, targetQueue)
+		if err != nil {
+			t.Fatalf("RequeueFromDLQ failed: %v", err)
+		}
+		if resp == nil {
+			t.Fatal("Response is nil")
+		}
+		if !resp.Success {
+			t.Error("Expected success=true, got false")
+		}
+	})
+
+	// Test DeleteFromDLQ
+	t.Run("DeleteFromDLQ", func(t *testing.T) {
+		resp, err := client.DeleteFromDLQ(ctx, dlqName, messageId)
+		if err != nil {
+			t.Fatalf("DeleteFromDLQ failed: %v", err)
+		}
+		if resp == nil {
+			t.Fatal("Response is nil")
+		}
+		if !resp.Success {
+			t.Error("Expected success=true, got false")
+		}
+	})
+
+	// Test PurgeDLQ
+	t.Run("PurgeDLQ", func(t *testing.T) {
+		resp, err := client.PurgeDLQ(ctx, dlqName)
+		if err != nil {
+			t.Fatalf("PurgeDLQ failed: %v", err)
+		}
+		if resp == nil {
+			t.Fatal("Response is nil")
+		}
+		if !resp.Success {
+			t.Error("Expected success=true, got false")
+		}
+	})
+
+	// Test GetDLQStats
+	t.Run("GetDLQStats", func(t *testing.T) {
+		resp, err := client.GetDLQStats(ctx, dlqName)
+		if err != nil {
+			t.Fatalf("GetDLQStats failed: %v", err)
+		}
+		if resp == nil {
+			t.Fatal("Response is nil")
+		}
+		if resp.Name != dlqName {
+			t.Errorf("Expected name=%s, got %s", dlqName, resp.Name)
+		}
+		if resp.MessageCount != 5 {
+			t.Errorf("Expected message count=5, got %d", resp.MessageCount)
+		}
+	})
 }

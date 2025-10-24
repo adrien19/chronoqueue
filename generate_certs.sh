@@ -8,10 +8,10 @@
 #   client.key: Client private key
 #   client.crt: Client certificate
 
-# Note: This script is intended for demonstration and development purposes. 
-#     In a production environment, you'd want to secure the CA private key (ca.key) 
-#     very carefully and potentially include additional features such as certificate 
-#     revocation lists (CRLs). Furthermore, you might want to adjust the validity 
+# Note: This script is intended for demonstration and development purposes.
+#     In a production environment, you'd want to secure the CA private key (ca.key)
+#     very carefully and potentially include additional features such as certificate
+#     revocation lists (CRLs). Furthermore, you might want to adjust the validity
 #     period (specified by -days 365) and other parameters to fit your specific requirements.
 
 
