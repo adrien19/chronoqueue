@@ -208,8 +208,33 @@ jobs:
       - name: Wait for image to be available
         run: |
           echo "Waiting for image to be available in registry..."
-          sleep 10
-          docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare-release.outputs.version }}
+
+          # Login for docker pull (buildx login doesn't persist)
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.DOCKER_REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+          # Retry pulling the image with backoff
+          MAX_ATTEMPTS=5
+          ATTEMPT=1
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Checking if image is available..."
+
+            if docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare-release.outputs.version }}; then
+              echo "✅ Image found and pulled successfully!"
+              exit 0
+            fi
+
+            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+              WAIT_TIME=$((10 * ATTEMPT))  # Exponential backoff: 10s, 20s, 30s, 40s, 50s
+              echo "Image not yet available. Waiting ${WAIT_TIME} seconds before retry..."
+              sleep $WAIT_TIME
+            fi
+
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          echo "❌ Image not found after $MAX_ATTEMPTS attempts."
+          echo "Expected image: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare-release.outputs.version }}"
+          exit 1
 
       - name: Generate SBOM for release
         uses: anchore/sbom-action@v0
