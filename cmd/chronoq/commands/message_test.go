@@ -26,7 +26,7 @@ func TestNewMessageCommand(t *testing.T) {
 	}
 
 	expectedCommands := []string{
-		"post <queue-name> <message-data>",
+		"post <queue-name> [message-data]",
 		"get <queue-name>",
 		"ack <queue-name> <message-id> <message-state>",
 		"peek <queue-name>",
@@ -43,7 +43,7 @@ func TestNewMessagePostCommand(t *testing.T) {
 	cmd := newMessagePostCommand()
 
 	assert.NotNil(t, cmd)
-	assert.Equal(t, "post <queue-name> <message-data>", cmd.Use)
+	assert.Equal(t, "post <queue-name> [message-data]", cmd.Use)
 	assert.Equal(t, "Post a message to a queue", cmd.Short)
 	assert.Contains(t, cmd.Long, "Post a new message to the specified queue")
 	assert.NotNil(t, cmd.RunE)
@@ -218,7 +218,7 @@ func TestMessageCommands_ArgumentValidation(t *testing.T) {
 			name:        "post command with insufficient args",
 			cmd:         newMessagePostCommand(),
 			args:        []string{"test-queue"},
-			expectError: true,
+			expectError: false, // Args validator accepts 1-2 args; RunE will handle missing data
 		},
 		{
 			name:        "get command with valid args",

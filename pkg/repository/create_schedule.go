@@ -21,7 +21,8 @@ import (
 
 // Serialize the metadata payload into JSON
 func (as *storage) encryptScheduleMetadataPayload(metadata *schedule_pb.Schedule_Metadata) error {
-	if !as.encryptionKeyManager.Enabled {
+	// Handle nil encryption key manager (used in testing)
+	if as.encryptionKeyManager == nil || !as.encryptionKeyManager.Enabled {
 		return nil
 	}
 	// Get the payload data from the message

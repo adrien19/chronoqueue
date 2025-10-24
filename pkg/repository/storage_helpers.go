@@ -35,6 +35,14 @@ func (as *storage) decryptMessageMetadataPayload(metadata *message_pb.Message_Me
 	base64EncryptedPayload := metadata.Payload.Metadata["encryptedPayload"].GetStringValue()
 	base64Nonce := metadata.Payload.Metadata["nonce"].GetStringValue()
 
+	// Handle nil encryption key manager (used in testing)
+	if as.encryptionKeyManager == nil {
+		if base64EncryptedPayload != "" || base64Nonce != "" {
+			return errors.New("encrypted payload found but encryption not configured")
+		}
+		return nil
+	}
+
 	if !as.encryptionKeyManager.Enabled {
 		if base64EncryptedPayload != "" || base64Nonce != "" {
 			return errors.New("encrypted payload found but encryption not enabled")

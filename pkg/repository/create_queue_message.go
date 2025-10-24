@@ -41,7 +41,8 @@ func (as *storage) serializeMetadataPayload(payload *common_pb.Payload) ([]byte,
 
 // Serialize the metadata payload into JSON
 func (as *storage) encryptMetadataPayload(metadata *message_pb.Message_Metadata) error {
-	if !as.encryptionKeyManager.Enabled {
+	// Handle nil encryption key manager (used in testing)
+	if as.encryptionKeyManager == nil || !as.encryptionKeyManager.Enabled {
 		return nil
 	}
 	// Get the payload data from the message

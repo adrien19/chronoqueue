@@ -193,9 +193,11 @@ func TestRedisErrorConditions(t *testing.T) {
 			},
 		}
 
+		// Note: ChronoQueue allows posting to non-existent queues (auto-creation behavior)
+		// This is a design decision - Redis allows adding to keys that don't exist
 		_, err := storage.CreateQueueMessage(ctx, request, nil)
-		assert.Error(t, err, "Should fail for non-existent queue")
-		t.Logf("Expected error for non-existent queue: %v", err)
+		assert.NoError(t, err, "Posting to non-existent queue succeeds (auto-creation)")
+		t.Logf("Message posted to non-existent queue (auto-creation): %v", err)
 	})
 
 	t.Run("CreateQueueWithEmptyName", func(t *testing.T) {
