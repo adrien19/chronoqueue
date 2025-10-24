@@ -8,10 +8,6 @@ on:
     branches:
       - main
       - develop
-  pull_request:
-    branches:
-      - main
-      - develop
 
 permissions:
   contents: read
@@ -20,7 +16,6 @@ jobs:
   check-direct-push:
     name: Check for Direct Push
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
     steps:
       - name: Fail on direct push to protected branch
         run: |
@@ -37,21 +32,3 @@ jobs:
           echo "   git checkout feature/your-changes"
           echo "   git push origin feature/your-changes"
           exit 1
-
-  require-pr-context:
-    name: Verify PR Context
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - name: Check PR requirements
-        run: |
-          echo "✅ Changes are coming via pull request - Good!"
-          echo "PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}"
-
-      - name: Remind about review requirement
-        run: |
-          echo "⚠️ Note: This repository is on a free tier, so branch protection is not enforced."
-          echo "📋 Before merging, please ensure:"
-          echo "   - All CI checks pass"
-          echo "   - Code has been reviewed"
-          echo "   - All conversations are resolved"

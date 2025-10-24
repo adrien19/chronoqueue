@@ -7,6 +7,10 @@ on:
       - develop
     types: [opened, synchronize, reopened]
 
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 env:
   GO_VERSION: "1.25"
   PROTOC_VERSION: "32.0"
