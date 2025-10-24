@@ -605,7 +605,38 @@ func Test_storage_RenewMessageLease(t *testing.T) {
 				t.Errorf("storage.RenewMessageLease() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+
+			// Check error condition matches
+			if (err != nil) != tt.wantErr {
+				t.Errorf("storage.RenewMessageLease() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			// For successful renewal, check state and remaining time with tolerance
+			if !tt.wantErr && got != nil && tt.want != nil {
+				// Check state matches
+				if got.State != tt.want.State {
+					t.Errorf("storage.RenewMessageLease() state = %v, want %v", got.State, tt.want.State)
+				}
+
+				// Check remaining time is approximately correct (within 1 second tolerance)
+				// This accounts for execution time between setup and assertion
+				if got.RemainingTime != nil && tt.want.RemainingTime != nil {
+					gotDuration := got.RemainingTime.AsDuration()
+					wantDuration := tt.want.RemainingTime.AsDuration()
+					diff := gotDuration - wantDuration
+					if diff < 0 {
+						diff = -diff
+					}
+
+					// Allow 1 second tolerance for timing variations
+					if diff > time.Second {
+						t.Errorf("storage.RenewMessageLease() remaining_time = %v, want approximately %v (diff: %v)",
+							gotDuration, wantDuration, diff)
+					}
+				}
+			} else if !reflect.DeepEqual(got, tt.want) {
+				// For error cases or nil responses, use exact comparison
 				t.Errorf("storage.RenewMessageLease() = %v, want %v", got, tt.want)
 			}
 		})
