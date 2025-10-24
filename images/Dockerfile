@@ -33,8 +33,12 @@ RUN mkdir ./config
 RUN mkdir /secrets
 COPY --from=base /go/src/chronoqueuesvr/chronoqueue .
 
+# Copy entrypoint script
+COPY images/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # just an indication that this port will be exposed by this container
 EXPOSE 9000 8080
 
 # command to run at the immediate start of the container
-ENTRYPOINT ["./chronoqueue", "server", "--production"]
+ENTRYPOINT ["/entrypoint.sh"]

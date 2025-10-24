@@ -27,6 +27,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
+	redismodule "github.com/testcontainers/testcontainers-go/modules/redis"
+	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -36,8 +38,9 @@ import (
 // It manages the lifecycle of Redis and ChronoQueue containers,
 // providing convenient access to clients and addresses.
 type TestEnvironment struct {
-	RedisContainer  testcontainers.Container
+	RedisContainer  *redismodule.RedisContainer
 	ServerContainer testcontainers.Container
+	Network         *testcontainers.DockerNetwork
 	RedisClient     *redis.Client
 	RedisAddr       string
 	GRPCAddr        string
@@ -66,29 +69,27 @@ type TestEnvironment struct {
 func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 	ctx := context.Background()
 
-	// Start Redis container
-	t.Log("Starting Redis container...")
-	redisReq := testcontainers.ContainerRequest{
-		Image:        "redis:7-alpine",
-		ExposedPorts: []string{"6379/tcp"},
-		WaitingFor:   wait.ForLog("Ready to accept connections"),
-	}
+	// Create a Docker network for container communication
+	net, err := network.New(ctx,
+		network.WithDriver("bridge"),
+	)
+	require.NoError(t, err, "Failed to create Docker network")
 
-	redisContainer, err := testcontainers.GenericContainer(ctx,
-		testcontainers.GenericContainerRequest{
-			ContainerRequest: redisReq,
-			Started:          true,
-		})
+	// Start Redis container using the Redis module
+	t.Log("Starting Redis container...")
+	redisContainer, err := redismodule.Run(ctx,
+		"redis:7-alpine",
+		network.WithNetwork([]string{"redis"}, net),
+	)
 	require.NoError(t, err, "Failed to start Redis container")
 
-	redisHost, err := redisContainer.Host(ctx)
+	// Get connection string using Redis module's helper method
+	connectionString, err := redisContainer.ConnectionString(ctx)
 	require.NoError(t, err)
+	t.Logf("Redis container started at %s", connectionString)
 
-	redisPort, err := redisContainer.MappedPort(ctx, "6379")
-	require.NoError(t, err)
-
-	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort.Port())
-	t.Logf("Redis container started at %s", redisAddr)
+	// Use redis:6379 for container-to-container communication
+	redisInternalAddr := "redis:6379"
 
 	// Start ChronoQueue server container
 	t.Log("Starting ChronoQueue server container...")
@@ -98,8 +99,10 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 			Dockerfile: "images/Dockerfile",
 		},
 		ExposedPorts: []string{"9000/tcp", "8080/tcp"},
+		Networks:     []string{net.Name},
 		Env: map[string]string{
-			"REDIS_ADDR":        redisAddr,
+			"SERVER_MODE":       "development",     // Use development mode for tests
+			"REDIS_ADDR":        redisInternalAddr, // Use internal network address
 			"REDIS_DB":          "0",
 			"LOG_LEVEL":         "debug",
 			"ENABLE_ENCRYPTION": "false", // Can be overridden for encryption tests
@@ -130,10 +133,11 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 
 	t.Logf("ChronoQueue server started - gRPC: %s, HTTP: %s", grpcAddr, httpAddr)
 
-	// Create Redis client
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: redisAddr,
-	})
+	// Create Redis client using the connection string
+	redisOpts, err := redis.ParseURL(connectionString)
+	require.NoError(t, err, "Failed to parse Redis connection string")
+
+	redisClient := redis.NewClient(redisOpts)
 
 	// Verify Redis connection
 	err = redisClient.Ping(ctx).Err()
@@ -143,8 +147,9 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 	env := &TestEnvironment{
 		RedisContainer:  redisContainer,
 		ServerContainer: serverContainer,
+		Network:         net,
 		RedisClient:     redisClient,
-		RedisAddr:       redisAddr,
+		RedisAddr:       connectionString,
 		GRPCAddr:        grpcAddr,
 		HTTPAddr:        httpAddr,
 		ctx:             ctx,
@@ -170,6 +175,9 @@ func (e *TestEnvironment) Cleanup() {
 	if e.RedisContainer != nil {
 		e.RedisContainer.Terminate(e.ctx)
 	}
+	if e.Network != nil {
+		e.Network.Remove(e.ctx)
+	}
 }
 
 // NewGRPCClient creates a new gRPC client connection to the ChronoQueue server.
@@ -185,12 +193,8 @@ func (e *TestEnvironment) Cleanup() {
 //	    // ... use client
 //	}
 func (e *TestEnvironment) NewGRPCClient(t *testing.T) *grpc.ClientConn {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	conn, err := grpc.DialContext(ctx, e.GRPCAddr,
+	conn, err := grpc.NewClient(e.GRPCAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	require.NoError(t, err, "Failed to create gRPC client")
 

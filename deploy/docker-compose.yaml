@@ -9,6 +9,7 @@ services:
       dockerfile: ./images/Dockerfile
     # env_file: .env
     environment:
+      - SERVER_MODE=development
       - HOST=chronoqueue_container
       - AUTH_SERVICE_HOST=authentication
       - REDIS_HOST=host.docker.internal

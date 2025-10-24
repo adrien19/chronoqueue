@@ -37,8 +37,9 @@ func TestScheduling_CreateCronSchedule(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-cron-schedule")
@@ -110,8 +111,9 @@ func TestScheduling_InvalidCronExpression(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-invalid-cron")
@@ -166,8 +168,9 @@ func TestScheduling_CalendarScheduleBusinessDays(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-calendar-business")
@@ -231,8 +234,9 @@ func TestScheduling_ValidateCalendarSchedule(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	// Create calendar rules to validate
@@ -269,8 +273,9 @@ func TestScheduling_PreviewCalendarSchedule(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	// Create calendar rules for preview
@@ -314,8 +319,9 @@ func TestScheduling_PauseAndResumeSchedule(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-pause-resume")
@@ -382,8 +388,9 @@ func TestScheduling_DeleteSchedule(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-delete-schedule")
@@ -450,8 +457,9 @@ func TestScheduling_ListSchedules(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-list-schedules")

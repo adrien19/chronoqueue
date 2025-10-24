@@ -32,8 +32,9 @@ func TestSchemaRegistry_RegisterSchema(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	// Load schema from fixture
@@ -66,8 +67,9 @@ func TestSchemaRegistry_GetSchema(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	// Register schema first
@@ -106,8 +108,9 @@ func TestSchemaRegistry_RegisterMultipleVersions(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	schemaID := "versioned-schema-" + helpers.GenerateRandomID(8)
@@ -163,8 +166,9 @@ func TestSchemaRegistry_ListSchemas(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	// Register multiple schemas
@@ -209,8 +213,9 @@ func TestSchemaRegistry_DeleteSchema(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	// Register schema
@@ -256,8 +261,9 @@ func TestSchemaValidation_ValidPayload(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	// Register schema
@@ -314,8 +320,9 @@ func TestSchemaValidation_InvalidPayload_MissingField(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	// Register schema
@@ -377,8 +384,9 @@ func TestSchemaValidation_InvalidPayload_WrongType(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	// Register schema
@@ -431,8 +439,9 @@ func TestSchemaValidation_ComplexSchema(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	// Register event schema (has enum for event_type)

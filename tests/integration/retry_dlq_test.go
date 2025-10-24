@@ -41,8 +41,9 @@ func TestRetrySystem_ExponentialBackoff(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-retry-backoff")
@@ -131,8 +132,9 @@ func TestRetrySystem_MaxRetriesReached(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-max-retries")
@@ -227,8 +229,9 @@ func TestDLQ_AutomaticCreation(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-auto-dlq")
@@ -244,13 +247,19 @@ func TestDLQ_AutomaticCreation(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Assert - Verify DLQ exists
-	listResp, err := client.ListQueues(ctx, &queueservice_pb.ListQueuesRequest{})
-	require.NoError(t, err)
+	// Assert - Verify DLQ exists by checking queue state directly
+	// (more resilient than ListQueues which can see other tests' queues)
+	mainQueueState, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{
+		QueueName: queueName,
+	})
+	require.NoError(t, err, "Main queue should exist")
+	assert.NotNil(t, mainQueueState, "Main queue state should be returned")
 
-	queueNames := extractQueueNames(listResp.Queues)
-	assert.Contains(t, queueNames, queueName, "Main queue should exist")
-	assert.Contains(t, queueNames, expectedDLQName, "DLQ should be created automatically")
+	dlqState, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{
+		QueueName: expectedDLQName,
+	})
+	require.NoError(t, err, "DLQ should be created automatically")
+	assert.NotNil(t, dlqState, "DLQ state should be returned")
 }
 
 // TestDLQ_RequeueMessage validates requeuing messages from DLQ
@@ -263,8 +272,9 @@ func TestDLQ_RequeueMessage(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-dlq-requeue")
@@ -368,8 +378,9 @@ func TestDLQ_DeleteMessage(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-dlq-delete")
@@ -411,8 +422,9 @@ func TestDLQ_PurgeAll(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-dlq-purge")
@@ -448,8 +460,9 @@ func TestDLQ_GetStatistics(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-dlq-stats")

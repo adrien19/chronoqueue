@@ -42,8 +42,9 @@ func TestMessageLifecycle_PostSimpleMessage(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-post-simple")
@@ -102,8 +103,9 @@ func TestMessageLifecycle_PostJSONMessage(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-post-json")
@@ -169,8 +171,9 @@ func TestMessageLifecycle_PostWithPriority(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-priority")
@@ -250,8 +253,9 @@ func TestMessageLifecycle_GetNextMessageFIFO(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-fifo")
@@ -323,8 +327,9 @@ func TestMessageLifecycle_MessageLeaseManagement(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-lease")
@@ -398,8 +403,9 @@ func TestMessageLifecycle_RenewMessageLease(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-renew-lease")
@@ -470,8 +476,9 @@ func TestMessageLifecycle_AcknowledgeMessage(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-ack")
@@ -551,8 +558,9 @@ func TestMessageLifecycle_PeekMessages(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-peek")
@@ -624,8 +632,9 @@ func TestMessageLifecycle_SendHeartbeat(t *testing.T) {
 
 	// Arrange
 	ctx := context.Background()
-	env := helpers.SetupTestEnvironment(t)
-	conn := env.NewGRPCClient(t)
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer conn.Close()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-heartbeat")
