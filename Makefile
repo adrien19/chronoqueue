@@ -342,11 +342,19 @@ lint: check-linter
 	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
 
 ################################################################################
-# Target: ci-lint (optimized for CI with GitHub Actions format)                #
+# Target: deps (download Go dependencies)                                      #
+################################################################################
+.PHONY: deps
+deps:
+	@echo "Downloading Go dependencies..."
+	@go mod download
+
+################################################################################
+# Target: ci-lint (optimized for CI)                                           #
 ################################################################################
 .PHONY: ci-lint
-ci-lint: check-linter
-	$(GOLANGCI_LINT) run --out-format=github-actions --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
+ci-lint: deps check-linter
+	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
 
 ################################################################################
 # Target: modtidy-all                                                          #
