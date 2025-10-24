@@ -19,7 +19,7 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/validator"
 
 	"github.com/go-redsync/redsync/v4"
-	"github.com/go-redsync/redsync/v4/redis/goredis/v9"
+	goredis "github.com/go-redsync/redsync/v4/redis/goredis/v9"
 	"github.com/redis/go-redis/v9"
 	"github.com/robfig/cron/v3"
 	"google.golang.org/grpc/codes"

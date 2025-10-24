@@ -353,7 +353,12 @@ deps:
 # Target: ci-lint (optimized for CI)                                           #
 ################################################################################
 .PHONY: ci-lint
-ci-lint: deps check-linter
+ci-lint: check-linter
+	@echo "Downloading Go dependencies..."
+	@go mod download -x
+	@echo "Verifying Go dependencies..."
+	@go mod verify
+	@echo "Running golangci-lint..."
 	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
 
 ################################################################################
