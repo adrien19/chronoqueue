@@ -355,9 +355,9 @@ deps:
 .PHONY: ci-lint
 ci-lint: check-linter
 	@echo "Downloading Go dependencies..."
-	@go mod download -x
-	@echo "Verifying Go dependencies..."
-	@go mod verify
+	@go mod download
+	@echo "Building packages to populate cache..."
+	@go build -tags=$(GOLANGCI_LINT_TAGS) ./...
 	@echo "Running golangci-lint..."
 	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
 
