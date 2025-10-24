@@ -354,12 +354,8 @@ deps:
 ################################################################################
 .PHONY: ci-lint
 ci-lint: check-linter
-	@echo "Downloading Go dependencies..."
-	@go mod download
-	@echo "Building packages to populate cache..."
-	@go build -tags=$(GOLANGCI_LINT_TAGS) ./...
-	@echo "Running golangci-lint..."
-	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
+	@$(GOLANGCI_LINT) cache clean
+	@CGO_ENABLED=0 $(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
 
 ################################################################################
 # Target: modtidy-all                                                          #
