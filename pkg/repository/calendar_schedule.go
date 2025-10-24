@@ -17,44 +17,45 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// updateAllCalendarSchedules processes all calendar-based schedules
-func (as *storage) updateAllCalendarSchedules(ctx context.Context) error {
-	// Fetch all schedules
-	var cursor uint64
-	var err error
-	var keys []string
+// // updateAllCalendarSchedules processes all calendar-based schedules.
+// // used by a background worker to ensure schedules are up-to-date.
+// func (as *storage) updateAllCalendarSchedules(ctx context.Context) error {
+// 	// Fetch all schedules
+// 	var cursor uint64
+// 	var err error
+// 	var keys []string
 
-	for {
-		keys, cursor, err = as.redisClient.Scan(ctx, cursor, "schedule:*:meta", 10).Result()
-		if err != nil {
-			return err
-		}
+// 	for {
+// 		keys, cursor, err = as.redisClient.Scan(ctx, cursor, "schedule:*:meta", 10).Result()
+// 		if err != nil {
+// 			return err
+// 		}
 
-		for _, key := range keys {
-			metadata, err := as.getScheduleMetadata(ctx, key)
-			if err != nil {
-				as.logger.ErrorWithFields("Failed to get schedule metadata", err, "key", key)
-				continue
-			}
+// 		for _, key := range keys {
+// 			metadata, err := as.getScheduleMetadata(ctx, key)
+// 			if err != nil {
+// 				as.logger.ErrorWithFields("Failed to get schedule metadata", err, "key", key)
+// 				continue
+// 			}
 
-			// Only process scheduled (active) schedules with calendar configuration
-			if metadata.State == schedule_pb.Schedule_Metadata_SCHEDULED && metadata.GetCalendarSchedule() != nil {
-				err = as.updateMessageCalendarSchedule(ctx, key, metadata)
-				if err != nil {
-					scheduleID := strings.Split(key, ":")[1]
-					as.logger.ErrorWithFields("Failed to update calendar schedule", err, "key", key, "scheduleID", scheduleID)
-					continue
-				}
-			}
-		}
+// 			// Only process scheduled (active) schedules with calendar configuration
+// 			if metadata.State == schedule_pb.Schedule_Metadata_SCHEDULED && metadata.GetCalendarSchedule() != nil {
+// 				err = as.updateMessageCalendarSchedule(ctx, key, metadata)
+// 				if err != nil {
+// 					scheduleID := strings.Split(key, ":")[1]
+// 					as.logger.ErrorWithFields("Failed to update calendar schedule", err, "key", key, "scheduleID", scheduleID)
+// 					continue
+// 				}
+// 			}
+// 		}
 
-		if cursor == 0 {
-			break
-		}
-	}
+// 		if cursor == 0 {
+// 			break
+// 		}
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 // updateMessageCalendarSchedule handles calendar-based schedule updates
 func (as *storage) updateMessageCalendarSchedule(ctx context.Context, key string, metadata *schedule_pb.Schedule_Metadata) error {

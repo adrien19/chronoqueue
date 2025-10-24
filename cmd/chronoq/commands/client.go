@@ -87,11 +87,6 @@ func CreateClient(opts *ClientOptions) (*client.ChronoQueueClient, error) {
 			tlsConfig = &tls.Config{}
 		}
 
-		if opts.CAFile != "" {
-			// Load custom CA if provided
-			// Note: For simplicity, using system CA pool for now
-			// In production, you'd load the custom CA file
-		}
 
 		clientOpts.TLSCredentials = credentials.NewTLS(tlsConfig)
 	}

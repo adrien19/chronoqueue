@@ -20,7 +20,7 @@ type DefaultEngine struct {
 	timezoneProvider         types.TimezoneProvider
 	exceptionHandler         types.ExceptionHandler
 	cache                    *executionCache
-	mu                       sync.RWMutex
+	mu                       sync.RWMutex //nolint:unused
 }
 
 // NewDefaultEngine creates a new default calendar engine with the given options

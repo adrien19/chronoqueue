@@ -24,10 +24,10 @@ const (
 	ERRORED
 )
 
-// Updates and saves the message metadata in Redis.
-func (as *storage) saveMessageMetadata(ctx context.Context, queueName string, messageID string, metadata *message_pb.Message_Metadata) error {
-	return as.saveMessageMetadataWithOldState(ctx, queueName, messageID, metadata, message_pb.Message_Metadata_State(-1))
-}
+// // Updates and saves the message metadata in Redis.
+// func (as *storage) saveMessageMetadata(ctx context.Context, queueName string, messageID string, metadata *message_pb.Message_Metadata) error {
+// 	return as.saveMessageMetadataWithOldState(ctx, queueName, messageID, metadata, message_pb.Message_Metadata_State(-1))
+// }
 
 func (as *storage) saveMessageMetadataWithOldState(ctx context.Context, queueName string, messageID string, metadata *message_pb.Message_Metadata, oldState message_pb.Message_Metadata_State) error {
 

@@ -43,7 +43,7 @@ func TestRetrySystem_ExponentialBackoff(t *testing.T) {
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-retry-backoff")
@@ -134,7 +134,7 @@ func TestRetrySystem_MaxRetriesReached(t *testing.T) {
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-max-retries")
@@ -231,7 +231,7 @@ func TestDLQ_AutomaticCreation(t *testing.T) {
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-auto-dlq")
@@ -274,7 +274,7 @@ func TestDLQ_RequeueMessage(t *testing.T) {
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-dlq-requeue")
@@ -380,7 +380,7 @@ func TestDLQ_DeleteMessage(t *testing.T) {
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-dlq-delete")
@@ -424,7 +424,7 @@ func TestDLQ_PurgeAll(t *testing.T) {
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-dlq-purge")
@@ -462,7 +462,7 @@ func TestDLQ_GetStatistics(t *testing.T) {
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-dlq-stats")

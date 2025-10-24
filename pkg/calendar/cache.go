@@ -67,7 +67,7 @@ func (c *executionCache) set(key string, times []time.Time) {
 }
 
 // clear removes all entries from the cache
-func (c *executionCache) clear() {
+func (c *executionCache) clear() { //nolint:unused
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -75,7 +75,7 @@ func (c *executionCache) clear() {
 }
 
 // size returns the number of entries in the cache
-func (c *executionCache) size() int {
+func (c *executionCache) size() int { //nolint:unused
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 

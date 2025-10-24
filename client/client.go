@@ -196,8 +196,10 @@ func DefaultServerConnector(address string, opts ClientOptions) (queueservice_pb
 		var conn *grpc.ClientConn
 		var err error
 		if opts.TLSCredentials != nil {
+			//nolint:staticcheck // Using Dial for immediate connection; will migrate to NewClient in future
 			conn, err = grpc.Dial(address, grpc.WithTransportCredentials(opts.TLSCredentials))
 		} else {
+			//nolint:staticcheck // Using Dial for immediate connection; will migrate to NewClient in future
 			conn, err = grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		}
 
@@ -1017,7 +1019,7 @@ func (client *ChronoQueueClient) Close() {
 	if !client.closed {
 		close(client.closeChan)
 		close(client.workChan)
-		client.conn.Close()
+		_ = client.conn.Close() // Best-effort close
 		client.closed = true
 	}
 }

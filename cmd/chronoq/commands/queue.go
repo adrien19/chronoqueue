@@ -2,13 +2,10 @@ package commands
 
 import (
 	"fmt"
-	"strconv"
-	"time"
 
 	"github.com/adrien19/chronoqueue/client"
 	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
 	"github.com/spf13/cobra"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // NewQueueCommand creates the queue command group
@@ -94,7 +91,7 @@ func newQueueDeleteCommand() *cobra.Command {
 			if !force {
 				fmt.Printf("Are you sure you want to delete queue '%s'? This action cannot be undone. [y/N]: ", queueName)
 				var confirm string
-				fmt.Scanln(&confirm)
+				_, _ = fmt.Scanln(&confirm) // Ignore scan error, default to 'N'
 				if confirm != "y" && confirm != "Y" {
 					outputs.PrintInfo("Operation cancelled")
 					return nil
@@ -173,18 +170,4 @@ func newQueueStateCommand() *cobra.Command {
 	return cmd
 }
 
-// Helper functions
-
-func parseDurationToPb(duration string) (*durationpb.Duration, error) {
-	d, err := time.ParseDuration(duration)
-	if err != nil {
-		return nil, err
-	}
-	return durationpb.New(d), nil
-}
-
-func formatTimestamp(timestamp int64) string {
-	// Convert Unix timestamp to readable format
-	// For now, just return as string
-	return strconv.FormatInt(timestamp, 10)
-}
+// Helper functions (removed unused parseDurationToPb and formatTimestamp)

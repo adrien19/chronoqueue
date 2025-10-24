@@ -185,7 +185,7 @@ func (as *storage) updateMessageStateAndLease(message *message_pb.Message, reque
 	message.Metadata.LeaseExpiry = expireDate.UnixNano() / int64(time.Millisecond)
 }
 
-func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string, message *message_pb.Message) error {
+func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string, message *message_pb.Message) error { //nolint:unused
 	return as.saveMessageWithMetadataAndOldState(ctx, queueName, message, message_pb.Message_Metadata_State(-1))
 }
 

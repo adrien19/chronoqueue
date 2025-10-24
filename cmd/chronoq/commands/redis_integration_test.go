@@ -43,7 +43,7 @@ func setupTestStorage(t *testing.T) (repository.Storage, *miniredis.Miniredis, f
 
 	// Return cleanup function
 	cleanup := func() {
-		client.Close()
+		_ = client.Close() // Best-effort close
 		server.Close()
 	}
 

@@ -127,7 +127,7 @@ func HealthCheckHandler() http.Handler {
 		// In production, you might want to check database connectivity,
 		// Redis connectivity, etc.
 
-		fmt.Fprintf(w, `{"status": "%s", "service": "%s", "version": "%s"}`,
+		_, _ = fmt.Fprintf(w, `{"status": "%s", "service": "%s", "version": "%s"}`,
 			response["status"], response["service"], response["version"])
 	})
 }
@@ -205,7 +205,7 @@ func SwaggerUIHandler() http.Handler {
     </script>
 </body>
 </html>`
-			fmt.Fprint(w, swaggerHTML)
+			_, _ = fmt.Fprint(w, swaggerHTML)
 		} else {
 			// Handle other paths under /docs/
 			http.NotFound(w, r)
@@ -237,6 +237,6 @@ func SwaggerSpecHandler() http.Handler {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write(specContent)
+		_, _ = w.Write(specContent)
 	})
 }

@@ -124,7 +124,7 @@ func newDLQDeleteCommand() *cobra.Command {
 			if !force {
 				fmt.Printf("Are you sure you want to permanently delete message '%s' from DLQ '%s'? This action cannot be undone. [y/N]: ", messageID, dlqName)
 				var confirm string
-				fmt.Scanln(&confirm)
+				_, _ = fmt.Scanln(&confirm) // Ignore scan error, default to 'N'
 				if confirm != "y" && confirm != "Y" {
 					outputs.PrintInfo("Operation cancelled")
 					return nil
@@ -166,7 +166,7 @@ func newDLQPurgeCommand() *cobra.Command {
 			if !force {
 				fmt.Printf("Are you sure you want to purge ALL messages from DLQ '%s'? This action cannot be undone. [y/N]: ", dlqName)
 				var confirm string
-				fmt.Scanln(&confirm)
+				_, _ = fmt.Scanln(&confirm) // Ignore scan error, default to 'N'
 				if confirm != "y" && confirm != "Y" {
 					outputs.PrintInfo("Operation cancelled")
 					return nil

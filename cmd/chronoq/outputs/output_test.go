@@ -47,12 +47,12 @@ func TestOutputFormatter_PrintJSON(t *testing.T) {
 	err := formatter.Print(testData)
 
 	// Restore stdout
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	// Read captured output
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	assert.NoError(t, err)
@@ -81,12 +81,12 @@ func TestOutputFormatter_PrintYAML(t *testing.T) {
 	err := formatter.Print(testData)
 
 	// Restore stdout
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	// Read captured output
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	assert.NoError(t, err)
@@ -114,12 +114,12 @@ func TestOutputFormatter_PrintTable(t *testing.T) {
 	err := formatter.Print(testData)
 
 	// Restore stdout
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	// Read captured output
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	assert.NoError(t, err)
@@ -142,12 +142,12 @@ func TestOutputFormatter_DefaultsToTable(t *testing.T) {
 	err := formatter.Print(testData)
 
 	// Restore stdout
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	// Read captured output
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	assert.NoError(t, err)
@@ -219,11 +219,11 @@ func TestOutputFormatter_ComplexData(t *testing.T) {
 
 	err := formatter.Print(complexData)
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	assert.NoError(t, err)
@@ -281,12 +281,14 @@ func TestOutputFormatter_EmptyData(t *testing.T) {
 			os.Stdout = w
 
 			err := formatter.Print(tt.data)
+			assert.NoError(t, err)
 
-			w.Close()
+			_ = w.Close()
 			os.Stdout = oldStdout
 
 			// Discard output
-			io.Copy(io.Discard, r)
+			_, err = io.Copy(io.Discard, r)
+			assert.NoError(t, err)
 
 			assert.NoError(t, err)
 		})

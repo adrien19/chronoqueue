@@ -54,17 +54,17 @@ func (f *OutputFormatter) printJSON(data interface{}) error {
 // printYAML prints data as YAML
 func (f *OutputFormatter) printYAML(data interface{}) error {
 	encoder := yaml.NewEncoder(os.Stdout)
-	defer encoder.Close()
+	defer func() { _ = encoder.Close() }()
 	return encoder.Encode(data)
 }
 
 // printTable prints data as a table using tabwriter
 func (f *OutputFormatter) printTable(data interface{}) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	defer w.Flush()
+	defer func() { _ = w.Flush() }()
 
 	if data == nil {
-		fmt.Fprintln(w, "No data")
+		_, _ = fmt.Fprintln(w, "No data")
 		return nil
 	}
 
@@ -74,7 +74,7 @@ func (f *OutputFormatter) printTable(data interface{}) error {
 	// Handle pointers
 	if v.Kind() == reflect.Ptr {
 		if v.IsNil() {
-			fmt.Fprintln(w, "No data")
+			_, _ = fmt.Fprintln(w, "No data")
 			return nil
 		}
 		v = v.Elem()
@@ -87,7 +87,7 @@ func (f *OutputFormatter) printTable(data interface{}) error {
 	case reflect.Struct:
 		return f.renderStruct(w, v, t)
 	default:
-		fmt.Fprintf(w, "%v\n", data)
+		_, _ = fmt.Fprintf(w, "%v\n", data)
 	}
 
 	return nil
@@ -96,7 +96,7 @@ func (f *OutputFormatter) printTable(data interface{}) error {
 // renderSlice renders a slice as a table
 func (f *OutputFormatter) renderSlice(w *tabwriter.Writer, v reflect.Value) error {
 	if v.Len() == 0 {
-		fmt.Fprintln(w, "No items")
+		_, _ = fmt.Fprintln(w, "No items")
 		return nil
 	}
 
@@ -110,7 +110,7 @@ func (f *OutputFormatter) renderSlice(w *tabwriter.Writer, v reflect.Value) erro
 		// Simple slice - just print values
 		for i := 0; i < v.Len(); i++ {
 			elem := v.Index(i)
-			fmt.Fprintf(w, "%v\n", elem.Interface())
+			_, _ = fmt.Fprintf(w, "%v\n", elem.Interface())
 		}
 		return nil
 	}
@@ -127,7 +127,7 @@ func (f *OutputFormatter) renderSlice(w *tabwriter.Writer, v reflect.Value) erro
 	}
 
 	// Print headers
-	fmt.Fprintln(w, strings.Join(headers, "\t"))
+	_, _ = fmt.Fprintln(w, strings.Join(headers, "\t"))
 
 	// Print rows
 	for i := 0; i < v.Len(); i++ {
@@ -144,7 +144,7 @@ func (f *OutputFormatter) renderSlice(w *tabwriter.Writer, v reflect.Value) erro
 				row = append(row, fmt.Sprintf("%v", fieldValue.Interface()))
 			}
 		}
-		fmt.Fprintln(w, strings.Join(row, "\t"))
+		_, _ = fmt.Fprintln(w, strings.Join(row, "\t"))
 	}
 
 	return nil
@@ -152,13 +152,13 @@ func (f *OutputFormatter) renderSlice(w *tabwriter.Writer, v reflect.Value) erro
 
 // renderStruct renders a single struct as a key-value table
 func (f *OutputFormatter) renderStruct(w *tabwriter.Writer, v reflect.Value, t reflect.Type) error {
-	fmt.Fprintln(w, "Field\tValue")
+	_, _ = fmt.Fprintln(w, "Field\tValue")
 
 	for i := 0; i < v.NumField(); i++ {
 		field := t.Field(i)
 		if field.IsExported() {
 			fieldValue := v.Field(i)
-			fmt.Fprintf(w, "%s\t%v\n", field.Name, fieldValue.Interface())
+			_, _ = fmt.Fprintf(w, "%s\t%v\n", field.Name, fieldValue.Interface())
 		}
 	}
 

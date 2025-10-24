@@ -37,7 +37,7 @@ func TestPriorityQueue_HighToLowOrdering(t *testing.T) {
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-priority-ordering")
@@ -113,7 +113,7 @@ func TestPriorityQueue_SamePriorityFIFO(t *testing.T) {
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-priority-fifo")
@@ -190,7 +190,7 @@ func TestPriorityQueue_MixedPriorities(t *testing.T) {
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-mixed-priorities")
@@ -281,7 +281,7 @@ func TestPriorityQueue_PeekWithPriorityRange(t *testing.T) {
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-peek-priority-range")
@@ -355,7 +355,7 @@ func TestPriorityQueue_BoundaryValues(t *testing.T) {
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
 	queueName := helpers.GenerateUniqueQueueName(t, "test-priority-boundaries")

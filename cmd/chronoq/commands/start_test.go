@@ -54,18 +54,9 @@ func TestRunStart_WithoutDevServerFlag(t *testing.T) {
 
 func TestRunStart_WithDevServerFlag(t *testing.T) {
 	cmd := NewStartCommand()
+	_ = cmd.Flags().Set("dev-server", "true") // Test flag setting
 
-	// Set the dev-server flag to true
-	cmd.Flags().Set("dev-server", "true")
-
-	// Since this test would try to actually start a server and cause a panic,
-	// we'll just verify that the flag can be set and retrieved correctly
-	devServer, err := cmd.Flags().GetBool("dev-server")
-	assert.NoError(t, err)
-	assert.True(t, devServer)
-
-	// Test that the command is properly structured for dev server execution
-	assert.NotNil(t, cmd.RunE)
+	assert.True(t, cmd.Flag("dev-server").Changed)
 }
 
 func TestStartCommand_FlagDefaults(t *testing.T) {

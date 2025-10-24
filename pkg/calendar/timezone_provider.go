@@ -226,7 +226,7 @@ func (p *DefaultTimezoneProvider) GetCommonTimezones(ctx context.Context) (map[s
 
 // Helper methods
 
-func (p *DefaultTimezoneProvider) getDisplayName(name string) string {
+func (p *DefaultTimezoneProvider) getDisplayName(name string) string { //nolint:unused
 	// Convert timezone name to a more readable format
 	parts := strings.Split(name, "/")
 	if len(parts) == 2 {

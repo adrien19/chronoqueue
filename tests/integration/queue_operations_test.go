@@ -41,7 +41,7 @@ func TestQueueOperations_CreateSimpleQueue_Success(t *testing.T) {
 	env := helpers.SharedTestEnvironment(t)
 
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
@@ -86,7 +86,7 @@ func TestQueueOperations_CreateQueueWithDLQ_Success(t *testing.T) {
 	env := helpers.SharedTestEnvironment(t)
 
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
@@ -135,7 +135,7 @@ func TestQueueOperations_DeleteEmptyQueue_Success(t *testing.T) {
 	env := helpers.SharedTestEnvironment(t)
 
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
@@ -177,7 +177,7 @@ func TestQueueOperations_DuplicateQueueCreation_Error(t *testing.T) {
 	env := helpers.SharedTestEnvironment(t)
 
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
@@ -221,7 +221,7 @@ func TestQueueOperations_ListQueues_Pagination(t *testing.T) {
 	env := helpers.SharedTestEnvironment(t)
 
 	conn := env.NewGRPCClientShared(t)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := queueservice_pb.NewQueueServiceClient(conn)
 

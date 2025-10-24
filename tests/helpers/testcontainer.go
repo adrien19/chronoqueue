@@ -167,16 +167,16 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 // This is automatically called via t.Cleanup() when using SetupTestEnvironment.
 func (e *TestEnvironment) Cleanup() {
 	if e.RedisClient != nil {
-		e.RedisClient.Close()
+		_ = e.RedisClient.Close()
 	}
 	if e.ServerContainer != nil {
-		e.ServerContainer.Terminate(e.ctx)
+		_ = e.ServerContainer.Terminate(e.ctx)
 	}
 	if e.RedisContainer != nil {
-		e.RedisContainer.Terminate(e.ctx)
+		_ = e.RedisContainer.Terminate(e.ctx)
 	}
 	if e.Network != nil {
-		e.Network.Remove(e.ctx)
+		_ = e.Network.Remove(e.ctx)
 	}
 }
 
@@ -199,7 +199,7 @@ func (e *TestEnvironment) NewGRPCClient(t *testing.T) *grpc.ClientConn {
 	require.NoError(t, err, "Failed to create gRPC client")
 
 	t.Cleanup(func() {
-		conn.Close()
+		_ = conn.Close()
 	})
 
 	return conn

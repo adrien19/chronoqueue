@@ -108,9 +108,10 @@ func TestServerCommand_SubcommandStructure(t *testing.T) {
 	var versionCmd *cobra.Command
 
 	for _, subcmd := range subcommands {
-		if subcmd.Use == "health" {
+		switch subcmd.Use {
+		case "health":
 			healthCmd = subcmd
-		} else if subcmd.Use == "version" {
+		case "version":
 			versionCmd = subcmd
 		}
 	}

@@ -46,6 +46,7 @@ func dialer() func(context.Context, string) (net.Conn, error) {
 func testConnector(dialer func(context.Context, string) (net.Conn, error)) Connector {
 	return func(address string, opts ClientOptions) (queueservice_pb.QueueServiceClient, *grpc.ClientConn, error) {
 		ctx := context.Background()
+		//nolint:staticcheck // Using deprecated DialContext for test compatibility with bufconn
 		conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(dialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			return nil, nil, err
