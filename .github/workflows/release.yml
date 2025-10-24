@@ -205,12 +205,33 @@ jobs:
             COMMIT=${{ github.sha }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
 
+  generate-sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    needs: [prepare-release, build-release-docker]
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine image tag
+        id: image-tag
+        run: |
+          # Strip 'v' prefix from version for image tag
+          VERSION="${{ needs.prepare-release.outputs.version }}"
+          IMAGE_TAG="${VERSION#v}"
+          echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "Image tag: ${IMAGE_TAG}"
+
       - name: Wait for image to be available
         run: |
-          echo "Waiting for image to be available in registry..."
+          IMAGE_FULL="${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image-tag.outputs.tag }}"
 
-          # Login for docker pull (buildx login doesn't persist)
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.DOCKER_REGISTRY }} -u ${{ github.actor }} --password-stdin
+          echo "Waiting for image to be available in registry..."
+          echo "Expected image: ${IMAGE_FULL}"
 
           # Retry pulling the image with backoff
           MAX_ATTEMPTS=5
@@ -218,32 +239,38 @@ jobs:
           while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
             echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Checking if image is available..."
 
-            if docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare-release.outputs.version }}; then
+            if docker pull "${IMAGE_FULL}"; then
               echo "✅ Image found and pulled successfully!"
-              exit 0
+              break
             fi
 
             if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
               WAIT_TIME=$((10 * ATTEMPT))  # Exponential backoff: 10s, 20s, 30s, 40s, 50s
               echo "Image not yet available. Waiting ${WAIT_TIME} seconds before retry..."
               sleep $WAIT_TIME
+            else
+              echo "❌ Image not found after $MAX_ATTEMPTS attempts."
+              exit 1
             fi
 
             ATTEMPT=$((ATTEMPT + 1))
           done
 
-          echo "❌ Image not found after $MAX_ATTEMPTS attempts."
-          echo "Expected image: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare-release.outputs.version }}"
-          exit 1
-
       - name: Generate SBOM for release
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare-release.outputs.version }}
+          image: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image-tag.outputs.tag }}
           format: spdx-json
           output-file: sbom-${{ needs.prepare-release.outputs.version }}.spdx.json
           registry-username: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload SBOM as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom-${{ needs.prepare-release.outputs.version }}.spdx.json
+          retention-days: 90
 
       - name: Upload SBOM to Release
         uses: softprops/action-gh-release@v2
@@ -254,23 +281,48 @@ jobs:
   release-verification:
     name: Verify Release
     runs-on: ubuntu-latest
-    needs: [prepare-release, build-release-binaries, build-release-docker]
+    needs:
+      [
+        prepare-release,
+        build-release-binaries,
+        build-release-docker,
+        generate-sbom,
+      ]
     steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Verify Docker image
         run: |
-          docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare-release.outputs.version }}
+          # Strip 'v' prefix from version for image tag
+          VERSION="${{ needs.prepare-release.outputs.version }}"
+          IMAGE_TAG="${VERSION#v}"
+
+          docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}
           docker images | grep chronoqueue
 
       - name: Test Docker image
         run: |
-          docker run --rm ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare-release.outputs.version }} --version || true
+          # Strip 'v' prefix from version for image tag
+          VERSION="${{ needs.prepare-release.outputs.version }}"
+          IMAGE_TAG="${VERSION#v}"
+
+          docker run --rm ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG} --version || true
 
       - name: Release Summary
         run: |
+          # Strip 'v' prefix from version for image tag
+          VERSION="${{ needs.prepare-release.outputs.version }}"
+          IMAGE_TAG="${VERSION#v}"
+
           echo "## Release ${{ needs.prepare-release.outputs.version }} Published! 🚀" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Docker Images" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare-release.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}\`" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Binaries" >> $GITHUB_STEP_SUMMARY
