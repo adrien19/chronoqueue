@@ -82,6 +82,7 @@ else
 	GOLANGCI_LINT:=golangci-lint
 	export ARCHIVE_EXT = .tar.gz
 endif
+GOLANGCI_LINT_VERSION ?= v2.5.0
 
 export BINARY_EXT ?= $(BINARY_EXT_LOCAL)
 
@@ -329,7 +330,7 @@ ci-test-all: ci-test ci-test-integration ci-test-e2e
 check-linter:
 	@which $(GOLANGCI_LINT) > /dev/null || { \
 		echo "Installing golangci-lint..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.55.2; \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin $(GOLANGCI_LINT_VERSION); \
 	}
 
 ################################################################################
