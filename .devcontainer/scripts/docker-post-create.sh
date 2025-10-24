@@ -13,9 +13,9 @@ docker volume ls | grep -q "redisStoreData" || docker volume create redisStoreDa
 # Check if Redis container exists
 if [ -z "$(docker container ls -a --filter name=^/redis$ --format '{{.Names}}')" ]; then
     echo "Pulling and running Redis"
-    docker pull redis/redis-stack-server:latest
+    docker pull redis/redis-stack:latest
     docker run -d --name redis -p 6379:6379 -p 8379:8001 -e REDIS_ARGS="--requirepass mypassword" \
-     -v redisStoreData:/data redis/redis-stack-server:latest
+     -v redisStoreData:/data redis/redis-stack:latest
 else
     echo "Starting redis"
     docker start redis
