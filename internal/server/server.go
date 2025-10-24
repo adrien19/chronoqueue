@@ -16,6 +16,9 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 
+	"github.com/redis/go-redis/v9"
+	"github.com/sirupsen/logrus"
+
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/pkg/chronoqueue"
@@ -24,8 +27,6 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/metrics"
 	"github.com/adrien19/chronoqueue/pkg/repository"
 	"github.com/adrien19/chronoqueue/pkg/schema"
-	"github.com/redis/go-redis/v9"
-	"github.com/sirupsen/logrus"
 )
 
 // Server represents the ChronoQueue server instance

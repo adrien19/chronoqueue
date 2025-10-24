@@ -14,12 +14,13 @@ import (
 	"testing"
 	"time"
 
-	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
-	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
-	"github.com/adrien19/chronoqueue/tests/helpers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	"github.com/adrien19/chronoqueue/tests/helpers"
 )
 
 // TestMain sets up shared test infrastructure for all tests in this package.

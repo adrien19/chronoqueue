@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 
-	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
-	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
-	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
+
+	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
 )
 
 func (as *storage) checkQueueExistence(ctx context.Context, queueName string) (bool, error) {

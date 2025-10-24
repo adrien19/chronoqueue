@@ -6,6 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis"
+	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
@@ -13,10 +18,6 @@ import (
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/adrien19/chronoqueue/pkg/repository"
-	"github.com/alicebob/miniredis"
-	"github.com/redis/go-redis/v9"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // setupTestStorage creates a test Redis storage layer using miniredis

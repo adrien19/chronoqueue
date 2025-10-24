@@ -3,8 +3,9 @@ package commands
 import (
 	"fmt"
 
-	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
 	"github.com/spf13/cobra"
+
+	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
 )
 
 // NewServerCommand creates the server command group

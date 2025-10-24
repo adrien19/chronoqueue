@@ -6,15 +6,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/calendar"
-	"github.com/redis/go-redis/v9"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // // updateAllCalendarSchedules processes all calendar-based schedules.

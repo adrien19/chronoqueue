@@ -6,9 +6,10 @@ import (
 	"log"
 	"time"
 
+	"google.golang.org/protobuf/types/known/structpb"
+
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	"github.com/adrien19/chronoqueue/client"
-	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/adrien19/chronoqueue/examples/interview-platform/backend/internal/db"
 	"github.com/adrien19/chronoqueue/examples/interview-platform/backend/internal/models"

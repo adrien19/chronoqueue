@@ -11,17 +11,18 @@ import (
 	"sync"
 	"time"
 
-	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
-	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
-	pb_queue "github.com/adrien19/chronoqueue/api/queue/v1"
-	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
-	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	structpb "github.com/golang/protobuf/ptypes/struct"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	pb_queue "github.com/adrien19/chronoqueue/api/queue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 )
 
 type (
@@ -283,7 +284,6 @@ func ParseMessageState(state string) (State, error) {
 
 // CreateQueue create a queue and returns empty response
 func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, queueOptions QueueOptions) (*queueservice_pb.CreateQueueResponse, error) {
-
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	if cancel != nil {
 		defer cancel()
@@ -378,7 +378,6 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 }
 
 func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName string, messageId string) {
-
 	// Set up a ticker to send a heartbeat at regular intervals
 	ticker := time.NewTicker(defaultHeartbeatInterval)
 	defer ticker.Stop()

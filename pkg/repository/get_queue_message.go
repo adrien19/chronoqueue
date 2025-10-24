@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 
+	"google.golang.org/grpc/codes"
+
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
-	"google.golang.org/grpc/codes"
 )
 
 func (as *storage) validateExclusivity(queueMeta *queue_pb.QueueMetadata, exclusivityKey string) error {

@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/encoding/protojson"
+
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type transitionState int32
@@ -30,7 +31,6 @@ const (
 // }
 
 func (as *storage) saveMessageMetadataWithOldState(ctx context.Context, queueName string, messageID string, metadata *message_pb.Message_Metadata, oldState message_pb.Message_Metadata_State) error {
-
 	messageMutex := as.rs.NewMutex("mutex:" + messageID)
 	// Try to acquire the lock
 	if err := messageMutex.Lock(); err != nil {

@@ -4,11 +4,12 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/pkg/log"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestHybridRetrySystem(t *testing.T) {

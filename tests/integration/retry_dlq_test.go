@@ -18,14 +18,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/tests/helpers"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // TestRetrySystem_ExponentialBackoff validates retry with exponential backoff

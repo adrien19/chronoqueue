@@ -7,10 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	schema_pb "github.com/adrien19/chronoqueue/api/schema/v1"
-	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/encoding/protojson"
+
+	schema_pb "github.com/adrien19/chronoqueue/api/schema/v1"
+	"github.com/adrien19/chronoqueue/pkg/log"
 )
 
 // RedisRegistry implements Registry using Redis as the storage backend

@@ -4,10 +4,11 @@ import (
 	"testing"
 	"time"
 
-	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
-	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 )
 
 // WaitForMessageTransition waits for the background worker to process message state transitions.
@@ -76,7 +77,8 @@ func AssertMessageState(t *testing.T, msg *message_pb.Message, expectedState mes
 
 // AssertQueueStateApproximate verifies queue statistics (allowing for timing variations)
 func AssertQueueStateApproximate(t *testing.T, pending, running, completed int64,
-	expectedPending, expectedRunning, expectedCompleted int64, tolerance int64) {
+	expectedPending, expectedRunning, expectedCompleted int64, tolerance int64,
+) {
 	t.Helper()
 
 	assert.InDelta(t, expectedPending, pending, float64(tolerance),

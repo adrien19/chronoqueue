@@ -7,10 +7,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/adrien19/chronoqueue/client"
-	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/credentials"
+
+	"github.com/adrien19/chronoqueue/client"
+	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
 )
 
 // ClientOptions holds configuration for the ChronoQueue client
@@ -86,7 +87,6 @@ func CreateClient(opts *ClientOptions) (*client.ChronoQueueClient, error) {
 			// Server-side TLS only
 			tlsConfig = &tls.Config{}
 		}
-
 
 		clientOpts.TLSCredentials = credentials.NewTLS(tlsConfig)
 	}

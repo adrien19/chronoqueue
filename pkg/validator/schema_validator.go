@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	schema_pb "github.com/adrien19/chronoqueue/api/schema/v1"
 	"github.com/adrien19/chronoqueue/pkg/schema"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 )
 
 // SchemaValidator validates messages against registered schemas

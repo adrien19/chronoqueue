@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	schema_pb "github.com/adrien19/chronoqueue/api/schema/v1"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // JSONStructureValidator validates that JSON payloads have valid structure

@@ -5,9 +5,10 @@ import (
 	"errors"
 	"time"
 
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (

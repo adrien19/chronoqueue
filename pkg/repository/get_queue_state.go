@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
-	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
-	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
 )
 
 func (as *storage) GetQueueState(ctx context.Context, request *queueservice_pb.GetQueueStateRequest) (*queueservice_pb.GetQueueStateResponse, error) {

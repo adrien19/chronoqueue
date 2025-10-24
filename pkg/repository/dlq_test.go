@@ -7,17 +7,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/pkg/log"
-	"github.com/redis/go-redis/v9"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func TestDLQImplementation(t *testing.T) {

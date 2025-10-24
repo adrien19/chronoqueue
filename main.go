@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/adrien19/chronoqueue/cmd/chronoq/commands"
 	"github.com/adrien19/chronoqueue/internal/server"
-	"github.com/spf13/cobra"
 )
 
 var (

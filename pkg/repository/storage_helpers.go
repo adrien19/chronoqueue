@@ -8,16 +8,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/reflect/protoreflect"
+
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption"
 	"github.com/adrien19/chronoqueue/internal/util"
-	"github.com/redis/go-redis/v9"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type ChronoHandlerFunc func(ctx context.Context, req interface{}) (interface{}, error)
@@ -67,7 +68,6 @@ func (as *storage) decryptMessageMetadataPayload(metadata *message_pb.Message_Me
 
 // Fetches and deserializes the message metadata from Redis.
 func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, messageID string) (*message_pb.Message_Metadata, error) {
-
 	messageMutex := as.rs.NewMutex("mutex:" + messageID)
 	// Try to acquire the lock
 	if err := messageMutex.Lock(); err != nil {
@@ -190,7 +190,6 @@ func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string
 }
 
 func (as *storage) saveMessageWithMetadataAndOldState(ctx context.Context, queueName string, message *message_pb.Message, oldState message_pb.Message_Metadata_State) error {
-
 	messageMutex := as.rs.NewMutex("mutex:" + message.MessageId)
 	// Try to acquire the lock
 	if err := messageMutex.Lock(); err != nil {

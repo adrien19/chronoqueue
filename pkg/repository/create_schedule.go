@@ -7,16 +7,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption"
 	"github.com/adrien19/chronoqueue/internal/util"
-	"github.com/redis/go-redis/v9"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // Serialize the metadata payload into JSON
@@ -164,7 +165,6 @@ func (as *storage) setPausedScheduleMetadata(ctx context.Context, scheduleInfo *
 }
 
 func (as *storage) DeleteSchedule(ctx context.Context, request *queueservice_pb.DeleteScheduleRequest) (*queueservice_pb.DeleteScheduleResponse, error) {
-
 	// Create or fetch the mutex for this specific schedule
 	scheduleMutex := as.rs.NewMutex("mutex:" + request.GetScheduleId())
 

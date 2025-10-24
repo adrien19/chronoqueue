@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/adrien19/chronoqueue/client"
 	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
-	"github.com/spf13/cobra"
 )
 
 // NewSchemaCommand creates the schema command group

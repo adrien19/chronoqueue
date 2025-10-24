@@ -15,7 +15,6 @@ import (
 // TestBackwardCompatibility tests that existing cron schedules continue to work
 // alongside the new calendar-based scheduling system
 func TestBackwardCompatibility(t *testing.T) {
-
 	tests := []struct {
 		name           string
 		cronSchedule   string

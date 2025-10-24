@@ -736,7 +736,6 @@ func (h *Handlers) GenerateReport(w http.ResponseWriter, r *http.Request) {
 		InvisibilityDuration: "1s",
 		LeaseDuration:        "5s",
 	})
-
 	if err != nil {
 		log.Printf("Failed to queue report generation: %v, failed report ID: %s", err, report.ID)
 		// Report is created but queue failed - don't fail request
@@ -806,7 +805,6 @@ func (h *Handlers) SendReport(w http.ResponseWriter, r *http.Request) {
 		InvisibilityDuration: "1s",
 		LeaseDuration:        "5s",
 	})
-
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to queue report sending")
 		return

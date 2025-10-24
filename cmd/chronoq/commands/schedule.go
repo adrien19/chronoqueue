@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
-	"github.com/adrien19/chronoqueue/client"
-	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
+
+	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
+	"github.com/adrien19/chronoqueue/client"
+	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
 )
 
 // NewScheduleCommand creates the schedule command group

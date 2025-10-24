@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
 	"strings"
 	"time"
 
@@ -123,7 +122,6 @@ func NewQueueStorageForTesting(redisClient *redis.Client, encryptionKeyManager *
 }
 
 func (as *storage) DeleteQueue(ctx context.Context, request *queueservice_pb.DeleteQueueRequest) (*queueservice_pb.DeleteQueueResponse, error) {
-
 	// Create or fetch the mutex for this specific queue
 	queueMutex := as.rs.NewMutex("mutex:" + request.GetName())
 

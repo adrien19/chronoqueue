@@ -6,10 +6,11 @@ import (
 	"io"
 	"os"
 
-	"github.com/adrien19/chronoqueue/client"
-	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/structpb"
+
+	"github.com/adrien19/chronoqueue/client"
+	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
 )
 
 // NewMessageCommand creates the message command group

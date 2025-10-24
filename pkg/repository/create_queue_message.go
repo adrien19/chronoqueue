@@ -6,16 +6,17 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption"
 	"github.com/adrien19/chronoqueue/internal/util"
 	"github.com/adrien19/chronoqueue/pkg/validator"
-	"github.com/redis/go-redis/v9"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const (

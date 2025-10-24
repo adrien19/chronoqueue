@@ -6,24 +6,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis"
+	"github.com/redis/go-redis/v9"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/pkg/log"
-	"github.com/alicebob/miniredis"
-	"github.com/redis/go-redis/v9"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-var redisServer *miniredis.Miniredis
-var redisClient *redis.Client
+var (
+	redisServer *miniredis.Miniredis
+	redisClient *redis.Client
+)
 
 func mockRedis() *miniredis.Miniredis {
 	s, err := miniredis.Run()
-
 	if err != nil {
 		panic(err)
 	}
@@ -41,6 +43,7 @@ func setup() {
 func teardown() {
 	redisServer.Close()
 }
+
 func TestNewQueueStorage(t *testing.T) {
 	type args struct {
 		ctx                  context.Context

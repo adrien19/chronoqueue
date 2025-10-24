@@ -16,10 +16,11 @@ import (
 	"context"
 	"testing"
 
-	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
-	"github.com/adrien19/chronoqueue/tests/helpers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	"github.com/adrien19/chronoqueue/tests/helpers"
 )
 
 // TestSchemaRegistry_RegisterSchema validates JSON schema registration
@@ -245,7 +246,6 @@ func TestSchemaRegistry_DeleteSchema(t *testing.T) {
 		SchemaId: schemaID,
 		Version:  1,
 	})
-
 	if err != nil {
 		t.Logf("Expected: Schema not found after deletion: %v", err)
 	}

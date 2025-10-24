@@ -6,8 +6,9 @@ import (
 	"sort"
 	"time"
 
-	schedule "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	schedule "github.com/adrien19/chronoqueue/api/schedule/v1"
 )
 
 // DefaultExceptionHandler is the default implementation of ExceptionHandler

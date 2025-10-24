@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"google.golang.org/grpc/codes"
+
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
-	"google.golang.org/grpc/codes"
 )
 
 func (as *storage) ListQueues(ctx context.Context, request *queueservice_pb.ListQueuesRequest) (*queueservice_pb.ListQueuesResponse, error) {

@@ -9,9 +9,6 @@ import (
 	"testing"
 	"time"
 
-	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
-	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
-	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -19,6 +16,10 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 )
 
 type mockChronoQueueServer struct {

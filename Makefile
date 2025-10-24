@@ -391,7 +391,18 @@ modtidy:
 ################################################################################
 .PHONY: format
 format: modtidy-all
-	gofumpt -l -w . && goimports -local github.com/adrien19/ -w $(shell find ./pkg -type f -name '*.go' -not -path "./api/chronoqueue/v1/*")
+	# check if gofumpt and goimports are installed
+	@which gofumpt > /dev/null || { \
+		echo "Installing gofumpt..."; \
+		go install mvdan.cc/gofumpt@latest; \
+	}
+	@which goimports > /dev/null || { \
+		echo "Installing goimports..."; \
+		go install golang.org/x/tools/cmd/goimports@latest; \
+	}
+	# run gofumpt and goimports on all Go files (excluding generated api files)
+	gofumpt -l -w .
+	find . -type f -name '*.go' -not -path "./api/*" -not -path "./vendor/*" | xargs goimports -local github.com/adrien19/ -w
 
 ################################################################################
 # Target: check                                                                #

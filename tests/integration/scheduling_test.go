@@ -17,14 +17,15 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/tests/helpers"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // TestScheduling_CreateCronSchedule validates cron schedule creation
@@ -442,7 +443,6 @@ func TestScheduling_DeleteSchedule(t *testing.T) {
 	_, err = client.GetSchedule(ctx, &queueservice_pb.GetScheduleRequest{
 		ScheduleId: scheduleID,
 	})
-
 	if err != nil {
 		t.Logf("Expected: Schedule not found after deletion: %v", err)
 	}

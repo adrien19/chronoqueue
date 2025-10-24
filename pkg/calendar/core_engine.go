@@ -624,8 +624,10 @@ func (e *DefaultEngine) describeDailyRule(rule *schedule.DailyRule) string {
 }
 
 func (e *DefaultEngine) describeYearlyRule(rule *schedule.YearlyRule) string {
-	months := []string{"", "January", "February", "March", "April", "May", "June",
-		"July", "August", "September", "October", "November", "December"}
+	months := []string{
+		"", "January", "February", "March", "April", "May", "June",
+		"July", "August", "September", "October", "November", "December",
+	}
 	month := months[rule.Month]
 	return fmt.Sprintf("Every %s %d", month, rule.Day)
 }

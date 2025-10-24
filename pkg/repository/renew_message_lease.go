@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 )
 
 func (as *storage) RenewMessageLease(ctx context.Context, request *queueservice_pb.RenewMessageLeaseRequest) (*queueservice_pb.RenewMessageLeaseResponse, error) {

@@ -168,8 +168,8 @@ func (r *Registry) getEvaluatorDescription(ruleType types.RuleType) string {
 // EvaluatorInfo contains information about a registered evaluator
 type EvaluatorInfo struct {
 	RuleType    types.RuleType      `json:"rule_type"`
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
 	Evaluator   types.RuleEvaluator `json:"-"` // Don't serialize the evaluator itself
 }
 

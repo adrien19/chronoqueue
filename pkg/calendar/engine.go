@@ -7,22 +7,24 @@ import (
 )
 
 // Type aliases for interfaces and types defined in types package
-type Engine = types.Engine
-type RuleEvaluator = types.RuleEvaluator
-type BusinessCalendarProvider = types.BusinessCalendarProvider
-type TimezoneProvider = types.TimezoneProvider
-type ExceptionHandler = types.ExceptionHandler
-type RuleType = types.RuleType
-type SchedulePreview = types.SchedulePreview
-type Holiday = types.Holiday
-type CalendarEngineConfig = types.CalendarEngineConfig
-type CalendarError = types.CalendarError
-type PreviewPeriod = types.PreviewPeriod
-type ExecutionTime = types.ExecutionTime
-type RulePreview = types.RulePreview
-type ExceptionPreview = types.ExceptionPreview
-type BusinessDayInfo = types.BusinessDayInfo
-type ValidationIssue = types.ValidationIssue
+type (
+	Engine                   = types.Engine
+	RuleEvaluator            = types.RuleEvaluator
+	BusinessCalendarProvider = types.BusinessCalendarProvider
+	TimezoneProvider         = types.TimezoneProvider
+	ExceptionHandler         = types.ExceptionHandler
+	RuleType                 = types.RuleType
+	SchedulePreview          = types.SchedulePreview
+	Holiday                  = types.Holiday
+	CalendarEngineConfig     = types.CalendarEngineConfig
+	CalendarError            = types.CalendarError
+	PreviewPeriod            = types.PreviewPeriod
+	ExecutionTime            = types.ExecutionTime
+	RulePreview              = types.RulePreview
+	ExceptionPreview         = types.ExceptionPreview
+	BusinessDayInfo          = types.BusinessDayInfo
+	ValidationIssue          = types.ValidationIssue
+)
 
 // Constants from types package
 const (
