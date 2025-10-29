@@ -2,13 +2,14 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"time"
 
+	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	"github.com/adrien19/chronoqueue/internal/util"
 )
 
 const (
@@ -17,9 +18,13 @@ const (
 )
 
 func (as *storage) SendMessageHeartBeat(ctx context.Context, request *queueservice_pb.SendMessageHeartBeatRequest) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
+	as.logger.InfoWithFields("Processing heartbeat for message",
+		"queue name", request.GetQueueName(),
+		"request message id", request.GetMessageId(),
+	)
 	meta, err := as.fetchMessageMetadata(ctx, request.GetQueueName(), request.GetMessageId())
 	if err != nil {
-		return nil, err
+		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to fetch metadata for heartbeat.").GRPCStatus()
 	}
 
 	if meta == nil || meta.State != message_pb.Message_Metadata_RUNNING {
@@ -57,7 +62,7 @@ func (as *storage) SendMessageHeartBeat(ctx context.Context, request *queueservi
 		meta.LeaseExpiry = newExpiry.UnixNano() / int64(time.Millisecond)
 		meta.LeaseRenewalCount = meta.GetLeaseRenewalCount() + 1 // increase the renewal count
 		if err = as.saveMessageMetadataWithOldState(ctx, request.GetQueueName(), request.GetMessageId(), meta, oldState); err != nil {
-			return nil, errors.New("failed to renew message lease")
+			return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to save metadata for heartbeat.").GRPCStatus()
 		}
 	}
 

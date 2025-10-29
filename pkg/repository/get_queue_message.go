@@ -93,6 +93,7 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *queueservice_pb
 		"Successfully leased the message:",
 		"lease expiry", message.Metadata.GetLeaseExpiry(),
 		"message Id", message.GetMessageId(),
+		"state", message.Metadata.State.String(),
 	)
 	return &queueservice_pb.GetNextMessageResponse{
 		Message: message,
