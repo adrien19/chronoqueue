@@ -11,6 +11,7 @@ import (
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
+	"github.com/redis/go-redis/v9"
 )
 
 type transitionState int32
@@ -92,6 +93,15 @@ func (as *storage) saveMessageMetadataWithOldState(ctx context.Context, queueNam
 
 		if err := as.transitionStateIndex(ctx, txPipeline, key, oldState, newState, newScore); err != nil {
 			return fmt.Errorf("failed to update state indexes: %w", err)
+		}
+	} else if newState == message_pb.Message_Metadata_RUNNING {
+		// If state didn't change and is RUNNING, we may need to update the score
+		_, err = txPipeline.ZAdd(ctx, "running_messages", redis.Z{
+			Score:  float64(metadata.LeaseExpiry),
+			Member: key,
+		}).Result()
+		if err != nil {
+			return fmt.Errorf("failed to add message to running_messages: %w", err)
 		}
 	}
 

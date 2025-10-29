@@ -118,19 +118,21 @@ type ClientOptions struct {
 
 type WorkItem struct {
 	ctx       context.Context
+	cancel    context.CancelFunc
 	queue     string
 	messageID string
 }
 
 // ChronoQueueClient is a client to call ChronoQueue RPC
 type ChronoQueueClient struct {
-	service   queueservice_pb.QueueServiceClient
-	conn      *grpc.ClientConn
-	workChan  chan WorkItem
-	closeChan chan struct{}
-	closed    bool
-	mu        sync.Mutex
-	opts      ClientOptions
+	service          queueservice_pb.QueueServiceClient
+	conn             *grpc.ClientConn
+	workChan         chan WorkItem
+	closeChan        chan struct{}
+	closed           bool
+	mu               sync.Mutex
+	opts             ClientOptions
+	activeHeartbeats sync.Map // messageID -> context.CancelFunc for explicit lifecycle management
 }
 
 // NewChronoQueueClient returns a new ChronoQueue client
@@ -382,6 +384,11 @@ func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName
 	ticker := time.NewTicker(defaultHeartbeatInterval)
 	defer ticker.Stop()
 
+	// Clean up when heartbeat stops
+	defer func() {
+		client.activeHeartbeats.Delete(messageId)
+	}()
+
 	retryCount := 0 // Initialize retry counter
 
 	for {
@@ -390,15 +397,15 @@ func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName
 
 			if retryCount >= client.opts.MaxHeartbeatRetryCount {
 				log.Printf("Max retry attempts reached for heartbeat of message: %s on queue: %s", messageId, queueName)
-				return // TODO: Or handle according to use-case: log, metric, alert, etc.
+				return
 			}
 
-			ctx, cancel := client.setDefaultContextTimeout(ctx)
-			if cancel != nil {
-				defer cancel()
-			}
+			// Use background context for RPC, not the heartbeat lifecycle context
+			rpcCtx, rpcCancel := context.WithTimeout(context.Background(), client.opts.DefaultRPCTimeout)
 
-			_, err := client.SendMessageHeartbeat(ctx, queueName, messageId)
+			_, err := client.SendMessageHeartbeat(rpcCtx, queueName, messageId)
+			rpcCancel() // Always cancel RPC context after use
+
 			if err != nil {
 				log.Printf("Error occurred in manageHeartbeats: %v", err)
 
@@ -420,8 +427,8 @@ func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName
 		case <-client.closeChan:
 			// client is closed, terminate the goroutine
 			return
-		case <-ctx.Done(): // Assuming client.ctx is a context that gets cancelled when processing is complete or an error occurs
-			// Stop sending heartbeats if the message processing is complete or an error occurred
+		case <-ctx.Done():
+			// Stop sending heartbeats when explicitly cancelled (via StopHeartbeat)
 			return
 		}
 	}
@@ -445,8 +452,15 @@ func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue strin
 	}
 
 	if enableHeartbeat && res.Message != nil {
+		// Create independent context for heartbeat lifecycle (not tied to request context)
+		heartbeatCtx, heartbeatCancel := context.WithCancel(context.Background())
+
+		// Store cancel function for explicit cleanup via StopHeartbeat
+		client.activeHeartbeats.Store(res.Message.MessageId, heartbeatCancel)
+
 		client.workChan <- WorkItem{
-			ctx:       ctx,
+			ctx:       heartbeatCtx,
+			cancel:    heartbeatCancel,
 			queue:     queue,
 			messageID: res.Message.MessageId,
 		}
@@ -515,7 +529,11 @@ func (client *ChronoQueueClient) RenewMessageLease(ctx context.Context, queue st
 }
 
 // AcknowledgeMessage updates state of a message and empty response
+// Automatically stops heartbeat for the message if one is active
 func (client *ChronoQueueClient) AcknowledgeMessage(ctx context.Context, queue string, messageId string, state State) (*queueservice_pb.AcknowledgeMessageResponse, error) {
+	// Stop heartbeat before acknowledging (if active)
+	client.StopHeartbeat(messageId)
+
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	if cancel != nil {
 		defer cancel()
@@ -548,6 +566,17 @@ func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queue
 		return nil, err
 	}
 	return res, nil
+}
+
+// StopHeartbeat explicitly stops the heartbeat for a specific message.
+// This should be called when message processing completes (success or failure)
+// to ensure the heartbeat goroutine terminates cleanly.
+func (client *ChronoQueueClient) StopHeartbeat(messageID string) {
+	if cancel, ok := client.activeHeartbeats.LoadAndDelete(messageID); ok {
+		if cancelFunc, ok := cancel.(context.CancelFunc); ok {
+			cancelFunc()
+		}
+	}
 }
 
 // ListQueues returns list of available queues.
