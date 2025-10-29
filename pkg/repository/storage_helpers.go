@@ -159,6 +159,8 @@ func (as *storage) updateMessageStateAndLease(message *message_pb.Message, reque
 		} else {
 			message.Metadata.LeaseDuration = queueMeta.LeaseDuration
 		}
+	} else if request.LeaseDuration.AsDuration() > 0 && request.LeaseDuration.AsDuration() > message.Metadata.GetLeaseDuration().AsDuration() {
+		message.Metadata.LeaseDuration = request.GetLeaseDuration()
 	}
 
 	// Initialize retry counts if not set

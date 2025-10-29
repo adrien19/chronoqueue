@@ -5,43 +5,35 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
+	schema_pb "github.com/adrien19/chronoqueue/api/schema/v1"
 )
 
 const (
-	// MaxInvisibilityDuration is the maximum allowed invisibility duration (12 hours)
-	MaxInvisibilityDuration = 12 * time.Hour
+	// DefaultLeaseDuration is the default lease duration when not specified
+	DefaultLeaseDuration = 30 * time.Second
 	// MinLeaseDuration is the minimum lease duration (1 second)
 	MinLeaseDuration = 1 * time.Second
-	// MaxLeaseDuration is the maximum lease duration (1 hour)
-	MaxLeaseDuration = 1 * time.Hour
 )
 
 // DurationValidator validates message duration fields
-// Checks invisibility and lease durations are within acceptable ranges
+// Applies defaults for nil values and validates duration ranges
 type DurationValidator struct {
-	queueMeta               *queue_pb.QueueMetadata
-	maxInvisibilityDuration time.Duration
-	minLeaseDuration        time.Duration
-	maxLeaseDuration        time.Duration
+	queueMeta *queue_pb.QueueMetadata
 }
 
 // NewDurationValidator creates a new duration validator
 func NewDurationValidator(queueMeta *queue_pb.QueueMetadata) Validator {
-	validator := &DurationValidator{
-		queueMeta:               queueMeta,
-		maxInvisibilityDuration: MaxInvisibilityDuration,
-		minLeaseDuration:        MinLeaseDuration,
-		maxLeaseDuration:        MaxLeaseDuration,
+	return &DurationValidator{
+		queueMeta: queueMeta,
 	}
-
-	// Note: Queue-specific duration limits will be added when ValidationConfig is implemented
-
-	return validator
 }
 
 // Validate validates the message duration fields
+// Applies defaults for nil values and validates the final values
 func (v *DurationValidator) Validate(ctx context.Context, msg *message_pb.Message) *ValidationResult {
 	result := &ValidationResult{
 		Valid:  true,
@@ -50,55 +42,48 @@ func (v *DurationValidator) Validate(ctx context.Context, msg *message_pb.Messag
 
 	if msg.Metadata == nil {
 		result.Valid = false
-		result.Errors = append(result.Errors, &ValidationError{
-			Field:   "metadata",
-			Message: "Message metadata is required",
-		})
+		result.Errors = append(result.Errors, NewValidationError(
+			"metadata",
+			schema_pb.ErrorCode_REQUIRED_FIELD_MISSING,
+			"Message metadata is required",
+		))
 		return result
 	}
 
-	// Validate invisibility duration
+	// Apply defaults for lease_duration if not specified
+	if msg.Metadata.LeaseDuration == nil {
+		// Use queue default if available
+		if v.queueMeta != nil && v.queueMeta.LeaseDuration != nil {
+			msg.Metadata.LeaseDuration = v.queueMeta.LeaseDuration
+		} else {
+			// Apply system default
+			msg.Metadata.LeaseDuration = durationpb.New(DefaultLeaseDuration)
+		}
+	}
+
+	// Validate lease duration after defaults applied
+	leaseDuration := msg.Metadata.LeaseDuration.AsDuration()
+	if leaseDuration < MinLeaseDuration {
+		result.Valid = false
+		result.Errors = append(result.Errors, NewValidationError(
+			"metadata.lease_duration",
+			schema_pb.ErrorCode_VALUE_OUT_OF_RANGE,
+			fmt.Sprintf("Lease duration %v is below minimum allowed value of %v",
+				leaseDuration, MinLeaseDuration),
+		))
+	}
+
+	// Validate invisibility duration if specified (nil means 0s = immediate visibility)
 	if msg.Metadata.InvisibilityDuration != nil {
 		invisDuration := msg.Metadata.InvisibilityDuration.AsDuration()
 
 		if invisDuration < 0 {
 			result.Valid = false
-			result.Errors = append(result.Errors, &ValidationError{
-				Field:   "metadata.invisibility_duration",
-				Message: "Invisibility duration cannot be negative",
-			})
-		}
-
-		if invisDuration > v.maxInvisibilityDuration {
-			result.Valid = false
-			result.Errors = append(result.Errors, &ValidationError{
-				Field: "metadata.invisibility_duration",
-				Message: fmt.Sprintf("Invisibility duration %v exceeds maximum allowed value of %v",
-					invisDuration, v.maxInvisibilityDuration),
-			})
-		}
-	}
-
-	// Validate lease duration if specified
-	if msg.Metadata.LeaseDuration != nil {
-		leaseDuration := msg.Metadata.LeaseDuration.AsDuration()
-
-		if leaseDuration < v.minLeaseDuration {
-			result.Valid = false
-			result.Errors = append(result.Errors, &ValidationError{
-				Field: "metadata.lease_duration",
-				Message: fmt.Sprintf("Lease duration %v is below minimum allowed value of %v",
-					leaseDuration, v.minLeaseDuration),
-			})
-		}
-
-		if leaseDuration > v.maxLeaseDuration {
-			result.Valid = false
-			result.Errors = append(result.Errors, &ValidationError{
-				Field: "metadata.lease_duration",
-				Message: fmt.Sprintf("Lease duration %v exceeds maximum allowed value of %v",
-					leaseDuration, v.maxLeaseDuration),
-			})
+			result.Errors = append(result.Errors, NewValidationError(
+				"metadata.invisibility_duration",
+				schema_pb.ErrorCode_VALUE_OUT_OF_RANGE,
+				"Invisibility duration cannot be negative",
+			))
 		}
 	}
 
