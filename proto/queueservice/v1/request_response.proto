@@ -50,6 +50,7 @@ message GetNextMessageRequest{
 }
 message GetNextMessageResponse{
     chronoqueue.api.message.v1.Message message = 1;
+    string stream_entry_id = 2;
 }
 
 // Acknowledge the message on the queue
@@ -57,6 +58,7 @@ message AcknowledgeMessageRequest{
     string queue_name = 1;
     string message_id = 2;
     chronoqueue.api.message.v1.Message.Metadata.State state = 3;
+    string stream_entry_id = 4;
 }
 message AcknowledgeMessageResponse{
     bool success = 1;
@@ -100,6 +102,7 @@ message GetQueueStateResponse{
 message SendMessageHeartBeatRequest {
     string queue_name = 1;
     string message_id = 2;
+    string stream_entry_id = 3;
 }
 message SendMessageHeartBeatResponse {
     google.protobuf.Duration remaining_time = 1;

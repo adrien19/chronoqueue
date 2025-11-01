@@ -6,6 +6,7 @@ package chronoqueue.api.message.v1;
 option go_package = "github.com/adrien19/chronoqueue/api/message/v1;message";
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 import "proto/common/v1/common.proto";
 
 
@@ -22,14 +23,16 @@ message Message {
             ERRORED = 5;
         }
         Metadata.State state = 2;
-        google.protobuf.Duration invisibility_duration = 3;
+        google.protobuf.Duration invisibility_duration = 3 [deprecated = true];
         int32 attempts_left = 4;
         google.protobuf.Duration lease_duration = 5;
         int64 lease_expiry = 6;
         int32 lease_renewal_count = 7;
-        int64 invisibility_expiry = 8;
+        int64 invisibility_expiry = 8 [deprecated = true];
         int64 priority = 9;
         int32 max_attempts = 10;
+        google.protobuf.Timestamp scheduled_time = 20;
+        int32 priority_level = 21;
     }
     Message.Metadata metadata = 3;
 }

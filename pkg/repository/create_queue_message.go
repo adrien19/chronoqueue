@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -100,10 +99,9 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice
 		}
 	}
 
-	// Set the message invisibility expiry
-	invisibilityExpiry := time.Now().Add(message.Metadata.InvisibilityDuration.AsDuration())
-	message.Metadata.InvisibilityExpiry = invisibilityExpiry.UnixMilli()
-	message.Metadata.State = message_pb.Message_Metadata_INVISIBLE
+	scheduledTime := as.calculateScheduledTime(message.Metadata)
+
+	message.Metadata.State = message_pb.Message_Metadata_PENDING
 
 	priority := message.Metadata.GetPriority()
 	if priority > MaxPriority {
@@ -111,59 +109,45 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice
 	} else if priority < 0 {
 		priority = MinPriority
 	}
-	// Calculate the message's priority score
-	// Priority-based scoring: Higher priority = Lower score for Redis sorted set ordering
-	// Score format: priority_component + timestamp_component
-	// Priority component: (MaxPriority - priority) * 1e10 (to ensure priority dominates)
-	// Timestamp component: current timestamp in milliseconds (for FIFO within same priority)
-	priorityComponent := int64(MaxPriority-priority) * 1e10
-	timestampComponent := time.Now().UnixMilli()
-	priorityScore := priorityComponent + timestampComponent
+	message.Metadata.PriorityLevel = int32(priority)
 
-	// Begin transaction pipeline
-	txPipeline := as.redisClient.TxPipeline()
-
-	// Add the message to the queue
-	prefixedQueueName := "queue:" + queueName
-	_, err := txPipeline.ZAdd(ctx, prefixedQueueName, redis.Z{
-		Score:  float64(priorityScore),
-		Member: message.GetMessageId(),
-	}).Result()
-	if err != nil {
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while adding message to queue")
+	if err := as.encryptMetadataPayload(message.Metadata); err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to encrypt message payload")
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	// Serialize the message metadata and store
 	messageMetadataByte, err := as.serializeMessageMetadata(message.Metadata)
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while serializing message metadata")
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	_, err = txPipeline.HSet(ctx, fmt.Sprintf("%s:%s:meta", queueName, message.MessageId), "metadata", string(messageMetadataByte)).Result()
+	_, err = as.redisClient.HSet(ctx, fmt.Sprintf("%s:%s:meta", queueName, message.MessageId), "metadata", string(messageMetadataByte)).Result()
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while saving message metadata")
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	// Add message to state-based index (INVISIBLE state)
-	messageKey := fmt.Sprintf("%s:%s:meta", queueName, message.MessageId)
-	_, err = txPipeline.ZAdd(ctx, "invisible_messages", redis.Z{
-		Score:  float64(message.Metadata.InvisibilityExpiry),
-		Member: messageKey,
-	}).Result()
-	if err != nil {
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while adding message to invisible index")
+	if err := as.addToSchedule(ctx, queueName, message.MessageId, scheduledTime); err != nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to add message to schedule index")
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	// Commit the transaction
-	_, err = txPipeline.Exec(ctx)
-	if err != nil {
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while executing redis pipeline")
-		return nil, chronoErr.GRPCStatus()
-	}
+	metaKey := fmt.Sprintf("%s:%s:meta", queueName, message.MessageId)
+	as.redisClient.Expire(ctx, metaKey, 24*time.Hour)
 
 	return &queueservice_pb.PostMessageResponse{Success: true}, nil
+}
+
+func (as *storage) calculateScheduledTime(meta *message_pb.Message_Metadata) int64 {
+	if meta.ScheduledTime != nil {
+		return meta.ScheduledTime.AsTime().UnixMilli()
+	}
+
+	if meta.InvisibilityDuration != nil {
+		delay := meta.InvisibilityDuration.AsDuration()
+		return time.Now().Add(delay).UnixMilli()
+	}
+
+	return time.Now().UnixMilli()
 }

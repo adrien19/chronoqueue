@@ -376,6 +376,7 @@ func (x *GetNextMessageRequest) GetExclusivityKey() string {
 type GetNextMessageResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       *v11.Message           `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	StreamEntryId string                 `protobuf:"bytes,2,opt,name=stream_entry_id,json=streamEntryId,proto3" json:"stream_entry_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -417,12 +418,20 @@ func (x *GetNextMessageResponse) GetMessage() *v11.Message {
 	return nil
 }
 
+func (x *GetNextMessageResponse) GetStreamEntryId() string {
+	if x != nil {
+		return x.StreamEntryId
+	}
+	return ""
+}
+
 // Acknowledge the message on the queue
 type AcknowledgeMessageRequest struct {
 	state         protoimpl.MessageState     `protogen:"open.v1"`
 	QueueName     string                     `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
 	MessageId     string                     `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
 	State         v11.Message_Metadata_State `protobuf:"varint,3,opt,name=state,proto3,enum=chronoqueue.api.message.v1.Message_Metadata_State" json:"state,omitempty"`
+	StreamEntryId string                     `protobuf:"bytes,4,opt,name=stream_entry_id,json=streamEntryId,proto3" json:"stream_entry_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -476,6 +485,13 @@ func (x *AcknowledgeMessageRequest) GetState() v11.Message_Metadata_State {
 		return x.State
 	}
 	return v11.Message_Metadata_State(0)
+}
+
+func (x *AcknowledgeMessageRequest) GetStreamEntryId() string {
+	if x != nil {
+		return x.StreamEntryId
+	}
+	return ""
 }
 
 type AcknowledgeMessageResponse struct {
@@ -842,6 +858,7 @@ type SendMessageHeartBeatRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
 	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	StreamEntryId string                 `protobuf:"bytes,3,opt,name=stream_entry_id,json=streamEntryId,proto3" json:"stream_entry_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -886,6 +903,13 @@ func (x *SendMessageHeartBeatRequest) GetQueueName() string {
 func (x *SendMessageHeartBeatRequest) GetMessageId() string {
 	if x != nil {
 		return x.MessageId
+	}
+	return ""
+}
+
+func (x *SendMessageHeartBeatRequest) GetStreamEntryId() string {
+	if x != nil {
+		return x.StreamEntryId
 	}
 	return ""
 }
@@ -3234,15 +3258,17 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12@\n" +
 	"\x0elease_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\rleaseDuration\x12'\n" +
-	"\x0fexclusivity_key\x18\x03 \x01(\tR\x0eexclusivityKey\"W\n" +
+	"\x0fexclusivity_key\x18\x03 \x01(\tR\x0eexclusivityKey\"\x7f\n" +
 	"\x16GetNextMessageResponse\x12=\n" +
-	"\amessage\x18\x01 \x01(\v2#.chronoqueue.api.message.v1.MessageR\amessage\"\xa3\x01\n" +
+	"\amessage\x18\x01 \x01(\v2#.chronoqueue.api.message.v1.MessageR\amessage\x12&\n" +
+	"\x0fstream_entry_id\x18\x02 \x01(\tR\rstreamEntryId\"\xcb\x01\n" +
 	"\x19AcknowledgeMessageRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x02 \x01(\tR\tmessageId\x12H\n" +
-	"\x05state\x18\x03 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\"6\n" +
+	"\x05state\x18\x03 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\x12&\n" +
+	"\x0fstream_entry_id\x18\x04 \x01(\tR\rstreamEntryId\"6\n" +
 	"\x1aAcknowledgeMessageResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x9a\x01\n" +
 	"\x18RenewMessageLeaseRequest\x12\x1d\n" +
@@ -3273,12 +3299,13 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\x11earliest_deadline\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x10earliestDeadline\x1a>\n" +
 	"\x10StateCountsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x01\"[\n" +
+	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x01\"\x83\x01\n" +
 	"\x1bSendMessageHeartBeatRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x02 \x01(\tR\tmessageId\"\xaa\x01\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\x12&\n" +
+	"\x0fstream_entry_id\x18\x03 \x01(\tR\rstreamEntryId\"\xaa\x01\n" +
 	"\x1cSendMessageHeartBeatResponse\x12@\n" +
 	"\x0eremaining_time\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\rremainingTime\x12H\n" +
 	"\x05state\x18\x02 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\"+\n" +

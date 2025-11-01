@@ -381,3 +381,43 @@ func (as *storage) transitionStateIndex(ctx context.Context, pipeline redis.Pipe
 
 	return nil
 }
+
+func (as *storage) messageMetaKey(queueName, messageID string) string {
+	return fmt.Sprintf("meta:%s:%s", queueName, messageID)
+}
+
+func (as *storage) saveMessageMetadata(ctx context.Context, queueName, messageID string, meta *message_pb.Message_Metadata) error {
+	key := fmt.Sprintf("%s:%s:meta", queueName, messageID)
+	data, err := protojson.Marshal(meta)
+	if err != nil {
+		return err
+	}
+
+	return as.redisClient.HSet(ctx, key, "metadata", data).Err()
+}
+
+func (as *storage) generateConsumerName() string {
+	return fmt.Sprintf("worker-%d", time.Now().UnixNano())
+}
+
+func (as *storage) listQueueNames(ctx context.Context) ([]string, error) {
+	var queues []string
+	seen := make(map[string]bool)
+
+	iter := as.redisClient.Scan(ctx, 0, "queue:*:meta", 0).Iterator()
+	for iter.Next(ctx) {
+		key := iter.Val()
+		parts := strings.Split(key, ":")
+		if len(parts) >= 2 {
+			queueName := parts[1]
+			if !seen[queueName] {
+				queues = append(queues, queueName)
+				seen[queueName] = true
+			}
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return nil, err
+	}
+	return queues, nil
+}

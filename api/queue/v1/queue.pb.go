@@ -70,6 +70,58 @@ func (QueueType) EnumDescriptor() ([]byte, []int) {
 	return file_proto_queue_v1_queue_proto_rawDescGZIP(), []int{0}
 }
 
+type FairnessPolicy int32
+
+const (
+	FairnessPolicy_STRICT   FairnessPolicy = 0
+	FairnessPolicy_WEIGHTED FairnessPolicy = 1
+	FairnessPolicy_AGING    FairnessPolicy = 2
+	FairnessPolicy_HYBRID   FairnessPolicy = 3
+)
+
+// Enum value maps for FairnessPolicy.
+var (
+	FairnessPolicy_name = map[int32]string{
+		0: "STRICT",
+		1: "WEIGHTED",
+		2: "AGING",
+		3: "HYBRID",
+	}
+	FairnessPolicy_value = map[string]int32{
+		"STRICT":   0,
+		"WEIGHTED": 1,
+		"AGING":    2,
+		"HYBRID":   3,
+	}
+)
+
+func (x FairnessPolicy) Enum() *FairnessPolicy {
+	p := new(FairnessPolicy)
+	*p = x
+	return p
+}
+
+func (x FairnessPolicy) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FairnessPolicy) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_queue_v1_queue_proto_enumTypes[1].Descriptor()
+}
+
+func (FairnessPolicy) Type() protoreflect.EnumType {
+	return &file_proto_queue_v1_queue_proto_enumTypes[1]
+}
+
+func (x FairnessPolicy) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FairnessPolicy.Descriptor instead.
+func (FairnessPolicy) EnumDescriptor() ([]byte, []int) {
+	return file_proto_queue_v1_queue_proto_rawDescGZIP(), []int{1}
+}
+
 type QueueMetadata struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	Type                 QueueType              `protobuf:"varint,1,opt,name=type,proto3,enum=chronoqueue.api.queue.v1.QueueType" json:"type,omitempty"`
@@ -83,6 +135,7 @@ type QueueMetadata struct {
 	SchemaRequired       bool                   `protobuf:"varint,9,opt,name=schema_required,json=schemaRequired,proto3" json:"schema_required,omitempty"`                  // Require schema validation for messages
 	MaxPayloadSize       int32                  `protobuf:"varint,10,opt,name=max_payload_size,json=maxPayloadSize,proto3" json:"max_payload_size,omitempty"`               // Override default max payload size (bytes)
 	AllowedContentTypes  []string               `protobuf:"bytes,11,rep,name=allowed_content_types,json=allowedContentTypes,proto3" json:"allowed_content_types,omitempty"` // Allowed MIME types (empty = all allowed)
+	PriorityConfig       *PriorityConfig        `protobuf:"bytes,12,opt,name=priority_config,json=priorityConfig,proto3" json:"priority_config,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -194,6 +247,81 @@ func (x *QueueMetadata) GetAllowedContentTypes() []string {
 	return nil
 }
 
+func (x *QueueMetadata) GetPriorityConfig() *PriorityConfig {
+	if x != nil {
+		return x.PriorityConfig
+	}
+	return nil
+}
+
+type PriorityConfig struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Policy             FairnessPolicy         `protobuf:"varint,1,opt,name=policy,proto3,enum=chronoqueue.api.queue.v1.FairnessPolicy" json:"policy,omitempty"`
+	PriorityWeights    map[int32]int32        `protobuf:"bytes,2,rep,name=priority_weights,json=priorityWeights,proto3" json:"priority_weights,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	AgeBoostThreshold  *durationpb.Duration   `protobuf:"bytes,3,opt,name=age_boost_threshold,json=ageBoostThreshold,proto3" json:"age_boost_threshold,omitempty"`
+	AgeBoostMultiplier int32                  `protobuf:"varint,4,opt,name=age_boost_multiplier,json=ageBoostMultiplier,proto3" json:"age_boost_multiplier,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *PriorityConfig) Reset() {
+	*x = PriorityConfig{}
+	mi := &file_proto_queue_v1_queue_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PriorityConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PriorityConfig) ProtoMessage() {}
+
+func (x *PriorityConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queue_v1_queue_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PriorityConfig.ProtoReflect.Descriptor instead.
+func (*PriorityConfig) Descriptor() ([]byte, []int) {
+	return file_proto_queue_v1_queue_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *PriorityConfig) GetPolicy() FairnessPolicy {
+	if x != nil {
+		return x.Policy
+	}
+	return FairnessPolicy_STRICT
+}
+
+func (x *PriorityConfig) GetPriorityWeights() map[int32]int32 {
+	if x != nil {
+		return x.PriorityWeights
+	}
+	return nil
+}
+
+func (x *PriorityConfig) GetAgeBoostThreshold() *durationpb.Duration {
+	if x != nil {
+		return x.AgeBoostThreshold
+	}
+	return nil
+}
+
+func (x *PriorityConfig) GetAgeBoostMultiplier() int32 {
+	if x != nil {
+		return x.AgeBoostMultiplier
+	}
+	return 0
+}
+
 type Queue struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -204,7 +332,7 @@ type Queue struct {
 
 func (x *Queue) Reset() {
 	*x = Queue{}
-	mi := &file_proto_queue_v1_queue_proto_msgTypes[1]
+	mi := &file_proto_queue_v1_queue_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -216,7 +344,7 @@ func (x *Queue) String() string {
 func (*Queue) ProtoMessage() {}
 
 func (x *Queue) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queue_v1_queue_proto_msgTypes[1]
+	mi := &file_proto_queue_v1_queue_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -229,7 +357,7 @@ func (x *Queue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Queue.ProtoReflect.Descriptor instead.
 func (*Queue) Descriptor() ([]byte, []int) {
-	return file_proto_queue_v1_queue_proto_rawDescGZIP(), []int{1}
+	return file_proto_queue_v1_queue_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Queue) GetName() string {
@@ -250,7 +378,7 @@ var File_proto_queue_v1_queue_proto protoreflect.FileDescriptor
 
 const file_proto_queue_v1_queue_proto_rawDesc = "" +
 	"\n" +
-	"\x1aproto/queue/v1/queue.proto\x12\x18chronoqueue.api.queue.v1\x1a\x1egoogle/protobuf/duration.proto\"\xb6\x04\n" +
+	"\x1aproto/queue/v1/queue.proto\x12\x18chronoqueue.api.queue.v1\x1a\x1egoogle/protobuf/duration.proto\"\x89\x05\n" +
 	"\rQueueMetadata\x127\n" +
 	"\x04type\x18\x01 \x01(\x0e2#.chronoqueue.api.queue.v1.QueueTypeR\x04type\x120\n" +
 	"\x14default_max_attempts\x18\x02 \x01(\x05R\x12defaultMaxAttempts\x12@\n" +
@@ -263,14 +391,30 @@ const file_proto_queue_v1_queue_proto_rawDesc = "" +
 	"\x0fschema_required\x18\t \x01(\bR\x0eschemaRequired\x12(\n" +
 	"\x10max_payload_size\x18\n" +
 	" \x01(\x05R\x0emaxPayloadSize\x122\n" +
-	"\x15allowed_content_types\x18\v \x03(\tR\x13allowedContentTypes\"`\n" +
+	"\x15allowed_content_types\x18\v \x03(\tR\x13allowedContentTypes\x12Q\n" +
+	"\x0fpriority_config\x18\f \x01(\v2(.chronoqueue.api.queue.v1.PriorityConfigR\x0epriorityConfig\"\xfd\x02\n" +
+	"\x0ePriorityConfig\x12@\n" +
+	"\x06policy\x18\x01 \x01(\x0e2(.chronoqueue.api.queue.v1.FairnessPolicyR\x06policy\x12h\n" +
+	"\x10priority_weights\x18\x02 \x03(\v2=.chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntryR\x0fpriorityWeights\x12I\n" +
+	"\x13age_boost_threshold\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\x11ageBoostThreshold\x120\n" +
+	"\x14age_boost_multiplier\x18\x04 \x01(\x05R\x12ageBoostMultiplier\x1aB\n" +
+	"\x14PriorityWeightsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\x05R\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x01\"`\n" +
 	"\x05Queue\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12C\n" +
 	"\bmetadata\x18\x02 \x01(\v2'.chronoqueue.api.queue.v1.QueueMetadataR\bmetadata*&\n" +
 	"\tQueueType\x12\n" +
 	"\n" +
 	"\x06SIMPLE\x10\x00\x12\r\n" +
-	"\tEXCLUSIVE\x10\x01B4Z2github.com/adrien19/chronoqueue/api/queue/v1;queueb\x06proto3"
+	"\tEXCLUSIVE\x10\x01*A\n" +
+	"\x0eFairnessPolicy\x12\n" +
+	"\n" +
+	"\x06STRICT\x10\x00\x12\f\n" +
+	"\bWEIGHTED\x10\x01\x12\t\n" +
+	"\x05AGING\x10\x02\x12\n" +
+	"\n" +
+	"\x06HYBRID\x10\x03B4Z2github.com/adrien19/chronoqueue/api/queue/v1;queueb\x06proto3"
 
 var (
 	file_proto_queue_v1_queue_proto_rawDescOnce sync.Once
@@ -284,24 +428,31 @@ func file_proto_queue_v1_queue_proto_rawDescGZIP() []byte {
 	return file_proto_queue_v1_queue_proto_rawDescData
 }
 
-var file_proto_queue_v1_queue_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_queue_v1_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_proto_queue_v1_queue_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_proto_queue_v1_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_proto_queue_v1_queue_proto_goTypes = []any{
 	(QueueType)(0),              // 0: chronoqueue.api.queue.v1.QueueType
-	(*QueueMetadata)(nil),       // 1: chronoqueue.api.queue.v1.QueueMetadata
-	(*Queue)(nil),               // 2: chronoqueue.api.queue.v1.Queue
-	(*durationpb.Duration)(nil), // 3: google.protobuf.Duration
+	(FairnessPolicy)(0),         // 1: chronoqueue.api.queue.v1.FairnessPolicy
+	(*QueueMetadata)(nil),       // 2: chronoqueue.api.queue.v1.QueueMetadata
+	(*PriorityConfig)(nil),      // 3: chronoqueue.api.queue.v1.PriorityConfig
+	(*Queue)(nil),               // 4: chronoqueue.api.queue.v1.Queue
+	nil,                         // 5: chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntry
+	(*durationpb.Duration)(nil), // 6: google.protobuf.Duration
 }
 var file_proto_queue_v1_queue_proto_depIdxs = []int32{
 	0, // 0: chronoqueue.api.queue.v1.QueueMetadata.type:type_name -> chronoqueue.api.queue.v1.QueueType
-	3, // 1: chronoqueue.api.queue.v1.QueueMetadata.lease_duration:type_name -> google.protobuf.Duration
-	3, // 2: chronoqueue.api.queue.v1.QueueMetadata.invisibility_duration:type_name -> google.protobuf.Duration
-	1, // 3: chronoqueue.api.queue.v1.Queue.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	6, // 1: chronoqueue.api.queue.v1.QueueMetadata.lease_duration:type_name -> google.protobuf.Duration
+	6, // 2: chronoqueue.api.queue.v1.QueueMetadata.invisibility_duration:type_name -> google.protobuf.Duration
+	3, // 3: chronoqueue.api.queue.v1.QueueMetadata.priority_config:type_name -> chronoqueue.api.queue.v1.PriorityConfig
+	1, // 4: chronoqueue.api.queue.v1.PriorityConfig.policy:type_name -> chronoqueue.api.queue.v1.FairnessPolicy
+	5, // 5: chronoqueue.api.queue.v1.PriorityConfig.priority_weights:type_name -> chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntry
+	6, // 6: chronoqueue.api.queue.v1.PriorityConfig.age_boost_threshold:type_name -> google.protobuf.Duration
+	2, // 7: chronoqueue.api.queue.v1.Queue.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_proto_queue_v1_queue_proto_init() }
@@ -314,8 +465,8 @@ func file_proto_queue_v1_queue_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_queue_v1_queue_proto_rawDesc), len(file_proto_queue_v1_queue_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   2,
+			NumEnums:      2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -22,7 +23,12 @@ func (as *storage) SendMessageHeartBeat(ctx context.Context, request *queueservi
 		"queue name", request.GetQueueName(),
 		"request message id", request.GetMessageId(),
 	)
-	meta, err := as.fetchMessageMetadata(ctx, request.GetQueueName(), request.GetMessageId())
+
+	queueName := request.GetQueueName()
+	messageID := request.GetMessageId()
+	streamEntryID := request.GetStreamEntryId()
+
+	meta, err := as.fetchMessageMetadata(ctx, queueName, messageID)
 	if err != nil {
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to fetch metadata for heartbeat.").GRPCStatus()
 	}
@@ -34,7 +40,11 @@ func (as *storage) SendMessageHeartBeat(ctx context.Context, request *queueservi
 		}, nil
 	}
 
-	key := "heartbeat:" + request.GetQueueName() + ":" + request.GetMessageId()
+	consumerName := as.generateConsumerName()
+
+	if err := as.sendHeartbeat(ctx, queueName, consumerName, streamEntryID); err != nil {
+		as.logger.ErrorWithFields("Failed to send heartbeat via XCLAIM", "error", err, "messageID", messageID)
+	}
 
 	maxRenewal := 10 * time.Second
 	minRenewal := 3 * time.Second
@@ -51,29 +61,26 @@ func (as *storage) SendMessageHeartBeat(ctx context.Context, request *queueservi
 		}
 	}
 
-	// Calculate the remaining time
 	remainingMilliseconds := meta.GetLeaseExpiry() - time.Now().UnixNano()/int64(time.Millisecond)
 	thresholdMilliseconds := int64(float64(renewalDuration.Milliseconds()) * DefaultThresholdPercentage)
 
 	if remainingMilliseconds <= thresholdMilliseconds {
-		// If lease is about to expire within the threshold, renew the lease for another y seconds
 		newExpiry := time.Now().Add(renewalDuration)
-		oldState := meta.State // Capture old state (should be RUNNING)
+		oldState := meta.State
 		meta.LeaseExpiry = newExpiry.UnixNano() / int64(time.Millisecond)
-		meta.LeaseRenewalCount = meta.GetLeaseRenewalCount() + 1 // increase the renewal count
-		if err = as.saveMessageMetadataWithOldState(ctx, request.GetQueueName(), request.GetMessageId(), meta, oldState); err != nil {
+		meta.LeaseRenewalCount = meta.GetLeaseRenewalCount() + 1
+		if err = as.saveMessageMetadataWithOldState(ctx, queueName, messageID, meta, oldState); err != nil {
 			return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to save metadata for heartbeat.").GRPCStatus()
 		}
+
+		metaKey := fmt.Sprintf("meta:%s:%s", queueName, messageID)
+		as.redisClient.Expire(ctx, metaKey, 2*renewalDuration)
 	}
 
 	remainingTimeDuration := durationpb.New(renewalDuration)
 
-	// Set expiration time to 60x the lease duration to ensure heartbeat key persistence
-	expiration := 60 * renewalDuration
-	_, err = as.redisClient.Set(ctx, key, time.Now().Unix(), expiration).Result()
-
 	return &queueservice_pb.SendMessageHeartBeatResponse{
 		RemainingTime: remainingTimeDuration,
 		State:         meta.State,
-	}, err
+	}, nil
 }

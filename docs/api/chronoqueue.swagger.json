@@ -1155,6 +1155,9 @@
       "properties": {
         "state": {
           "$ref": "#/definitions/v1MessageMetadataState"
+        },
+        "streamEntryId": {
+          "type": "string"
         }
       },
       "title": "Acknowledge the message on the queue"
@@ -1205,6 +1208,9 @@
       "type": "object",
       "properties": {
         "messageId": {
+          "type": "string"
+        },
+        "streamEntryId": {
           "type": "string"
         }
       },
@@ -1531,6 +1537,16 @@
         }
       }
     },
+    "v1FairnessPolicy": {
+      "type": "string",
+      "enum": [
+        "STRICT",
+        "WEIGHTED",
+        "AGING",
+        "HYBRID"
+      ],
+      "default": "STRICT"
+    },
     "v1FixedDate": {
       "type": "object",
       "properties": {
@@ -1583,6 +1599,9 @@
       "properties": {
         "message": {
           "$ref": "#/definitions/v1Message"
+        },
+        "streamEntryId": {
+          "type": "string"
         }
       }
     },
@@ -1749,6 +1768,14 @@
         "maxAttempts": {
           "type": "integer",
           "format": "int32"
+        },
+        "scheduledTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "priorityLevel": {
+          "type": "integer",
+          "format": "int32"
         }
       }
     },
@@ -1880,6 +1907,28 @@
         }
       }
     },
+    "v1PriorityConfig": {
+      "type": "object",
+      "properties": {
+        "policy": {
+          "$ref": "#/definitions/v1FairnessPolicy"
+        },
+        "priorityWeights": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "ageBoostThreshold": {
+          "type": "string"
+        },
+        "ageBoostMultiplier": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
     "v1PurgeDLQResponse": {
       "type": "object",
       "properties": {
@@ -1943,6 +1992,9 @@
             "type": "string"
           },
           "title": "Allowed MIME types (empty = all allowed)"
+        },
+        "priorityConfig": {
+          "$ref": "#/definitions/v1PriorityConfig"
         }
       }
     },

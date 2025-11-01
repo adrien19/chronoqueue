@@ -24,6 +24,21 @@ message QueueMetadata {
     bool schema_required = 9;       // Require schema validation for messages
     int32 max_payload_size = 10;   // Override default max payload size (bytes)
     repeated string allowed_content_types = 11; // Allowed MIME types (empty = all allowed)
+    PriorityConfig priority_config = 12;
+}
+
+enum FairnessPolicy {
+    STRICT = 0;
+    WEIGHTED = 1;
+    AGING = 2;
+    HYBRID = 3;
+}
+
+message PriorityConfig {
+    FairnessPolicy policy = 1;
+    map<int32, int32> priority_weights = 2;
+    google.protobuf.Duration age_boost_threshold = 3;
+    int32 age_boost_multiplier = 4;
 }
 
 message Queue {

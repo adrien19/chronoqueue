@@ -4,14 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/redis/go-redis/v9"
+
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/internal/util"
-	"github.com/redis/go-redis/v9"
 )
 
 type transitionState int32
@@ -130,8 +132,8 @@ func isValidTransition(currentState, newState transitionState) bool {
 func (as *storage) AcknowledgeMessage(ctx context.Context, request *queueservice_pb.AcknowledgeMessageRequest) (*queueservice_pb.AcknowledgeMessageResponse, error) {
 	queueName := request.GetQueueName()
 	messageID := request.GetMessageId()
+	streamEntryID := request.GetStreamEntryId()
 
-	// Basic validation
 	if queueName == "" || messageID == "" {
 		err := errors.New("invalid input: queue name and message ID required")
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Invalid input provided")
@@ -144,21 +146,28 @@ func (as *storage) AcknowledgeMessage(ctx context.Context, request *queueservice
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	// Check if the state transition is allowed
-	oldState := metadata.State // Capture old state before update
+	oldState := metadata.State
 	if !isValidTransition(transitionState(metadata.State), transitionState(request.State)) {
-		err := fmt.Errorf("invalid input: requested state %v transition to %v is not allowed for message: %s", request.State, metadata.State, messageID)
+		err := fmt.Errorf("invalid input: requested state transition from %v to %v is not allowed for message: %s", metadata.State, request.State, messageID)
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while changing message state")
 		return nil, chronoErr.GRPCStatus()
 	}
-	// Update the message state
+
 	metadata.State = request.State
 
-	// Save the updated metadata with the known old state to avoid redundant fetch
 	err = as.saveMessageMetadataWithOldState(ctx, queueName, messageID, metadata, oldState)
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while saving updated message metadata")
 		return nil, chronoErr.GRPCStatus()
+	}
+
+	if streamEntryID != "" {
+		if err := as.ackMessage(ctx, queueName, streamEntryID); err != nil {
+			as.logger.ErrorWithFields("Failed to XACK message from stream", "error", err, "messageID", messageID)
+		}
+
+		metaKey := fmt.Sprintf("%s:%s:meta", queueName, messageID)
+		as.redisClient.Expire(ctx, metaKey, 1*time.Hour)
 	}
 
 	return &queueservice_pb.AcknowledgeMessageResponse{Success: true}, nil
