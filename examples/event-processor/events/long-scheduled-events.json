@@ -1,0 +1,34 @@
+{
+    "events": [
+        {
+            "type": "email",
+            "priority": "high",
+            "schedule_in_minutes": 60,
+            "data": {
+                "recipient": "user@example.com",
+                "subject": "Scheduled in 60 minutes - Meeting Reminder",
+                "template": "meeting_reminder"
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "medium",
+            "schedule_in_minutes": 90,
+            "data": {
+                "webhook_url": "https://api.example.com/scheduled-callback",
+                "payload": {
+                    "event_type": "scheduled_notification_90min"
+                }
+            }
+        },
+        {
+            "type": "sms",
+            "priority": "low",
+            "schedule_in_minutes": 120,
+            "data": {
+                "phone": "+1234567890",
+                "message": "Your appointment reminder - scheduled 2 hours in advance"
+            }
+        }
+    ]
+}

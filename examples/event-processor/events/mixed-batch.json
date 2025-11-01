@@ -1,0 +1,90 @@
+{
+    "events": [
+        {
+            "type": "email",
+            "priority": "high",
+            "data": {
+                "to": "admin@example.com",
+                "subject": "System Alert: High Memory Usage",
+                "body": "Memory usage has exceeded 85% threshold on server prod-01",
+                "template": "system-alert"
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "medium",
+            "data": {
+                "webhook_url": "https://api.example.com/user-signup",
+                "payload": {
+                    "user_id": "usr_12345",
+                    "email": "newuser@example.com",
+                    "signup_date": "2024-01-01T12:00:00Z"
+                }
+            }
+        },
+        {
+            "type": "sms",
+            "priority": "critical",
+            "data": {
+                "phone_number": "+1234567890",
+                "message": "URGENT: Your account has been locked due to suspicious activity. Contact support immediately.",
+                "sender_id": "SecureApp"
+            }
+        },
+        {
+            "type": "email",
+            "priority": "low",
+            "data": {
+                "to": "user@example.com",
+                "subject": "Weekly Newsletter",
+                "body": "Here are this week's updates...",
+                "template": "newsletter"
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "high",
+            "data": {
+                "webhook_url": "https://api.example.com/order-status",
+                "payload": {
+                    "order_id": "ORD-789",
+                    "status": "shipped",
+                    "tracking_number": "TRK123456789",
+                    "estimated_delivery": "2024-01-05"
+                }
+            }
+        },
+        {
+            "type": "sms",
+            "priority": "medium",
+            "data": {
+                "phone_number": "+1234567891",
+                "message": "Your verification code is: 123456. Valid for 10 minutes.",
+                "sender_id": "VerifyApp"
+            }
+        },
+        {
+            "type": "email",
+            "priority": "medium",
+            "data": {
+                "to": "customer@example.com",
+                "subject": "Your order has been shipped",
+                "body": "Good news! Your order #ORD-789 is on its way.",
+                "template": "order-shipped"
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "low",
+            "data": {
+                "webhook_url": "https://api.example.com/analytics",
+                "payload": {
+                    "event": "page_view",
+                    "page": "/products",
+                    "user_id": "usr_98765",
+                    "timestamp": 1704067200
+                }
+            }
+        }
+    ]
+}

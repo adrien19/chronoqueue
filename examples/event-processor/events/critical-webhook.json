@@ -1,0 +1,47 @@
+{
+    "events": [
+        {
+            "type": "webhook",
+            "priority": "critical",
+            "data": {
+                "webhook_url": "https://api.example.com/critical-alert",
+                "payload": {
+                    "alert_type": "system_failure",
+                    "severity": "critical",
+                    "message": "Database connection pool exhausted",
+                    "timestamp": 1704067200
+                },
+                "headers": {
+                    "X-Alert-Priority": "critical",
+                    "Content-Type": "application/json"
+                }
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "critical",
+            "data": {
+                "webhook_url": "https://api.example.com/security-alert",
+                "payload": {
+                    "event": "unauthorized_access_attempt",
+                    "ip_address": "192.168.1.100",
+                    "attempts": 5,
+                    "timestamp": 1704067260
+                }
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "high",
+            "data": {
+                "webhook_url": "https://api.example.com/payment-notification",
+                "payload": {
+                    "transaction_id": "txn_abc123",
+                    "amount": 99.99,
+                    "currency": "USD",
+                    "status": "completed"
+                }
+            }
+        }
+    ]
+}
