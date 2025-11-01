@@ -11,10 +11,11 @@ import (
 	"syscall"
 	"time"
 
+	"google.golang.org/protobuf/types/known/structpb"
+
 	messagev1 "github.com/adrien19/chronoqueue/api/message/v1"
 	queuev1 "github.com/adrien19/chronoqueue/api/queue/v1"
 	"github.com/adrien19/chronoqueue/client"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const (
@@ -632,11 +633,11 @@ func generateEvents(count int, output string) error {
 		return fmt.Errorf("failed to marshal events: %w", err)
 	}
 
-	if err := os.MkdirAll("events", 0755); err != nil {
+	if err := os.MkdirAll("events", 0o755); err != nil {
 		return fmt.Errorf("failed to create events directory: %w", err)
 	}
 
-	if err := os.WriteFile(output, data, 0644); err != nil {
+	if err := os.WriteFile(output, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 

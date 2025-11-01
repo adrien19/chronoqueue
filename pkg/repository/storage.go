@@ -146,12 +146,15 @@ func (as *storage) DeleteQueue(ctx context.Context, request *queueservice_pb.Del
 	if request == nil || request.GetName() == "" {
 		return &queueservice_pb.DeleteQueueResponse{Success: false}, errors.New("error: queue information missing")
 	}
+
+	queueName := request.GetName()
 	checker := NewKeyChecker(as.redisClient, 100)
 
 	start := time.Now()
 	checker.Start(ctx)
 
-	iter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("queue:%s*", request.GetName()), 0).Iterator()
+	// Delete legacy queue sorted set and metadata
+	iter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("queue:%s*", queueName), 0).Iterator()
 	for iter.Next(ctx) {
 		checker.Add(iter.Val())
 	}
@@ -159,11 +162,49 @@ func (as *storage) DeleteQueue(ctx context.Context, request *queueservice_pb.Del
 		return &queueservice_pb.DeleteQueueResponse{Success: false}, err
 	}
 
+	// Delete all priority streams for this queue
+	priorityLevels := []string{"high", "medium", "low"}
+	groupKey := as.groupKey(queueName)
+
+	for _, level := range priorityLevels {
+		streamKey := fmt.Sprintf("stream:%s:%s", level, queueName)
+
+		// Destroy consumer group first if it exists
+		err := as.redisClient.XGroupDestroy(ctx, streamKey, groupKey).Err()
+		if err != nil && err != redis.Nil {
+			as.logger.DebugWithFields("Failed to destroy consumer group", "stream", streamKey, "group", groupKey, "error", err)
+		}
+
+		// Delete the stream
+		checker.Add(streamKey)
+	}
+
+	// Delete scheduled messages sorted set
+	scheduleKey := as.scheduleKey(queueName)
+	checker.Add(scheduleKey)
+
+	// Delete message metadata keys
+	metaIter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("%s:*:meta", queueName), 0).Iterator()
+	for metaIter.Next(ctx) {
+		checker.Add(metaIter.Val())
+	}
+	if err := metaIter.Err(); err != nil {
+		as.logger.DebugWithFields("Error scanning message metadata keys", "error", err)
+	}
+
+	// Delete DLQ stream if exists
+	dlqStream := as.dlqStreamKey(queueName)
+	err := as.redisClient.XGroupDestroy(ctx, dlqStream, groupKey).Err()
+	if err != nil && err != redis.Nil {
+		as.logger.DebugWithFields("Failed to destroy DLQ consumer group", "stream", dlqStream, "error", err)
+	}
+	checker.Add(dlqStream)
+
 	deleted := checker.Stop()
 	as.logger.DebugWithFields(
 		"Deleted keys associated with queue",
 		"total", deleted,
-		"queue", request.GetName(),
+		"queue", queueName,
 		"took", time.Since(start),
 	)
 

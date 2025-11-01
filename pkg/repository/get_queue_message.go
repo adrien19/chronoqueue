@@ -25,26 +25,6 @@ func (as *storage) validateExclusivity(queueMeta *queue_pb.QueueMetadata, exclus
 	return nil
 }
 
-func (as *storage) getNextPendingMessage(ctx context.Context, queueName string, members []string) (*message_pb.Message, error) {
-	for _, member := range members {
-		if len(member) == 0 {
-			continue
-		}
-		meta, err := as.fetchMessageMetadata(ctx, queueName, member)
-		if err != nil {
-			as.logger.ErrorWithFields("Failed to fetch message metadata", "error", err)
-			return nil, err
-		}
-		if meta.State == message_pb.Message_Metadata_PENDING {
-			return &message_pb.Message{
-				MessageId: member,
-				Metadata:  meta,
-			}, nil
-		}
-	}
-	return nil, nil
-}
-
 func (as *storage) GetQueueMessage(ctx context.Context, request *queueservice_pb.GetNextMessageRequest) (*queueservice_pb.GetNextMessageResponse, error) {
 	queueName := request.GetQueueName()
 	queueMeta, err := as.GetQueueMetadata(ctx, queueName)

@@ -15,64 +15,99 @@ import (
 )
 
 func (as *storage) GetQueueState(ctx context.Context, request *queueservice_pb.GetQueueStateRequest) (*queueservice_pb.GetQueueStateResponse, error) {
-	// Create or fetch the mutex for this specific queue
-	queueMutex := as.rs.NewMutex("mutex:" + request.GetQueueName())
-
-	// Try to acquire the lock
-	if err := queueMutex.Lock(); err != nil {
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
-		// chronoErr := util.NewServiceError("LOCK_ERROR", codes.Internal, err)
-		return nil, chronoErr.GRPCStatus()
-	}
-
-	defer func() {
-		// Release the message lock
-		if ok, err := queueMutex.Unlock(); !ok || err != nil {
-			as.logger.Error("Failed to release queue lock", err)
-		}
-	}()
-
-	prefixedQueueName := "queue:" + request.GetQueueName()
-	// Now we can safely compute the queue state as before
-	membersWithScores, err := as.redisClient.ZRangeByScoreWithScores(ctx, prefixedQueueName, &redis.ZRangeBy{
-		Min:    "-inf",
-		Max:    "+inf",
-		Offset: 0,
-	}).Result()
-	if err != nil {
-		return &queueservice_pb.GetQueueStateResponse{}, err
-	}
-	if len(membersWithScores) <= 1 {
-		return &queueservice_pb.GetQueueStateResponse{}, nil
-	}
-
+	queueName := request.GetQueueName()
 	stateCounts := make(map[message_pb.Message_Metadata_State]int32)
 	var earliestDeadline time.Time
 
-	for _, member := range membersWithScores {
-		if len(member.Member.(string)) == 0 {
+	// Count scheduled messages (INVISIBLE state)
+	scheduleKey := as.scheduleKey(queueName)
+	scheduledCount, err := as.redisClient.ZCard(ctx, scheduleKey).Result()
+	if err != nil && err != redis.Nil {
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to count scheduled messages")
+		return nil, chronoErr.GRPCStatus()
+	}
+	if scheduledCount > 0 {
+		stateCounts[message_pb.Message_Metadata_INVISIBLE] = int32(scheduledCount)
+	}
+
+	// Query all priority streams for this queue
+	priorityLevels := []string{"high", "medium", "low"}
+	groupKey := as.groupKey(queueName)
+
+	for _, level := range priorityLevels {
+		streamKey := fmt.Sprintf("stream:%s:%s", level, queueName)
+
+		// Get stream length (PENDING messages in stream)
+		streamLen, err := as.redisClient.XLen(ctx, streamKey).Result()
+		if err != nil && err != redis.Nil {
 			continue
 		}
 
-		metadata, err := as.fetchMessageMetadata(ctx, request.GetQueueName(), member.Member.(string))
-		if err != nil {
-			msg := fmt.Sprintf("Unexpected error occured while fetching metadata for message %s", member.Member.(string))
-			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, msg)
-			as.logger.DebugWithFields(msg, "err", chronoErr.Error())
-
-			return nil, chronoErr.GRPCStatus()
+		// Get consumer group info if it exists
+		groupInfo, err := as.redisClient.XInfoGroups(ctx, streamKey).Result()
+		if err != nil || len(groupInfo) == 0 {
+			// No consumer group or stream doesn't exist yet
+			if streamLen > 0 {
+				stateCounts[message_pb.Message_Metadata_PENDING] += int32(streamLen)
+			}
+			continue
 		}
 
-		stateCounts[metadata.GetState()] += 1
+		// Use XPENDING to get messages being processed (RUNNING state)
+		pendingInfo, err := as.redisClient.XPending(ctx, streamKey, groupKey).Result()
+		if err != nil && err != redis.Nil {
+			continue
+		}
 
-		// Calculate earliest deadline from message metadata
-		if metadata.LeaseExpiry > 0 {
-			leaseDeadline := time.Unix(0, metadata.LeaseExpiry*int64(time.Millisecond))
-			if earliestDeadline.IsZero() || leaseDeadline.Before(earliestDeadline) {
-				earliestDeadline = leaseDeadline
+		if pendingInfo != nil {
+			// Messages in PEL are RUNNING
+			runningCount := pendingInfo.Count
+			stateCounts[message_pb.Message_Metadata_RUNNING] += int32(runningCount)
+
+			// Messages in stream but not in PEL are PENDING
+			pendingCount := streamLen - runningCount
+			if pendingCount > 0 {
+				stateCounts[message_pb.Message_Metadata_PENDING] += int32(pendingCount)
 			}
+
+			// Get earliest deadline from PEL
+			if runningCount > 0 {
+				// Get detailed pending info for earliest deadline
+				pendingExt, err := as.redisClient.XPendingExt(ctx, &redis.XPendingExtArgs{
+					Stream: streamKey,
+					Group:  groupKey,
+					Start:  "-",
+					End:    "+",
+					Count:  1,
+				}).Result()
+				if err == nil && len(pendingExt) > 0 {
+					// Idle time is how long the message has been pending
+					// We need to calculate deadline from message metadata
+					messageID := pendingExt[0].ID
+					// Extract actual message ID from stream entry
+					entries, err := as.redisClient.XRange(ctx, streamKey, messageID, messageID).Result()
+					if err == nil && len(entries) > 0 {
+						if msgID, ok := entries[0].Values["message_id"].(string); ok {
+							metadata, err := as.fetchMessageMetadata(ctx, queueName, msgID)
+							if err == nil && metadata.LeaseExpiry > 0 {
+								leaseDeadline := time.Unix(0, metadata.LeaseExpiry*int64(time.Millisecond))
+								if earliestDeadline.IsZero() || leaseDeadline.Before(earliestDeadline) {
+									earliestDeadline = leaseDeadline
+								}
+							}
+						}
+					}
+				}
+			}
+		} else if streamLen > 0 {
+			// No PEL info but stream has messages - all are PENDING
+			stateCounts[message_pb.Message_Metadata_PENDING] += int32(streamLen)
 		}
 	}
+
+	// Note: COMPLETED, CANCELED, and ERRORED states are not tracked in streams
+	// These messages are acknowledged and removed from streams
+	// DLQ messages (ERRORED) would need to be queried from dlq:{queueName} stream
 
 	return &queueservice_pb.GetQueueStateResponse{
 		StateCounts: map[string]int32{

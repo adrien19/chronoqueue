@@ -79,12 +79,19 @@ func TestHeartbeatUpdatesRunningMessagesScore(t *testing.T) {
 	err = redisClient.HSet(ctx, testMessageKey, "metadata", metadataJSON).Err()
 	require.NoError(t, err)
 
-	// Add message to the queue sorted set with priority score
-	priorityScore := float64(100 * 1e10)
-	err = redisClient.ZAdd(ctx, "queue:"+queueName, redis.Z{
-		Score:  priorityScore,
-		Member: messageID,
-	}).Err()
+	// Add message to stream instead of sorted set
+	storage := storageInterface.(*storage)
+	streamKey := storage.streamKey(queueName, 5)
+	groupKey := storage.groupKey(queueName)
+	err = storage.ensureConsumerGroup(ctx, streamKey, groupKey)
+	require.NoError(t, err)
+	_, err = redisClient.XAdd(ctx, &redis.XAddArgs{
+		Stream: streamKey,
+		Values: map[string]interface{}{
+			"message_id": messageID,
+			"priority":   5,
+		},
+	}).Result()
 	require.NoError(t, err)
 
 	// Get the message (transitions to RUNNING and adds to running_messages)
@@ -177,11 +184,18 @@ func TestHeartbeatWithMultipleRenewals(t *testing.T) {
 	err = redisClient.HSet(ctx, testMessageKey, "metadata", metadataJSON).Err()
 	require.NoError(t, err)
 
-	priorityScore := float64(100 * 1e10)
-	err = redisClient.ZAdd(ctx, "queue:"+queueName, redis.Z{
-		Score:  priorityScore,
-		Member: messageID,
-	}).Err()
+	storage := storageInterface.(*storage)
+	streamKey := storage.streamKey(queueName, 5)
+	groupKey := storage.groupKey(queueName)
+	err = storage.ensureConsumerGroup(ctx, streamKey, groupKey)
+	require.NoError(t, err)
+	_, err = redisClient.XAdd(ctx, &redis.XAddArgs{
+		Stream: streamKey,
+		Values: map[string]interface{}{
+			"message_id": messageID,
+			"priority":   5,
+		},
+	}).Result()
 	require.NoError(t, err)
 
 	getResp, err := storageInterface.GetQueueMessage(ctx, &queueservice_pb.GetNextMessageRequest{
@@ -265,11 +279,18 @@ func TestRunningToPendingRespectsUpdatedScore(t *testing.T) {
 	err = redisClient.HSet(ctx, testMessageKey, "metadata", metadataJSON).Err()
 	require.NoError(t, err)
 
-	priorityScore := float64(100 * 1e10)
-	err = redisClient.ZAdd(ctx, "queue:"+queueName, redis.Z{
-		Score:  priorityScore,
-		Member: messageID,
-	}).Err()
+	storage := storageInterface.(*storage)
+	streamKey := storage.streamKey(queueName, 5)
+	groupKey := storage.groupKey(queueName)
+	err = storage.ensureConsumerGroup(ctx, streamKey, groupKey)
+	require.NoError(t, err)
+	_, err = redisClient.XAdd(ctx, &redis.XAddArgs{
+		Stream: streamKey,
+		Values: map[string]interface{}{
+			"message_id": messageID,
+			"priority":   5,
+		},
+	}).Result()
 	require.NoError(t, err)
 
 	getResp, err := storageInterface.GetQueueMessage(ctx, &queueservice_pb.GetNextMessageRequest{

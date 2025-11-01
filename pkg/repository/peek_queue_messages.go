@@ -2,8 +2,6 @@ package repository
 
 import (
 	"context"
-	"fmt"
-	"strconv"
 
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
@@ -13,56 +11,77 @@ import (
 	"github.com/adrien19/chronoqueue/internal/util"
 )
 
-// Fetches message IDs from the sorted set in Redis based on the priority range.
-// With the new scoring system: score = (MaxPriority - priority) * 1e10 + timestamp
-func (as *storage) fetchMessageIDs(ctx context.Context, queueName string, priorityRange *queueservice_pb.PeekQueueMessagesRequest_PriorityRange, limit int64) ([]string, error) {
-	prefixedQueueName := "queue:" + queueName
+// fetchMessageIDsFromStreams retrieves message IDs from Redis Streams based on priority range
+func (as *storage) fetchMessageIDsFromStreams(ctx context.Context, queueName string, priorityRange *queueservice_pb.PeekQueueMessagesRequest_PriorityRange, limit int64) ([]string, error) {
+	var messageIDs []string
 
-	if priorityRange != nil {
-		// Convert priority range to score range
-		// Higher priority (e.g., 100) -> Lower score (e.g., 0 * 1e10)
-		// Lower priority (e.g., 0) -> Higher score (e.g., 100 * 1e10)
-		minPriority := priorityRange.GetMin()
-		maxPriority := priorityRange.GetMax()
+	// Query priority streams - use priority levels (high, medium, low) instead of individual priorities
+	priorityLevels := []string{"high", "medium", "low"}
+	remaining := limit
 
-		// Convert to score bounds (note the inversion)
-		minScore := strconv.FormatInt((MaxPriority-maxPriority)*1e10, 10)
-		maxScore := strconv.FormatInt((MaxPriority-minPriority)*1e10+1e10-1, 10) // Include all timestamps for this priority
+	// Query streams in priority order (high to low)
+	for _, level := range priorityLevels {
+		if remaining <= 0 {
+			break
+		}
 
-		return as.redisClient.ZRangeByScore(ctx, prefixedQueueName, &redis.ZRangeBy{
-			Min:    minScore,
-			Max:    maxScore,
-			Offset: 0,
-			Count:  limit,
-		}).Result()
+		streamKey := "stream:" + level + ":" + queueName
+
+		// Use XRANGE to peek at messages without consuming
+		entries, err := as.redisClient.XRange(ctx, streamKey, "-", "+").Result()
+		if err != nil && err != redis.Nil {
+			continue
+		}
+
+		for _, entry := range entries {
+			if remaining <= 0 {
+				break
+			}
+			if msgID, ok := entry.Values["message_id"].(string); ok {
+				messageIDs = append(messageIDs, msgID)
+				remaining--
+			}
+		}
 	}
 
-	// No priority filter - get all messages ordered by priority
-	return as.redisClient.ZRange(ctx, prefixedQueueName, 0, limit-1).Result()
+	// Also check scheduled messages if there's remaining capacity
+	if remaining > 0 {
+		scheduleKey := as.scheduleKey(queueName)
+		scheduledMsgIDs, err := as.redisClient.ZRange(ctx, scheduleKey, 0, remaining-1).Result()
+		if err == nil {
+			messageIDs = append(messageIDs, scheduledMsgIDs...)
+		}
+	}
+
+	return messageIDs, nil
 }
 
 func (as *storage) PeekQueueMessages(ctx context.Context, request *queueservice_pb.PeekQueueMessagesRequest) (*queueservice_pb.PeekQueueMessagesResponse, error) {
 	queueName := request.GetQueueName()
-	messageIDs, err := as.fetchMessageIDs(ctx, queueName, request.PriorityRange, request.GetLimit())
+	limit := request.GetLimit()
+	if limit <= 0 {
+		limit = 10 // Default limit
+	}
+
+	messageIDs, err := as.fetchMessageIDsFromStreams(ctx, queueName, request.PriorityRange, limit)
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error while fetching message IDs")
 		return nil, chronoErr.GRPCStatus()
 	}
 	messageIDs = util.FilterEmptyStrings(messageIDs)
 
-	messages := make([]*message_pb.Message, len(messageIDs))
-	for i, messageID := range messageIDs {
+	messages := make([]*message_pb.Message, 0, len(messageIDs))
+	for _, messageID := range messageIDs {
 		metadata, err := as.fetchMessageMetadata(ctx, queueName, messageID)
 		if err != nil {
-			msg := fmt.Sprintf("error fetching metadata for message %s", messageID)
-			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, msg)
-			return nil, chronoErr.GRPCStatus()
+			as.logger.DebugWithFields("Failed to fetch metadata for message", "messageID", messageID, "error", err)
+			continue
 		}
 
-		messages[i] = &message_pb.Message{
+		messages = append(messages, &message_pb.Message{
 			MessageId: messageID,
 			Metadata:  metadata,
-		}
+		})
 	}
 
 	return &queueservice_pb.PeekQueueMessagesResponse{Messages: messages}, nil

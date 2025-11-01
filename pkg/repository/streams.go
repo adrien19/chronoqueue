@@ -44,55 +44,12 @@ func (as *storage) addToSchedule(ctx context.Context, queueName, messageID strin
 	}).Err()
 }
 
-func (as *storage) addToStream(ctx context.Context, queueName string, priority int32, messageID string, payload map[string]interface{}) (string, error) {
-	streamKey := as.streamKey(queueName, priority)
-	groupKey := as.groupKey(queueName)
-
-	if err := as.ensureConsumerGroup(ctx, streamKey, groupKey); err != nil {
-		return "", err
-	}
-
-	result := as.redisClient.XAdd(ctx, &redis.XAddArgs{
-		Stream: streamKey,
-		Values: payload,
-	})
-
-	return result.Val(), result.Err()
-}
-
 func (as *storage) ensureConsumerGroup(ctx context.Context, streamKey, groupKey string) error {
 	err := as.redisClient.XGroupCreateMkStream(ctx, streamKey, groupKey, "0").Err()
 	if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
 		return err
 	}
 	return nil
-}
-
-func (as *storage) claimFromStream(ctx context.Context, queueName, consumerName string, count int64) ([]redis.XMessage, error) {
-	priorities := []string{"high", "medium", "low"}
-
-	for _, priority := range priorities {
-		streamKey := fmt.Sprintf("stream:%s:%s", priority, queueName)
-		groupKey := as.groupKey(queueName)
-
-		messages, err := as.redisClient.XReadGroup(ctx, &redis.XReadGroupArgs{
-			Group:    groupKey,
-			Consumer: consumerName,
-			Streams:  []string{streamKey, ">"},
-			Count:    count,
-			Block:    0,
-		}).Result()
-
-		if err != nil && err != redis.Nil {
-			return nil, err
-		}
-
-		if len(messages) > 0 && len(messages[0].Messages) > 0 {
-			return messages[0].Messages, nil
-		}
-	}
-
-	return nil, nil
 }
 
 func (as *storage) ackMessage(ctx context.Context, queueName, streamEntryID string) error {
@@ -294,44 +251,4 @@ func (as *storage) weightedRandomSelect(weights map[string]int32) string {
 	}
 
 	return "high"
-}
-
-func (as *storage) moveToDLQ(ctx context.Context, queueName, messageID, streamEntryID, reason string) error {
-	dlqStream := as.dlqStreamKey(queueName)
-
-	meta, err := as.fetchMessageMetadata(ctx, queueName, messageID)
-	if err != nil {
-		return fmt.Errorf("failed to fetch message metadata: %w", err)
-	}
-
-	payload := map[string]interface{}{
-		"message_id":       messageID,
-		"original_queue":   queueName,
-		"failure_reason":   reason,
-		"delivery_count":   meta.MaxAttempts - meta.AttemptsLeft,
-		"original_payload": meta.Payload,
-		"timestamp":        time.Now().UnixMilli(),
-	}
-
-	_, err = as.redisClient.XAdd(ctx, &redis.XAddArgs{
-		Stream: dlqStream,
-		Values: payload,
-	}).Result()
-	if err != nil {
-		return fmt.Errorf("failed to add message to DLQ stream: %w", err)
-	}
-
-	meta.State = 2
-	if err := as.saveMessageMetadata(ctx, queueName, messageID, meta); err != nil {
-		return fmt.Errorf("failed to update message metadata: %w", err)
-	}
-
-	if streamEntryID != "" {
-		if err := as.ackMessage(ctx, queueName, streamEntryID); err != nil {
-			as.logger.ErrorWithFields("Failed to ack message after moving to DLQ", "error", err, "messageID", messageID)
-		}
-	}
-
-	as.logger.InfoWithFields("Message moved to DLQ", "queueName", queueName, "messageID", messageID, "reason", reason)
-	return nil
 }

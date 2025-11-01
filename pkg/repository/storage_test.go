@@ -819,13 +819,23 @@ func Test_storage_GetQueueState(t *testing.T) {
 		return
 	}
 
-	// Add to sorted set
-	err = redisClient.ZAdd(context.TODO(), "queue:test_queue", redis.Z{
-		Score:  float64(100 * 1e10),
-		Member: "test_message_id",
-	}).Err()
+	// Add to stream instead of sorted set
+	streamKey := as.(*storage).streamKey("test_queue", 5)
+	groupKey := as.(*storage).groupKey("test_queue")
+	err = as.(*storage).ensureConsumerGroup(context.TODO(), streamKey, groupKey)
 	if err != nil {
-		t.Errorf("Failed to add message to queue: %v", err)
+		t.Errorf("Failed to create consumer group: %v", err)
+		return
+	}
+	_, err = redisClient.XAdd(context.TODO(), &redis.XAddArgs{
+		Stream: streamKey,
+		Values: map[string]interface{}{
+			"message_id": "test_message_id",
+			"priority":   5,
+		},
+	}).Result()
+	if err != nil {
+		t.Errorf("Failed to add message to stream: %v", err)
 		return
 	}
 
