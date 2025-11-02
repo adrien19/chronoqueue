@@ -126,11 +126,9 @@ func publishEvents(ctx context.Context, filename string) error {
 		// Handle scheduled messages
 		var scheduleInfo string
 		if event.ScheduleInMinutes > 0 {
-			invisibilityExpiry := time.Now().Add(time.Duration(event.ScheduleInMinutes) * time.Minute).Unix()
-			msgOpts.InvisibilityExpiry = invisibilityExpiry
-			msgOpts.InvisibilityDuration = fmt.Sprintf("%dm", event.ScheduleInMinutes)
-			scheduleTime := time.Unix(invisibilityExpiry, 0).Format("15:04:05")
-			scheduleInfo = fmt.Sprintf(", Scheduled: %s (%dm)", scheduleTime, event.ScheduleInMinutes)
+			scheduledTime := time.Now().Add(time.Duration(event.ScheduleInMinutes) * time.Minute)
+			msgOpts.ScheduledTime = &scheduledTime
+			scheduleInfo = fmt.Sprintf(", Scheduled: %s (%dm)", scheduledTime.Format("15:04:05"), event.ScheduleInMinutes)
 		}
 
 		_, err = c.PostMessage(ctx, queueName, msgID, msgOpts)

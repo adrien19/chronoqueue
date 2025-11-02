@@ -72,7 +72,7 @@ func (r *ReclaimService) reclaimStuckMessages(ctx context.Context) {
 		for _, priority := range []string{"high", "medium", "low"} {
 			streamKey := fmt.Sprintf("stream:%s:%s", priority, queueName)
 			groupKey := r.storage.groupKey(queueName)
-			var startID string = "0-0"
+			startID := "0-0"
 			for {
 				msgs, nextID, err := r.xAutoClaim(ctx, streamKey, groupKey, startID, minIdleMs, 10)
 				if err != nil {

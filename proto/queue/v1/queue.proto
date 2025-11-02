@@ -13,11 +13,13 @@ enum QueueType {
 }
 
 message QueueMetadata {
+    reserved 5;
+    reserved "invisibility_duration";
+    
     QueueType type = 1;
     int32 default_max_attempts = 2;
     google.protobuf.Duration lease_duration = 3;
     string exclusivity_key = 4;
-    google.protobuf.Duration invisibility_duration = 5;
     string dead_letter_queue_name = 6;
     bool auto_create_dlq = 7;
     string schema_id = 8;           // Default schema for queue messages

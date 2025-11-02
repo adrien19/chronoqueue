@@ -54,9 +54,8 @@ func TestMessageLifecycle_PostSimpleMessage(t *testing.T) {
 	_, err := client.CreateQueue(ctx, &queueservice_pb.CreateQueueRequest{
 		Name: queueName,
 		Metadata: &queue_pb.QueueMetadata{
-			Type:                 queue_pb.QueueType_SIMPLE,
-			LeaseDuration:        durationpb.New(30 * time.Second),
-			InvisibilityDuration: durationpb.New(5 * time.Minute),
+			Type:          queue_pb.QueueType_SIMPLE,
+			LeaseDuration: durationpb.New(30 * time.Second),
 		},
 	})
 	require.NoError(t, err)
@@ -73,10 +72,9 @@ func TestMessageLifecycle_PostSimpleMessage(t *testing.T) {
 	message := &message_pb.Message{
 		MessageId: helpers.GenerateUniqueMessageID(t),
 		Metadata: &message_pb.Message_Metadata{
-			Payload:              payload,
-			Priority:             int64(msgFixture.Priority),
-			MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-			InvisibilityDuration: durationpb.New(0), // Message available immediately
+			Payload:     payload,
+			Priority:    int64(msgFixture.Priority),
+			MaxAttempts: 1, // Set max attempts to 1 for simplicity
 		},
 	}
 
@@ -133,10 +131,9 @@ func TestMessageLifecycle_PostJSONMessage(t *testing.T) {
 	message := &message_pb.Message{
 		MessageId: helpers.GenerateUniqueMessageID(t),
 		Metadata: &message_pb.Message_Metadata{
-			Payload:              payload,
-			Priority:             int64(msgFixture.Priority),
-			MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-			InvisibilityDuration: durationpb.New(0), // Message available immediately
+			Payload:     payload,
+			Priority:    int64(msgFixture.Priority),
+			MaxAttempts: 1, // Set max attempts to 1 for simplicity
 		},
 	}
 
@@ -213,10 +210,9 @@ func TestMessageLifecycle_PostWithPriority(t *testing.T) {
 		message := &message_pb.Message{
 			MessageId: helpers.GenerateUniqueMessageID(t),
 			Metadata: &message_pb.Message_Metadata{
-				Payload:              payload,
-				Priority:             mp.priority,
-				MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-				InvisibilityDuration: durationpb.New(0), // Message available immediately
+				Payload:     payload,
+				Priority:    mp.priority,
+				MaxAttempts: 1, // Set max attempts to 1 for simplicity
 			},
 		}
 
@@ -292,10 +288,9 @@ func TestMessageLifecycle_GetNextMessageFIFO(t *testing.T) {
 		message := &message_pb.Message{
 			MessageId: msgID,
 			Metadata: &message_pb.Message_Metadata{
-				Payload:              payload,
-				Priority:             50,                // Same priority for all
-				MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-				InvisibilityDuration: durationpb.New(0), // Message available immediately
+				Payload:     payload,
+				Priority:    50, // Same priority for all
+				MaxAttempts: 1,  // Set max attempts to 1 for simplicity
 			},
 		}
 
@@ -364,10 +359,9 @@ func TestMessageLifecycle_MessageLeaseManagement(t *testing.T) {
 	message := &message_pb.Message{
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
-			Payload:              payload,
-			Priority:             50,
-			MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-			InvisibilityDuration: durationpb.New(0), // Message available immediately
+			Payload:     payload,
+			Priority:    50,
+			MaxAttempts: 1, // Set max attempts to 1 for simplicity
 		},
 	}
 
@@ -445,10 +439,9 @@ func TestMessageLifecycle_RenewMessageLease(t *testing.T) {
 	message := &message_pb.Message{
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
-			Payload:              payload,
-			Priority:             50,
-			MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-			InvisibilityDuration: durationpb.New(0), // Message available immediately
+			Payload:     payload,
+			Priority:    50,
+			MaxAttempts: 1, // Set max attempts to 1 for simplicity
 		},
 	}
 
@@ -519,10 +512,9 @@ func TestMessageLifecycle_AcknowledgeMessage(t *testing.T) {
 	message := &message_pb.Message{
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
-			Payload:              payload,
-			Priority:             50,
-			MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-			InvisibilityDuration: durationpb.New(0), // Message available immediately
+			Payload:     payload,
+			Priority:    50,
+			MaxAttempts: 1, // Set max attempts to 1 for simplicity
 		},
 	}
 
@@ -602,10 +594,9 @@ func TestMessageLifecycle_PeekMessages(t *testing.T) {
 		message := &message_pb.Message{
 			MessageId: helpers.GenerateUniqueMessageID(t),
 			Metadata: &message_pb.Message_Metadata{
-				Payload:              payload,
-				Priority:             int64(50 + i),     // Vary priority slightly to ensure different scores
-				MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-				InvisibilityDuration: durationpb.New(0), // Message available immediately
+				Payload:     payload,
+				Priority:    int64(50 + i), // Vary priority slightly to ensure different scores
+				MaxAttempts: 1,             // Set max attempts to 1 for simplicity
 			},
 		}
 
@@ -679,10 +670,9 @@ func TestMessageLifecycle_SendHeartbeat(t *testing.T) {
 	message := &message_pb.Message{
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
-			Payload:              payload,
-			Priority:             50,
-			MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-			InvisibilityDuration: durationpb.New(0), // Message available immediately
+			Payload:     payload,
+			Priority:    50,
+			MaxAttempts: 1, // Set max attempts to 1 for simplicity
 		},
 	}
 

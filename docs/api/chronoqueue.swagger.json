@@ -1739,9 +1739,6 @@
         "state": {
           "$ref": "#/definitions/v1MessageMetadataState"
         },
-        "invisibilityDuration": {
-          "type": "string"
-        },
         "attemptsLeft": {
           "type": "integer",
           "format": "int32"
@@ -1756,10 +1753,6 @@
         "leaseRenewalCount": {
           "type": "integer",
           "format": "int32"
-        },
-        "invisibilityExpiry": {
-          "type": "string",
-          "format": "int64"
         },
         "priority": {
           "type": "string",
@@ -1962,9 +1955,6 @@
           "type": "string"
         },
         "exclusivityKey": {
-          "type": "string"
-        },
-        "invisibilityDuration": {
           "type": "string"
         },
         "deadLetterQueueName": {

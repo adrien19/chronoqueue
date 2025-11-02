@@ -53,11 +53,10 @@ func TestRetrySystem_ExponentialBackoff(t *testing.T) {
 	_, err := client.CreateQueue(ctx, &queueservice_pb.CreateQueueRequest{
 		Name: queueName,
 		Metadata: &queue_pb.QueueMetadata{
-			Type:                 queue_pb.QueueType_SIMPLE,
-			DefaultMaxAttempts:   5,
-			LeaseDuration:        durationpb.New(5 * time.Second),
-			InvisibilityDuration: durationpb.New(2 * time.Second), // Short invisibility for testing
-			AutoCreateDlq:        true,
+			Type:               queue_pb.QueueType_SIMPLE,
+			DefaultMaxAttempts: 5,
+			LeaseDuration:      durationpb.New(5 * time.Second),
+			AutoCreateDlq:      true,
 		},
 	})
 	require.NoError(t, err)
@@ -72,10 +71,9 @@ func TestRetrySystem_ExponentialBackoff(t *testing.T) {
 	message := &message_pb.Message{
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
-			Payload:              payload,
-			Priority:             50,
-			MaxAttempts:          3,                 // Server requires >= 1
-			InvisibilityDuration: durationpb.New(0), // Message available immediately
+			Payload:     payload,
+			Priority:    50,
+			MaxAttempts: 3, // Server requires >= 1
 		},
 	}
 
@@ -145,11 +143,10 @@ func TestRetrySystem_MaxRetriesReached(t *testing.T) {
 	_, err := client.CreateQueue(ctx, &queueservice_pb.CreateQueueRequest{
 		Name: queueName,
 		Metadata: &queue_pb.QueueMetadata{
-			Type:                 queue_pb.QueueType_SIMPLE,
-			DefaultMaxAttempts:   3,
-			LeaseDuration:        durationpb.New(3 * time.Second),
-			InvisibilityDuration: durationpb.New(1 * time.Second),
-			AutoCreateDlq:        true,
+			Type:               queue_pb.QueueType_SIMPLE,
+			DefaultMaxAttempts: 3,
+			LeaseDuration:      durationpb.New(3 * time.Second),
+			AutoCreateDlq:      true,
 		},
 	})
 	require.NoError(t, err)
@@ -164,10 +161,9 @@ func TestRetrySystem_MaxRetriesReached(t *testing.T) {
 	message := &message_pb.Message{
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
-			Payload:              payload,
-			Priority:             50,
-			MaxAttempts:          3,
-			InvisibilityDuration: durationpb.New(0), // Message available immediately
+			Payload:     payload,
+			Priority:    50,
+			MaxAttempts: 3,
 		},
 	}
 
@@ -303,10 +299,9 @@ func TestDLQ_RequeueMessage(t *testing.T) {
 	message := &message_pb.Message{
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
-			Payload:              payload,
-			Priority:             50,
-			MaxAttempts:          1,
-			InvisibilityDuration: durationpb.New(0), // Message available immediately
+			Payload:     payload,
+			Priority:    50,
+			MaxAttempts: 1,
 		},
 	}
 

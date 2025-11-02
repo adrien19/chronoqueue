@@ -67,9 +67,8 @@ func TestDLQImplementation(t *testing.T) {
 							},
 						},
 					},
-					InvisibilityDuration: durationpb.New(5 * time.Millisecond),  // Short
-					LeaseDuration:        durationpb.New(50 * time.Millisecond), // Short
-					Priority:             100,
+					LeaseDuration: durationpb.New(50 * time.Millisecond), // Short
+					Priority:      100,
 				},
 			},
 		}
@@ -159,9 +158,8 @@ func TestDLQImplementation(t *testing.T) {
 							},
 						},
 					},
-					InvisibilityDuration: durationpb.New(1 * time.Millisecond),
-					LeaseDuration:        durationpb.New(1 * time.Millisecond),
-					Priority:             100,
+					LeaseDuration: durationpb.New(1 * time.Millisecond),
+					Priority:      100,
 				},
 			},
 		}
@@ -225,10 +223,9 @@ func TestDLQImplementation(t *testing.T) {
 							},
 						},
 					},
-					InvisibilityDuration: durationpb.New(1 * time.Millisecond),
-					LeaseDuration:        durationpb.New(1 * time.Millisecond),
-					MaxAttempts:          -1, // Explicit infinite retry
-					Priority:             100,
+					LeaseDuration: durationpb.New(1 * time.Millisecond),
+					MaxAttempts:   -1, // Explicit infinite retry
+					Priority:      100,
 				},
 			},
 		}
@@ -292,9 +289,8 @@ func TestDLQImplementation(t *testing.T) {
 							},
 						},
 					},
-					InvisibilityDuration: durationpb.New(1 * time.Millisecond),
-					LeaseDuration:        durationpb.New(1 * time.Millisecond),
-					Priority:             100,
+					LeaseDuration: durationpb.New(1 * time.Millisecond),
+					Priority:      100,
 				},
 			},
 		}
@@ -370,9 +366,8 @@ func TestDLQImplementation(t *testing.T) {
 							},
 						},
 					},
-					InvisibilityDuration: durationpb.New(1 * time.Millisecond),
-					LeaseDuration:        durationpb.New(1 * time.Millisecond),
-					Priority:             100,
+					LeaseDuration: durationpb.New(1 * time.Millisecond),
+					Priority:      100,
 				},
 			},
 		}

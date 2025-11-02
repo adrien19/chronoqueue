@@ -64,10 +64,9 @@ func TestPriorityQueue_HighToLowOrdering(t *testing.T) {
 		message := &message_pb.Message{
 			MessageId: fmt.Sprintf("priority-msg-%d", i),
 			Metadata: &message_pb.Message_Metadata{
-				Payload:              payload,
-				Priority:             priority,
-				MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-				InvisibilityDuration: durationpb.New(0), // Message available immediately
+				Payload:     payload,
+				Priority:    priority,
+				MaxAttempts: 1, // Set max attempts to 1 for simplicity
 			},
 		}
 
@@ -147,10 +146,9 @@ func TestPriorityQueue_SamePriorityFIFO(t *testing.T) {
 		message := &message_pb.Message{
 			MessageId: msgID,
 			Metadata: &message_pb.Message_Metadata{
-				Payload:              payload,
-				Priority:             samePriority,
-				MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-				InvisibilityDuration: durationpb.New(0), // Message available immediately
+				Payload:     payload,
+				Priority:    samePriority,
+				MaxAttempts: 1, // Set max attempts to 1 for simplicity
 			},
 		}
 
@@ -230,10 +228,9 @@ func TestPriorityQueue_MixedPriorities(t *testing.T) {
 			message := &message_pb.Message{
 				MessageId: fmt.Sprintf("%s-msg-%d", td.label, i),
 				Metadata: &message_pb.Message_Metadata{
-					Payload:              payload,
-					Priority:             td.priority,
-					MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-					InvisibilityDuration: durationpb.New(0), // Message available immediately
+					Payload:     payload,
+					Priority:    td.priority,
+					MaxAttempts: 1, // Set max attempts to 1 for simplicity
 				},
 			}
 
@@ -384,10 +381,9 @@ func TestPriorityQueue_BoundaryValues(t *testing.T) {
 		message := &message_pb.Message{
 			MessageId: fmt.Sprintf("boundary-msg-%d", i),
 			Metadata: &message_pb.Message_Metadata{
-				Payload:              payload,
-				Priority:             priority,
-				MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-				InvisibilityDuration: durationpb.New(0), // Message available immediately
+				Payload:     payload,
+				Priority:    priority,
+				MaxAttempts: 1, // Set max attempts to 1 for simplicity
 			},
 		}
 

@@ -89,8 +89,6 @@ func (as *storage) saveMessageMetadataWithOldState(ctx context.Context, queueNam
 		switch newState {
 		case message_pb.Message_Metadata_RUNNING:
 			newScore = float64(metadata.LeaseExpiry)
-		case message_pb.Message_Metadata_INVISIBLE:
-			newScore = float64(metadata.InvisibilityExpiry)
 		}
 
 		if err := as.transitionStateIndex(ctx, txPipeline, key, oldState, newState, newScore); err != nil {

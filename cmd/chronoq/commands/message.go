@@ -88,10 +88,6 @@ The --file flag takes precedence if both inline and file are provided.`,
 			if err != nil {
 				return err
 			}
-			invisibilityDuration, err := cmd.Flags().GetString("invisibility-duration")
-			if err != nil {
-				return err
-			}
 			priority, err := cmd.Flags().GetInt64("priority")
 			if err != nil {
 				return err
@@ -160,10 +156,9 @@ The --file flag takes precedence if both inline and file are provided.`,
 					SchemaID:      schemaID,
 					SchemaVersion: schemaVersion,
 				},
-				InvisibilityDuration: invisibilityDuration,
-				LeaseDuration:        leaseDuration,
-				Priority:             priority,
-				MaxAttempts:          maxAttempts, // Set max attempts for the message
+				LeaseDuration: leaseDuration,
+				Priority:      priority,
+				MaxAttempts:   maxAttempts, // Set max attempts for the message
 			}
 
 			return WithClient(cmd, func(client *client.ChronoQueueClient) error {

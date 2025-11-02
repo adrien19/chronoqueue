@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/testcontainers/testcontainers-go"
 	tc_redis "github.com/testcontainers/testcontainers-go/modules/redis"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -29,7 +28,7 @@ var (
 func setup(t *testing.T) {
 	ctx := context.Background()
 	var err error
-	redisContainer, err = tc_redis.RunContainer(ctx, testcontainers.WithImage("redis:7.2.4"))
+	redisContainer, err = tc_redis.Run(ctx, "redis:7.2.4")
 	if err != nil {
 		t.Fatalf("Failed to start Redis container: %v", err)
 	}

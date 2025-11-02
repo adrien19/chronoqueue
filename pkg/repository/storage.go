@@ -22,7 +22,6 @@ import (
 	"github.com/robfig/cron/v3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -268,12 +267,10 @@ func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, me
 		}
 
 		runMessageInstanceMetadata := message_pb.Message_Metadata{
-			Priority:      metadata.Priority,
-			LeaseDuration: metadata.LeaseDuration,
-			LeaseExpiry:   0,
-			InvisibilityDuration: &durationpb.Duration{
-				Seconds: nextRunTime / int64(time.Millisecond),
-			},
+			Priority:          metadata.Priority,
+			LeaseDuration:     metadata.LeaseDuration,
+			LeaseExpiry:       0,
+			ScheduledTime:     timestamppb.New(time.Unix(0, nextRunTime*int64(time.Millisecond))),
 			AttemptsLeft:      1,
 			State:             message_pb.Message_Metadata_INVISIBLE,
 			Payload:           metadata.Payload,

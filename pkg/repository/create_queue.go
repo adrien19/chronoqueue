@@ -89,12 +89,11 @@ func (as *storage) CreateQueue(ctx context.Context, request *queueservice_pb.Cre
 		dlqRequest := &queueservice_pb.CreateQueueRequest{
 			Name: dlqName,
 			Metadata: &queue_pb.QueueMetadata{
-				Type:                 request.GetMetadata().GetType(),
-				AutoCreateDlq:        false,
-				ExclusivityKey:       request.GetMetadata().GetExclusivityKey(),
-				LeaseDuration:        request.GetMetadata().GetLeaseDuration(),
-				InvisibilityDuration: request.GetMetadata().GetInvisibilityDuration(),
-				DefaultMaxAttempts:   request.GetMetadata().GetDefaultMaxAttempts(),
+				Type:               request.GetMetadata().GetType(),
+				AutoCreateDlq:      false,
+				ExclusivityKey:     request.GetMetadata().GetExclusivityKey(),
+				LeaseDuration:      request.GetMetadata().GetLeaseDuration(),
+				DefaultMaxAttempts: request.GetMetadata().GetDefaultMaxAttempts(),
 			},
 		}
 		err = as.setQueueMetadata(ctx, dlqRequest, txPipeline)

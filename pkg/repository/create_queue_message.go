@@ -144,10 +144,5 @@ func (as *storage) calculateScheduledTime(meta *message_pb.Message_Metadata) int
 		return meta.ScheduledTime.AsTime().UnixMilli()
 	}
 
-	if meta.InvisibilityDuration != nil {
-		delay := meta.InvisibilityDuration.AsDuration()
-		return time.Now().Add(delay).UnixMilli()
-	}
-
 	return time.Now().UnixMilli()
 }

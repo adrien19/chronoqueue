@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
@@ -29,24 +30,23 @@ type (
 	State int32
 
 	QueueOptions struct {
-		DequeueAttempts      int32  `json:"dequeueAttempts,omitempty"`
-		ExclusivityKey       string `json:"exclusivityKey,omitempty"`
-		InvisibilityDuration string `json:"invisibilityDuration"`
-		LeaseDuration        string `json:"leaseDuration"`
-		Type                 int32  `json:"type,omitempty"`
-		DeadLetterQueueName  string `json:"deadLetterQueueName,omitempty"`
-		AutoCreateDLQ        bool   `json:"autoCreateDLQ,omitempty"`
+		DequeueAttempts     int32  `json:"dequeueAttempts,omitempty"`
+		ExclusivityKey      string `json:"exclusivityKey,omitempty"`
+		LeaseDuration       string `json:"leaseDuration"`
+		Type                int32  `json:"type,omitempty"`
+		DeadLetterQueueName string `json:"deadLetterQueueName,omitempty"`
+		AutoCreateDLQ       bool   `json:"autoCreateDLQ,omitempty"`
 	}
 	MessageOptions struct {
-		Payload              Payload `json:"payload,omitempty"`
-		AttemptsLeft         int32   `json:"attemptsLeft,omitempty"`
-		MaxAttempts          int32   `json:"maxAttempts,omitempty"`
-		InvisibilityDuration string  `json:"invisibilityDuration"`
-		LeaseDuration        string  `json:"leaseDuration"`
-		LeaseExpiry          int64   `json:"leaseExpiry,omitempty"`
-		State                State   `json:"state,omitempty"`
-		InvisibilityExpiry   int64   `json:"invisibilityExpiry,omitempty"`
-		Priority             int64   `json:"Priority,omitempty"`
+		Payload            Payload    `json:"payload,omitempty"`
+		AttemptsLeft       int32      `json:"attemptsLeft,omitempty"`
+		MaxAttempts        int32      `json:"maxAttempts,omitempty"`
+		ScheduledTime      *time.Time `json:"scheduledTime,omitempty"`
+		LeaseDuration      string     `json:"leaseDuration"`
+		LeaseExpiry        int64      `json:"leaseExpiry,omitempty"`
+		State              State      `json:"state,omitempty"`
+		InvisibilityExpiry int64      `json:"invisibilityExpiry,omitempty"`
+		Priority           int64      `json:"Priority,omitempty"`
 	}
 	Payload struct {
 		Metadata      map[string]*structpb.Value `json:"metadata,omitempty"`
@@ -296,21 +296,16 @@ func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, q
 	if err != nil {
 		return &queueservice_pb.CreateQueueResponse{Success: false}, fmt.Errorf("invalid lease duration: %v", err)
 	}
-	invisibilityDuration, err := parseDurationToProto(queueOptions.InvisibilityDuration)
-	if err != nil {
-		return &queueservice_pb.CreateQueueResponse{Success: false}, fmt.Errorf("invalid invisibility duration: %v", err)
-	}
 
 	req := &queueservice_pb.CreateQueueRequest{
 		Name: name,
 		Metadata: &pb_queue.QueueMetadata{
-			Type:                 pb_queue.QueueType(queueOptions.Type),
-			DefaultMaxAttempts:   int32(queueOptions.DequeueAttempts),
-			LeaseDuration:        leaseDuration,
-			ExclusivityKey:       queueOptions.ExclusivityKey,
-			InvisibilityDuration: invisibilityDuration,
-			DeadLetterQueueName:  queueOptions.DeadLetterQueueName,
-			AutoCreateDlq:        queueOptions.AutoCreateDLQ,
+			Type:                pb_queue.QueueType(queueOptions.Type),
+			DefaultMaxAttempts:  int32(queueOptions.DequeueAttempts),
+			LeaseDuration:       leaseDuration,
+			ExclusivityKey:      queueOptions.ExclusivityKey,
+			DeadLetterQueueName: queueOptions.DeadLetterQueueName,
+			AutoCreateDlq:       queueOptions.AutoCreateDLQ,
 		},
 	}
 	res, err := client.service.CreateQueue(ctx, req)
@@ -346,31 +341,32 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 	if err != nil {
 		return nil, fmt.Errorf("invalid lease duration: %v", err)
 	}
-	invisibilityDuration, err := parseDurationToProto(messageOptions.InvisibilityDuration)
-	if err != nil {
-		return nil, fmt.Errorf("invalid invisibility duration: %v", err)
+
+	metadata := &message_pb.Message_Metadata{
+		Payload: &common_pb.Payload{
+			Metadata:      messageOptions.Payload.Metadata,
+			Data:          messageOptions.Payload.Data,
+			ContentType:   messageOptions.Payload.ContentType,
+			SchemaId:      messageOptions.Payload.SchemaID,
+			SchemaVersion: messageOptions.Payload.SchemaVersion,
+		},
+		AttemptsLeft:  messageOptions.AttemptsLeft,
+		MaxAttempts:   messageOptions.MaxAttempts,
+		LeaseDuration: leaseDuration,
+		LeaseExpiry:   messageOptions.LeaseExpiry,
+		State:         message_pb.Message_Metadata_State(messageOptions.State),
+		Priority:      messageOptions.Priority,
+	}
+
+	if messageOptions.ScheduledTime != nil {
+		metadata.ScheduledTime = timestamppb.New(*messageOptions.ScheduledTime)
 	}
 
 	req := &queueservice_pb.PostMessageRequest{
 		QueueName: queue,
 		Message: &message_pb.Message{
 			MessageId: messageId,
-			Metadata: &message_pb.Message_Metadata{
-				Payload: &common_pb.Payload{
-					Metadata:      messageOptions.Payload.Metadata,
-					Data:          messageOptions.Payload.Data,
-					ContentType:   messageOptions.Payload.ContentType,
-					SchemaId:      messageOptions.Payload.SchemaID,
-					SchemaVersion: messageOptions.Payload.SchemaVersion,
-				},
-				AttemptsLeft:         messageOptions.AttemptsLeft,
-				MaxAttempts:          messageOptions.MaxAttempts,
-				LeaseDuration:        leaseDuration,
-				LeaseExpiry:          messageOptions.LeaseExpiry,
-				InvisibilityDuration: invisibilityDuration,
-				State:                message_pb.Message_Metadata_State(messageOptions.State),
-				Priority:             messageOptions.Priority,
-			},
+			Metadata:  metadata,
 		},
 	}
 	res, err := client.service.PostMessage(ctx, req)

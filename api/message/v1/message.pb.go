@@ -137,23 +137,19 @@ func (x *Message) GetMetadata() *Message_Metadata {
 }
 
 type Message_Metadata struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Payload *v1.Payload            `protobuf:"bytes,1,opt,name=payload,proto3" json:"payload,omitempty"`
-	State   Message_Metadata_State `protobuf:"varint,2,opt,name=state,proto3,enum=chronoqueue.api.message.v1.Message_Metadata_State" json:"state,omitempty"`
-	// Deprecated: Marked as deprecated in proto/message/v1/message.proto.
-	InvisibilityDuration *durationpb.Duration `protobuf:"bytes,3,opt,name=invisibility_duration,json=invisibilityDuration,proto3" json:"invisibility_duration,omitempty"`
-	AttemptsLeft         int32                `protobuf:"varint,4,opt,name=attempts_left,json=attemptsLeft,proto3" json:"attempts_left,omitempty"`
-	LeaseDuration        *durationpb.Duration `protobuf:"bytes,5,opt,name=lease_duration,json=leaseDuration,proto3" json:"lease_duration,omitempty"`
-	LeaseExpiry          int64                `protobuf:"varint,6,opt,name=lease_expiry,json=leaseExpiry,proto3" json:"lease_expiry,omitempty"`
-	LeaseRenewalCount    int32                `protobuf:"varint,7,opt,name=lease_renewal_count,json=leaseRenewalCount,proto3" json:"lease_renewal_count,omitempty"`
-	// Deprecated: Marked as deprecated in proto/message/v1/message.proto.
-	InvisibilityExpiry int64                  `protobuf:"varint,8,opt,name=invisibility_expiry,json=invisibilityExpiry,proto3" json:"invisibility_expiry,omitempty"`
-	Priority           int64                  `protobuf:"varint,9,opt,name=priority,proto3" json:"priority,omitempty"`
-	MaxAttempts        int32                  `protobuf:"varint,10,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
-	ScheduledTime      *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
-	PriorityLevel      int32                  `protobuf:"varint,21,opt,name=priority_level,json=priorityLevel,proto3" json:"priority_level,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Payload           *v1.Payload            `protobuf:"bytes,1,opt,name=payload,proto3" json:"payload,omitempty"`
+	State             Message_Metadata_State `protobuf:"varint,2,opt,name=state,proto3,enum=chronoqueue.api.message.v1.Message_Metadata_State" json:"state,omitempty"`
+	AttemptsLeft      int32                  `protobuf:"varint,4,opt,name=attempts_left,json=attemptsLeft,proto3" json:"attempts_left,omitempty"`
+	LeaseDuration     *durationpb.Duration   `protobuf:"bytes,5,opt,name=lease_duration,json=leaseDuration,proto3" json:"lease_duration,omitempty"`
+	LeaseExpiry       int64                  `protobuf:"varint,6,opt,name=lease_expiry,json=leaseExpiry,proto3" json:"lease_expiry,omitempty"`
+	LeaseRenewalCount int32                  `protobuf:"varint,7,opt,name=lease_renewal_count,json=leaseRenewalCount,proto3" json:"lease_renewal_count,omitempty"`
+	Priority          int64                  `protobuf:"varint,9,opt,name=priority,proto3" json:"priority,omitempty"`
+	MaxAttempts       int32                  `protobuf:"varint,10,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
+	ScheduledTime     *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
+	PriorityLevel     int32                  `protobuf:"varint,21,opt,name=priority_level,json=priorityLevel,proto3" json:"priority_level,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Message_Metadata) Reset() {
@@ -200,14 +196,6 @@ func (x *Message_Metadata) GetState() Message_Metadata_State {
 	return Message_Metadata_INVISIBLE
 }
 
-// Deprecated: Marked as deprecated in proto/message/v1/message.proto.
-func (x *Message_Metadata) GetInvisibilityDuration() *durationpb.Duration {
-	if x != nil {
-		return x.InvisibilityDuration
-	}
-	return nil
-}
-
 func (x *Message_Metadata) GetAttemptsLeft() int32 {
 	if x != nil {
 		return x.AttemptsLeft
@@ -232,14 +220,6 @@ func (x *Message_Metadata) GetLeaseExpiry() int64 {
 func (x *Message_Metadata) GetLeaseRenewalCount() int32 {
 	if x != nil {
 		return x.LeaseRenewalCount
-	}
-	return 0
-}
-
-// Deprecated: Marked as deprecated in proto/message/v1/message.proto.
-func (x *Message_Metadata) GetInvisibilityExpiry() int64 {
-	if x != nil {
-		return x.InvisibilityExpiry
 	}
 	return 0
 }
@@ -276,20 +256,18 @@ var File_proto_message_v1_message_proto protoreflect.FileDescriptor
 
 const file_proto_message_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"\x1eproto/message/v1/message.proto\x12\x1achronoqueue.api.message.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cproto/common/v1/common.proto\"\xcf\x06\n" +
+	"\x1eproto/message/v1/message.proto\x12\x1achronoqueue.api.message.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cproto/common/v1/common.proto\"\xfe\x05\n" +
 	"\aMessage\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\x12H\n" +
-	"\bmetadata\x18\x03 \x01(\v2,.chronoqueue.api.message.v1.Message.MetadataR\bmetadata\x1a\xda\x05\n" +
+	"\bmetadata\x18\x03 \x01(\v2,.chronoqueue.api.message.v1.Message.MetadataR\bmetadata\x1a\x89\x05\n" +
 	"\bMetadata\x12<\n" +
 	"\apayload\x18\x01 \x01(\v2\".chronoqueue.api.common.v1.PayloadR\apayload\x12H\n" +
-	"\x05state\x18\x02 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\x12R\n" +
-	"\x15invisibility_duration\x18\x03 \x01(\v2\x19.google.protobuf.DurationB\x02\x18\x01R\x14invisibilityDuration\x12#\n" +
+	"\x05state\x18\x02 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\x12#\n" +
 	"\rattempts_left\x18\x04 \x01(\x05R\fattemptsLeft\x12@\n" +
 	"\x0elease_duration\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\rleaseDuration\x12!\n" +
 	"\flease_expiry\x18\x06 \x01(\x03R\vleaseExpiry\x12.\n" +
-	"\x13lease_renewal_count\x18\a \x01(\x05R\x11leaseRenewalCount\x123\n" +
-	"\x13invisibility_expiry\x18\b \x01(\x03B\x02\x18\x01R\x12invisibilityExpiry\x12\x1a\n" +
+	"\x13lease_renewal_count\x18\a \x01(\x05R\x11leaseRenewalCount\x12\x1a\n" +
 	"\bpriority\x18\t \x01(\x03R\bpriority\x12!\n" +
 	"\fmax_attempts\x18\n" +
 	" \x01(\x05R\vmaxAttempts\x12A\n" +
@@ -301,7 +279,7 @@ const file_proto_message_v1_message_proto_rawDesc = "" +
 	"\aRUNNING\x10\x02\x12\r\n" +
 	"\tCOMPLETED\x10\x03\x12\f\n" +
 	"\bCANCELED\x10\x04\x12\v\n" +
-	"\aERRORED\x10\x05B8Z6github.com/adrien19/chronoqueue/api/message/v1;messageb\x06proto3"
+	"\aERRORED\x10\x05J\x04\b\x03\x10\x04J\x04\b\b\x10\tR\x15invisibility_durationR\x13invisibility_expiryB8Z6github.com/adrien19/chronoqueue/api/message/v1;messageb\x06proto3"
 
 var (
 	file_proto_message_v1_message_proto_rawDescOnce sync.Once
@@ -329,14 +307,13 @@ var file_proto_message_v1_message_proto_depIdxs = []int32{
 	2, // 0: chronoqueue.api.message.v1.Message.metadata:type_name -> chronoqueue.api.message.v1.Message.Metadata
 	3, // 1: chronoqueue.api.message.v1.Message.Metadata.payload:type_name -> chronoqueue.api.common.v1.Payload
 	0, // 2: chronoqueue.api.message.v1.Message.Metadata.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	4, // 3: chronoqueue.api.message.v1.Message.Metadata.invisibility_duration:type_name -> google.protobuf.Duration
-	4, // 4: chronoqueue.api.message.v1.Message.Metadata.lease_duration:type_name -> google.protobuf.Duration
-	5, // 5: chronoqueue.api.message.v1.Message.Metadata.scheduled_time:type_name -> google.protobuf.Timestamp
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	4, // 3: chronoqueue.api.message.v1.Message.Metadata.lease_duration:type_name -> google.protobuf.Duration
+	5, // 4: chronoqueue.api.message.v1.Message.Metadata.scheduled_time:type_name -> google.protobuf.Timestamp
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_proto_message_v1_message_proto_init() }

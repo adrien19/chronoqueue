@@ -123,21 +123,20 @@ func (FairnessPolicy) EnumDescriptor() ([]byte, []int) {
 }
 
 type QueueMetadata struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	Type                 QueueType              `protobuf:"varint,1,opt,name=type,proto3,enum=chronoqueue.api.queue.v1.QueueType" json:"type,omitempty"`
-	DefaultMaxAttempts   int32                  `protobuf:"varint,2,opt,name=default_max_attempts,json=defaultMaxAttempts,proto3" json:"default_max_attempts,omitempty"`
-	LeaseDuration        *durationpb.Duration   `protobuf:"bytes,3,opt,name=lease_duration,json=leaseDuration,proto3" json:"lease_duration,omitempty"`
-	ExclusivityKey       string                 `protobuf:"bytes,4,opt,name=exclusivity_key,json=exclusivityKey,proto3" json:"exclusivity_key,omitempty"`
-	InvisibilityDuration *durationpb.Duration   `protobuf:"bytes,5,opt,name=invisibility_duration,json=invisibilityDuration,proto3" json:"invisibility_duration,omitempty"`
-	DeadLetterQueueName  string                 `protobuf:"bytes,6,opt,name=dead_letter_queue_name,json=deadLetterQueueName,proto3" json:"dead_letter_queue_name,omitempty"`
-	AutoCreateDlq        bool                   `protobuf:"varint,7,opt,name=auto_create_dlq,json=autoCreateDlq,proto3" json:"auto_create_dlq,omitempty"`
-	SchemaId             string                 `protobuf:"bytes,8,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`                                     // Default schema for queue messages
-	SchemaRequired       bool                   `protobuf:"varint,9,opt,name=schema_required,json=schemaRequired,proto3" json:"schema_required,omitempty"`                  // Require schema validation for messages
-	MaxPayloadSize       int32                  `protobuf:"varint,10,opt,name=max_payload_size,json=maxPayloadSize,proto3" json:"max_payload_size,omitempty"`               // Override default max payload size (bytes)
-	AllowedContentTypes  []string               `protobuf:"bytes,11,rep,name=allowed_content_types,json=allowedContentTypes,proto3" json:"allowed_content_types,omitempty"` // Allowed MIME types (empty = all allowed)
-	PriorityConfig       *PriorityConfig        `protobuf:"bytes,12,opt,name=priority_config,json=priorityConfig,proto3" json:"priority_config,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Type                QueueType              `protobuf:"varint,1,opt,name=type,proto3,enum=chronoqueue.api.queue.v1.QueueType" json:"type,omitempty"`
+	DefaultMaxAttempts  int32                  `protobuf:"varint,2,opt,name=default_max_attempts,json=defaultMaxAttempts,proto3" json:"default_max_attempts,omitempty"`
+	LeaseDuration       *durationpb.Duration   `protobuf:"bytes,3,opt,name=lease_duration,json=leaseDuration,proto3" json:"lease_duration,omitempty"`
+	ExclusivityKey      string                 `protobuf:"bytes,4,opt,name=exclusivity_key,json=exclusivityKey,proto3" json:"exclusivity_key,omitempty"`
+	DeadLetterQueueName string                 `protobuf:"bytes,6,opt,name=dead_letter_queue_name,json=deadLetterQueueName,proto3" json:"dead_letter_queue_name,omitempty"`
+	AutoCreateDlq       bool                   `protobuf:"varint,7,opt,name=auto_create_dlq,json=autoCreateDlq,proto3" json:"auto_create_dlq,omitempty"`
+	SchemaId            string                 `protobuf:"bytes,8,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`                                     // Default schema for queue messages
+	SchemaRequired      bool                   `protobuf:"varint,9,opt,name=schema_required,json=schemaRequired,proto3" json:"schema_required,omitempty"`                  // Require schema validation for messages
+	MaxPayloadSize      int32                  `protobuf:"varint,10,opt,name=max_payload_size,json=maxPayloadSize,proto3" json:"max_payload_size,omitempty"`               // Override default max payload size (bytes)
+	AllowedContentTypes []string               `protobuf:"bytes,11,rep,name=allowed_content_types,json=allowedContentTypes,proto3" json:"allowed_content_types,omitempty"` // Allowed MIME types (empty = all allowed)
+	PriorityConfig      *PriorityConfig        `protobuf:"bytes,12,opt,name=priority_config,json=priorityConfig,proto3" json:"priority_config,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *QueueMetadata) Reset() {
@@ -196,13 +195,6 @@ func (x *QueueMetadata) GetExclusivityKey() string {
 		return x.ExclusivityKey
 	}
 	return ""
-}
-
-func (x *QueueMetadata) GetInvisibilityDuration() *durationpb.Duration {
-	if x != nil {
-		return x.InvisibilityDuration
-	}
-	return nil
 }
 
 func (x *QueueMetadata) GetDeadLetterQueueName() string {
@@ -378,13 +370,12 @@ var File_proto_queue_v1_queue_proto protoreflect.FileDescriptor
 
 const file_proto_queue_v1_queue_proto_rawDesc = "" +
 	"\n" +
-	"\x1aproto/queue/v1/queue.proto\x12\x18chronoqueue.api.queue.v1\x1a\x1egoogle/protobuf/duration.proto\"\x89\x05\n" +
+	"\x1aproto/queue/v1/queue.proto\x12\x18chronoqueue.api.queue.v1\x1a\x1egoogle/protobuf/duration.proto\"\xd6\x04\n" +
 	"\rQueueMetadata\x127\n" +
 	"\x04type\x18\x01 \x01(\x0e2#.chronoqueue.api.queue.v1.QueueTypeR\x04type\x120\n" +
 	"\x14default_max_attempts\x18\x02 \x01(\x05R\x12defaultMaxAttempts\x12@\n" +
 	"\x0elease_duration\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\rleaseDuration\x12'\n" +
-	"\x0fexclusivity_key\x18\x04 \x01(\tR\x0eexclusivityKey\x12N\n" +
-	"\x15invisibility_duration\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x14invisibilityDuration\x123\n" +
+	"\x0fexclusivity_key\x18\x04 \x01(\tR\x0eexclusivityKey\x123\n" +
 	"\x16dead_letter_queue_name\x18\x06 \x01(\tR\x13deadLetterQueueName\x12&\n" +
 	"\x0fauto_create_dlq\x18\a \x01(\bR\rautoCreateDlq\x12\x1b\n" +
 	"\tschema_id\x18\b \x01(\tR\bschemaId\x12'\n" +
@@ -392,7 +383,7 @@ const file_proto_queue_v1_queue_proto_rawDesc = "" +
 	"\x10max_payload_size\x18\n" +
 	" \x01(\x05R\x0emaxPayloadSize\x122\n" +
 	"\x15allowed_content_types\x18\v \x03(\tR\x13allowedContentTypes\x12Q\n" +
-	"\x0fpriority_config\x18\f \x01(\v2(.chronoqueue.api.queue.v1.PriorityConfigR\x0epriorityConfig\"\xfd\x02\n" +
+	"\x0fpriority_config\x18\f \x01(\v2(.chronoqueue.api.queue.v1.PriorityConfigR\x0epriorityConfigJ\x04\b\x05\x10\x06R\x15invisibility_duration\"\xfd\x02\n" +
 	"\x0ePriorityConfig\x12@\n" +
 	"\x06policy\x18\x01 \x01(\x0e2(.chronoqueue.api.queue.v1.FairnessPolicyR\x06policy\x12h\n" +
 	"\x10priority_weights\x18\x02 \x03(\v2=.chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntryR\x0fpriorityWeights\x12I\n" +
@@ -442,17 +433,16 @@ var file_proto_queue_v1_queue_proto_goTypes = []any{
 var file_proto_queue_v1_queue_proto_depIdxs = []int32{
 	0, // 0: chronoqueue.api.queue.v1.QueueMetadata.type:type_name -> chronoqueue.api.queue.v1.QueueType
 	6, // 1: chronoqueue.api.queue.v1.QueueMetadata.lease_duration:type_name -> google.protobuf.Duration
-	6, // 2: chronoqueue.api.queue.v1.QueueMetadata.invisibility_duration:type_name -> google.protobuf.Duration
-	3, // 3: chronoqueue.api.queue.v1.QueueMetadata.priority_config:type_name -> chronoqueue.api.queue.v1.PriorityConfig
-	1, // 4: chronoqueue.api.queue.v1.PriorityConfig.policy:type_name -> chronoqueue.api.queue.v1.FairnessPolicy
-	5, // 5: chronoqueue.api.queue.v1.PriorityConfig.priority_weights:type_name -> chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntry
-	6, // 6: chronoqueue.api.queue.v1.PriorityConfig.age_boost_threshold:type_name -> google.protobuf.Duration
-	2, // 7: chronoqueue.api.queue.v1.Queue.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	3, // 2: chronoqueue.api.queue.v1.QueueMetadata.priority_config:type_name -> chronoqueue.api.queue.v1.PriorityConfig
+	1, // 3: chronoqueue.api.queue.v1.PriorityConfig.policy:type_name -> chronoqueue.api.queue.v1.FairnessPolicy
+	5, // 4: chronoqueue.api.queue.v1.PriorityConfig.priority_weights:type_name -> chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntry
+	6, // 5: chronoqueue.api.queue.v1.PriorityConfig.age_boost_threshold:type_name -> google.protobuf.Duration
+	2, // 6: chronoqueue.api.queue.v1.Queue.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_proto_queue_v1_queue_proto_init() }

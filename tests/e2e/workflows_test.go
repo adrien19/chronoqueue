@@ -68,11 +68,10 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 	_, err := client.CreateQueue(ctx, &queueservice_pb.CreateQueueRequest{
 		Name: queueName,
 		Metadata: &queue_pb.QueueMetadata{
-			Type:                 queue_pb.QueueType_SIMPLE,
-			DefaultMaxAttempts:   2,
-			LeaseDuration:        durationpb.New(10 * time.Second),
-			InvisibilityDuration: durationpb.New(2 * time.Second),
-			AutoCreateDlq:        true,
+			Type:               queue_pb.QueueType_SIMPLE,
+			DefaultMaxAttempts: 2,
+			LeaseDuration:      durationpb.New(10 * time.Second),
+			AutoCreateDlq:      true,
 		},
 	})
 	require.NoError(t, err, "Queue creation failed")
@@ -95,10 +94,9 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 		message := &message_pb.Message{
 			MessageId: msgID,
 			Metadata: &message_pb.Message_Metadata{
-				Payload:              payload,
-				Priority:             priority,
-				MaxAttempts:          2,
-				InvisibilityDuration: durationpb.New(0), // Message available immediately
+				Payload:     payload,
+				Priority:    priority,
+				MaxAttempts: 2,
 			},
 		}
 
@@ -291,10 +289,9 @@ func TestE2E_HighPriorityAlertSystem(t *testing.T) {
 		message := &message_pb.Message{
 			MessageId: fmt.Sprintf("log-%d", i),
 			Metadata: &message_pb.Message_Metadata{
-				Payload:              payload,
-				Priority:             10,
-				MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-				InvisibilityDuration: durationpb.New(0), // Message available immediately
+				Payload:     payload,
+				Priority:    10,
+				MaxAttempts: 1, // Set max attempts to 1 for simplicity
 			},
 		}
 
@@ -316,10 +313,9 @@ func TestE2E_HighPriorityAlertSystem(t *testing.T) {
 		message := &message_pb.Message{
 			MessageId: fmt.Sprintf("event-%d", i),
 			Metadata: &message_pb.Message_Metadata{
-				Payload:              payload,
-				Priority:             50,
-				MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-				InvisibilityDuration: durationpb.New(0), // Message available immediately
+				Payload:     payload,
+				Priority:    50,
+				MaxAttempts: 1, // Set max attempts to 1 for simplicity
 			},
 		}
 
@@ -341,10 +337,9 @@ func TestE2E_HighPriorityAlertSystem(t *testing.T) {
 		message := &message_pb.Message{
 			MessageId: fmt.Sprintf("alert-%d", i),
 			Metadata: &message_pb.Message_Metadata{
-				Payload:              payload,
-				Priority:             95,
-				MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-				InvisibilityDuration: durationpb.New(0), // Message available immediately
+				Payload:     payload,
+				Priority:    95,
+				MaxAttempts: 1, // Set max attempts to 1 for simplicity
 			},
 		}
 
@@ -472,10 +467,9 @@ func TestE2E_MultiTenantIsolation(t *testing.T) {
 			message := &message_pb.Message{
 				MessageId: fmt.Sprintf("%s-msg-%d", queueName, i),
 				Metadata: &message_pb.Message_Metadata{
-					Payload:              payload,
-					Priority:             50,
-					MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-					InvisibilityDuration: durationpb.New(0), // Message available immediately
+					Payload:     payload,
+					Priority:    50,
+					MaxAttempts: 1, // Set max attempts to 1 for simplicity
 				},
 			}
 

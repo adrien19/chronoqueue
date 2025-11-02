@@ -50,11 +50,10 @@ func TestQueueOperations_CreateSimpleQueue_Success(t *testing.T) {
 	request := &queueservice_pb.CreateQueueRequest{
 		Name: queueName,
 		Metadata: &queue_pb.QueueMetadata{
-			Type:                 queue_pb.QueueType_SIMPLE,
-			DefaultMaxAttempts:   3,
-			AutoCreateDlq:        true,
-			LeaseDuration:        durationpb.New(30 * time.Second),
-			InvisibilityDuration: durationpb.New(5 * time.Minute),
+			Type:               queue_pb.QueueType_SIMPLE,
+			DefaultMaxAttempts: 3,
+			AutoCreateDlq:      true,
+			LeaseDuration:      durationpb.New(30 * time.Second),
 		},
 	}
 

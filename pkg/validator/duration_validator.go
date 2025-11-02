@@ -73,19 +73,5 @@ func (v *DurationValidator) Validate(ctx context.Context, msg *message_pb.Messag
 		))
 	}
 
-	// Validate invisibility duration if specified (nil means 0s = immediate visibility)
-	if msg.Metadata.InvisibilityDuration != nil {
-		invisDuration := msg.Metadata.InvisibilityDuration.AsDuration()
-
-		if invisDuration < 0 {
-			result.Valid = false
-			result.Errors = append(result.Errors, NewValidationError(
-				"metadata.invisibility_duration",
-				schema_pb.ErrorCode_VALUE_OUT_OF_RANGE,
-				"Invisibility duration cannot be negative",
-			))
-		}
-	}
-
 	return result
 }
