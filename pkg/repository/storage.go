@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -23,7 +22,6 @@ import (
 	"github.com/robfig/cron/v3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -60,11 +58,6 @@ type Storage interface {
 	ValidateCalendarSchedule(ctx context.Context, calendarSchedule *schedule_pb.CalendarSchedule) error
 	GetCalendarSchedulePreview(ctx context.Context, calendarSchedule *schedule_pb.CalendarSchedule, count int) (*queueservice_pb.PreviewCalendarScheduleResponse, error)
 
-	// Message processing methods
-	ProcessExpiredInvisibleMessages(ctx context.Context) error
-	ProcessExpiredRunningMessages(ctx context.Context) error
-	ProcessErroredMessagesForDLQ(ctx context.Context) error
-
 	// DLQ management methods
 	GetDLQMessages(ctx context.Context, dlqName string, limit int32) ([]*message_pb.Message, error)
 	RequeueFromDLQ(ctx context.Context, dlqName string, messageID string, targetQueueName string, resetRetries bool) error
@@ -78,9 +71,16 @@ type storage struct {
 	rs                   *redsync.Redsync
 	encryptionKeyManager *keymanager.EncryptionKeyManager
 	logger               *log.Logger
+	scheduler            *Scheduler
+	reclaimService       *ReclaimService
 }
 
 func NewQueueStorage(ctx context.Context, redisClient *redis.Client, encryptionKeyManager *keymanager.EncryptionKeyManager, logger *log.Logger) Storage {
+	return NewQueueStorageWithIntervals(ctx, redisClient, encryptionKeyManager, logger, time.Second, 5*time.Second)
+}
+
+// NewQueueStorageWithIntervals creates a storage instance with custom scheduler and reclaim intervals
+func NewQueueStorageWithIntervals(ctx context.Context, redisClient *redis.Client, encryptionKeyManager *keymanager.EncryptionKeyManager, logger *log.Logger, schedulerInterval, reclaimInterval time.Duration) Storage {
 	pool := goredis.NewPool(redisClient)
 	rs := redsync.New(pool)
 	storage := &storage{
@@ -90,21 +90,30 @@ func NewQueueStorage(ctx context.Context, redisClient *redis.Client, encryptionK
 		logger:               logger,
 	}
 
-	// Create a buffered channel for tasks
-	tasks := make(chan Task, 10)
+	scheduler := NewScheduler(storage, schedulerInterval)
+	storage.scheduler = scheduler
+	go scheduler.Start(ctx)
 
-	// Start worker goroutines
-	// for i := 0; i < 5; i++ { // 5 workers
-	go storage.worker(ctx, tasks)
-	// }
+	// Start the reclaim service for XAUTOCLAIM-based stuck message recovery
+	reclaimService := NewReclaimService(storage, reclaimInterval)
+	storage.reclaimService = reclaimService
+	go reclaimService.Start(ctx)
 
-	// Schedule the initial tasks
-	// tasks <- Task{Name: "invisibleToPending", Script: invisibleToPending, GoFunc: nil, Interval: time.Second}
-	// tasks <- Task{Name: "runningToPending", Script: runningToPending, GoFunc: nil, Interval: time.Second}
-	tasks <- Task{Name: "updateCronSchedules", Script: nil, GoFunc: storage.updateAllCronSchedules, Interval: time.Second}
-	tasks <- Task{Name: "processErroredMessages", Script: processErroredMessages, GoFunc: nil, Interval: time.Second}
-	tasks <- Task{Name: "invisibleToPending", Script: invisibleToPending, GoFunc: nil, Interval: time.Second} // process expired invisible messages
-	tasks <- Task{Name: "runningToPending", Script: runningToPending, GoFunc: nil, Interval: time.Second}     // process expired running messages
+	// Start background task for cron schedule updates
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := storage.updateAllCronSchedules(ctx); err != nil {
+					storage.logger.ErrorWithFields("Failed to update cron schedules", "error", err)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	return storage
 }
@@ -141,12 +150,15 @@ func (as *storage) DeleteQueue(ctx context.Context, request *queueservice_pb.Del
 	if request == nil || request.GetName() == "" {
 		return &queueservice_pb.DeleteQueueResponse{Success: false}, errors.New("error: queue information missing")
 	}
+
+	queueName := request.GetName()
 	checker := NewKeyChecker(as.redisClient, 100)
 
 	start := time.Now()
 	checker.Start(ctx)
 
-	iter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("queue:%s*", request.GetName()), 0).Iterator()
+	// Delete legacy queue sorted set and metadata
+	iter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("queue:%s*", queueName), 0).Iterator()
 	for iter.Next(ctx) {
 		checker.Add(iter.Val())
 	}
@@ -154,11 +166,49 @@ func (as *storage) DeleteQueue(ctx context.Context, request *queueservice_pb.Del
 		return &queueservice_pb.DeleteQueueResponse{Success: false}, err
 	}
 
+	// Delete all priority streams for this queue
+	priorityLevels := []string{"high", "medium", "low"}
+	groupKey := as.groupKey(queueName)
+
+	for _, level := range priorityLevels {
+		streamKey := fmt.Sprintf("stream:%s:%s", level, queueName)
+
+		// Destroy consumer group first if it exists
+		err := as.redisClient.XGroupDestroy(ctx, streamKey, groupKey).Err()
+		if err != nil && err != redis.Nil {
+			as.logger.DebugWithFields("Failed to destroy consumer group", "stream", streamKey, "group", groupKey, "error", err)
+		}
+
+		// Delete the stream
+		checker.Add(streamKey)
+	}
+
+	// Delete scheduled messages sorted set
+	scheduleKey := as.scheduleKey(queueName)
+	checker.Add(scheduleKey)
+
+	// Delete message metadata keys
+	metaIter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("%s:*:meta", queueName), 0).Iterator()
+	for metaIter.Next(ctx) {
+		checker.Add(metaIter.Val())
+	}
+	if err := metaIter.Err(); err != nil {
+		as.logger.DebugWithFields("Error scanning message metadata keys", "error", err)
+	}
+
+	// Delete DLQ stream if exists
+	dlqStream := as.dlqStreamKey(queueName)
+	err := as.redisClient.XGroupDestroy(ctx, dlqStream, groupKey).Err()
+	if err != nil && err != redis.Nil {
+		as.logger.DebugWithFields("Failed to destroy DLQ consumer group", "stream", dlqStream, "error", err)
+	}
+	checker.Add(dlqStream)
+
 	deleted := checker.Stop()
 	as.logger.DebugWithFields(
 		"Deleted keys associated with queue",
 		"total", deleted,
-		"queue", request.GetName(),
+		"queue", queueName,
 		"took", time.Since(start),
 	)
 
@@ -171,126 +221,6 @@ func (as *storage) DeleteQueueMessage(ctx context.Context, queueName string, mes
 		return err
 	}
 	return nil
-}
-
-type Task struct {
-	Name     string
-	Script   *redis.Script
-	GoFunc   func(ctx context.Context) error
-	Interval time.Duration
-}
-
-func (as *storage) worker(ctx context.Context, tasks chan Task) {
-	for {
-		select {
-		case task := <-tasks:
-			now := time.Now().UnixNano() / int64(time.Millisecond)
-			if task.Script != nil {
-				result := task.Script.Run(ctx, as.redisClient, nil, now)
-				err := result.Err()
-				if err != nil && err.Error() != "redis: nil" {
-					as.logger.ErrorWithFields(
-						"Failed to run the script",
-						"task", task.Name,
-						"error", err,
-					)
-				} else {
-					// Parse and log structured response from script
-					if resultStr := result.String(); resultStr != "" && resultStr != "[]" {
-						// Extract JSON from Redis response
-						// Look for the pattern ": {" which indicates the start of our JSON response
-						jsonPattern := ": {"
-						jsonStart := strings.Index(resultStr, jsonPattern)
-						if jsonStart != -1 {
-							jsonStr := resultStr[jsonStart+2:] // Skip ": " to get to the JSON
-
-							// Try to parse as JSON to check for errors
-							var scriptResult map[string]interface{}
-							if jsonErr := json.Unmarshal([]byte(jsonStr), &scriptResult); jsonErr == nil {
-								if success, ok := scriptResult["success"].(bool); ok && !success {
-									// Script returned an error
-									as.logger.ErrorWithFields(
-										"Lua script execution error",
-										"task", task.Name,
-										"error", scriptResult["error"],
-										"type", scriptResult["type"],
-									)
-								} else {
-									// Script executed successfully, log summary
-									processed := 0
-									errors := 0
-									transitions := 0
-									totalKeys := 0
-
-									if p, ok := scriptResult["processed"].(float64); ok {
-										processed = int(p)
-									}
-									if e, ok := scriptResult["errors"].(float64); ok {
-										errors = int(e)
-									}
-									if t, ok := scriptResult["transitions"].(float64); ok {
-										transitions = int(t)
-									}
-									if tk, ok := scriptResult["total_keys"].(float64); ok {
-										totalKeys = int(tk)
-									}
-
-									if processed > 0 || errors > 0 || transitions > 0 {
-										as.logger.InfoWithFields(
-											"Script execution summary",
-											"task", task.Name,
-											"processed", processed,
-											"errors", errors,
-											"transitions", transitions,
-											"total_keys", totalKeys,
-										)
-									}
-
-									// Log full debug info only if verbose logging or errors occurred
-									if errors > 0 {
-										as.logger.ErrorWithFields(
-											"Script execution details",
-											"task", task.Name,
-											"full_response", jsonStr,
-										)
-									}
-								}
-							} else {
-								// Fallback for non-JSON responses
-								as.logger.InfoWithFields(
-									"Script execution debug",
-									"task", task.Name,
-									"debug_info", resultStr,
-								)
-							}
-						} else {
-							// No JSON found, log as debug
-							as.logger.InfoWithFields(
-								"Script execution debug",
-								"task", task.Name,
-								"debug_info", resultStr,
-							)
-						}
-					}
-				}
-			}
-			if task.GoFunc != nil {
-				err := task.GoFunc(ctx)
-				if err != nil {
-					as.logger.ErrorWithFields(
-						"Failed to run the go routine",
-						"task", task.Name,
-						"error", err,
-					)
-				}
-			}
-
-			// Re-schedule the task
-			time.AfterFunc(task.Interval, func() { tasks <- task })
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 func calculateNextRunTime(cronSchedule string) (int64, error) {
@@ -337,12 +267,10 @@ func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, me
 		}
 
 		runMessageInstanceMetadata := message_pb.Message_Metadata{
-			Priority:      metadata.Priority,
-			LeaseDuration: metadata.LeaseDuration,
-			LeaseExpiry:   0,
-			InvisibilityDuration: &durationpb.Duration{
-				Seconds: nextRunTime / int64(time.Millisecond),
-			},
+			Priority:          metadata.Priority,
+			LeaseDuration:     metadata.LeaseDuration,
+			LeaseExpiry:       0,
+			ScheduledTime:     timestamppb.New(time.Unix(0, nextRunTime*int64(time.Millisecond))),
 			AttemptsLeft:      1,
 			State:             message_pb.Message_Metadata_INVISIBLE,
 			Payload:           metadata.Payload,

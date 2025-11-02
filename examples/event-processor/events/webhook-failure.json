@@ -1,0 +1,26 @@
+{
+    "events": [
+        {
+            "type": "webhook",
+            "priority": "high",
+            "data": {
+                "webhook_url": "https://api.example.com/will-fail",
+                "destination": "force-fail-destination",
+                "payload": {
+                    "test": "This webhook will fail to test retry logic"
+                }
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "medium",
+            "data": {
+                "webhook_url": "https://api.example.com/another-fail",
+                "destination": "fail-retry-test",
+                "payload": {
+                    "message": "Testing exponential backoff"
+                }
+            }
+        }
+    ]
+}

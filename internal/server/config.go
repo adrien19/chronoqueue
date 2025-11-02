@@ -35,6 +35,10 @@ type Config struct {
 	EnableCORS   bool
 	AllowOrigins []string
 
+	// Background Services Configuration
+	SchedulerIntervalMs int // Scheduler interval in milliseconds (default: 1000ms)
+	ReclaimIntervalMs   int // Reclaim service interval in milliseconds (default: 5000ms)
+
 	// Development/Runtime Configuration
 	IsDevelopment bool
 }
@@ -42,38 +46,42 @@ type Config struct {
 // DefaultConfig returns a configuration suitable for development
 func DefaultConfig() *Config {
 	return &Config{
-		GRPCAddr:      ":9000",
-		HTTPAddr:      ":8080",
-		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword: getEnv("REDIS_PASSWORD", ""),
-		RedisUsername: getEnv("REDIS_USERNAME", ""),
-		RedisDB:       getEnvInt("REDIS_DB", 0),
-		RedisTLS:      getEnvBool("REDIS_TLS_ENABLED", false),
-		LogLevel:      "info",
-		LogFormat:     "text",
-		EnableTLS:     false,
-		EnableCORS:    true,
-		AllowOrigins:  []string{"*"},
-		IsDevelopment: true,
+		GRPCAddr:            ":9000",
+		HTTPAddr:            ":8080",
+		RedisAddr:           getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:       getEnv("REDIS_PASSWORD", ""),
+		RedisUsername:       getEnv("REDIS_USERNAME", ""),
+		RedisDB:             getEnvInt("REDIS_DB", 0),
+		RedisTLS:            getEnvBool("REDIS_TLS_ENABLED", false),
+		LogLevel:            "info",
+		LogFormat:           "text",
+		EnableTLS:           false,
+		EnableCORS:          true,
+		AllowOrigins:        []string{"*"},
+		SchedulerIntervalMs: getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
+		ReclaimIntervalMs:   getEnvInt("RECLAIM_INTERVAL_MS", 5000),
+		IsDevelopment:       true,
 	}
 }
 
 // ProductionConfig returns a configuration suitable for production
 func ProductionConfig() *Config {
 	return &Config{
-		GRPCAddr:      ":9000",
-		HTTPAddr:      ":8080",
-		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword: getEnv("REDIS_PASSWORD", ""),
-		RedisUsername: getEnv("REDIS_USERNAME", ""),
-		RedisDB:       getEnvInt("REDIS_DB", 0),
-		RedisTLS:      getEnvBool("REDIS_TLS_ENABLED", false),
-		LogLevel:      "info",
-		LogFormat:     "json",
-		EnableTLS:     false,
-		EnableCORS:    false,
-		AllowOrigins:  []string{},
-		IsDevelopment: false,
+		GRPCAddr:            ":9000",
+		HTTPAddr:            ":8080",
+		RedisAddr:           getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:       getEnv("REDIS_PASSWORD", ""),
+		RedisUsername:       getEnv("REDIS_USERNAME", ""),
+		RedisDB:             getEnvInt("REDIS_DB", 0),
+		RedisTLS:            getEnvBool("REDIS_TLS_ENABLED", false),
+		LogLevel:            "info",
+		LogFormat:           "json",
+		EnableTLS:           false,
+		EnableCORS:          false,
+		AllowOrigins:        []string{},
+		SchedulerIntervalMs: getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
+		ReclaimIntervalMs:   getEnvInt("RECLAIM_INTERVAL_MS", 5000),
+		IsDevelopment:       false,
 	}
 }
 

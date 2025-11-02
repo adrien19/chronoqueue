@@ -258,9 +258,8 @@ func (h *Handlers) CreateInterview(w http.ResponseWriter, r *http.Request) {
 				Data:        payloadStruct,
 				ContentType: "application/json",
 			},
-			MaxAttempts:          3,
-			InvisibilityDuration: "1s",
-			LeaseDuration:        "5s",
+			MaxAttempts:   3,
+			LeaseDuration: "5s",
 		})
 
 		if err != nil || !resp.Success {
@@ -402,9 +401,8 @@ func (h *Handlers) CompleteInterview(w http.ResponseWriter, r *http.Request) {
 				Data:        payload,
 				ContentType: "application/json",
 			},
-			MaxAttempts:          3,
-			InvisibilityDuration: "1s",
-			LeaseDuration:        "5s",
+			MaxAttempts:   3,
+			LeaseDuration: "5s",
 		})
 
 		if err != nil {
@@ -531,9 +529,8 @@ func (h *Handlers) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
 				Data:        payloadStruct,
 				ContentType: "application/json",
 			},
-			MaxAttempts:          3,
-			InvisibilityDuration: "1s",
-			LeaseDuration:        "5s",
+			MaxAttempts:   3,
+			LeaseDuration: "5s",
 		})
 	}
 
@@ -732,9 +729,8 @@ func (h *Handlers) GenerateReport(w http.ResponseWriter, r *http.Request) {
 			Data:        payloadStruct,
 			ContentType: "application/json",
 		},
-		MaxAttempts:          3,
-		InvisibilityDuration: "1s",
-		LeaseDuration:        "5s",
+		MaxAttempts:   3,
+		LeaseDuration: "5s",
 	})
 	if err != nil {
 		log.Printf("Failed to queue report generation: %v, failed report ID: %s", err, report.ID)
@@ -801,9 +797,8 @@ func (h *Handlers) SendReport(w http.ResponseWriter, r *http.Request) {
 			Data:        payloadStruct,
 			ContentType: "application/json",
 		},
-		MaxAttempts:          3,
-		InvisibilityDuration: "1s",
-		LeaseDuration:        "5s",
+		MaxAttempts:   3,
+		LeaseDuration: "5s",
 	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to queue report sending")

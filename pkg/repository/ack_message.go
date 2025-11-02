@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/redis/go-redis/v9"
 
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
@@ -86,12 +89,19 @@ func (as *storage) saveMessageMetadataWithOldState(ctx context.Context, queueNam
 		switch newState {
 		case message_pb.Message_Metadata_RUNNING:
 			newScore = float64(metadata.LeaseExpiry)
-		case message_pb.Message_Metadata_INVISIBLE:
-			newScore = float64(metadata.InvisibilityExpiry)
 		}
 
 		if err := as.transitionStateIndex(ctx, txPipeline, key, oldState, newState, newScore); err != nil {
 			return fmt.Errorf("failed to update state indexes: %w", err)
+		}
+	} else if newState == message_pb.Message_Metadata_RUNNING {
+		// If state didn't change and is RUNNING, we may need to update the score
+		_, err = txPipeline.ZAdd(ctx, "running_messages", redis.Z{
+			Score:  float64(metadata.LeaseExpiry),
+			Member: key,
+		}).Result()
+		if err != nil {
+			return fmt.Errorf("failed to add message to running_messages: %w", err)
 		}
 	}
 
@@ -120,8 +130,8 @@ func isValidTransition(currentState, newState transitionState) bool {
 func (as *storage) AcknowledgeMessage(ctx context.Context, request *queueservice_pb.AcknowledgeMessageRequest) (*queueservice_pb.AcknowledgeMessageResponse, error) {
 	queueName := request.GetQueueName()
 	messageID := request.GetMessageId()
+	streamEntryID := request.GetStreamEntryId()
 
-	// Basic validation
 	if queueName == "" || messageID == "" {
 		err := errors.New("invalid input: queue name and message ID required")
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Invalid input provided")
@@ -134,22 +144,62 @@ func (as *storage) AcknowledgeMessage(ctx context.Context, request *queueservice
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	// Check if the state transition is allowed
-	oldState := metadata.State // Capture old state before update
+	oldState := metadata.State
 	if !isValidTransition(transitionState(metadata.State), transitionState(request.State)) {
-		err := fmt.Errorf("invalid input: requested state %v transition to %v is not allowed for message: %s", request.State, metadata.State, messageID)
+		err := fmt.Errorf("invalid input: requested state transition from %v to %v is not allowed for message: %s", metadata.State, request.State, messageID)
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while changing message state")
 		return nil, chronoErr.GRPCStatus()
 	}
-	// Update the message state
+
 	metadata.State = request.State
 
-	// Save the updated metadata with the known old state to avoid redundant fetch
 	err = as.saveMessageMetadataWithOldState(ctx, queueName, messageID, metadata, oldState)
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while saving updated message metadata")
 		return nil, chronoErr.GRPCStatus()
 	}
 
+	// Update state counters for tracking terminal states
+	if err := as.updateStateCounters(ctx, queueName, oldState, request.State); err != nil {
+		as.logger.ErrorWithFields("Failed to update state counters", "error", err, "messageID", messageID)
+		// Don't fail the ACK, just log the error
+	}
+
+	if streamEntryID != "" {
+		if err := as.ackMessage(ctx, queueName, streamEntryID); err != nil {
+			as.logger.ErrorWithFields("Failed to XACK message from stream", "error", err, "messageID", messageID)
+		}
+
+		metaKey := fmt.Sprintf("%s:%s:meta", queueName, messageID)
+		as.redisClient.Expire(ctx, metaKey, 1*time.Hour)
+	}
+
 	return &queueservice_pb.AcknowledgeMessageResponse{Success: true}, nil
+}
+
+// updateStateCounters updates Redis hash counters for state transitions
+// This provides O(1) lookup for GetQueueState instead of scanning all message keys
+func (as *storage) updateStateCounters(ctx context.Context, queueName string, oldState, newState message_pb.Message_Metadata_State) error {
+	statsKey := fmt.Sprintf("stats:%s", queueName)
+
+	// Use pipelined operations for atomicity
+	pipe := as.redisClient.Pipeline()
+
+	// Decrement old state counter
+	oldStateStr := oldState.String()
+	if oldStateStr != "" && oldStateStr != "UNDEFINED" {
+		pipe.HIncrBy(ctx, statsKey, oldStateStr, -1)
+	}
+
+	// Increment new state counter
+	newStateStr := newState.String()
+	if newStateStr != "" && newStateStr != "UNDEFINED" {
+		pipe.HIncrBy(ctx, statsKey, newStateStr, 1)
+	}
+
+	// Set TTL on stats key to auto-cleanup (match message metadata TTL)
+	pipe.Expire(ctx, statsKey, 2*time.Hour)
+
+	_, err := pipe.Exec(ctx)
+	return err
 }

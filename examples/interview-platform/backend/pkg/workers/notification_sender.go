@@ -51,7 +51,8 @@ func (w *NotificationSenderWorker) Start(ctx context.Context) error {
 			}
 
 			msg := response.GetMessage()
-			if err := w.processMessage(ctx, queueName, msg); err != nil {
+			streamEntryID := response.GetStreamEntryId()
+			if err := w.processMessage(ctx, queueName, msg, streamEntryID); err != nil {
 				log.Printf("[Notification Sender] Error processing message %s: %v", msg.GetMessageId(), err)
 			}
 		}
@@ -59,18 +60,18 @@ func (w *NotificationSenderWorker) Start(ctx context.Context) error {
 }
 
 // processMessage handles a single notification message
-func (w *NotificationSenderWorker) processMessage(ctx context.Context, queueName string, msg *message_pb.Message) error {
+func (w *NotificationSenderWorker) processMessage(ctx context.Context, queueName string, msg *message_pb.Message, streamEntryID string) error {
 	log.Printf("[Notification Sender] Processing message: %s", msg.GetMessageId())
 
 	metadata := msg.GetMetadata()
 	if metadata == nil || metadata.GetPayload() == nil {
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
 		return nil
 	}
 
 	payloadData := metadata.GetPayload().GetData()
 	if payloadData == nil {
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
 		return nil
 	}
 
@@ -82,7 +83,7 @@ func (w *NotificationSenderWorker) processMessage(ctx context.Context, queueName
 	relatedID, _ := fields["related_id"].(string)
 
 	if recipient == "" || subject == "" {
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
 		return nil
 	}
 
@@ -123,7 +124,7 @@ func (w *NotificationSenderWorker) processMessage(ctx context.Context, queueName
 	time.Sleep(100 * time.Millisecond)
 
 	// Acknowledge message
-	if _, err := w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED); err != nil {
+	if _, err := w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID); err != nil {
 		log.Printf("[Notification Sender] Failed to acknowledge message: %v", err)
 		return err
 	}

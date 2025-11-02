@@ -88,10 +88,6 @@ The --file flag takes precedence if both inline and file are provided.`,
 			if err != nil {
 				return err
 			}
-			invisibilityDuration, err := cmd.Flags().GetString("invisibility-duration")
-			if err != nil {
-				return err
-			}
 			priority, err := cmd.Flags().GetInt64("priority")
 			if err != nil {
 				return err
@@ -160,10 +156,9 @@ The --file flag takes precedence if both inline and file are provided.`,
 					SchemaID:      schemaID,
 					SchemaVersion: schemaVersion,
 				},
-				InvisibilityDuration: invisibilityDuration,
-				LeaseDuration:        leaseDuration,
-				Priority:             priority,
-				MaxAttempts:          maxAttempts, // Set max attempts for the message
+				LeaseDuration: leaseDuration,
+				Priority:      priority,
+				MaxAttempts:   maxAttempts, // Set max attempts for the message
 			}
 
 			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
@@ -219,6 +214,7 @@ func newMessageGetCommand() *cobra.Command {
 					return nil
 				}
 				outputs.PrintInfo(fmt.Sprintf("Message ID: %s", resp.GetMessage().GetMessageId()))
+				outputs.PrintInfo(fmt.Sprintf("Stream Entry ID: %s", resp.GetStreamEntryId()))
 				outputs.PrintInfo(fmt.Sprintf("Metadata: %v", resp.GetMessage().GetMetadata()))
 				outputs.PrintInfo(fmt.Sprintf("Payload: %v", resp.GetMessage().GetMetadata().GetPayload()))
 				outputs.PrintInfo(fmt.Sprintf("Data: %v", resp.GetMessage().GetMetadata().GetPayload().GetData()))
@@ -237,21 +233,26 @@ func newMessageGetCommand() *cobra.Command {
 // newMessageAckCommand creates the message acknowledge subcommand
 func newMessageAckCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "ack <queue-name> <message-id> <message-state>",
+		Use:   "ack <queue-name> <message-id> <message-state> [stream-entry-id]",
 		Short: "Acknowledge a message",
-		Long:  `Acknowledge that a message has been processed successfully.`,
-		Args:  cobra.ExactArgs(3),
+		Long:  `Acknowledge that a message has been processed successfully. The stream-entry-id is optional but recommended for Redis Streams architecture.`,
+		Args:  cobra.RangeArgs(3, 4),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			queueName := args[0]
 			messageID := args[1]
 			stateStr := args[2]
+			streamEntryID := ""
+			if len(args) == 4 {
+				streamEntryID = args[3]
+			}
+
 			state, err := client.ParseMessageState(stateStr)
 			if err != nil {
 				return err
 			}
 
 			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
-				resp, err := client.AcknowledgeMessage(cmd.Context(), queueName, messageID, state)
+				resp, err := client.AcknowledgeMessage(cmd.Context(), queueName, messageID, state, streamEntryID)
 				if err != nil {
 					return err
 				}
@@ -342,16 +343,20 @@ func newMessageRenewCommand() *cobra.Command {
 // newMessageHeartbeatCommand creates the message heartbeat subcommand
 func newMessageHeartbeatCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "heartbeat <queue-name> <message-id>",
+		Use:   "heartbeat <queue-name> <message-id> [stream-entry-id]",
 		Short: "Send a heartbeat for a message",
-		Long:  `Send a heartbeat to indicate that a message is still being processed.`,
-		Args:  cobra.ExactArgs(2),
+		Long:  `Send a heartbeat to indicate that a message is still being processed. The stream-entry-id is optional but recommended for Redis Streams architecture.`,
+		Args:  cobra.RangeArgs(2, 3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			queueName := args[0]
 			messageID := args[1]
+			streamEntryID := ""
+			if len(args) == 3 {
+				streamEntryID = args[2]
+			}
 
 			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
-				resp, err := client.SendMessageHeartbeat(cmd.Context(), queueName, messageID)
+				resp, err := client.SendMessageHeartbeat(cmd.Context(), queueName, messageID, streamEntryID)
 				if err != nil {
 					return err
 				}

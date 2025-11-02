@@ -1,4 +1,7 @@
-// ./proto/message/v1/message.proto
+// ChronoQueue Message API v1
+//
+// This file defines the core Message structure and its lifecycle states.
+// Messages are the fundamental unit of work in ChronoQueue.
 
 syntax = "proto3";
 package chronoqueue.api.message.v1;
@@ -6,31 +9,131 @@ package chronoqueue.api.message.v1;
 option go_package = "github.com/adrien19/chronoqueue/api/message/v1;message";
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 import "proto/common/v1/common.proto";
 
-
+// Message represents a unit of work in ChronoQueue.
+//
+// A message encapsulates:
+// - Your business data (payload)
+// - Execution metadata (state, priority, retries)
+// - Scheduling information (when to execute)
+// - Processing guarantees (leases, acknowledgments)
+//
+// Lifecycle:
+//   1. INVISIBLE: Message is scheduled for future execution or waiting to become visible
+//   2. PENDING: Message is ready to be consumed by a worker
+//   3. RUNNING: Message is actively being processed (worker has acquired a lease)
+//   4. COMPLETED: Message was successfully processed and acknowledged
+//   5. ERRORED: Message failed all retry attempts and moved to DLQ
+//   6. CANCELED: Message was manually canceled before processing
+//
+// Example usage:
+//   // Post a message
+//   msg := &message.Message{
+//       MessageId: "task-123",
+//       Metadata: &message.Message_Metadata{
+//           Payload: yourPayload,
+//           Priority: 100,                        // Higher = processed first
+//           MaxAttempts: 3,                       // Retry up to 3 times
+//           LeaseDuration: durationpb.New(30*time.Second), // 30s to process
+//           ScheduledTime: timestamppb.New(executeAt),     // When to execute
+//       },
+//   }
+//
+//   // Process a message
+//   msg, err := client.GetNextMessage(ctx, queueName)
+//   // ... do work ...
+//   client.AcknowledgeMessage(ctx, queueName, msg.MessageId, streamEntryID)
 message Message {
+    // message_id: Unique identifier for this message within its queue.
+    // Must be unique per queue. Used for deduplication and idempotency.
+    // If you retry posting the same message_id, ChronoQueue returns the existing message.
+    // Recommended format: UUID, task ID, or "{entity_type}:{entity_id}".
     string message_id = 1;
+    
+    // Metadata contains all message execution and lifecycle information.
     message Metadata {
+        // Reserved field numbers from deprecated features (for backward compatibility).
+        // These fields were removed as part of Redis Streams migration.
+        reserved 3, 8;
+        reserved "invisibility_duration", "invisibility_expiry";
+        
+        // payload: The business data and metadata to be processed.
+        // This is what your workers receive and act upon.
         chronoqueue.api.common.v1.Payload payload = 1;
+        
+        // State represents the message lifecycle stage.
+        //
+        // State transitions:
+        //   POST -> INVISIBLE (if scheduled_time is set)
+        //   POST -> PENDING (if no scheduled_time or scheduled_time is past)
+        //   INVISIBLE -> PENDING (when scheduled_time arrives)
+        //   PENDING -> RUNNING (when worker calls GetNextMessage)
+        //   RUNNING -> COMPLETED (when worker calls AcknowledgeMessage)
+        //   RUNNING -> PENDING (if lease expires without acknowledgment)
+        //   RUNNING -> ERRORED (if max_attempts exhausted)
+        //   * -> CANCELED (when CancelMessage is called)
+        //
+        // Important: Messages in COMPLETED, CANCELED, and ERRORED states are terminal
+        // and won't be processed again (unless explicitly requeued from DLQ).
         enum State {
-            INVISIBLE = 0;
-            PENDING = 1;
-            RUNNING = 2;
-            COMPLETED = 3;
-            CANCELED = 4;
-            ERRORED = 5;
+            INVISIBLE = 0;  // Scheduled for future, not yet visible to workers
+            PENDING = 1;    // Ready to be consumed by workers (visible in queue)
+            RUNNING = 2;    // Currently being processed (lease acquired)
+            COMPLETED = 3;  // Successfully processed and acknowledged (terminal)
+            CANCELED = 4;   // Manually canceled (terminal)
+            ERRORED = 5;    // Failed after all retries, moved to DLQ (terminal)
         }
         Metadata.State state = 2;
-        google.protobuf.Duration invisibility_duration = 3;
+        
+        // attempts_left: Number of retry attempts remaining before moving to DLQ.
+        // Decrements with each processing failure. When reaches 0 and fails, moves to ERRORED state.
+        // Set max_attempts when posting to control retry behavior.
         int32 attempts_left = 4;
+        
+        // lease_duration: How long a worker can process this message before the lease expires.
+        // After this duration, if not acknowledged or renewed, message returns to PENDING state.
+        // Workers should call RenewLease or SendHeartbeat if processing takes longer.
+        // Typical values: 30s for quick tasks, 5m for longer processing.
         google.protobuf.Duration lease_duration = 5;
+        
+        // lease_expiry: Unix timestamp (milliseconds) when the current lease expires.
+        // Managed automatically by ChronoQueue. Workers can monitor this to know when to renew.
+        // If current time > lease_expiry, message will be reclaimed and made PENDING again.
         int64 lease_expiry = 6;
+        
+        // lease_renewal_count: Number of times the lease has been renewed for this processing attempt.
+        // Useful for detecting stuck/zombie workers that keep renewing without completing.
+        // Consider implementing a max renewal limit in your worker logic.
         int32 lease_renewal_count = 7;
-        int64 invisibility_expiry = 8;
+        
+        // priority: Message priority score (0-2147483647, higher = processed first).
+        // ChronoQueue uses priority streams (high: ≥70, medium: ≥30, low: <30).
+        // Messages with the same priority are processed FIFO.
+        // Use for: urgent tasks (100), normal (50), background (10).
         int64 priority = 9;
+        
+        // max_attempts: Maximum number of processing attempts before moving to DLQ.
+        // If omitted, uses queue's default_max_attempts.
+        // Set to -1 for infinite retries (use with caution).
+        // Common values: 1 (no retry), 3 (standard), 5 (persistent), -1 (infinite).
         int32 max_attempts = 10;
+        
+        // scheduled_time: When this message should become visible for processing.
+        // If set to a future time, message enters INVISIBLE state until that time.
+        // If omitted or past, message immediately becomes PENDING.
+        // Use for: scheduled tasks, delayed execution, rate limiting, backoff strategies.
+        // Example: Schedule order fulfillment for tomorrow at 9 AM.
+        google.protobuf.Timestamp scheduled_time = 20;
+        
+        // priority_level: Internal priority level for stream routing (auto-calculated).
+        // Managed by ChronoQueue based on priority score. Read-only from client perspective.
+        // Used internally for routing to high/medium/low priority streams.
+        int32 priority_level = 21;
     }
+    
+    // metadata: All message execution and lifecycle information.
     Message.Metadata metadata = 3;
 }
 

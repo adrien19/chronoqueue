@@ -1,0 +1,74 @@
+{
+    "events": [
+        {
+            "type": "email",
+            "priority": "high",
+            "schedule_in_minutes": 5,
+            "data": {
+                "recipient": "user@example.com",
+                "subject": "Scheduled Reminder: Meeting in 5 minutes",
+                "template": "meeting_reminder",
+                "meeting_id": "mtg-12345",
+                "scheduled_time": "2024-11-01T15:00:00Z"
+            }
+        },
+        {
+            "type": "email",
+            "priority": "medium",
+            "schedule_in_minutes": 10,
+            "data": {
+                "recipient": "team@example.com",
+                "subject": "Daily Report - Scheduled Delivery",
+                "template": "daily_report",
+                "report_date": "2024-11-01",
+                "metrics": {
+                    "users": 1234,
+                    "revenue": 56789
+                }
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "high",
+            "schedule_in_minutes": 15,
+            "data": {
+                "webhook_url": "https://api.example.com/scheduled-callback",
+                "payload": {
+                    "event_type": "scheduled_notification",
+                    "scheduled_at": "2024-11-01T15:15:00Z",
+                    "callback_id": "cb-67890"
+                },
+                "headers": {
+                    "X-Scheduled-Event": "true",
+                    "Content-Type": "application/json"
+                }
+            }
+        },
+        {
+            "type": "sms",
+            "priority": "medium",
+            "schedule_in_minutes": 20,
+            "data": {
+                "phone": "+1234567890",
+                "message": "Your appointment is scheduled for tomorrow at 10 AM. Reply CONFIRM to confirm.",
+                "appointment_id": "appt-54321"
+            }
+        },
+        {
+            "type": "email",
+            "priority": "low",
+            "schedule_in_minutes": 3,
+            "data": {
+                "recipient": "newsletter@example.com",
+                "subject": "Weekly Newsletter - Scheduled Send",
+                "template": "weekly_newsletter",
+                "edition": "Week 44",
+                "articles": [
+                    "Top 10 features released this week",
+                    "Customer success story",
+                    "Upcoming webinar announcement"
+                ]
+            }
+        }
+    ]
+}

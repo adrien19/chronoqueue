@@ -59,8 +59,9 @@ func (w *InterviewSchedulerWorker) Start(ctx context.Context) error {
 
 			// Process the message
 			msg := response.GetMessage()
+			streamEntryID := response.GetStreamEntryId()
 			log.Printf("[Interview Scheduler] Received message: %s", msg.GetMessageId())
-			if err := w.processMessage(ctx, queueName, msg); err != nil {
+			if err := w.processMessage(ctx, queueName, msg, streamEntryID); err != nil {
 				log.Printf("[Interview Scheduler] Error processing message %s: %v", msg.GetMessageId(), err)
 				// Message lease will expire and become available again
 			}
@@ -69,21 +70,21 @@ func (w *InterviewSchedulerWorker) Start(ctx context.Context) error {
 }
 
 // processMessage handles a single interview scheduling message
-func (w *InterviewSchedulerWorker) processMessage(ctx context.Context, queueName string, msg *message_pb.Message) error {
+func (w *InterviewSchedulerWorker) processMessage(ctx context.Context, queueName string, msg *message_pb.Message, streamEntryID string) error {
 	log.Printf("[Interview Scheduler] Processing message: %s", msg.GetMessageId())
 
 	// Get payload data
 	metadata := msg.GetMetadata()
 	if metadata == nil || metadata.GetPayload() == nil {
 		log.Printf("[Interview Scheduler] Empty payload")
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
 		return nil
 	}
 
 	payloadData := metadata.GetPayload().GetData()
 	if payloadData == nil {
 		log.Printf("[Interview Scheduler] Empty payload data")
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
 		return nil
 	}
 
@@ -97,7 +98,7 @@ func (w *InterviewSchedulerWorker) processMessage(ctx context.Context, queueName
 
 	if interviewID == "" {
 		log.Printf("[Interview Scheduler] Missing interview_id")
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
 		return nil
 	}
 
@@ -105,7 +106,7 @@ func (w *InterviewSchedulerWorker) processMessage(ctx context.Context, queueName
 	interview, err := w.db.GetInterview(interviewID)
 	if err != nil {
 		log.Printf("[Interview Scheduler] Interview not found: %v", err)
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
 		return err
 	}
 
@@ -127,73 +128,66 @@ func (w *InterviewSchedulerWorker) processMessage(ctx context.Context, queueName
 		// Get the scheduled time (already a time.Time)
 		scheduledTime := interview.ScheduledAt
 
-		// Schedule reminder notifications using ChronoQueue's scheduling feature
-		// Note: ChronoQueue's max InvisibilityDuration is 12 hours, so we can only schedule reminders within that window
+		// Schedule reminder notifications using ChronoQueue's ScheduledTime feature
 		// Reminder 1: 10 hours before interview (if interview is more than 10 hours away)
 		tenHoursBefore := scheduledTime.Add(-10 * time.Hour)
 		if time.Now().Before(tenHoursBefore) {
-			reminderDelay := time.Until(tenHoursBefore)
-			if reminderDelay <= 12*time.Hour { // Ensure within ChronoQueue's max limit
-				reminderPayload1 := map[string]interface{}{
-					"notification_type": "interview_reminder",
-					"recipient":         candidateEmail,
-					"subject":           "Reminder: Interview Tomorrow",
-					"body":              fmt.Sprintf("You have an interview scheduled for tomorrow at %s for the position of %s", scheduledTime.Format("3:04 PM"), interview.Position),
-					"related_id":        interviewID,
-				}
+			reminderPayload1 := map[string]interface{}{
+				"notification_type": "interview_reminder",
+				"recipient":         candidateEmail,
+				"subject":           "Reminder: Interview Tomorrow",
+				"body":              fmt.Sprintf("You have an interview scheduled for tomorrow at %s for the position of %s", scheduledTime.Format("3:04 PM"), interview.Position),
+				"related_id":        interviewID,
+			}
 
-				payloadStruct1, _ := structpb.NewStruct(reminderPayload1)
-				messageID1 := fmt.Sprintf("reminder-10h-%s", interviewID)
+			payloadStruct1, _ := structpb.NewStruct(reminderPayload1)
+			messageID1 := fmt.Sprintf("reminder-10h-%s", interviewID)
 
-				_, err = w.queue.PostMessage(context.Background(), "notification-sender", messageID1, client.MessageOptions{
-					Payload: client.Payload{
-						Data:        payloadStruct1,
-						ContentType: "application/json",
-					},
-					InvisibilityDuration: reminderDelay.String(),
-					MaxAttempts:          3,
-				})
-				if err != nil {
-					log.Printf("[Interview Scheduler] Failed to schedule 10-hour reminder: %v", err)
-				} else {
-					log.Printf("[Interview Scheduler] Scheduled 10-hour reminder for %s", tenHoursBefore.Format(time.RFC3339))
-				}
+			scheduledAt1 := tenHoursBefore
+			_, err = w.queue.PostMessage(context.Background(), "notification-sender", messageID1, client.MessageOptions{
+				Payload: client.Payload{
+					Data:        payloadStruct1,
+					ContentType: "application/json",
+				},
+				ScheduledTime: &scheduledAt1,
+				MaxAttempts:   3,
+			})
+			if err != nil {
+				log.Printf("[Interview Scheduler] Failed to schedule 10-hour reminder: %v", err)
+			} else {
+				log.Printf("[Interview Scheduler] Scheduled 10-hour reminder for %s", tenHoursBefore.Format(time.RFC3339))
 			}
 		}
 
 		// Reminder 2: 1 hour before interview (if interview is more than 1 hour away)
 		oneHourBefore := scheduledTime.Add(-1 * time.Hour)
 		if time.Now().Before(oneHourBefore) {
-			reminderDelay := time.Until(oneHourBefore)
-			if reminderDelay <= 12*time.Hour { // Ensure within ChronoQueue's max limit
-				reminderPayload2 := map[string]interface{}{
-					"notification_type": "interview_reminder",
-					"recipient":         candidateEmail,
-					"subject":           "Reminder: Interview in 1 Hour",
-					"body":              fmt.Sprintf("Your interview starts in 1 hour at %s for the position of %s", scheduledTime.Format("3:04 PM"), interview.Position),
-					"related_id":        interviewID,
-				}
-
-				payloadStruct2, _ := structpb.NewStruct(reminderPayload2)
-				messageID2 := fmt.Sprintf("reminder-1h-%s", interviewID)
-
-				_, err = w.queue.PostMessage(context.Background(), "notification-sender", messageID2, client.MessageOptions{
-					Payload: client.Payload{
-						Data:        payloadStruct2,
-						ContentType: "application/json",
-					},
-					InvisibilityDuration: reminderDelay.String(),
-					MaxAttempts:          3,
-				})
-				if err != nil {
-					log.Printf("[Interview Scheduler] Failed to schedule 1-hour reminder: %v", err)
-				} else {
-					log.Printf("[Interview Scheduler] Scheduled 1-hour reminder for %s", oneHourBefore.Format(time.RFC3339))
-				}
+			reminderPayload2 := map[string]interface{}{
+				"notification_type": "interview_reminder",
+				"recipient":         candidateEmail,
+				"subject":           "Reminder: Interview in 1 Hour",
+				"body":              fmt.Sprintf("Your interview starts in 1 hour at %s for the position of %s", scheduledTime.Format("3:04 PM"), interview.Position),
+				"related_id":        interviewID,
 			}
-		}
 
-		// Send immediate confirmation notification
+			payloadStruct2, _ := structpb.NewStruct(reminderPayload2)
+			messageID2 := fmt.Sprintf("reminder-1h-%s", interviewID)
+
+			scheduledAt2 := oneHourBefore
+			_, err = w.queue.PostMessage(context.Background(), "notification-sender", messageID2, client.MessageOptions{
+				Payload: client.Payload{
+					Data:        payloadStruct2,
+					ContentType: "application/json",
+				},
+				ScheduledTime: &scheduledAt2,
+				MaxAttempts:   3,
+			})
+			if err != nil {
+				log.Printf("[Interview Scheduler] Failed to schedule 1-hour reminder: %v", err)
+			} else {
+				log.Printf("[Interview Scheduler] Scheduled 1-hour reminder for %s", oneHourBefore.Format(time.RFC3339))
+			}
+		} // Send immediate confirmation notification
 		confirmPayload := map[string]interface{}{
 			"notification_type": "interview_scheduled",
 			"recipient":         candidateEmail,
@@ -223,7 +217,7 @@ func (w *InterviewSchedulerWorker) processMessage(ctx context.Context, queueName
 	}
 
 	// Acknowledge message as completed
-	if _, err := w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED); err != nil {
+	if _, err := w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID); err != nil {
 		log.Printf("[Interview Scheduler] Failed to acknowledge message: %v", err)
 		return err
 	}

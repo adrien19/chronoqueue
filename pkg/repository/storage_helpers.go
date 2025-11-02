@@ -187,94 +187,6 @@ func (as *storage) updateMessageStateAndLease(message *message_pb.Message, reque
 	message.Metadata.LeaseExpiry = expireDate.UnixNano() / int64(time.Millisecond)
 }
 
-func (as *storage) saveMessageWithMetadata(ctx context.Context, queueName string, message *message_pb.Message) error { //nolint:unused
-	return as.saveMessageWithMetadataAndOldState(ctx, queueName, message, message_pb.Message_Metadata_State(-1))
-}
-
-func (as *storage) saveMessageWithMetadataAndOldState(ctx context.Context, queueName string, message *message_pb.Message, oldState message_pb.Message_Metadata_State) error {
-	messageMutex := as.rs.NewMutex("mutex:" + message.MessageId)
-	// Try to acquire the lock
-	if err := messageMutex.Lock(); err != nil {
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected while acquiring lock")
-		return chronoErr.GRPCStatus()
-	}
-
-	defer func() {
-		// Release the message lock
-		if ok, err := messageMutex.Unlock(); !ok || err != nil {
-			as.logger.Error("Failed to release message lock", err)
-		}
-	}()
-
-	key := fmt.Sprintf("%s:%s:meta", queueName, message.MessageId)
-
-	// If oldState is -1, we need to fetch the old state
-	if oldState == message_pb.Message_Metadata_State(-1) {
-		if oldMetadata, err := as.fetchMessageMetadata(ctx, queueName, message.MessageId); err == nil {
-			oldState = oldMetadata.State
-		} else {
-			// If we can't fetch old metadata, assume this is a new message
-			as.logger.Info("No existing metadata found for message, assuming new message", "messageID", message.MessageId, "queueName", queueName)
-			oldState = message_pb.Message_Metadata_State(-1)
-		}
-	} // Begin transaction pipeline for atomic updates
-	txPipeline := as.redisClient.TxPipeline()
-
-	// Create a proto message's metadata marshaller
-	m := protojson.MarshalOptions{
-		EmitUnpopulated: true,
-	}
-
-	err := as.encryptMetadataPayload(message.Metadata)
-	if err != nil {
-		return err
-	}
-
-	messageMetadataBytes, err := m.Marshal(message.Metadata)
-	if err != nil {
-		return err
-	}
-
-	// Update message metadata
-	_, err = txPipeline.HSet(ctx, key, "metadata", string(messageMetadataBytes)).Result()
-	if err != nil {
-		return err
-	}
-
-	// Handle state index transitions
-	newState := message.Metadata.State
-	if oldState != newState {
-		var newScore float64
-		switch newState {
-		case message_pb.Message_Metadata_RUNNING:
-			newScore = float64(message.Metadata.LeaseExpiry)
-		case message_pb.Message_Metadata_INVISIBLE:
-			newScore = float64(message.Metadata.InvisibilityExpiry)
-		}
-
-		if err := as.transitionStateIndex(ctx, txPipeline, key, oldState, newState, newScore); err != nil {
-			return fmt.Errorf("failed to update state indexes: %w", err)
-		}
-	}
-
-	// Commit the transaction
-	_, err = txPipeline.Exec(ctx)
-	return err
-}
-
-func (as *storage) fetchQueueMembersByPriority(ctx context.Context, queueName string, limit int64) ([]string, error) {
-	prefixedQueueName := "queue:" + queueName
-	// Get messages ordered by priority (lowest score = highest priority)
-	return as.redisClient.ZRange(ctx, prefixedQueueName, 0, limit-1).Result()
-}
-
-func (as *storage) removeQueueMembersByPriority(ctx context.Context, queueName string, memberIDs []string) error {
-	prefixedQueueName := "queue:" + queueName
-	// Remove messages ordered by priority (lowest score = highest priority)
-	_, err := as.redisClient.ZRem(ctx, prefixedQueueName, memberIDs).Result()
-	return err
-}
-
 func (as *storage) listMetadataIDs(ctx context.Context, keyType string, prefix string, limit int64) ([]string, error) {
 	var metadataIDs []string
 	var cursor uint64
@@ -380,4 +292,40 @@ func (as *storage) transitionStateIndex(ctx context.Context, pipeline redis.Pipe
 	}
 
 	return nil
+}
+
+func (as *storage) saveMessageMetadata(ctx context.Context, queueName, messageID string, meta *message_pb.Message_Metadata) error {
+	key := fmt.Sprintf("%s:%s:meta", queueName, messageID)
+	data, err := protojson.Marshal(meta)
+	if err != nil {
+		return err
+	}
+
+	return as.redisClient.HSet(ctx, key, "metadata", data).Err()
+}
+
+func (as *storage) generateConsumerName() string {
+	return fmt.Sprintf("worker-%d", time.Now().UnixNano())
+}
+
+func (as *storage) listQueueNames(ctx context.Context) ([]string, error) {
+	var queues []string
+	seen := make(map[string]bool)
+
+	iter := as.redisClient.Scan(ctx, 0, "queue:*:meta", 0).Iterator()
+	for iter.Next(ctx) {
+		key := iter.Val()
+		parts := strings.Split(key, ":")
+		if len(parts) >= 2 {
+			queueName := parts[1]
+			if !seen[queueName] {
+				queues = append(queues, queueName)
+				seen[queueName] = true
+			}
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return nil, err
+	}
+	return queues, nil
 }

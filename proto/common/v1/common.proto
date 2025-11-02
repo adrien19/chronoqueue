@@ -1,4 +1,6 @@
-// ./proto/common/v1/common.proto
+// ChronoQueue Common API v1
+//
+// This file defines common data structures used across ChronoQueue APIs.
 
 syntax = "proto3";
 package chronoqueue.api.common.v1;
@@ -6,11 +8,55 @@ package chronoqueue.api.common.v1;
 import "google/protobuf/struct.proto";
 option go_package = "github.com/adrien19/chronoqueue/api/common/v1;common";
 
-
+// Payload represents the user data and metadata for a message.
+//
+// The Payload is the core data container in ChronoQueue that allows you to:
+// - Store arbitrary structured data (JSON, XML, binary, etc.)
+// - Attach custom metadata for filtering, routing, or tracking
+// - Enforce schema validation for data quality
+//
+// Example usage in Go:
+//   payload := &common.Payload{
+//       Metadata: map[string]*structpb.Value{
+//           "source": structpb.NewStringValue("web-api"),
+//           "user_id": structpb.NewStringValue("user-123"),
+//           "correlation_id": structpb.NewStringValue("req-xyz"),
+//       },
+//       Data: dataStruct, // Your business data
+//       ContentType: "application/json",
+//       SchemaId: "order.v1",      // Optional: enforce schema
+//       SchemaVersion: 1,
+//   }
+//
+// Best practices:
+// - Use metadata for: correlation IDs, trace context, routing info, custom headers
+// - Use content_type to indicate data format (aids debugging and processing)
+// - Use schema_id for validation in production to catch data quality issues early
+// - Keep payloads under 256KB for optimal performance (configurable per queue)
 message Payload {
+    // metadata: Custom key-value pairs for message routing, filtering, and tracking.
+    // Common uses: correlation IDs, trace context, source system, user ID, tenant ID.
+    // These values are indexed and can be queried without deserializing the data field.
     map<string, google.protobuf.Value> metadata = 1;
+    
+    // data: The actual message payload as structured data (JSON, Protobuf, etc.).
+    // This is your business data - orders, events, tasks, notifications, etc.
+    // Stored as google.protobuf.Struct for flexibility across different data formats.
     google.protobuf.Struct data = 2;
-    string content_type = 3;  // MIME type (e.g., application/json, text/plain)
-    string schema_id = 4;     // Optional schema reference for validation
-    int32 schema_version = 5; // Schema version number
+    
+    // content_type: MIME type indicating the data format.
+    // Examples: "application/json", "application/xml", "text/plain", "application/protobuf"
+    // Used for automatic deserialization and processing by workers.
+    string content_type = 3;
+    
+    // schema_id: Reference to a registered schema for validation.
+    // If provided, ChronoQueue validates the data against this schema before accepting the message.
+    // Example: "order.created.v1", "user.profile.v2"
+    // Use RegisterSchema API to define schemas.
+    string schema_id = 4;
+    
+    // schema_version: Version number of the schema to use.
+    // Allows schema evolution while maintaining backward compatibility.
+    // If omitted, uses the latest active version of schema_id.
+    int32 schema_version = 5;
 }

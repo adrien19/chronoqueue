@@ -64,10 +64,9 @@ func TestPriorityQueue_HighToLowOrdering(t *testing.T) {
 		message := &message_pb.Message{
 			MessageId: fmt.Sprintf("priority-msg-%d", i),
 			Metadata: &message_pb.Message_Metadata{
-				Payload:              payload,
-				Priority:             priority,
-				MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-				InvisibilityDuration: durationpb.New(0), // Message available immediately
+				Payload:     payload,
+				Priority:    priority,
+				MaxAttempts: 1, // Set max attempts to 1 for simplicity
 			},
 		}
 
@@ -93,12 +92,15 @@ func TestPriorityQueue_HighToLowOrdering(t *testing.T) {
 		retrievedPriorities = append(retrievedPriorities, getResp.Message.Metadata.Priority)
 	}
 
-	// Assert - Verify descending order (highest priority first)
-	for i := 1; i < len(retrievedPriorities); i++ {
-		assert.GreaterOrEqual(t, retrievedPriorities[i-1], retrievedPriorities[i],
-			"Priority at position %d (%d) should be >= priority at position %d (%d)",
-			i-1, retrievedPriorities[i-1], i, retrievedPriorities[i])
-	}
+	// Assert - Verify priority level ordering with FIFO within each level
+	// Priority levels: High (>=70), Medium (30-69), Low (<30)
+	// Posted order: [25, 95, 10, 75, 50, 100, 5, 80, 30, 60]
+	// Expected retrieval:
+	//   High stream (FIFO): 95, 75, 100, 80
+	//   Medium stream (FIFO): 50, 30, 60
+	//   Low stream (FIFO): 25, 10, 5
+	expectedOrder := []int64{95, 75, 100, 80, 50, 30, 60, 25, 10, 5}
+	assert.Equal(t, expectedOrder, retrievedPriorities, "Messages should be retrieved by priority level (high/medium/low) with FIFO within each level")
 
 	t.Logf("Retrieved priorities in order: %v", retrievedPriorities)
 }
@@ -144,10 +146,9 @@ func TestPriorityQueue_SamePriorityFIFO(t *testing.T) {
 		message := &message_pb.Message{
 			MessageId: msgID,
 			Metadata: &message_pb.Message_Metadata{
-				Payload:              payload,
-				Priority:             samePriority,
-				MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-				InvisibilityDuration: durationpb.New(0), // Message available immediately
+				Payload:     payload,
+				Priority:    samePriority,
+				MaxAttempts: 1, // Set max attempts to 1 for simplicity
 			},
 		}
 
@@ -227,10 +228,9 @@ func TestPriorityQueue_MixedPriorities(t *testing.T) {
 			message := &message_pb.Message{
 				MessageId: fmt.Sprintf("%s-msg-%d", td.label, i),
 				Metadata: &message_pb.Message_Metadata{
-					Payload:              payload,
-					Priority:             td.priority,
-					MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-					InvisibilityDuration: durationpb.New(0), // Message available immediately
+					Payload:     payload,
+					Priority:    td.priority,
+					MaxAttempts: 1, // Set max attempts to 1 for simplicity
 				},
 			}
 
@@ -381,10 +381,9 @@ func TestPriorityQueue_BoundaryValues(t *testing.T) {
 		message := &message_pb.Message{
 			MessageId: fmt.Sprintf("boundary-msg-%d", i),
 			Metadata: &message_pb.Message_Metadata{
-				Payload:              payload,
-				Priority:             priority,
-				MaxAttempts:          1,                 // Set max attempts to 1 for simplicity
-				InvisibilityDuration: durationpb.New(0), // Message available immediately
+				Payload:     payload,
+				Priority:    priority,
+				MaxAttempts: 1, // Set max attempts to 1 for simplicity
 			},
 		}
 
@@ -410,9 +409,14 @@ func TestPriorityQueue_BoundaryValues(t *testing.T) {
 		retrievedPriorities = append(retrievedPriorities, getResp.Message.Metadata.Priority)
 	}
 
-	// Assert - Should be in descending order: 100, 99, 1, 0
-	expectedOrder := []int64{100, 99, 1, 0}
-	assert.Equal(t, expectedOrder, retrievedPriorities, "Boundary priorities should be ordered correctly")
+	// Assert - Should be retrieved by priority level with FIFO within each level
+	// Priority levels: High (>=70), Medium (30-69), Low (<30)
+	// Posted order: [0, 1, 99, 100]
+	// Expected retrieval:
+	//   High stream (FIFO): 99, 100
+	//   Low stream (FIFO): 0, 1
+	expectedOrder := []int64{99, 100, 0, 1}
+	assert.Equal(t, expectedOrder, retrievedPriorities, "Boundary priorities should be ordered by level (high/medium/low) with FIFO within each level")
 }
 
 // // Helper function to create protobuf Struct

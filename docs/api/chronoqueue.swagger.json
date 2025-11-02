@@ -18,6 +18,8 @@
   "paths": {
     "/v1/calendar-schedules:preview": {
       "post": {
+        "summary": "PreviewCalendarSchedule shows next N execution times for a schedule.",
+        "description": "Use to:\n- Verify schedule behaves as expected\n- Test complex calendar rules\n- Confirm timezone handling\n- Preview holiday exceptions\n\nExample:\n  POST /v1/calendar-schedules:preview\n  {\n    \"calendar_schedule\": {...},\n    \"count\": 10  // Next 10 executions\n  }\n  \n  Response:\n  {\n    \"next_runs\": [\n      \"2024-01-02T09:00:00Z\",\n      \"2024-01-03T09:00:00Z\",\n      \"2024-01-04T09:00:00Z\",\n      ...\n    ]\n  }\n\nReturns: List of upcoming execution timestamps",
         "operationId": "QueueService_PreviewCalendarSchedule",
         "responses": {
           "200": {
@@ -50,7 +52,8 @@
     },
     "/v1/calendar-schedules:validate": {
       "post": {
-        "summary": "Calendar Schedule Operations",
+        "summary": "ValidateCalendarSchedule checks if a calendar schedule is valid.",
+        "description": "Validates:\n- Cron expression syntax\n- Calendar rule correctness\n- Timezone validity\n- Holiday rule logic\n\nUse before CreateSchedule to catch configuration errors.\n\nExample:\n  POST /v1/calendar-schedules:validate\n  {\n    \"calendar_schedule\": {...}\n  }\n\nReturns: Validation result with errors if invalid",
         "operationId": "QueueService_ValidateCalendarSchedule",
         "responses": {
           "200": {
@@ -83,7 +86,8 @@
     },
     "/v1/dlq/{dlqName}/messages": {
       "get": {
-        "summary": "Dead Letter Queue Management Operations",
+        "summary": "GetDLQMessages retrieves messages from a dead letter queue.",
+        "description": "Dead letter queues contain:\n- Messages that exhausted retry attempts\n- Messages that caused persistent errors\n- Messages rejected by workers\n\nUse for:\n- Investigating failures\n- Manual reprocessing after fixing bugs\n- Identifying systematic issues\n\nExample:\n  GET /v1/dlq/order-dlq/messages?limit=50\n\nReturns: List of failed messages with error details",
         "operationId": "QueueService_GetDLQMessages",
         "responses": {
           "200": {
@@ -122,6 +126,8 @@
     },
     "/v1/dlq/{dlqName}/messages/{messageId}": {
       "delete": {
+        "summary": "DeleteFromDLQ permanently removes a message from the DLQ.",
+        "description": "Use when:\n- Message is not recoverable\n- Data is no longer relevant\n- Cleaning up test data\n\nWARNING: This is permanent. Message cannot be recovered.\n\nExample:\n  DELETE /v1/dlq/order-dlq/messages/msg-123\n\nReturns: Empty response\nErrors:\n  - NotFound: Message not in DLQ",
         "operationId": "QueueService_DeleteFromDLQ",
         "responses": {
           "200": {
@@ -160,6 +166,8 @@
     },
     "/v1/dlq/{dlqName}/messages/{messageId}:requeue": {
       "post": {
+        "summary": "RequeueFromDLQ moves a message from DLQ back to its original queue.",
+        "description": "Use after:\n- Fixing bugs that caused failures\n- Resolving external service outages\n- Correcting data issues\n\nEffects:\n- Message removed from DLQ\n- Message added back to original queue as PENDING\n- attempts_left reset (or set to specified value)\n\nExample:\n  POST /v1/dlq/order-dlq/messages/msg-123:requeue\n  {\n    \"max_attempts\": 3  // Give it 3 more tries\n  }\n\nReturns: Requeued message\nErrors:\n  - NotFound: Message not in DLQ",
         "operationId": "QueueService_RequeueFromDLQ",
         "responses": {
           "200": {
@@ -206,6 +214,8 @@
     },
     "/v1/dlq/{dlqName}/stats": {
       "get": {
+        "summary": "GetDLQStats returns statistics about a dead letter queue.",
+        "description": "Provides:\n- Message count\n- Age of oldest message\n- Common error types\n- Failure rate trends\n\nUse for:\n- Monitoring DLQ health\n- Alerting on DLQ growth\n- Identifying systemic issues\n\nExample:\n  GET /v1/dlq/order-dlq/stats\n\nReturns: DLQ statistics",
         "operationId": "QueueService_GetDLQStats",
         "responses": {
           "200": {
@@ -237,6 +247,8 @@
     },
     "/v1/dlq/{dlqName}:purge": {
       "post": {
+        "summary": "PurgeDLQ removes all messages from a dead letter queue.",
+        "description": "Use when:\n- Cleaning up after incident\n- Clearing test data\n- DLQ too large to manage individually\n\nWARNING: This is irreversible. All DLQ messages are permanently deleted.\n\nExample:\n  POST /v1/dlq/order-dlq:purge\n\nReturns: Count of deleted messages",
         "operationId": "QueueService_PurgeDLQ",
         "responses": {
           "200": {
@@ -276,6 +288,8 @@
     },
     "/v1/queues": {
       "get": {
+        "summary": "ListQueues returns all queues in your ChronoQueue instance.",
+        "description": "Use for:\n- Monitoring dashboards\n- Queue discovery\n- Debugging\n\nExample:\n  GET /v1/queues\n\nReturns: List of Queue objects with metadata",
         "operationId": "QueueService_ListQueues",
         "responses": {
           "200": {
@@ -304,7 +318,8 @@
         ]
       },
       "post": {
-        "summary": "Queue Management Operations",
+        "summary": "CreateQueue creates a new queue with specified configuration.",
+        "description": "Use to:\n- Define retry behavior (max_attempts, lease_duration)\n- Set up dead letter queue for failed messages\n- Configure priority handling\n- Enforce message schemas\n\nExample:\n  POST /v1/queues\n  {\n    \"queue\": {\n      \"name\": \"order-processing\",\n      \"metadata\": {\n        \"default_max_attempts\": 3,\n        \"lease_duration\": \"5m\",\n        \"dead_letter_queue_name\": \"order-dlq\",\n        \"auto_create_dlq\": true\n      }\n    }\n  }\n\nReturns: Queue details\nErrors:\n  - AlreadyExists: Queue with this name exists\n  - InvalidArgument: Invalid configuration (negative lease_duration, etc.)",
         "operationId": "QueueService_CreateQueue",
         "responses": {
           "200": {
@@ -337,6 +352,8 @@
     },
     "/v1/queues/{name}": {
       "delete": {
+        "summary": "DeleteQueue permanently deletes a queue and all its messages.",
+        "description": "WARNING: This operation is irreversible. All pending and running messages are lost.\n\nUse when:\n- Decommissioning a feature\n- Cleaning up test queues\n- Removing unused queues\n\nBest practice: Drain queue first (stop posting, wait for workers to finish).\n\nExample:\n  DELETE /v1/queues/order-processing\n\nReturns: Empty response\nErrors:\n  - NotFound: Queue doesn't exist",
         "operationId": "QueueService_DeleteQueue",
         "responses": {
           "200": {
@@ -368,7 +385,8 @@
     },
     "/v1/queues/{queueName}/messages": {
       "post": {
-        "summary": "Message Operations",
+        "summary": "PostMessage adds a new message to a queue.",
+        "description": "Use for:\n- Asynchronous task execution\n- Event-driven workflows\n- Job scheduling\n- Load leveling\n\nFeatures:\n- Delayed execution (scheduled_time)\n- Priority ordering\n- Schema validation\n- Deduplication (idempotency_key)\n- Exclusive processing (exclusivity_key)\n\nExample - immediate execution:\n  POST /v1/queues/order-processing/messages\n  {\n    \"message\": {\n      \"metadata\": {\n        \"payload\": {\"data\": \"...\"},\n        \"priority\": 100\n      }\n    }\n  }\n\nExample - delayed execution (send email in 1 hour):\n  {\n    \"message\": {\n      \"metadata\": {\n        \"payload\": {\"data\": \"...\"},\n        \"scheduled_time\": \"2024-12-01T15:00:00Z\"\n      }\n    }\n  }\n\nReturns: Message with assigned message_id\nErrors:\n  - NotFound: Queue doesn't exist\n  - InvalidArgument: Schema validation failed, invalid scheduled_time\n  - AlreadyExists: Duplicate idempotency_key (within dedup window)",
         "operationId": "QueueService_PostMessage",
         "responses": {
           "200": {
@@ -408,6 +426,8 @@
     },
     "/v1/queues/{queueName}/messages/{messageId}:acknowledge": {
       "post": {
+        "summary": "AcknowledgeMessage marks a message as successfully processed.",
+        "description": "Call this after successfully processing a message retrieved by GetNextMessage.\n\nEffects:\n- Message moves to COMPLETED state\n- Message removed from queue\n- Queue stats updated\n\nImportant: You must ACK within the lease_duration, or the message returns\nto PENDING and may be delivered to another worker.\n\nExample:\n  POST /v1/queues/order-processing/messages/msg-123:acknowledge\n\nReturns: Empty response\nErrors:\n  - NotFound: Message doesn't exist or already acknowledged\n  - DeadlineExceeded: Lease already expired",
         "operationId": "QueueService_AcknowledgeMessage",
         "responses": {
           "200": {
@@ -454,6 +474,8 @@
     },
     "/v1/queues/{queueName}/messages/{messageId}:renewLease": {
       "post": {
+        "summary": "RenewMessageLease extends the processing time for a message.",
+        "description": "Use when:\n- Processing takes longer than expected\n- Long-running batch operations\n- External API calls with unpredictable latency\n\nCall periodically during processing to prevent lease expiration.\n\nExample pattern (heartbeat-style lease renewal):\n  msg := getNextMessage()\n  done := make(chan bool)\n  \n  go func() {\n      ticker := time.NewTicker(leaseDuration / 2)\n      defer ticker.Stop()\n      for {\n          select {\n          case \u003c-ticker.C:\n              renewMessageLease(msg.MessageId)\n          case \u003c-done:\n              return\n          }\n      }\n  }()\n  \n  processMessage(msg)\n  close(done)\n  acknowledgeMessage(msg.MessageId)\n\nReturns: Updated message with new lease expiration\nErrors:\n  - NotFound: Message doesn't exist or already completed\n  - FailedPrecondition: Message not in RUNNING state",
         "operationId": "QueueService_RenewMessageLease",
         "responses": {
           "200": {
@@ -500,6 +522,8 @@
     },
     "/v1/queues/{queueName}/messages:getNext": {
       "post": {
+        "summary": "GetNextMessage retrieves the next available message for processing.",
+        "description": "This is the primary worker API. Call in a loop to continuously process messages.\n\nBehavior:\n- Returns highest priority PENDING message\n- Message moves to RUNNING state\n- Lease timer starts (worker has lease_duration to process)\n- If lease expires without ACK → message returns to PENDING for retry\n\nConcurrency:\n- Multiple workers can call simultaneously\n- Each worker gets a different message (no duplicates)\n- Use exclusivity_key for single-threaded processing of related messages\n\nExample worker loop:\n  for {\n      resp := client.GetNextMessage(ctx, \u0026GetNextMessageRequest{\n          QueueName: \"order-processing\",\n          LeaseDuration: durationpb.New(5 * time.Minute),\n      })\n      if resp.Message == nil {\n          time.Sleep(1 * time.Second)  // No messages available\n          continue\n      }\n      \n      err := processMessage(resp.Message)\n      if err != nil {\n          // Let lease expire → automatic retry\n          continue\n      }\n      \n      client.AcknowledgeMessage(ctx, \u0026AcknowledgeMessageRequest{\n          QueueName: \"order-processing\",\n          MessageId: resp.Message.MessageId,\n      })\n  }\n\nReturns: Message (or empty if no messages available)\nErrors:\n  - NotFound: Queue doesn't exist",
         "operationId": "QueueService_GetNextMessage",
         "responses": {
           "200": {
@@ -539,6 +563,8 @@
     },
     "/v1/queues/{queueName}/messages:heartbeat": {
       "post": {
+        "summary": "SendMessageHeartBeat indicates a worker is still processing a message.",
+        "description": "Alternative to RenewMessageLease with similar purpose but lighter weight.\nUseful for tracking worker health without extending lease.\n\nExample:\n  POST /v1/queues/order-processing/messages:heartbeat\n  {\n    \"message_ids\": [\"msg-123\", \"msg-456\"]\n  }\n\nReturns: Empty response",
         "operationId": "QueueService_SendMessageHeartBeat",
         "responses": {
           "200": {
@@ -578,6 +604,8 @@
     },
     "/v1/queues/{queueName}/messages:peek": {
       "get": {
+        "summary": "PeekQueueMessages views messages without leasing them.",
+        "description": "Use for:\n- Debugging (inspect message payloads)\n- Monitoring (see what's pending)\n- Admin dashboards\n\nDoes NOT:\n- Change message state\n- Create leases\n- Affect message ordering\n\nExample:\n  GET /v1/queues/order-processing/messages:peek?count=10\n\nReturns: List of messages (up to requested count)",
         "operationId": "QueueService_PeekQueueMessages",
         "responses": {
           "200": {
@@ -630,6 +658,8 @@
     },
     "/v1/queues/{queueName}/state": {
       "get": {
+        "summary": "GetQueueState returns current queue statistics and health.",
+        "description": "Provides:\n- Message counts by state (PENDING, RUNNING, COMPLETED, ERRORED)\n- Rate metrics (messages/sec, processing time)\n- DLQ size\n\nUse for:\n- Health checks\n- Autoscaling decisions (scale workers based on PENDING count)\n- Alerting (high ERRORED count, DLQ growth)\n\nExample:\n  GET /v1/queues/order-processing/state\n  Response:\n  {\n    \"pending_count\": 150,\n    \"running_count\": 10,\n    \"completed_count\": 5420,\n    \"errored_count\": 3,\n    \"dlq_count\": 2\n  }\n\nReturns: QueueState with counts and metrics",
         "operationId": "QueueService_GetQueueState",
         "responses": {
           "200": {
@@ -661,6 +691,8 @@
     },
     "/v1/schedules": {
       "get": {
+        "summary": "ListSchedules returns all schedules.",
+        "description": "Use for:\n- Admin dashboards\n- Monitoring active schedules\n- Discovering schedules\n\nExample:\n  GET /v1/schedules\n\nReturns: List of Schedule objects",
         "operationId": "QueueService_ListSchedules",
         "responses": {
           "200": {
@@ -689,7 +721,8 @@
         ]
       },
       "post": {
-        "summary": "Schedule Management Operations",
+        "summary": "CreateSchedule creates a recurring message posting schedule.",
+        "description": "Use for:\n- Cron-style job scheduling (daily reports, hourly cleanup)\n- Business calendar scheduling (first business day of month)\n- Recurring notifications (reminders, alerts)\n- Periodic batch processing\n\nSupports:\n- Simple cron expressions: \"0 9 * * 1-5\" (weekdays at 9 AM)\n- Complex calendar rules: \"last Friday of each quarter\"\n- Timezone-aware scheduling\n- Holiday handling\n\nExample - daily report at 8 AM EST:\n  POST /v1/schedules\n  {\n    \"schedule\": {\n      \"schedule_id\": \"daily-sales-report\",\n      \"metadata\": {\n        \"cron_schedule\": \"0 8 * * *\",\n        \"timezone\": \"America/New_York\",\n        \"queue_name\": \"reports\",\n        \"payload\": {...}\n      }\n    }\n  }\n\nReturns: Created schedule with next_run time\nErrors:\n  - AlreadyExists: schedule_id already in use\n  - InvalidArgument: Invalid cron expression or calendar rule",
         "operationId": "QueueService_CreateSchedule",
         "responses": {
           "200": {
@@ -722,6 +755,8 @@
     },
     "/v1/schedules/{scheduleId}": {
       "get": {
+        "summary": "GetSchedule retrieves schedule details and current state.",
+        "description": "Returns:\n- Schedule configuration\n- Current state (SCHEDULED, PAUSED, CANCELED, ERRORED)\n- Next execution time\n- Last execution time\n- Execution count\n\nExample:\n  GET /v1/schedules/daily-sales-report\n\nReturns: Schedule object\nErrors:\n  - NotFound: Schedule doesn't exist",
         "operationId": "QueueService_GetSchedule",
         "responses": {
           "200": {
@@ -751,6 +786,8 @@
         ]
       },
       "delete": {
+        "summary": "DeleteSchedule permanently removes a schedule.",
+        "description": "Effects:\n- Schedule stops creating new messages\n- Existing messages already posted remain in queue\n- Schedule history is preserved\n\nExample:\n  DELETE /v1/schedules/daily-sales-report\n\nReturns: Empty response\nErrors:\n  - NotFound: Schedule doesn't exist",
         "operationId": "QueueService_DeleteSchedule",
         "responses": {
           "200": {
@@ -782,6 +819,8 @@
     },
     "/v1/schedules/{scheduleId}/history": {
       "get": {
+        "summary": "GetScheduleHistory returns execution history for a schedule.",
+        "description": "Shows:\n- Past executions with timestamps\n- Messages created by each execution\n- Success/failure status\n\nUse for:\n- Debugging missed executions\n- Auditing schedule activity\n- Verifying schedule correctness\n\nExample:\n  GET /v1/schedules/daily-sales-report/history\n\nReturns: ScheduleHistory with execution records",
         "operationId": "QueueService_GetScheduleHistory",
         "responses": {
           "200": {
@@ -820,6 +859,8 @@
     },
     "/v1/schedules/{scheduleId}:pause": {
       "post": {
+        "summary": "PauseSchedule temporarily stops a schedule from creating messages.",
+        "description": "Use when:\n- Temporarily disabling a feature\n- During maintenance windows\n- Debugging issues\n\nEffects:\n- Schedule state → PAUSED\n- No new messages created\n- Can be resumed later with ResumeSchedule\n\nExample:\n  POST /v1/schedules/daily-sales-report:pause\n\nReturns: Updated schedule\nErrors:\n  - NotFound: Schedule doesn't exist",
         "operationId": "QueueService_PauseSchedule",
         "responses": {
           "200": {
@@ -859,6 +900,8 @@
     },
     "/v1/schedules/{scheduleId}:resume": {
       "post": {
+        "summary": "ResumeSchedule reactivates a paused schedule.",
+        "description": "Effects:\n- Schedule state → SCHEDULED\n- Resumes creating messages on next scheduled time\n- Does NOT backfill missed executions during pause\n\nExample:\n  POST /v1/schedules/daily-sales-report:resume\n\nReturns: Updated schedule with next_run\nErrors:\n  - NotFound: Schedule doesn't exist\n  - FailedPrecondition: Schedule not in PAUSED state",
         "operationId": "QueueService_ResumeSchedule",
         "responses": {
           "200": {
@@ -898,6 +941,8 @@
     },
     "/v1/schemas": {
       "get": {
+        "summary": "ListSchemas returns all registered schemas.",
+        "description": "Use for:\n- Schema discovery\n- Admin dashboards\n- Schema management\n\nExample:\n  GET /v1/schemas\n\nReturns: List of schemas (all versions)",
         "operationId": "QueueService_ListSchemas",
         "responses": {
           "200": {
@@ -942,7 +987,8 @@
         ]
       },
       "post": {
-        "summary": "Schema Management Operations",
+        "summary": "RegisterSchema creates or updates a message validation schema.",
+        "description": "Use for:\n- Enforcing message structure\n- API contract validation\n- Data quality checks\n- Type safety\n\nSchema versioning:\n- Each schema has a schema_id and version number\n- Multiple versions can coexist\n- Queues reference schema_id (use highest active version)\n\nExample:\n  POST /v1/schemas\n  {\n    \"schema\": {\n      \"schema_id\": \"order-schema\",\n      \"version\": 2,\n      \"content\": \"{...JSON Schema...}\",\n      \"content_type\": \"json-schema\"\n    }\n  }\n\nReturns: Registered schema\nErrors:\n  - AlreadyExists: schema_id + version already exists\n  - InvalidArgument: Invalid schema syntax",
         "operationId": "QueueService_RegisterSchema",
         "responses": {
           "200": {
@@ -975,6 +1021,8 @@
     },
     "/v1/schemas/{schemaId}/versions/{version}": {
       "get": {
+        "summary": "GetSchema retrieves a specific schema version.",
+        "description": "Example:\n  GET /v1/schemas/order-schema/versions/2\n\nReturns: Schema details\nErrors:\n  - NotFound: Schema not found",
         "operationId": "QueueService_GetSchema",
         "responses": {
           "200": {
@@ -1014,6 +1062,8 @@
         ]
       },
       "delete": {
+        "summary": "DeleteSchema removes a schema version.",
+        "description": "Effects:\n- Schema version deleted\n- Queues using this schema will fail validation\n\nBest practice: Mark schema as inactive (is_active = false) instead\nof deleting to preserve validation history.\n\nExample:\n  DELETE /v1/schemas/order-schema/versions/1\n\nReturns: Empty response\nErrors:\n  - NotFound: Schema not found\n  - FailedPrecondition: Schema in use by active queues",
         "operationId": "QueueService_DeleteSchema",
         "responses": {
           "200": {
@@ -1055,6 +1105,8 @@
     },
     "/v1/schemas/{schemaId}/versions/{version}:validate": {
       "post": {
+        "summary": "ValidatePayload validates a payload against a schema without posting a message.",
+        "description": "Use for:\n- Pre-flight validation\n- Testing schema changes\n- Client-side validation\n- Development/debugging\n\nExample:\n  POST /v1/schemas/order-schema/versions/2:validate\n  {\n    \"payload\": {\n      \"data\": \"{\\\"orderId\\\": \\\"ORD-123\\\", ...}\"\n    }\n  }\n\nReturns: ValidationResult (valid=true or list of errors)",
         "operationId": "QueueService_ValidatePayload",
         "responses": {
           "200": {
@@ -1112,7 +1164,7 @@
         "EXTRA"
       ],
       "default": "SKIP",
-      "title": "- SKIP: skip execution on this date\n - RESCHEDULE: move execution to different date\n - EXTRA: add extra execution on this date"
+      "description": "ExceptionType determines how to modify the schedule.\n\n - SKIP: Don't execute on this date\n - RESCHEDULE: Move execution to a different date\n - EXTRA: Add additional execution(s) on this date"
     },
     "CalendarScheduleScheduleType": {
       "type": "string",
@@ -1124,7 +1176,8 @@
         "BUSINESS_DAYS",
         "CUSTOM"
       ],
-      "default": "MONTHLY"
+      "default": "MONTHLY",
+      "description": "ScheduleType categorizes the primary scheduling pattern.\nDetermines which rule types are applicable.\n\n - MONTHLY: Executes monthly (1st of month, last Friday, etc.)\n - WEEKLY: Executes weekly (every Monday, bi-weekly, etc.)\n - DAILY: Executes daily (every day, weekdays only, etc.)\n - YEARLY: Executes yearly (birthdays, anniversaries, annual reports)\n - BUSINESS_DAYS: Executes on business days (respects holidays/weekends)\n - CUSTOM: Custom logic via expression language"
     },
     "MonthlyRuleDayType": {
       "type": "string",
@@ -1135,7 +1188,7 @@
         "LAST_DAY"
       ],
       "default": "DAY_OF_MONTH",
-      "title": "- DAY_OF_MONTH: e.g., 15th of every month\n - WEEKDAY_OF_MONTH: e.g., first Monday of month\n - LAST_WEEKDAY: e.g., last Friday of month\n - LAST_DAY: last day of month"
+      "description": "DayType determines how to select the day within a month.\n\n - DAY_OF_MONTH: Specific date (1-31)\n - WEEKDAY_OF_MONTH: Nth occurrence of weekday (first Monday, third Friday)\n - LAST_WEEKDAY: Last occurrence of weekday (last Friday)\n - LAST_DAY: Last day of month (handles varying month lengths)"
     },
     "PeekQueueMessagesRequestPriorityRange": {
       "type": "object",
@@ -1155,6 +1208,9 @@
       "properties": {
         "state": {
           "$ref": "#/definitions/v1MessageMetadataState"
+        },
+        "streamEntryId": {
+          "type": "string"
         }
       },
       "title": "Acknowledge the message on the queue"
@@ -1205,6 +1261,9 @@
       "type": "object",
       "properties": {
         "messageId": {
+          "type": "string"
+        },
+        "streamEntryId": {
           "type": "string"
         }
       },
@@ -1268,20 +1327,24 @@
       "type": "object",
       "properties": {
         "calendarId": {
-          "type": "string"
+          "type": "string",
+          "description": "calendar_id: Unique identifier for this calendar.\nReferenced by BusinessDaysRule.business_calendar_id."
         },
         "name": {
-          "type": "string"
+          "type": "string",
+          "title": "name: Human-readable name.\nExample: \"US Federal Holidays\", \"UK Bank Holidays\", \"ACME Corp Custom Calendar\""
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "description: Optional detailed description."
         },
         "holidays": {
           "type": "array",
           "items": {
             "type": "object",
             "$ref": "#/definitions/v1Holiday"
-          }
+          },
+          "description": "holidays: List of holidays (days to skip for business day schedules).\nCan be fixed dates (Dec 25) or relative (first Monday in May)."
         },
         "weekendDays": {
           "type": "array",
@@ -1289,41 +1352,46 @@
             "type": "integer",
             "format": "int32"
           },
-          "title": "1=Monday, 7=Sunday"
+          "title": "weekend_days: Days considered weekends (1=Monday, 7=Sunday).\nCommon values:\n  [6, 7] = Saturday, Sunday (most countries)\n  [5, 6] = Friday, Saturday (some Middle Eastern countries)\n  [7] = Sunday only"
         },
         "timezone": {
-          "type": "string"
+          "type": "string",
+          "description": "timezone: IANA timezone for this calendar.\nAffects date boundaries for holidays."
         }
-      }
+      },
+      "description": "BusinessCalendar defines holidays and weekends for a region/organization.\nUsed by BusinessDaysRule to determine working vs non-working days.\n\nExample - US federal holidays:\n  calendar := \u0026schedule.BusinessCalendar{\n      CalendarId: \"us-federal\",\n      Name: \"US Federal Holidays\",\n      Holidays: []*schedule.Holiday{\n          {Name: \"New Year's Day\", Rule: \u0026schedule.HolidayRule{...}},\n          {Name: \"Independence Day\", Rule: \u0026schedule.HolidayRule{...}},\n          {Name: \"Thanksgiving\", Rule: \u0026schedule.HolidayRule{...}},\n          // ... more holidays\n      },\n      WeekendDays: []int32{6, 7},  // Saturday, Sunday\n      Timezone: \"America/New_York\",\n  }"
     },
     "v1BusinessDaysRule": {
       "type": "object",
       "properties": {
         "businessCalendarId": {
           "type": "string",
-          "title": "reference to business calendar"
+          "description": "business_calendar_id: Reference to BusinessCalendar defining holidays/weekends.\nMust match a calendar_id in CalendarSchedule.business_calendar."
         },
         "dayOffset": {
           "type": "integer",
           "format": "int32",
-          "title": "offset from business day (e.g., -1 for day before)"
+          "description": "day_offset: Offset from business day.\n0 = on business day\n-1 = day before business day (useful for overnight prep jobs)\n1 = day after business day\nNote: Offset day might land on non-business day; schedule skips those."
         }
-      }
+      },
+      "description": "BusinessDaysRule schedules execution on business days (non-holidays, non-weekends).\n\nExamples:\n  Every business day:\n    {business_calendar_id: \"us-holidays\"}\n  \n  Day before each business day (for overnight processing):\n    {business_calendar_id: \"us-holidays\", day_offset: -1}\n  \n  Day after each business day:\n    {business_calendar_id: \"us-holidays\", day_offset: 1}"
     },
     "v1CalendarException": {
       "type": "object",
       "properties": {
         "date": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "date: Date this exception applies to."
         },
         "type": {
-          "$ref": "#/definitions/CalendarExceptionExceptionType"
+          "$ref": "#/definitions/CalendarExceptionExceptionType",
+          "description": "type: What kind of exception to apply."
         },
         "rescheduleTo": {
           "type": "string",
           "format": "date-time",
-          "title": "for RESCHEDULE type"
+          "description": "reschedule_to: Target date for RESCHEDULE exceptions.\nRequired if type = RESCHEDULE."
         },
         "extraTimes": {
           "type": "array",
@@ -1331,34 +1399,41 @@
             "type": "object",
             "$ref": "#/definitions/v1TimeOfDay"
           },
-          "title": "for EXTRA type"
+          "description": "extra_times: Additional execution times for EXTRA exceptions.\nApplied in addition to regular schedule.\nRequired if type = EXTRA."
         },
         "reason": {
           "type": "string",
-          "title": "optional description"
+          "title": "reason: Optional explanation for this exception.\nUseful for documentation and auditing.\nExample: \"System maintenance\", \"Holiday adjustment\", \"Special event\""
         }
-      }
+      },
+      "description": "CalendarException modifies schedule behavior for a specific date.\nUse for one-off changes without modifying the core schedule.\n\nExamples:\n  Skip execution during maintenance:\n    {date: \"2024-06-15\", type: SKIP, reason: \"System maintenance\"}\n  \n  Reschedule monthly report when month-end is holiday:\n    {date: \"2024-12-31\", type: RESCHEDULE, reschedule_to: \"2024-12-30\", reason: \"New Year's Eve\"}\n  \n  Add extra execution for special event:\n    {date: \"2024-11-29\", type: EXTRA, extra_times: [{hour: 14}], reason: \"Black Friday promotions\"}"
     },
     "v1CalendarRule": {
       "type": "object",
       "properties": {
         "monthly": {
-          "$ref": "#/definitions/v1MonthlyRule"
+          "$ref": "#/definitions/v1MonthlyRule",
+          "title": "For MONTHLY schedules"
         },
         "weekly": {
-          "$ref": "#/definitions/v1WeeklyRule"
+          "$ref": "#/definitions/v1WeeklyRule",
+          "title": "For WEEKLY schedules"
         },
         "daily": {
-          "$ref": "#/definitions/v1DailyRule"
+          "$ref": "#/definitions/v1DailyRule",
+          "title": "For DAILY schedules"
         },
         "yearly": {
-          "$ref": "#/definitions/v1YearlyRule"
+          "$ref": "#/definitions/v1YearlyRule",
+          "title": "For YEARLY schedules"
         },
         "businessDays": {
-          "$ref": "#/definitions/v1BusinessDaysRule"
+          "$ref": "#/definitions/v1BusinessDaysRule",
+          "title": "For BUSINESS_DAYS schedules"
         },
         "custom": {
-          "$ref": "#/definitions/v1CustomRule"
+          "$ref": "#/definitions/v1CustomRule",
+          "title": "For CUSTOM schedules"
         },
         "executionTimes": {
           "type": "array",
@@ -1366,47 +1441,54 @@
             "type": "object",
             "$ref": "#/definitions/v1TimeOfDay"
           },
-          "title": "Time of day for execution"
+          "description": "execution_times: What time(s) of day to execute on matching dates.\nMultiple times = multiple executions per day.\nExamples:\n  [{hour:9}] = once at 9 AM\n  [{hour:8}, {hour:12}, {hour:17}] = three times daily\nIf empty, defaults to midnight (00:00:00)."
         },
         "validFrom": {
           "type": "string",
           "format": "date-time",
-          "title": "Optional date range for rule validity"
+          "description": "valid_from: Start date for this rule (inclusive).\nRule only applies on or after this date.\nUse for seasonal schedules or phased rollouts."
         },
         "validUntil": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "valid_until: End date for this rule (inclusive).\nRule only applies on or before this date.\nUse for limited-time campaigns or temporary schedules."
         }
-      }
+      },
+      "description": "CalendarRule defines a specific scheduling pattern within a CalendarSchedule.\nEach rule specifies WHEN (date pattern) and WHAT TIME (execution_times) to run.\n\nExample - Every Monday and Wednesday at 9 AM:\n  rule := \u0026schedule.CalendarRule{\n      Rule: \u0026schedule.CalendarRule_Weekly{\n          Weekly: \u0026schedule.WeeklyRule{\n              DaysOfWeek: []int32{1, 3},  // Monday, Wednesday\n          },\n      },\n      ExecutionTimes: []*schedule.TimeOfDay{{Hour: 9}},\n  }\n\nExample - First day of every quarter at midnight:\n  rule := \u0026schedule.CalendarRule{\n      Rule: \u0026schedule.CalendarRule_Monthly{\n          Monthly: \u0026schedule.MonthlyRule{\n              DayType: schedule.MonthlyRule_DAY_OF_MONTH,\n              DayValue: 1,\n              Months: []int32{1, 4, 7, 10},  // Jan, Apr, Jul, Oct\n          },\n      },\n      ExecutionTimes: []*schedule.TimeOfDay{{Hour: 0}},\n  }"
     },
     "v1CalendarSchedule": {
       "type": "object",
       "properties": {
         "type": {
-          "$ref": "#/definitions/CalendarScheduleScheduleType"
+          "$ref": "#/definitions/CalendarScheduleScheduleType",
+          "description": "type: Primary scheduling pattern.\nConstrains which rule types can be used in rules field."
         },
         "rules": {
           "type": "array",
           "items": {
             "type": "object",
             "$ref": "#/definitions/v1CalendarRule"
-          }
+          },
+          "title": "rules: Specific scheduling rules (when to execute).\nMultiple rules = union of all matching times.\nExample: Two rules for \"weekdays at 9 AM\" and \"weekdays at 5 PM\""
         },
         "timezone": {
-          "type": "string"
+          "type": "string",
+          "description": "timezone: IANA timezone for all time calculations.\nExamples: \"America/New_York\", \"Europe/London\", \"Asia/Tokyo\"\nAffects DST transitions, date boundaries, execution times.\nRequired for calendar schedules."
         },
         "businessCalendar": {
-          "$ref": "#/definitions/v1BusinessCalendar"
+          "$ref": "#/definitions/v1BusinessCalendar",
+          "description": "business_calendar: Holiday and weekend definitions.\nUsed by BUSINESS_DAYS schedules to skip non-working days.\nCan include country-specific holidays, custom company holidays."
         },
         "exceptions": {
           "type": "array",
           "items": {
             "type": "object",
             "$ref": "#/definitions/v1CalendarException"
-          }
+          },
+          "title": "exceptions: Override schedule for specific dates.\nUse cases:\n- Skip execution during maintenance windows\n- Reschedule monthly report when month-end is holiday\n- Add extra execution for one-time events"
         }
       },
-      "title": "Calendar-based scheduling definitions"
+      "description": "CalendarSchedule defines rich business calendar-based scheduling.\n\nSupports complex scheduling patterns:\n- Business days only (skip weekends and holidays)\n- Relative dates (first Monday of month, last Friday)\n- Custom calendars per region/country\n- Exception handling (skip/reschedule specific dates)\n- Multiple execution times per day\n\nExample - Monthly reports on first business day at 8 AM and 5 PM:\n  calendar := \u0026schedule.CalendarSchedule{\n      Type: schedule.CalendarSchedule_BUSINESS_DAYS,\n      Rules: []*schedule.CalendarRule{{\n          BusinessDays: \u0026schedule.BusinessDaysRule{\n              BusinessCalendarId: \"us-holidays\",\n          },\n          ExecutionTimes: []*schedule.TimeOfDay{\n              {Hour: 8, Minute: 0},\n              {Hour: 17, Minute: 0},\n          },\n      }},\n      Timezone: \"America/New_York\",\n      BusinessCalendar: usHolidaysCalendar,\n  }\n\nExample - Quarterly board meeting (last Friday of Mar/Jun/Sep/Dec at 2 PM):\n  calendar := \u0026schedule.CalendarSchedule{\n      Type: schedule.CalendarSchedule_MONTHLY,\n      Rules: []*schedule.CalendarRule{{\n          Monthly: \u0026schedule.MonthlyRule{\n              DayType: schedule.MonthlyRule_LAST_WEEKDAY,\n              DayValue: 5,  // Friday\n              Months: []int32{3, 6, 9, 12},  // Q1, Q2, Q3, Q4\n          },\n          ExecutionTimes: []*schedule.TimeOfDay{{Hour: 14}},\n      }},\n      Timezone: \"America/Los_Angeles\",\n  }"
     },
     "v1CreateQueueRequest": {
       "type": "object",
@@ -1450,20 +1532,21 @@
       "properties": {
         "expression": {
           "type": "string",
-          "title": "custom expression for complex rules"
+          "description": "expression: Custom scheduling expression.\nFormat depends on rule_type. See ChronoQueue documentation for supported expressions."
         },
         "ruleType": {
           "type": "string",
-          "title": "identifier for custom rule processor"
+          "description": "rule_type: Identifies which custom rule processor to use.\nBuilt-in types: \"business_calendar_expression\", \"lua_expression\"\nExtensible via server plugins."
         },
         "parameters": {
           "type": "object",
           "additionalProperties": {
             "type": "string"
           },
-          "title": "rule-specific parameters"
+          "description": "parameters: Additional configuration for the rule processor.\nContents depend on rule_type."
         }
-      }
+      },
+      "description": "CustomRule allows complex scheduling logic via custom expressions.\nUseful when built-in rules don't support your use case.\n\nExample - Last business day of each quarter:\n  {\n    expression: \"last_business_day_of_quarter\",\n    rule_type: \"business_calendar_expression\",\n    parameters: {\"calendar_id\": \"us-holidays\", \"quarters\": \"1,2,3,4\"}\n  }"
     },
     "v1DailyRule": {
       "type": "object",
@@ -1471,18 +1554,19 @@
         "dayInterval": {
           "type": "integer",
           "format": "int32",
-          "title": "every N days (default: 1)"
+          "title": "day_interval: Execute every Nth day.\n1 = every day, 2 = every other day, 7 = weekly\nDefault: 1"
         },
         "weekdaysOnly": {
           "type": "boolean",
-          "title": "exclude weekends"
+          "title": "weekdays_only: If true, skip weekends (Saturday and Sunday).\nApplies after day_interval calculation.\nExample: {day_interval: 1, weekdays_only: true} = every weekday"
         },
         "startDate": {
           "type": "string",
           "format": "date-time",
-          "title": "reference date for intervals"
+          "description": "start_date: Reference date for day_interval calculation.\nDay interval counts from this date.\nIf not set, uses schedule creation date."
         }
-      }
+      },
+      "description": "DailyRule schedules execution every N days.\n\nExamples:\n  Every day:\n    {day_interval: 1}\n  \n  Every other day:\n    {day_interval: 2}\n  \n  Weekdays only:\n    {day_interval: 1, weekdays_only: true}\n  \n  Every 3 days starting from specific date:\n    {day_interval: 3, start_date: \"2024-01-01\"}"
     },
     "v1DeleteFromDLQResponse": {
       "type": "object",
@@ -1527,9 +1611,21 @@
         "daysOffset": {
           "type": "integer",
           "format": "int32",
-          "title": "days from Easter Sunday"
+          "description": "days_offset: Days to add to Easter Sunday.\nNegative = before Easter, positive = after Easter, 0 = Easter itself."
         }
-      }
+      },
+      "description": "EasterOffset represents holidays calculated relative to Easter Sunday.\nEaster date varies year-to-year based on lunar calendar.\n\nExamples:\n  Good Friday: {days_offset: -2}\n  Easter Monday: {days_offset: 1}\n  Ascension Day: {days_offset: 39}\n  Pentecost: {days_offset: 49}"
+    },
+    "v1FairnessPolicy": {
+      "type": "string",
+      "enum": [
+        "STRICT",
+        "WEIGHTED",
+        "AGING",
+        "HYBRID"
+      ],
+      "default": "STRICT",
+      "description": "FairnessPolicy determines how messages with different priorities compete for processing.\n\nPriority fairness is critical in systems with both urgent and background tasks.\nWithout fairness policies, low-priority messages could starve indefinitely.\n\n - STRICT: Process strictly by priority (high before medium before low)\n - WEIGHTED: Balance priority with fairness using weights\n - AGING: Boost priority of messages waiting too long\n - HYBRID: Combines weighted and aging strategies"
     },
     "v1FixedDate": {
       "type": "object",
@@ -1537,14 +1633,15 @@
         "month": {
           "type": "integer",
           "format": "int32",
-          "title": "1-12"
+          "description": "month: Month (1=January, 12=December)."
         },
         "day": {
           "type": "integer",
           "format": "int32",
-          "title": "1-31"
+          "description": "day: Day of month (1-31)."
         }
-      }
+      },
+      "description": "FixedDate represents a holiday on the same calendar date every year.\n\nExamples:\n  Christmas: {month: 12, day: 25}\n  Independence Day (US): {month: 7, day: 4}\n  New Year's Day: {month: 1, day: 1}"
     },
     "v1GetDLQMessagesResponse": {
       "type": "object",
@@ -1583,6 +1680,9 @@
       "properties": {
         "message": {
           "$ref": "#/definitions/v1Message"
+        },
+        "streamEntryId": {
+          "type": "string"
         }
       }
     },
@@ -1631,34 +1731,42 @@
       "type": "object",
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "name: Holiday name (e.g., \"New Year's Day\", \"Memorial Day\")."
         },
         "date": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "date: Specific date for one-time holidays.\nFor recurring holidays, use rule instead."
         },
         "recurringYearly": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "recurring_yearly: If true, this holiday repeats every year.\nRequires rule to be set to determine the date each year."
         },
         "rule": {
           "$ref": "#/definitions/v1HolidayRule",
-          "title": "for complex holidays like \"first Monday in May\""
+          "description": "rule: Logic for calculating holiday date.\nRequired if recurring_yearly = true."
         }
-      }
+      },
+      "description": "Holiday represents a non-working day in a BusinessCalendar.\n\nExamples:\n  Fixed date holiday (Christmas):\n    {\n      name: \"Christmas\",\n      recurring_yearly: true,\n      rule: {fixed: {month: 12, day: 25}}\n    }\n  \n  Relative date holiday (US Thanksgiving - 4th Thursday of November):\n    {\n      name: \"Thanksgiving\",\n      recurring_yearly: true,\n      rule: {relative: {month: 11, weekday: 4, occurrence: 4}}\n    }\n  \n  Easter-based holiday (Good Friday - 2 days before Easter):\n    {\n      name: \"Good Friday\",\n      recurring_yearly: true,\n      rule: {easter_offset: {days_offset: -2}}\n    }"
     },
     "v1HolidayRule": {
       "type": "object",
       "properties": {
         "fixed": {
-          "$ref": "#/definitions/v1FixedDate"
+          "$ref": "#/definitions/v1FixedDate",
+          "title": "Same date every year (Dec 25)"
         },
         "relative": {
-          "$ref": "#/definitions/v1RelativeDate"
+          "$ref": "#/definitions/v1RelativeDate",
+          "title": "Relative to month (first Monday in May)"
         },
         "easterOffset": {
-          "$ref": "#/definitions/v1EasterOffset"
+          "$ref": "#/definitions/v1EasterOffset",
+          "title": "Days offset from Easter"
         }
-      }
+      },
+      "description": "HolidayRule defines how to calculate a holiday's date."
     },
     "v1ListQueuesResponse": {
       "type": "object",
@@ -1704,53 +1812,67 @@
       "type": "object",
       "properties": {
         "messageId": {
-          "type": "string"
+          "type": "string",
+          "description": "message_id: Unique identifier for this message within its queue.\nMust be unique per queue. Used for deduplication and idempotency.\nIf you retry posting the same message_id, ChronoQueue returns the existing message.\nRecommended format: UUID, task ID, or \"{entity_type}:{entity_id}\"."
         },
         "metadata": {
-          "$ref": "#/definitions/v1MessageMetadata"
+          "$ref": "#/definitions/v1MessageMetadata",
+          "description": "metadata: All message execution and lifecycle information."
         }
-      }
+      },
+      "description": "Message represents a unit of work in ChronoQueue.\n\nA message encapsulates:\n- Your business data (payload)\n- Execution metadata (state, priority, retries)\n- Scheduling information (when to execute)\n- Processing guarantees (leases, acknowledgments)\n\nLifecycle:\n  1. INVISIBLE: Message is scheduled for future execution or waiting to become visible\n  2. PENDING: Message is ready to be consumed by a worker\n  3. RUNNING: Message is actively being processed (worker has acquired a lease)\n  4. COMPLETED: Message was successfully processed and acknowledged\n  5. ERRORED: Message failed all retry attempts and moved to DLQ\n  6. CANCELED: Message was manually canceled before processing\n\nExample usage:\n  // Post a message\n  msg := \u0026message.Message{\n      MessageId: \"task-123\",\n      Metadata: \u0026message.Message_Metadata{\n          Payload: yourPayload,\n          Priority: 100,                        // Higher = processed first\n          MaxAttempts: 3,                       // Retry up to 3 times\n          LeaseDuration: durationpb.New(30*time.Second), // 30s to process\n          ScheduledTime: timestamppb.New(executeAt),     // When to execute\n      },\n  }\n\n  // Process a message\n  msg, err := client.GetNextMessage(ctx, queueName)\n  // ... do work ...\n  client.AcknowledgeMessage(ctx, queueName, msg.MessageId, streamEntryID)"
     },
     "v1MessageMetadata": {
       "type": "object",
       "properties": {
         "payload": {
-          "$ref": "#/definitions/v1Payload"
+          "$ref": "#/definitions/v1Payload",
+          "description": "payload: The business data and metadata to be processed.\nThis is what your workers receive and act upon."
         },
         "state": {
           "$ref": "#/definitions/v1MessageMetadataState"
         },
-        "invisibilityDuration": {
-          "type": "string"
-        },
         "attemptsLeft": {
           "type": "integer",
-          "format": "int32"
+          "format": "int32",
+          "description": "attempts_left: Number of retry attempts remaining before moving to DLQ.\nDecrements with each processing failure. When reaches 0 and fails, moves to ERRORED state.\nSet max_attempts when posting to control retry behavior."
         },
         "leaseDuration": {
-          "type": "string"
+          "type": "string",
+          "description": "lease_duration: How long a worker can process this message before the lease expires.\nAfter this duration, if not acknowledged or renewed, message returns to PENDING state.\nWorkers should call RenewLease or SendHeartbeat if processing takes longer.\nTypical values: 30s for quick tasks, 5m for longer processing."
         },
         "leaseExpiry": {
           "type": "string",
-          "format": "int64"
+          "format": "int64",
+          "description": "lease_expiry: Unix timestamp (milliseconds) when the current lease expires.\nManaged automatically by ChronoQueue. Workers can monitor this to know when to renew.\nIf current time \u003e lease_expiry, message will be reclaimed and made PENDING again."
         },
         "leaseRenewalCount": {
           "type": "integer",
-          "format": "int32"
-        },
-        "invisibilityExpiry": {
-          "type": "string",
-          "format": "int64"
+          "format": "int32",
+          "description": "lease_renewal_count: Number of times the lease has been renewed for this processing attempt.\nUseful for detecting stuck/zombie workers that keep renewing without completing.\nConsider implementing a max renewal limit in your worker logic."
         },
         "priority": {
           "type": "string",
-          "format": "int64"
+          "format": "int64",
+          "description": "priority: Message priority score (0-2147483647, higher = processed first).\nChronoQueue uses priority streams (high: ≥70, medium: ≥30, low: \u003c30).\nMessages with the same priority are processed FIFO.\nUse for: urgent tasks (100), normal (50), background (10)."
         },
         "maxAttempts": {
           "type": "integer",
-          "format": "int32"
+          "format": "int32",
+          "description": "max_attempts: Maximum number of processing attempts before moving to DLQ.\nIf omitted, uses queue's default_max_attempts.\nSet to -1 for infinite retries (use with caution).\nCommon values: 1 (no retry), 3 (standard), 5 (persistent), -1 (infinite)."
+        },
+        "scheduledTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "scheduled_time: When this message should become visible for processing.\nIf set to a future time, message enters INVISIBLE state until that time.\nIf omitted or past, message immediately becomes PENDING.\nUse for: scheduled tasks, delayed execution, rate limiting, backoff strategies.\nExample: Schedule order fulfillment for tomorrow at 9 AM."
+        },
+        "priorityLevel": {
+          "type": "integer",
+          "format": "int32",
+          "description": "priority_level: Internal priority level for stream routing (auto-calculated).\nManaged by ChronoQueue based on priority score. Read-only from client perspective.\nUsed internally for routing to high/medium/low priority streams."
         }
-      }
+      },
+      "description": "Metadata contains all message execution and lifecycle information."
     },
     "v1MessageMetadataState": {
       "type": "string",
@@ -1762,23 +1884,25 @@
         "CANCELED",
         "ERRORED"
       ],
-      "default": "INVISIBLE"
+      "default": "INVISIBLE",
+      "description": "State represents the message lifecycle stage.\n\nState transitions:\n  POST -\u003e INVISIBLE (if scheduled_time is set)\n  POST -\u003e PENDING (if no scheduled_time or scheduled_time is past)\n  INVISIBLE -\u003e PENDING (when scheduled_time arrives)\n  PENDING -\u003e RUNNING (when worker calls GetNextMessage)\n  RUNNING -\u003e COMPLETED (when worker calls AcknowledgeMessage)\n  RUNNING -\u003e PENDING (if lease expires without acknowledgment)\n  RUNNING -\u003e ERRORED (if max_attempts exhausted)\n  * -\u003e CANCELED (when CancelMessage is called)\n\nImportant: Messages in COMPLETED, CANCELED, and ERRORED states are terminal\nand won't be processed again (unless explicitly requeued from DLQ).\n\n - INVISIBLE: Scheduled for future, not yet visible to workers\n - PENDING: Ready to be consumed by workers (visible in queue)\n - RUNNING: Currently being processed (lease acquired)\n - COMPLETED: Successfully processed and acknowledged (terminal)\n - CANCELED: Manually canceled (terminal)\n - ERRORED: Failed after all retries, moved to DLQ (terminal)"
     },
     "v1MonthlyRule": {
       "type": "object",
       "properties": {
         "dayType": {
-          "$ref": "#/definitions/MonthlyRuleDayType"
+          "$ref": "#/definitions/MonthlyRuleDayType",
+          "description": "day_type: How to interpret day_value."
         },
         "dayValue": {
           "type": "integer",
           "format": "int32",
-          "title": "day number (1-31) or weekday (1-7)"
+          "title": "day_value: Day number or weekday.\nFor DAY_OF_MONTH: 1-31 (values \u003e month length skip that month)\nFor WEEKDAY_OF_MONTH/LAST_WEEKDAY: 1=Monday through 7=Sunday (ISO 8601)\nFor LAST_DAY: ignored"
         },
         "occurrence": {
           "type": "integer",
           "format": "int32",
-          "description": "for WEEKDAY_OF_MONTH: 1=first, 2=second, etc."
+          "title": "occurrence: Which occurrence of the weekday (for WEEKDAY_OF_MONTH).\n1 = first occurrence, 2 = second, 3 = third, 4 = fourth\n5 = fifth (rare, skips months without 5 occurrences)\n-1 = last occurrence (equivalent to LAST_WEEKDAY)"
         },
         "months": {
           "type": "array",
@@ -1786,9 +1910,10 @@
             "type": "integer",
             "format": "int32"
           },
-          "title": "specific months (1-12), empty = all months"
+          "title": "months: Which months to apply this rule (1=January, 12=December).\nEmpty = all months.\nCommon patterns:\n  [3,6,9,12] = quarterly\n  [1,4,7,10] = quarterly (different quarters)\n  [1,7] = semi-annual"
         }
-      }
+      },
+      "description": "MonthlyRule schedules execution on specific days of the month.\n\nExamples:\n  15th of every month:\n    {day_type: DAY_OF_MONTH, day_value: 15}\n  \n  First Monday of every month:\n    {day_type: WEEKDAY_OF_MONTH, day_value: 1, occurrence: 1}\n  \n  Last Friday of every month:\n    {day_type: LAST_WEEKDAY, day_value: 5}\n  \n  Last day of every month:\n    {day_type: LAST_DAY}\n  \n  15th of March, June, September, December:\n    {day_type: DAY_OF_MONTH, day_value: 15, months: [3,6,9,12]}"
     },
     "v1PauseScheduleResponse": {
       "type": "object",
@@ -1803,25 +1928,28 @@
       "properties": {
         "metadata": {
           "type": "object",
-          "additionalProperties": {}
+          "additionalProperties": {},
+          "description": "metadata: Custom key-value pairs for message routing, filtering, and tracking.\nCommon uses: correlation IDs, trace context, source system, user ID, tenant ID.\nThese values are indexed and can be queried without deserializing the data field."
         },
         "data": {
-          "type": "object"
+          "type": "object",
+          "description": "data: The actual message payload as structured data (JSON, Protobuf, etc.).\nThis is your business data - orders, events, tasks, notifications, etc.\nStored as google.protobuf.Struct for flexibility across different data formats."
         },
         "contentType": {
           "type": "string",
-          "title": "MIME type (e.g., application/json, text/plain)"
+          "description": "content_type: MIME type indicating the data format.\nExamples: \"application/json\", \"application/xml\", \"text/plain\", \"application/protobuf\"\nUsed for automatic deserialization and processing by workers."
         },
         "schemaId": {
           "type": "string",
-          "title": "Optional schema reference for validation"
+          "description": "schema_id: Reference to a registered schema for validation.\nIf provided, ChronoQueue validates the data against this schema before accepting the message.\nExample: \"order.created.v1\", \"user.profile.v2\"\nUse RegisterSchema API to define schemas."
         },
         "schemaVersion": {
           "type": "integer",
           "format": "int32",
-          "title": "Schema version number"
+          "description": "schema_version: Version number of the schema to use.\nAllows schema evolution while maintaining backward compatibility.\nIf omitted, uses the latest active version of schema_id."
         }
-      }
+      },
+      "description": "Payload represents the user data and metadata for a message.\n\nThe Payload is the core data container in ChronoQueue that allows you to:\n- Store arbitrary structured data (JSON, XML, binary, etc.)\n- Attach custom metadata for filtering, routing, or tracking\n- Enforce schema validation for data quality\n\nExample usage in Go:\n  payload := \u0026common.Payload{\n      Metadata: map[string]*structpb.Value{\n          \"source\": structpb.NewStringValue(\"web-api\"),\n          \"user_id\": structpb.NewStringValue(\"user-123\"),\n          \"correlation_id\": structpb.NewStringValue(\"req-xyz\"),\n      },\n      Data: dataStruct, // Your business data\n      ContentType: \"application/json\",\n      SchemaId: \"order.v1\",      // Optional: enforce schema\n      SchemaVersion: 1,\n  }\n\nBest practices:\n- Use metadata for: correlation IDs, trace context, routing info, custom headers\n- Use content_type to indicate data format (aids debugging and processing)\n- Use schema_id for validation in production to catch data quality issues early\n- Keep payloads under 256KB for optimal performance (configurable per queue)"
     },
     "v1PeekQueueMessagesResponse": {
       "type": "object",
@@ -1880,6 +2008,33 @@
         }
       }
     },
+    "v1PriorityConfig": {
+      "type": "object",
+      "properties": {
+        "policy": {
+          "$ref": "#/definitions/v1FairnessPolicy",
+          "description": "policy: The fairness strategy to use.\nSee FairnessPolicy enum for detailed descriptions."
+        },
+        "priorityWeights": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "description": "priority_weights: For WEIGHTED/HYBRID policies, maps priority levels to weights.\nKey: priority level (e.g., 100, 50, 10)\nValue: relative weight (e.g., 70, 20, 10 = 70% high, 20% medium, 10% low)\nWeights are relative - they're normalized to percentages."
+        },
+        "ageBoostThreshold": {
+          "type": "string",
+          "description": "age_boost_threshold: For AGING/HYBRID policies, how long before boosting priority.\nMessages waiting longer than this duration get their priority boosted.\nPrevents indefinite starvation of low-priority messages.\nTypical values: 15m (aggressive), 30m (standard), 1h (relaxed)."
+        },
+        "ageBoostMultiplier": {
+          "type": "integer",
+          "format": "int32",
+          "description": "age_boost_multiplier: For AGING/HYBRID policies, how much to boost priority.\nPriority multiplied by this factor every age_boost_threshold period.\nExample: multiplier=2, threshold=30m means priority doubles every 30 minutes.\nTypical values: 1.5 (gentle), 2 (standard), 3 (aggressive)."
+        }
+      },
+      "description": "PriorityConfig provides fine-grained control over priority-based processing.\n\nExample - Weighted fairness with aging:\n  config := \u0026queue.PriorityConfig{\n      Policy: queue.FairnessPolicy_HYBRID,\n      PriorityWeights: map[int32]int32{\n          100: 70,  // High priority: 70% of processing capacity\n          50:  20,  // Medium priority: 20%\n          10:  10,  // Low priority: 10%\n      },\n      AgeBoostThreshold: durationpb.New(30*time.Minute),  // Boost after 30min wait\n      AgeBoostMultiplier: 2,  // Double the priority every 30min\n  }"
+    },
     "v1PurgeDLQResponse": {
       "type": "object",
       "properties": {
@@ -1892,59 +2047,70 @@
       "type": "object",
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "title": "name: Unique identifier for this queue.\nMust be unique across your ChronoQueue instance.\nNaming convention: lowercase, hyphens, descriptive\nExamples: \"order-processing\", \"email-sender\", \"webhook-delivery\""
         },
         "metadata": {
-          "$ref": "#/definitions/v1QueueMetadata"
+          "$ref": "#/definitions/v1QueueMetadata",
+          "description": "metadata: Queue configuration and behavior settings."
         }
-      }
+      },
+      "description": "Queue represents a named message container with specific processing behavior.\n\nQueues are the primary organizational unit in ChronoQueue.\nCreate separate queues for different types of work to:\n- Isolate failures (one queue's DLQ doesn't affect others)\n- Apply different processing rules (retries, priorities, leases)\n- Scale consumers independently\n- Organize by domain (orders, notifications, analytics)\n\nExample queue names:\n- \"order-processing\"          // Core business logic\n- \"email-notifications\"       // User communications\n- \"webhook-deliveries\"        // External API calls\n- \"data-analytics-high\"       // Time-sensitive analytics\n- \"cleanup-tasks-low\"         // Background maintenance"
     },
     "v1QueueMetadata": {
       "type": "object",
       "properties": {
         "type": {
-          "$ref": "#/definitions/v1QueueType"
+          "$ref": "#/definitions/v1QueueType",
+          "description": "type: Determines message consumption pattern.\nSIMPLE: Multiple workers process concurrently (most common).\nEXCLUSIVE: Single worker processes sequentially (ensures order)."
         },
         "defaultMaxAttempts": {
           "type": "integer",
-          "format": "int32"
+          "format": "int32",
+          "description": "default_max_attempts: Default retry count for messages without explicit max_attempts.\nMessages failing this many times move to the dead letter queue.\nCommon values: 1 (no retry), 3 (standard), 5 (aggressive retry).\nSet to -1 for infinite retries (use with extreme caution)."
         },
         "leaseDuration": {
-          "type": "string"
+          "type": "string",
+          "description": "lease_duration: Default time workers have to process a message.\nIf a worker doesn't acknowledge within this time, message returns to queue.\nWorkers can renew leases for longer operations via RenewLease/SendHeartbeat.\nCommon values: 30s (quick tasks), 5m (standard), 30m (long-running).\nBalance between: too short = unnecessary retries, too long = slow failure detection."
         },
         "exclusivityKey": {
-          "type": "string"
-        },
-        "invisibilityDuration": {
-          "type": "string"
+          "type": "string",
+          "description": "exclusivity_key: For EXCLUSIVE queues, this key ensures single-consumer access.\nOnly one worker with a matching exclusivity key can consume from this queue.\nLeave empty for non-exclusive queues.\nUse cases: ordered processing, singleton workers, distributed locks."
         },
         "deadLetterQueueName": {
-          "type": "string"
+          "type": "string",
+          "description": "dead_letter_queue_name: Name of the DLQ for messages that exhaust retries.\nMessages that fail after max_attempts are moved here for investigation.\nNaming convention: \"{original-queue}-dlq\" or \"{original-queue}-errors\"\nAccess DLQ messages via DLQ APIs: GetDLQMessage, ListDLQMessages, RequeueDLQMessage."
         },
         "autoCreateDlq": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "auto_create_dlq: If true, ChronoQueue automatically creates the DLQ if it doesn't exist.\nRecommended: true for production (ensures no messages are lost).\nSet to false if you want to manually control DLQ creation and configuration."
         },
         "schemaId": {
           "type": "string",
-          "title": "Default schema for queue messages"
+          "description": "schema_id: Default schema for validating messages posted to this queue.\nAll messages must conform to this schema (if schema_required is true).\nHelps ensure data quality and catch errors before processing.\nExample: \"order.created.v1\", \"user.profile.v2\"\nRegister schemas via RegisterSchema API."
         },
         "schemaRequired": {
           "type": "boolean",
-          "title": "Require schema validation for messages"
+          "description": "schema_required: If true, all messages must have a valid schema and pass validation.\nMessages without a schema or failing validation are rejected.\nUse in production for critical data pipelines to prevent bad data.\nSet to false for development or when schema validation isn't needed."
         },
         "maxPayloadSize": {
           "type": "integer",
           "format": "int32",
-          "title": "Override default max payload size (bytes)"
+          "description": "max_payload_size: Maximum size of message payload in bytes.\nMessages exceeding this limit are rejected.\nIf not set or 0, uses system default (typically 256KB).\nIncrease for large payloads (e.g., 1MB = 1048576).\nNote: Very large messages impact performance - consider using references instead."
         },
         "allowedContentTypes": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "title": "Allowed MIME types (empty = all allowed)"
+          "description": "allowed_content_types: List of permitted MIME types for message payloads.\nEmpty list = all content types allowed (default).\nExamples: [\"application/json\"], [\"application/json\", \"application/xml\"]\nUse to enforce data format standards across your organization."
+        },
+        "priorityConfig": {
+          "$ref": "#/definitions/v1PriorityConfig",
+          "description": "priority_config: Advanced priority scheduling configuration.\nControls how messages with different priorities are processed.\nMost users can omit this - defaults work well for common cases.\nCustomize for: complex fairness requirements, aging prevention, weighted priorities."
         }
-      }
+      },
+      "description": "QueueMetadata defines the configuration and behavior of a queue.\n\nThis controls:\n- Message processing rules (retries, leases, priorities)\n- Data validation (schemas, content types)\n- Error handling (dead letter queues)\n- Consumer patterns (exclusivity, fairness)\n\nExample - Create a queue for order processing:\n  metadata := \u0026queue.QueueMetadata{\n      Type: queue.QueueType_SIMPLE,\n      DefaultMaxAttempts: 3,\n      LeaseDuration: durationpb.New(5*time.Minute),\n      DeadLetterQueueName: \"order-processing-dlq\",\n      AutoCreateDlq: true,\n      SchemaId: \"order.v1\",\n      SchemaRequired: true,\n      MaxPayloadSize: 1024 * 512,  // 512KB\n      AllowedContentTypes: []string{\"application/json\"},\n  }"
     },
     "v1QueueType": {
       "type": "string",
@@ -1952,7 +2118,8 @@
         "SIMPLE",
         "EXCLUSIVE"
       ],
-      "default": "SIMPLE"
+      "default": "SIMPLE",
+      "description": "QueueType defines the message consumption pattern.\n\nChoose based on your use case:\n- SIMPLE: Most common. Multiple workers can consume in parallel.\n- EXCLUSIVE: Single-consumer queues for ordered processing or exclusive access.\n\n - SIMPLE: Multiple workers can consume messages concurrently (default)\n - EXCLUSIVE: Only one worker can consume from this queue at a time"
     },
     "v1RegisterSchemaRequest": {
       "type": "object",
@@ -2012,19 +2179,20 @@
         "month": {
           "type": "integer",
           "format": "int32",
-          "title": "1-12"
+          "description": "month: Month (1=January, 12=December)."
         },
         "weekday": {
           "type": "integer",
           "format": "int32",
-          "title": "1=Monday, 7=Sunday"
+          "description": "weekday: Day of week (1=Monday, 7=Sunday, ISO 8601)."
         },
         "occurrence": {
           "type": "integer",
           "format": "int32",
-          "title": "1=first, 2=second, -1=last"
+          "title": "occurrence: Which occurrence in the month.\n1 = first, 2 = second, 3 = third, 4 = fourth\n-1 = last (useful when week count varies by month)"
         }
-      }
+      },
+      "description": "RelativeDate represents a holiday defined by weekday occurrence in a month.\n\nExamples:\n  Memorial Day (US): Last Monday of May\n    {month: 5, weekday: 1, occurrence: -1}\n  \n  Thanksgiving (US): 4th Thursday of November\n    {month: 11, weekday: 4, occurrence: 4}\n  \n  Labor Day (US): First Monday of September\n    {month: 9, weekday: 1, occurrence: 1}"
     },
     "v1RenewMessageLeaseResponse": {
       "type": "object",
@@ -2057,12 +2225,15 @@
       "type": "object",
       "properties": {
         "scheduleId": {
-          "type": "string"
+          "type": "string",
+          "title": "schedule_id: Unique identifier for this schedule.\nMust be unique across all schedules in your ChronoQueue instance.\nUsed for updating, pausing, resuming, or deleting the schedule.\nRecommended format: descriptive-name or {system}-{task}-{frequency}"
         },
         "metadata": {
-          "$ref": "#/definitions/v1ScheduleMetadata"
+          "$ref": "#/definitions/v1ScheduleMetadata",
+          "description": "metadata: Schedule configuration and execution state."
         }
-      }
+      },
+      "description": "Schedule represents a recurring message posting pattern.\n\nUse schedules to:\n- Execute tasks at regular intervals (every hour, daily, weekly)\n- Implement business calendar logic (weekdays, holidays, month-end)\n- Create complex scheduling rules (first Monday of month, quarterly reports)\n- Automate maintenance tasks, reports, notifications, batch jobs\n\nTwo scheduling modes:\n1. Cron-based (legacy): Traditional Unix cron expressions\n2. Calendar-based (recommended): Rich business calendar support\n\nExample - Daily report at 9 AM weekdays:\n  schedule := \u0026schedule.Schedule{\n      ScheduleId: \"daily-sales-report\",\n      Metadata: \u0026schedule.Schedule_Metadata{\n          Payload: reportPayload,\n          QueueName: \"report-generator\",\n          CalendarSchedule: \u0026schedule.CalendarSchedule{\n              Type: schedule.CalendarSchedule_BUSINESS_DAYS,\n              Rules: []*schedule.CalendarRule{{\n                  BusinessDays: \u0026schedule.BusinessDaysRule{...},\n                  ExecutionTimes: []*schedule.TimeOfDay{{Hour: 9}},\n              }},\n              Timezone: \"America/New_York\",\n          },\n          Priority: 100,\n          MaxMessages: 1000,  // Safety limit\n      },\n  }\n\nLifecycle:\n- SCHEDULED: Active, posting messages according to schedule\n- PAUSED: Temporarily disabled (can resume later)\n- CANCELED: Permanently stopped\n- ERRORED: Failed to execute (check state_message for details)"
     },
     "v1ScheduleHistory": {
       "type": "object",
@@ -2072,95 +2243,114 @@
           "items": {
             "type": "object",
             "$ref": "#/definitions/v1Message"
-          }
+          },
+          "description": "messages: Messages created by this schedule.\nLimited to recent history (e.g., last 100 executions)."
         },
         "scheduleId": {
-          "type": "string"
+          "type": "string",
+          "description": "schedule_id: The schedule this history belongs to."
         },
         "nextRun": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "next_run: When the schedule will execute next."
         },
         "lastRun": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "last_run: When the schedule last executed."
         },
         "createdAt": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "created_at: When this schedule was created."
         },
         "updatedAt": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "updated_at: When this schedule was last modified."
         }
-      }
+      },
+      "description": "ScheduleHistory captures execution history and state for a schedule.\nUsed by GetScheduleHistory API to show past executions and timing."
     },
     "v1ScheduleMetadata": {
       "type": "object",
       "properties": {
         "payload": {
-          "$ref": "#/definitions/v1Payload"
+          "$ref": "#/definitions/v1Payload",
+          "description": "payload: Template payload for messages created by this schedule.\nEach scheduled execution creates a new message with this payload.\nYou can include template variables that get resolved at execution time."
         },
         "state": {
           "$ref": "#/definitions/v1ScheduleMetadataState"
         },
         "cronSchedule": {
           "type": "string",
-          "title": "legacy cron-based scheduling"
+          "description": "cron_schedule: Unix cron expression (legacy, still supported).\nFormat: \"minute hour day month weekday\"\nExamples:\n  \"0 9 * * 1-5\"     = 9 AM weekdays\n  \"0 */4 * * *\"     = every 4 hours\n  \"0 0 1 * *\"       = first day of month\n  \"*/15 * * * *\"    = every 15 minutes\nLimitation: No timezone support, no business calendar logic."
         },
         "calendarSchedule": {
           "$ref": "#/definitions/v1CalendarSchedule",
-          "title": "new calendar-based scheduling"
+          "description": "calendar_schedule: Rich business calendar support (recommended).\nSupports:\n- Business days, holidays, custom calendars\n- Complex rules (nth weekday of month, last Friday, quarterly)\n- Timezone-aware scheduling\n- Exception handling (skip dates, reschedule)\nSee CalendarSchedule message for full capabilities."
         },
         "queueName": {
-          "type": "string"
+          "type": "string",
+          "description": "queue_name: Target queue where scheduled messages are posted.\nMust be an existing queue or auto-created if allowed.\nMessages inherit queue's retry, lease, and DLQ settings."
         },
         "messageIds": {
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "description": "message_ids: IDs of messages created by this schedule (for tracking/debugging).\nAuto-populated by ChronoQueue. Format: \"{schedule_id}-{timestamp}\"\nUse to correlate schedule executions with processed messages."
         },
         "nextRun": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "next_run: When this schedule will execute next.\nAuto-calculated by ChronoQueue based on schedule_config.\nRead-only from client perspective."
         },
         "lastRun": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "last_run: When this schedule last executed.\nNull if never executed. Useful for monitoring schedule health."
         },
         "createdAt": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "created_at: When this schedule was created."
         },
         "updatedAt": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "updated_at: When this schedule was last modified.\nUpdates when pausing, resuming, or changing configuration."
         },
         "exclusivityKey": {
-          "type": "string"
+          "type": "string",
+          "description": "exclusivity_key: Ensures only one instance of this schedule runs.\nUseful in multi-region deployments to prevent duplicate executions.\nLeave empty if multiple instances can run concurrently."
         },
         "stateMessage": {
-          "type": "string"
+          "type": "string",
+          "title": "state_message: Human-readable status or error message.\nContains error details when state = ERRORED.\nExample: \"Failed to post message: queue 'reports' not found\""
         },
         "priority": {
           "type": "string",
-          "format": "int64"
+          "format": "int64",
+          "description": "priority: Priority for messages created by this schedule.\nInherited by posted messages unless message specifies otherwise.\nCommon values: 100 (high), 50 (normal), 10 (low)."
         },
         "hasMaxMessages": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "has_max_messages: If true, enforces max_messages limit.\nSafety feature to prevent runaway schedules."
         },
         "maxMessages": {
           "type": "string",
-          "format": "int64"
+          "format": "int64",
+          "description": "max_messages: Maximum total messages this schedule can create.\nWhen reached, schedule automatically moves to PAUSED state.\nReset by calling ResumeSchedule. Set to 0 for unlimited.\nUse for: one-time campaigns, limited batch jobs, testing."
         },
         "leaseDuration": {
-          "type": "string"
+          "type": "string",
+          "description": "lease_duration: Override default lease duration for scheduled messages.\nIf not set, uses queue's default lease_duration.\nUseful when scheduled tasks need different processing time than queue default."
         },
         "timezone": {
           "type": "string",
-          "description": "timezone for calendar calculations",
-          "title": "Calendar scheduling metadata"
+          "description": "timezone: Timezone for calendar_schedule calculations.\nIANA timezone format: \"America/New_York\", \"Europe/London\", \"Asia/Tokyo\"\nAffects when \"9 AM\" means and handles DST transitions correctly.\nMust be set when using calendar_schedule."
         },
         "nextRuns": {
           "type": "array",
@@ -2168,9 +2358,10 @@
             "type": "string",
             "format": "date-time"
           },
-          "title": "precomputed next execution times"
+          "description": "next_runs: Precomputed upcoming execution times (for preview/validation).\nPopulated by PreviewSchedule API or ValidateSchedule API.\nShows next N execution times to verify schedule behaves as expected."
         }
-      }
+      },
+      "description": "Metadata contains schedule configuration and execution state."
     },
     "v1ScheduleMetadataState": {
       "type": "string",
@@ -2180,59 +2371,60 @@
         "ERRORED",
         "PAUSED"
       ],
-      "default": "SCHEDULED"
+      "default": "SCHEDULED",
+      "description": "State represents the schedule lifecycle stage.\n\n - SCHEDULED: Active, posting messages per schedule\n - CANCELED: Permanently stopped (terminal state)\n - ERRORED: Failed execution (check state_message for cause)\n - PAUSED: Temporarily disabled (can resume with ResumeSchedule)"
     },
     "v1Schema": {
       "type": "object",
       "properties": {
         "schemaId": {
           "type": "string",
-          "title": "Unique schema identifier"
+          "title": "schema_id: Unique identifier for this schema family.\nAll versions of the same schema share this ID.\nExample: \"order-schema\", \"user-event-schema\""
         },
         "version": {
           "type": "integer",
           "format": "int32",
-          "title": "Schema version number"
+          "title": "version: Schema version number (positive integer).\nIncrement when making changes to the schema.\nSemantic versioning recommended:\n  v1 -\u003e v2: backward compatible changes (add optional fields)\n  v2 -\u003e v3: breaking changes (remove/rename fields, change types)"
         },
         "name": {
           "type": "string",
-          "title": "Human-readable schema name"
+          "title": "name: Human-readable schema name.\nExample: \"Order Validation Schema v2\", \"User Registration Event\""
         },
         "description": {
           "type": "string",
-          "title": "Schema description"
+          "title": "description: Detailed description of what this schema validates.\nInclude changelog for new versions.\nExample: \"v2: Added optional 'discountCode' field. Removed deprecated 'legacyField'.\""
         },
         "content": {
           "type": "string",
-          "title": "JSON Schema content"
+          "title": "content: The actual validation schema.\nFormat depends on content_type.\nFor \"json-schema\": JSON Schema Draft 7 (https://json-schema.org/)\nFor \"protobuf\": Base64-encoded FileDescriptorSet\nSize limit: 1MB"
         },
         "contentType": {
           "type": "string",
-          "title": "Schema type (default: json-schema)"
+          "description": "content_type: Schema format identifier.\nSupported values:\n  \"json-schema\" (default): JSON Schema Draft 7\n  \"protobuf\": Protocol Buffers schema\n  \"avro\": Apache Avro schema\nChronoQueue validates content syntax when registering schema."
         },
         "createdAt": {
           "type": "string",
           "format": "int64",
-          "title": "Creation timestamp (Unix milliseconds)"
+          "description": "created_at: When this schema version was registered (Unix milliseconds).\nAutomatically set by ChronoQueue."
         },
         "updatedAt": {
           "type": "string",
           "format": "int64",
-          "title": "Last update timestamp (Unix milliseconds)"
+          "description": "updated_at: When this schema was last modified (Unix milliseconds).\nSchemas are immutable after creation; updates create new versions.\nThis tracks metadata changes (name, description, is_active)."
         },
         "isActive": {
           "type": "boolean",
-          "title": "Whether this schema version is active"
+          "description": "is_active: Whether this schema version can be used for validation.\nSet to false to deprecate old versions.\nQueues configured with this schema_id will use the highest active version.\nUse case: Deactivate v1 after all clients migrate to v2."
         },
         "metadata": {
           "type": "object",
           "additionalProperties": {
             "type": "string"
           },
-          "title": "Additional metadata"
+          "title": "metadata: Additional schema metadata.\nUse for:\n  \"owner\": \"team-checkout\"\n  \"deprecation_date\": \"2025-01-01\"\n  \"changelog_url\": \"https://...\"\n  \"contact\": \"checkout-team@example.com\""
         }
       },
-      "title": "Schema defines a message validation schema"
+      "description": "Schema defines a message validation schema.\n\nChronoQueue validates message payloads against schemas before accepting them.\nThis prevents invalid messages from entering your queues.\n\nSchema evolution:\n1. Create v1: Initial schema\n2. Create v2: Add optional fields (backward compatible)\n3. Update producers to v2\n4. Update consumers to v2\n5. Deprecate v1 when all clients upgraded\n\nExample - Order schema:\n  schema := \u0026schema.Schema{\n      SchemaId: \"order-schema\",\n      Version: 1,\n      Name: \"Order Validation Schema\",\n      Content: `{\n          \"type\": \"object\",\n          \"required\": [\"orderId\", \"customerId\", \"items\"],\n          \"properties\": {\n              \"orderId\": {\"type\": \"string\", \"pattern\": \"^ORD-[0-9]+$\"},\n              \"customerId\": {\"type\": \"string\"},\n              \"items\": {\n                  \"type\": \"array\",\n                  \"minItems\": 1,\n                  \"items\": {\n                      \"type\": \"object\",\n                      \"required\": [\"productId\", \"quantity\"],\n                      \"properties\": {\n                          \"productId\": {\"type\": \"string\"},\n                          \"quantity\": {\"type\": \"integer\", \"minimum\": 1}\n                      }\n                  }\n              },\n              \"totalAmount\": {\"type\": \"number\", \"minimum\": 0}\n          }\n      }`,\n      ContentType: \"json-schema\",\n      IsActive: true,\n  }\n\nThen reference in Queue:\n  queue := \u0026queue.Queue{\n      Name: \"order-processing\",\n      Metadata: \u0026queue.QueueMetadata{\n          SchemaId: \"order-schema\",\n          SchemaRequired: true,  // Reject invalid messages\n      },\n  }"
     },
     "v1SchemaInfo": {
       "type": "object",
@@ -2287,19 +2479,20 @@
         "hour": {
           "type": "integer",
           "format": "int32",
-          "title": "0-23"
+          "description": "hour: Hour of day (0-23), 24-hour format."
         },
         "minute": {
           "type": "integer",
           "format": "int32",
-          "title": "0-59"
+          "title": "minute: Minute of hour (0-59). Default: 0"
         },
         "second": {
           "type": "integer",
           "format": "int32",
-          "title": "0-59 (optional, default: 0)"
+          "description": "second: Second of minute (0-59). Default: 0\nMost schedules don't need second precision."
         }
-      }
+      },
+      "description": "TimeOfDay specifies a time within a day (wall clock time).\n\nExamples:\n  9 AM: {hour: 9}\n  2:30 PM: {hour: 14, minute: 30}\n  Midnight: {hour: 0}\n  11:59:59 PM: {hour: 23, minute: 59, second: 59}"
     },
     "v1ValidateCalendarScheduleRequest": {
       "type": "object",
@@ -2356,25 +2549,25 @@
       "properties": {
         "field": {
           "type": "string",
-          "title": "Field path (e.g., \"payload.data.orderId\")"
+          "title": "field: JSON path to the field that failed validation.\nUses dot notation: \"payload.data.orderId\", \"payload.data.items[0].productId\"\nRoot level: \"payload.data\""
         },
         "errorCode": {
           "type": "string",
-          "title": "Error code (e.g., REQUIRED_FIELD_MISSING)"
+          "description": "error_code: Standardized error code from ErrorCode enum.\nEnables programmatic error handling across different schema types."
         },
         "message": {
           "type": "string",
-          "title": "Human-readable error message"
+          "title": "message: Human-readable error explanation.\nSafe to show to end users or log for debugging.\nExample: \"Field 'orderId' must match pattern '^ORD-[0-9]+$', got 'invalid'\""
         },
         "details": {
           "type": "object",
           "additionalProperties": {
             "type": "string"
           },
-          "title": "Additional error details"
+          "title": "details: Additional context about the error.\nContents depend on error_code:\n  INVALID_TYPE: {\"expected\": \"integer\", \"actual\": \"string\"}\n  PATTERN_MISMATCH: {\"pattern\": \"^[A-Z]+$\", \"value\": \"abc\"}\n  VALUE_OUT_OF_RANGE: {\"min\": \"0\", \"max\": \"100\", \"value\": \"150\"}"
         }
       },
-      "title": "ValidationError provides detailed error information"
+      "description": "ValidationError provides detailed information about a validation failure.\n\nEach error describes:\n- Which field failed (field path)\n- Why it failed (error_code)\n- Human-readable explanation (message)\n- Additional context (details)\n\nExample errors:\n  Field \"payload.data.orderId\" - REQUIRED_FIELD_MISSING:\n    {field: \"payload.data.orderId\", error_code: \"REQUIRED_FIELD_MISSING\",\n     message: \"Required field 'orderId' is missing\"}\n  \n  Field \"payload.data.quantity\" - INVALID_TYPE:\n    {field: \"payload.data.quantity\", error_code: \"INVALID_TYPE\",\n     message: \"Expected integer, got string\",\n     details: {\"expected\": \"integer\", \"actual\": \"string\"}}"
     },
     "v1ValidationIssue": {
       "type": "object",
@@ -2409,19 +2602,20 @@
             "type": "integer",
             "format": "int32"
           },
-          "title": "1=Monday, 7=Sunday"
+          "title": "days_of_week: Which days of the week to execute.\nISO 8601 format: 1=Monday, 2=Tuesday, ..., 7=Sunday\nEmpty = all days (equivalent to daily schedule)"
         },
         "weekInterval": {
           "type": "integer",
           "format": "int32",
-          "title": "every N weeks (default: 1)"
+          "title": "week_interval: Execute every Nth week.\n1 = every week, 2 = every other week (bi-weekly), 4 = monthly (every 4 weeks)\nDefault: 1"
         },
         "startWeek": {
           "type": "string",
           "format": "date-time",
-          "title": "reference week for intervals"
+          "description": "start_week: Reference date for week_interval calculation.\nWeek interval counts from this date's week.\nExample: bi-weekly schedule starting Jan 1, 2024 executes on weeks of Jan 1, Jan 15, Jan 29, etc.\nIf not set, uses schedule creation date."
         }
-      }
+      },
+      "description": "WeeklyRule schedules execution on specific days of the week.\n\nExamples:\n  Every Monday and Friday:\n    {days_of_week: [1, 5]}\n  \n  Every weekday (Mon-Fri):\n    {days_of_week: [1, 2, 3, 4, 5]}\n  \n  Every other week on Wednesday:\n    {days_of_week: [3], week_interval: 2, start_week: \"2024-01-03\"}"
     },
     "v1YearlyRule": {
       "type": "object",
@@ -2429,18 +2623,19 @@
         "month": {
           "type": "integer",
           "format": "int32",
-          "title": "month (1-12)"
+          "description": "month: Month of the year (1=January, 12=December)."
         },
         "day": {
           "type": "integer",
           "format": "int32",
-          "title": "day of month (1-31)"
+          "description": "day: Day of the month (1-31).\nMust be valid for the specified month."
         },
         "adjustForLeapYear": {
           "type": "boolean",
-          "title": "handle Feb 29 on non-leap years"
+          "title": "adjust_for_leap_year: How to handle Feb 29 on non-leap years.\nIf true: executes on Feb 28 on non-leap years\nIf false: skips execution on non-leap years"
         }
-      }
+      },
+      "description": "YearlyRule schedules execution once per year on a specific date.\n\nExamples:\n  January 1st (New Year's Day):\n    {month: 1, day: 1}\n  \n  December 25th (Christmas):\n    {month: 12, day: 25}\n  \n  February 29th (handles non-leap years):\n    {month: 2, day: 29, adjust_for_leap_year: true}"
     }
   }
 }

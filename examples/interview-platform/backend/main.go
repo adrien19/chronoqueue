@@ -188,11 +188,10 @@ func initializeQueues(ctx context.Context, qClient *client.ChronoQueueClient) er
 	}
 
 	queueOpts := client.QueueOptions{
-		Type:                 0, // SIMPLE queue
-		DequeueAttempts:      3,
-		LeaseDuration:        "30s",
-		InvisibilityDuration: "5s",
-		AutoCreateDLQ:        true,
+		Type:            0, // SIMPLE queue
+		DequeueAttempts: 3,
+		LeaseDuration:   "30s",
+		AutoCreateDLQ:   true,
 	}
 
 	for _, queueName := range queueNames {

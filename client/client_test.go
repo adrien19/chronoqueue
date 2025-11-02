@@ -505,8 +505,7 @@ func TestChronoQueueClient_CreateQueue(t *testing.T) {
 				ctx:  context.Background(),
 				name: "validQueueName",
 				queueOptions: QueueOptions{
-					LeaseDuration:        "15s",
-					InvisibilityDuration: "10s",
+					LeaseDuration: "15s",
 				},
 			},
 			want: &queueservice_pb.CreateQueueResponse{
@@ -520,8 +519,7 @@ func TestChronoQueueClient_CreateQueue(t *testing.T) {
 				ctx:  context.Background(),
 				name: "",
 				queueOptions: QueueOptions{
-					LeaseDuration:        "15s",
-					InvisibilityDuration: "10s",
+					LeaseDuration: "15s",
 				},
 			},
 			want:    nil,
@@ -571,8 +569,7 @@ func TestChronoQueueClient_DeleteQueue(t *testing.T) {
 				ctx:  context.Background(),
 				name: "validQueueName",
 				queueOptions: QueueOptions{
-					LeaseDuration:        "15s",
-					InvisibilityDuration: "10s",
+					LeaseDuration: "15s",
 				},
 			},
 			want: &queueservice_pb.DeleteQueueResponse{
@@ -586,8 +583,7 @@ func TestChronoQueueClient_DeleteQueue(t *testing.T) {
 				ctx:  context.Background(),
 				name: "",
 				queueOptions: QueueOptions{
-					LeaseDuration:        "15s",
-					InvisibilityDuration: "10s",
+					LeaseDuration: "15s",
 				},
 			},
 			want:    nil,
@@ -655,8 +651,7 @@ func TestChronoQueueClient_PostMessage(t *testing.T) {
 				queue:     "",
 				messageId: "validMessageId",
 				messageOptions: MessageOptions{
-					LeaseDuration:        "3s",
-					InvisibilityDuration: "0s",
+					LeaseDuration: "3s",
 				},
 			},
 			want:    nil,
@@ -669,8 +664,7 @@ func TestChronoQueueClient_PostMessage(t *testing.T) {
 				queue:     "validQueueName",
 				messageId: "",
 				messageOptions: MessageOptions{
-					LeaseDuration:        "3s",
-					InvisibilityDuration: "0s",
+					LeaseDuration: "3s",
 				},
 			},
 			want:    nil,
@@ -683,22 +677,7 @@ func TestChronoQueueClient_PostMessage(t *testing.T) {
 				queue:     "validQueueName",
 				messageId: "validMessageId",
 				messageOptions: MessageOptions{
-					LeaseDuration:        "invalidDuration",
-					InvisibilityDuration: "5m",
-				},
-			},
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name: "Failed Message Posting with Invalid Visibility Timeout",
-			args: args{
-				ctx:       context.Background(),
-				queue:     "validQueueName",
-				messageId: "validMessageId",
-				messageOptions: MessageOptions{
-					LeaseDuration:        "10s",
-					InvisibilityDuration: "invalidTimeout",
+					LeaseDuration: "invalidDuration",
 				},
 			},
 			want:    nil,
@@ -909,7 +888,7 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 			tt.setup(&tt.fields, client)
 
 			// Use a separate goroutine as manageHeartbeats is blocking
-			go client.manageHeartbeats(tt.args.ctx, tt.args.queueName, tt.args.messageId)
+			go client.manageHeartbeats(tt.args.ctx, tt.args.queueName, tt.args.messageId, "")
 
 			// Add a small sleep to allow for asynchronous operations to execute
 			// Note: This might need to be adjusted based on actual behavior
@@ -1293,7 +1272,7 @@ func TestChronoQueueClient_AcknowledgeMessage(t *testing.T) {
 			}
 			defer client.Close()
 
-			got, err := client.AcknowledgeMessage(tt.args.ctx, tt.args.queue, tt.args.messageId, tt.args.state)
+			got, err := client.AcknowledgeMessage(tt.args.ctx, tt.args.queue, tt.args.messageId, tt.args.state, "")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.AcknowledgeMessage() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -1353,7 +1332,7 @@ func TestChronoQueueClient_SendMessageHeartbeat(t *testing.T) {
 			}
 			defer client.Close()
 
-			got, err := client.SendMessageHeartbeat(tt.args.ctx, tt.args.queueName, tt.args.messageId)
+			got, err := client.SendMessageHeartbeat(tt.args.ctx, tt.args.queueName, tt.args.messageId, "")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.SendMessageHeartbeat() error = %v, wantErr %v", err, tt.wantErr)
 				return

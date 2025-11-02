@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
@@ -60,11 +61,20 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 // customErrorHandler provides custom error handling for the gateway
 func customErrorHandler(logger *log.Logger) runtime.ErrorHandlerFunc {
 	return func(ctx context.Context, mux *runtime.ServeMux, marshaler runtime.Marshaler, w http.ResponseWriter, r *http.Request, err error) {
-		logger.ErrorWithFields("Gateway error",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"error", err,
-		)
+		// Check if this is a NotFound error - common for unimplemented endpoints
+		// Log at DEBUG level instead of ERROR to reduce noise
+		if err != nil && strings.Contains(err.Error(), "NotFound") {
+			logger.DebugWithFields("Gateway endpoint not found",
+				"method", r.Method,
+				"path", r.URL.Path,
+			)
+		} else {
+			logger.ErrorWithFields("Gateway error",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"error", err,
+			)
+		}
 
 		// Use the default error handler but log the error
 		runtime.DefaultHTTPErrorHandler(ctx, mux, marshaler, w, r, err)

@@ -3,11 +3,12 @@ package repository
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis"
 	"github.com/redis/go-redis/v9"
+	tc_redis "github.com/testcontainers/testcontainers-go/modules/redis"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -20,28 +21,40 @@ import (
 )
 
 var (
-	redisServer *miniredis.Miniredis
-	redisClient *redis.Client
+	redisContainer *tc_redis.RedisContainer
+	redisClient    *redis.Client
 )
 
-func mockRedis() *miniredis.Miniredis {
-	s, err := miniredis.Run()
+func setup(t *testing.T) {
+	ctx := context.Background()
+	var err error
+	redisContainer, err = tc_redis.Run(ctx, "redis:7.2.4")
 	if err != nil {
-		panic(err)
+		t.Fatalf("Failed to start Redis container: %v", err)
 	}
 
-	return s
-}
-
-func setup() {
-	redisServer = mockRedis()
+	endpoint, err := redisContainer.Endpoint(ctx, "redis")
+	if err != nil {
+		_ = redisContainer.Terminate(ctx)
+		t.Fatalf("Failed to get Redis endpoint: %v", err)
+	}
+	// Remove redis:// prefix if present
+	endpoint = strings.TrimPrefix(endpoint, "redis://")
 	redisClient = redis.NewClient(&redis.Options{
-		Addr: redisServer.Addr(),
+		Addr: endpoint,
 	})
 }
 
-func teardown() {
-	redisServer.Close()
+func teardown(t *testing.T) {
+	ctx := context.Background()
+	if redisContainer != nil {
+		if err := redisContainer.Terminate(ctx); err != nil {
+			t.Fatalf("Failed to terminate Redis container: %v", err)
+		}
+	}
+	if redisClient != nil {
+		_ = redisClient.Close()
+	}
 }
 
 func TestNewQueueStorage(t *testing.T) {
@@ -68,8 +81,8 @@ func TestNewQueueStorage(t *testing.T) {
 }
 
 func Test_storage_CreateQueue(t *testing.T) {
-	setup()
-	defer teardown()
+	setup(t)
+	defer teardown(t)
 
 	// Create a proper storage instance for testing (without background workers)
 	logger := log.NewLogger()
@@ -141,8 +154,8 @@ func Test_storage_CreateQueue(t *testing.T) {
 }
 
 func Test_storage_DeleteQueue(t *testing.T) {
-	setup()
-	defer teardown()
+	setup(t)
+	defer teardown(t)
 
 	// Create a proper storage instance for testing (without background workers)
 	logger := log.NewLogger()
@@ -212,8 +225,8 @@ func Test_storage_DeleteQueue(t *testing.T) {
 }
 
 func Test_storage_CreateQueueMessage(t *testing.T) {
-	setup()
-	defer teardown()
+	setup(t)
+	defer teardown(t)
 
 	type args struct {
 		ctx     context.Context
@@ -292,8 +305,8 @@ func Test_storage_CreateQueueMessage(t *testing.T) {
 }
 
 func Test_storage_GetQueueMessage(t *testing.T) {
-	setup()
-	defer teardown()
+	setup(t)
+	defer teardown(t)
 
 	type args struct {
 		ctx     context.Context
@@ -335,19 +348,17 @@ func Test_storage_GetQueueMessage(t *testing.T) {
 		return
 	}
 
-	// Second, directly set up a message in PENDING state for testing
-	// We bypass CreateQueueMessage to avoid INVISIBLE state complexity in unit tests
+	// Second, directly set up a message in PENDING state and add to the stream for testing
 	testMessageKey := "test_queue:test_message_id:meta"
 	testMessage := &message_pb.Message{
 		MessageId: "test_message_id",
 		Metadata: &message_pb.Message_Metadata{
 			Payload:  &common_pb.Payload{},
 			State:    message_pb.Message_Metadata_PENDING,
-			Priority: 0,
+			Priority: 5,
 		},
 	}
 
-	// Serialize and store the message metadata (using HSet for hash storage)
 	metadataJSON, err := protojson.Marshal(testMessage.Metadata)
 	if err != nil {
 		t.Errorf("Failed to marshal message metadata: %v", err)
@@ -359,14 +370,20 @@ func Test_storage_GetQueueMessage(t *testing.T) {
 		return
 	}
 
-	// Add message to the queue sorted set with priority score
-	priorityScore := float64(100 * 1e10) // MaxPriority-based score
-	err = redisClient.ZAdd(context.TODO(), "queue:test_queue", redis.Z{
-		Score:  priorityScore,
-		Member: "test_message_id",
-	}).Err()
+	// Add message to the stream directly (simulate scheduler)
+	streamKey := as.(*storage).streamKey("test_queue", 5)
+	groupKey := as.(*storage).groupKey("test_queue")
+	_ = redisClient.XGroupCreateMkStream(context.TODO(), streamKey, groupKey, "0").Err()
+	_, err = redisClient.XAdd(context.TODO(), &redis.XAddArgs{
+		Stream: streamKey,
+		Values: map[string]interface{}{
+			"message_id":     "test_message_id",
+			"priority":       5,
+			"scheduled_time": time.Now().UnixMilli(),
+		},
+	}).Result()
 	if err != nil {
-		t.Errorf("Failed to add message to queue: %v", err)
+		t.Errorf("Failed to add message to stream: %v", err)
 		return
 	}
 
@@ -385,8 +402,8 @@ func Test_storage_GetQueueMessage(t *testing.T) {
 }
 
 func Test_storage_DeleteQueueMessage(t *testing.T) {
-	setup()
-	defer teardown()
+	setup(t)
+	defer teardown(t)
 
 	type args struct {
 		ctx       context.Context
@@ -451,8 +468,8 @@ func Test_storage_DeleteQueueMessage(t *testing.T) {
 }
 
 func Test_storage_AcknowledgeMessage(t *testing.T) {
-	setup()
-	defer teardown()
+	setup(t)
+	defer teardown(t)
 
 	type args struct {
 		ctx     context.Context
@@ -530,8 +547,8 @@ func Test_storage_AcknowledgeMessage(t *testing.T) {
 }
 
 func Test_storage_RenewMessageLease(t *testing.T) {
-	setup()
-	defer teardown()
+	setup(t)
+	defer teardown(t)
 
 	type args struct {
 		ctx     context.Context
@@ -644,8 +661,8 @@ func Test_storage_RenewMessageLease(t *testing.T) {
 }
 
 func Test_storage_PeekQueueMessages(t *testing.T) {
-	setup()
-	defer teardown()
+	setup(t)
+	defer teardown(t)
 
 	type args struct {
 		ctx     context.Context
@@ -686,20 +703,41 @@ func Test_storage_PeekQueueMessages(t *testing.T) {
 		return
 	}
 
-	// Second, add messages to the queue.
-	_, err = as.CreateQueueMessage(context.TODO(), &queueservice_pb.PostMessageRequest{
-		QueueName: "test_queue",
-		Message: &message_pb.Message{
-			MessageId: "test_message_id",
-			Metadata: &message_pb.Message_Metadata{
-				Payload:  &common_pb.Payload{},
-				State:    message_pb.Message_Metadata_PENDING,
-				Priority: time.Now().Unix(),
-			},
+	// Second, add message directly to the stream (simulate scheduler)
+	testMessageKey := "test_queue:test_message_id:meta"
+	testMessage := &message_pb.Message{
+		MessageId: "test_message_id",
+		Metadata: &message_pb.Message_Metadata{
+			Payload:  &common_pb.Payload{},
+			State:    message_pb.Message_Metadata_PENDING,
+			Priority: 5,
 		},
-	}, nil)
+	}
+
+	metadataJSON, err := protojson.Marshal(testMessage.Metadata)
 	if err != nil {
-		t.Errorf("storage.CreateQueueMessage() error = %v", err)
+		t.Errorf("Failed to marshal message metadata: %v", err)
+		return
+	}
+	err = redisClient.HSet(context.TODO(), testMessageKey, "metadata", metadataJSON).Err()
+	if err != nil {
+		t.Errorf("Failed to set message metadata in Redis: %v", err)
+		return
+	}
+
+	streamKey := as.(*storage).streamKey("test_queue", 5)
+	groupKey := as.(*storage).groupKey("test_queue")
+	_ = redisClient.XGroupCreateMkStream(context.TODO(), streamKey, groupKey, "0").Err()
+	_, err = redisClient.XAdd(context.TODO(), &redis.XAddArgs{
+		Stream: streamKey,
+		Values: map[string]interface{}{
+			"message_id":     "test_message_id",
+			"priority":       5,
+			"scheduled_time": time.Now().UnixMilli(),
+		},
+	}).Result()
+	if err != nil {
+		t.Errorf("Failed to add message to stream: %v", err)
 		return
 	}
 
@@ -718,8 +756,8 @@ func Test_storage_PeekQueueMessages(t *testing.T) {
 }
 
 func Test_storage_GetQueueState(t *testing.T) {
-	setup()
-	defer teardown()
+	setup(t)
+	defer teardown(t)
 
 	type args struct {
 		ctx     context.Context
@@ -780,13 +818,23 @@ func Test_storage_GetQueueState(t *testing.T) {
 		return
 	}
 
-	// Add to sorted set
-	err = redisClient.ZAdd(context.TODO(), "queue:test_queue", redis.Z{
-		Score:  float64(100 * 1e10),
-		Member: "test_message_id",
-	}).Err()
+	// Add to stream instead of sorted set
+	streamKey := as.(*storage).streamKey("test_queue", 5)
+	groupKey := as.(*storage).groupKey("test_queue")
+	err = as.(*storage).ensureConsumerGroup(context.TODO(), streamKey, groupKey)
 	if err != nil {
-		t.Errorf("Failed to add message to queue: %v", err)
+		t.Errorf("Failed to create consumer group: %v", err)
+		return
+	}
+	_, err = redisClient.XAdd(context.TODO(), &redis.XAddArgs{
+		Stream: streamKey,
+		Values: map[string]interface{}{
+			"message_id": "test_message_id",
+			"priority":   5,
+		},
+	}).Result()
+	if err != nil {
+		t.Errorf("Failed to add message to stream: %v", err)
 		return
 	}
 

@@ -1,4 +1,7 @@
-// ./proto/schedule/v1/schedule.proto
+// ChronoQueue Schedule API v1
+//
+// This file defines scheduling structures for recurring message execution.
+// Schedules enable cron-like and calendar-based task automation.
 
 syntax = "proto3";
 package chronoqueue.api.schedule.v1;
@@ -10,187 +13,701 @@ import "google/protobuf/duration.proto";
 import "proto/common/v1/common.proto";
 import "proto/message/v1/message.proto";
 
-
+// Schedule represents a recurring message posting pattern.
+//
+// Use schedules to:
+// - Execute tasks at regular intervals (every hour, daily, weekly)
+// - Implement business calendar logic (weekdays, holidays, month-end)
+// - Create complex scheduling rules (first Monday of month, quarterly reports)
+// - Automate maintenance tasks, reports, notifications, batch jobs
+//
+// Two scheduling modes:
+// 1. Cron-based (legacy): Traditional Unix cron expressions
+// 2. Calendar-based (recommended): Rich business calendar support
+//
+// Example - Daily report at 9 AM weekdays:
+//   schedule := &schedule.Schedule{
+//       ScheduleId: "daily-sales-report",
+//       Metadata: &schedule.Schedule_Metadata{
+//           Payload: reportPayload,
+//           QueueName: "report-generator",
+//           CalendarSchedule: &schedule.CalendarSchedule{
+//               Type: schedule.CalendarSchedule_BUSINESS_DAYS,
+//               Rules: []*schedule.CalendarRule{{
+//                   BusinessDays: &schedule.BusinessDaysRule{...},
+//                   ExecutionTimes: []*schedule.TimeOfDay{{Hour: 9}},
+//               }},
+//               Timezone: "America/New_York",
+//           },
+//           Priority: 100,
+//           MaxMessages: 1000,  // Safety limit
+//       },
+//   }
+//
+// Lifecycle:
+// - SCHEDULED: Active, posting messages according to schedule
+// - PAUSED: Temporarily disabled (can resume later)
+// - CANCELED: Permanently stopped
+// - ERRORED: Failed to execute (check state_message for details)
 message Schedule {
+    // schedule_id: Unique identifier for this schedule.
+    // Must be unique across all schedules in your ChronoQueue instance.
+    // Used for updating, pausing, resuming, or deleting the schedule.
+    // Recommended format: descriptive-name or {system}-{task}-{frequency}
     string schedule_id = 1;
+    
+    // Metadata contains schedule configuration and execution state.
     message Metadata {
+        // payload: Template payload for messages created by this schedule.
+        // Each scheduled execution creates a new message with this payload.
+        // You can include template variables that get resolved at execution time.
         chronoqueue.api.common.v1.Payload payload = 1;
+        
+        // State represents the schedule lifecycle stage.
         enum State {
-            SCHEDULED = 0;
-            CANCELED = 1;
-            ERRORED = 2;
-            PAUSED = 3;
+            SCHEDULED = 0;  // Active, posting messages per schedule
+            CANCELED = 1;   // Permanently stopped (terminal state)
+            ERRORED = 2;    // Failed execution (check state_message for cause)
+            PAUSED = 3;     // Temporarily disabled (can resume with ResumeSchedule)
         }
         Schedule.Metadata.State state = 2;
         
-        // Schedule configuration - supports both cron and calendar scheduling
+        // schedule_config: Defines WHEN messages are posted.
+        // Choose one: cron_schedule (simple) or calendar_schedule (advanced).
         oneof schedule_config {
-            string cron_schedule = 3;           // legacy cron-based scheduling
-            CalendarSchedule calendar_schedule = 16;  // new calendar-based scheduling
+            // cron_schedule: Unix cron expression (legacy, still supported).
+            // Format: "minute hour day month weekday"
+            // Examples:
+            //   "0 9 * * 1-5"     = 9 AM weekdays
+            //   "0 */4 * * *"     = every 4 hours
+            //   "0 0 1 * *"       = first day of month
+            //   "*/15 * * * *"    = every 15 minutes
+            // Limitation: No timezone support, no business calendar logic.
+            string cron_schedule = 3;
+            
+            // calendar_schedule: Rich business calendar support (recommended).
+            // Supports:
+            // - Business days, holidays, custom calendars
+            // - Complex rules (nth weekday of month, last Friday, quarterly)
+            // - Timezone-aware scheduling
+            // - Exception handling (skip dates, reschedule)
+            // See CalendarSchedule message for full capabilities.
+            CalendarSchedule calendar_schedule = 16;
         }
         
+        // queue_name: Target queue where scheduled messages are posted.
+        // Must be an existing queue or auto-created if allowed.
+        // Messages inherit queue's retry, lease, and DLQ settings.
         string queue_name = 4;
+        
+        // message_ids: IDs of messages created by this schedule (for tracking/debugging).
+        // Auto-populated by ChronoQueue. Format: "{schedule_id}-{timestamp}"
+        // Use to correlate schedule executions with processed messages.
         repeated string message_ids = 5;
+        
+        // next_run: When this schedule will execute next.
+        // Auto-calculated by ChronoQueue based on schedule_config.
+        // Read-only from client perspective.
         google.protobuf.Timestamp next_run = 6;
+        
+        // last_run: When this schedule last executed.
+        // Null if never executed. Useful for monitoring schedule health.
         google.protobuf.Timestamp last_run = 7;
+        
+        // created_at: When this schedule was created.
         google.protobuf.Timestamp created_at = 8;
+        
+        // updated_at: When this schedule was last modified.
+        // Updates when pausing, resuming, or changing configuration.
         google.protobuf.Timestamp updated_at = 9;
+        
+        // exclusivity_key: Ensures only one instance of this schedule runs.
+        // Useful in multi-region deployments to prevent duplicate executions.
+        // Leave empty if multiple instances can run concurrently.
         string exclusivity_key = 10;
+        
+        // state_message: Human-readable status or error message.
+        // Contains error details when state = ERRORED.
+        // Example: "Failed to post message: queue 'reports' not found"
         string state_message = 11;
+        
+        // priority: Priority for messages created by this schedule.
+        // Inherited by posted messages unless message specifies otherwise.
+        // Common values: 100 (high), 50 (normal), 10 (low).
         int64 priority = 12;
+        
+        // has_max_messages: If true, enforces max_messages limit.
+        // Safety feature to prevent runaway schedules.
         bool has_max_messages = 13;
+        
+        // max_messages: Maximum total messages this schedule can create.
+        // When reached, schedule automatically moves to PAUSED state.
+        // Reset by calling ResumeSchedule. Set to 0 for unlimited.
+        // Use for: one-time campaigns, limited batch jobs, testing.
         int64 max_messages = 14;
+        
+        // lease_duration: Override default lease duration for scheduled messages.
+        // If not set, uses queue's default lease_duration.
+        // Useful when scheduled tasks need different processing time than queue default.
         google.protobuf.Duration lease_duration = 15;
         
-        // Calendar scheduling metadata
-        string timezone = 17;                   // timezone for calendar calculations
-        repeated google.protobuf.Timestamp next_runs = 18;  // precomputed next execution times
+        // timezone: Timezone for calendar_schedule calculations.
+        // IANA timezone format: "America/New_York", "Europe/London", "Asia/Tokyo"
+        // Affects when "9 AM" means and handles DST transitions correctly.
+        // Must be set when using calendar_schedule.
+        string timezone = 17;
+        
+        // next_runs: Precomputed upcoming execution times (for preview/validation).
+        // Populated by PreviewSchedule API or ValidateSchedule API.
+        // Shows next N execution times to verify schedule behaves as expected.
+        repeated google.protobuf.Timestamp next_runs = 18;
     }
+    
+    // metadata: Schedule configuration and execution state.
     Schedule.Metadata metadata = 2;
 }
 
+// ScheduleHistory captures execution history and state for a schedule.
+// Used by GetScheduleHistory API to show past executions and timing.
 message ScheduleHistory {
+    // messages: Messages created by this schedule.
+    // Limited to recent history (e.g., last 100 executions).
     repeated chronoqueue.api.message.v1.Message messages = 1;
+    
+    // schedule_id: The schedule this history belongs to.
     string schedule_id = 2;
+    
+    // next_run: When the schedule will execute next.
     google.protobuf.Timestamp next_run = 3;
+    
+    // last_run: When the schedule last executed.
     google.protobuf.Timestamp last_run = 4;
+    
+    // created_at: When this schedule was created.
     google.protobuf.Timestamp created_at = 5;
+    
+    // updated_at: When this schedule was last modified.
     google.protobuf.Timestamp updated_at = 6;
 }
 
-// Calendar-based scheduling definitions
+// CalendarSchedule defines rich business calendar-based scheduling.
+//
+// Supports complex scheduling patterns:
+// - Business days only (skip weekends and holidays)
+// - Relative dates (first Monday of month, last Friday)
+// - Custom calendars per region/country
+// - Exception handling (skip/reschedule specific dates)
+// - Multiple execution times per day
+//
+// Example - Monthly reports on first business day at 8 AM and 5 PM:
+//   calendar := &schedule.CalendarSchedule{
+//       Type: schedule.CalendarSchedule_BUSINESS_DAYS,
+//       Rules: []*schedule.CalendarRule{{
+//           BusinessDays: &schedule.BusinessDaysRule{
+//               BusinessCalendarId: "us-holidays",
+//           },
+//           ExecutionTimes: []*schedule.TimeOfDay{
+//               {Hour: 8, Minute: 0},
+//               {Hour: 17, Minute: 0},
+//           },
+//       }},
+//       Timezone: "America/New_York",
+//       BusinessCalendar: usHolidaysCalendar,
+//   }
+//
+// Example - Quarterly board meeting (last Friday of Mar/Jun/Sep/Dec at 2 PM):
+//   calendar := &schedule.CalendarSchedule{
+//       Type: schedule.CalendarSchedule_MONTHLY,
+//       Rules: []*schedule.CalendarRule{{
+//           Monthly: &schedule.MonthlyRule{
+//               DayType: schedule.MonthlyRule_LAST_WEEKDAY,
+//               DayValue: 5,  // Friday
+//               Months: []int32{3, 6, 9, 12},  // Q1, Q2, Q3, Q4
+//           },
+//           ExecutionTimes: []*schedule.TimeOfDay{{Hour: 14}},
+//       }},
+//       Timezone: "America/Los_Angeles",
+//   }
 message CalendarSchedule {
+    // ScheduleType categorizes the primary scheduling pattern.
+    // Determines which rule types are applicable.
     enum ScheduleType {
-        MONTHLY = 0;
-        WEEKLY = 1;
-        DAILY = 2;
-        YEARLY = 3;
-        BUSINESS_DAYS = 4;
-        CUSTOM = 5;
+        MONTHLY = 0;        // Executes monthly (1st of month, last Friday, etc.)
+        WEEKLY = 1;         // Executes weekly (every Monday, bi-weekly, etc.)
+        DAILY = 2;          // Executes daily (every day, weekdays only, etc.)
+        YEARLY = 3;         // Executes yearly (birthdays, anniversaries, annual reports)
+        BUSINESS_DAYS = 4;  // Executes on business days (respects holidays/weekends)
+        CUSTOM = 5;         // Custom logic via expression language
     }
     
+    // type: Primary scheduling pattern.
+    // Constrains which rule types can be used in rules field.
     ScheduleType type = 1;
+    
+    // rules: Specific scheduling rules (when to execute).
+    // Multiple rules = union of all matching times.
+    // Example: Two rules for "weekdays at 9 AM" and "weekdays at 5 PM"
     repeated CalendarRule rules = 2;
+    
+    // timezone: IANA timezone for all time calculations.
+    // Examples: "America/New_York", "Europe/London", "Asia/Tokyo"
+    // Affects DST transitions, date boundaries, execution times.
+    // Required for calendar schedules.
     string timezone = 3;
+    
+    // business_calendar: Holiday and weekend definitions.
+    // Used by BUSINESS_DAYS schedules to skip non-working days.
+    // Can include country-specific holidays, custom company holidays.
     BusinessCalendar business_calendar = 4;
+    
+    // exceptions: Override schedule for specific dates.
+    // Use cases:
+    // - Skip execution during maintenance windows
+    // - Reschedule monthly report when month-end is holiday
+    // - Add extra execution for one-time events
     repeated CalendarException exceptions = 5;
 }
 
+// CalendarRule defines a specific scheduling pattern within a CalendarSchedule.
+// Each rule specifies WHEN (date pattern) and WHAT TIME (execution_times) to run.
+//
+// Example - Every Monday and Wednesday at 9 AM:
+//   rule := &schedule.CalendarRule{
+//       Rule: &schedule.CalendarRule_Weekly{
+//           Weekly: &schedule.WeeklyRule{
+//               DaysOfWeek: []int32{1, 3},  // Monday, Wednesday
+//           },
+//       },
+//       ExecutionTimes: []*schedule.TimeOfDay{{Hour: 9}},
+//   }
+//
+// Example - First day of every quarter at midnight:
+//   rule := &schedule.CalendarRule{
+//       Rule: &schedule.CalendarRule_Monthly{
+//           Monthly: &schedule.MonthlyRule{
+//               DayType: schedule.MonthlyRule_DAY_OF_MONTH,
+//               DayValue: 1,
+//               Months: []int32{1, 4, 7, 10},  // Jan, Apr, Jul, Oct
+//           },
+//       },
+//       ExecutionTimes: []*schedule.TimeOfDay{{Hour: 0}},
+//   }
 message CalendarRule {
+    // rule: Date pattern determining which days to execute.
+    // Choose one based on CalendarSchedule.type.
     oneof rule {
-        MonthlyRule monthly = 1;
-        WeeklyRule weekly = 2;
-        DailyRule daily = 3;
-        YearlyRule yearly = 4;
-        BusinessDaysRule business_days = 5;
-        CustomRule custom = 6;
+        MonthlyRule monthly = 1;              // For MONTHLY schedules
+        WeeklyRule weekly = 2;                // For WEEKLY schedules
+        DailyRule daily = 3;                  // For DAILY schedules
+        YearlyRule yearly = 4;                // For YEARLY schedules
+        BusinessDaysRule business_days = 5;   // For BUSINESS_DAYS schedules
+        CustomRule custom = 6;                // For CUSTOM schedules
     }
     
-    // Time of day for execution
+    // execution_times: What time(s) of day to execute on matching dates.
+    // Multiple times = multiple executions per day.
+    // Examples:
+    //   [{hour:9}] = once at 9 AM
+    //   [{hour:8}, {hour:12}, {hour:17}] = three times daily
+    // If empty, defaults to midnight (00:00:00).
     repeated TimeOfDay execution_times = 7;
     
-    // Optional date range for rule validity
+    // valid_from: Start date for this rule (inclusive).
+    // Rule only applies on or after this date.
+    // Use for seasonal schedules or phased rollouts.
     google.protobuf.Timestamp valid_from = 8;
+    
+    // valid_until: End date for this rule (inclusive).
+    // Rule only applies on or before this date.
+    // Use for limited-time campaigns or temporary schedules.
     google.protobuf.Timestamp valid_until = 9;
 }
 
+// MonthlyRule schedules execution on specific days of the month.
+//
+// Examples:
+//   15th of every month:
+//     {day_type: DAY_OF_MONTH, day_value: 15}
+//   
+//   First Monday of every month:
+//     {day_type: WEEKDAY_OF_MONTH, day_value: 1, occurrence: 1}
+//   
+//   Last Friday of every month:
+//     {day_type: LAST_WEEKDAY, day_value: 5}
+//   
+//   Last day of every month:
+//     {day_type: LAST_DAY}
+//   
+//   15th of March, June, September, December:
+//     {day_type: DAY_OF_MONTH, day_value: 15, months: [3,6,9,12]}
 message MonthlyRule {
+    // DayType determines how to select the day within a month.
     enum DayType {
-        DAY_OF_MONTH = 0;        // e.g., 15th of every month
-        WEEKDAY_OF_MONTH = 1;    // e.g., first Monday of month
-        LAST_WEEKDAY = 2;        // e.g., last Friday of month
-        LAST_DAY = 3;            // last day of month
+        DAY_OF_MONTH = 0;        // Specific date (1-31)
+        WEEKDAY_OF_MONTH = 1;    // Nth occurrence of weekday (first Monday, third Friday)
+        LAST_WEEKDAY = 2;        // Last occurrence of weekday (last Friday)
+        LAST_DAY = 3;            // Last day of month (handles varying month lengths)
     }
     
+    // day_type: How to interpret day_value.
     DayType day_type = 1;
-    int32 day_value = 2;         // day number (1-31) or weekday (1-7)
-    int32 occurrence = 3;        // for WEEKDAY_OF_MONTH: 1=first, 2=second, etc.
-    repeated int32 months = 4;   // specific months (1-12), empty = all months
+    
+    // day_value: Day number or weekday.
+    // For DAY_OF_MONTH: 1-31 (values > month length skip that month)
+    // For WEEKDAY_OF_MONTH/LAST_WEEKDAY: 1=Monday through 7=Sunday (ISO 8601)
+    // For LAST_DAY: ignored
+    int32 day_value = 2;
+    
+    // occurrence: Which occurrence of the weekday (for WEEKDAY_OF_MONTH).
+    // 1 = first occurrence, 2 = second, 3 = third, 4 = fourth
+    // 5 = fifth (rare, skips months without 5 occurrences)
+    // -1 = last occurrence (equivalent to LAST_WEEKDAY)
+    int32 occurrence = 3;
+    
+    // months: Which months to apply this rule (1=January, 12=December).
+    // Empty = all months.
+    // Common patterns:
+    //   [3,6,9,12] = quarterly
+    //   [1,4,7,10] = quarterly (different quarters)
+    //   [1,7] = semi-annual
+    repeated int32 months = 4;
 }
 
+// WeeklyRule schedules execution on specific days of the week.
+//
+// Examples:
+//   Every Monday and Friday:
+//     {days_of_week: [1, 5]}
+//   
+//   Every weekday (Mon-Fri):
+//     {days_of_week: [1, 2, 3, 4, 5]}
+//   
+//   Every other week on Wednesday:
+//     {days_of_week: [3], week_interval: 2, start_week: "2024-01-03"}
 message WeeklyRule {
-    repeated int32 days_of_week = 1;  // 1=Monday, 7=Sunday
-    int32 week_interval = 2;          // every N weeks (default: 1)
-    google.protobuf.Timestamp start_week = 3;  // reference week for intervals
+    // days_of_week: Which days of the week to execute.
+    // ISO 8601 format: 1=Monday, 2=Tuesday, ..., 7=Sunday
+    // Empty = all days (equivalent to daily schedule)
+    repeated int32 days_of_week = 1;
+    
+    // week_interval: Execute every Nth week.
+    // 1 = every week, 2 = every other week (bi-weekly), 4 = monthly (every 4 weeks)
+    // Default: 1
+    int32 week_interval = 2;
+    
+    // start_week: Reference date for week_interval calculation.
+    // Week interval counts from this date's week.
+    // Example: bi-weekly schedule starting Jan 1, 2024 executes on weeks of Jan 1, Jan 15, Jan 29, etc.
+    // If not set, uses schedule creation date.
+    google.protobuf.Timestamp start_week = 3;
 }
 
+// DailyRule schedules execution every N days.
+//
+// Examples:
+//   Every day:
+//     {day_interval: 1}
+//   
+//   Every other day:
+//     {day_interval: 2}
+//   
+//   Weekdays only:
+//     {day_interval: 1, weekdays_only: true}
+//   
+//   Every 3 days starting from specific date:
+//     {day_interval: 3, start_date: "2024-01-01"}
 message DailyRule {
-    int32 day_interval = 1;           // every N days (default: 1)
-    bool weekdays_only = 2;           // exclude weekends
-    google.protobuf.Timestamp start_date = 3;  // reference date for intervals
+    // day_interval: Execute every Nth day.
+    // 1 = every day, 2 = every other day, 7 = weekly
+    // Default: 1
+    int32 day_interval = 1;
+    
+    // weekdays_only: If true, skip weekends (Saturday and Sunday).
+    // Applies after day_interval calculation.
+    // Example: {day_interval: 1, weekdays_only: true} = every weekday
+    bool weekdays_only = 2;
+    
+    // start_date: Reference date for day_interval calculation.
+    // Day interval counts from this date.
+    // If not set, uses schedule creation date.
+    google.protobuf.Timestamp start_date = 3;
 }
 
+// YearlyRule schedules execution once per year on a specific date.
+//
+// Examples:
+//   January 1st (New Year's Day):
+//     {month: 1, day: 1}
+//   
+//   December 25th (Christmas):
+//     {month: 12, day: 25}
+//   
+//   February 29th (handles non-leap years):
+//     {month: 2, day: 29, adjust_for_leap_year: true}
 message YearlyRule {
-    int32 month = 1;                  // month (1-12)
-    int32 day = 2;                    // day of month (1-31)
-    bool adjust_for_leap_year = 3;    // handle Feb 29 on non-leap years
+    // month: Month of the year (1=January, 12=December).
+    int32 month = 1;
+    
+    // day: Day of the month (1-31).
+    // Must be valid for the specified month.
+    int32 day = 2;
+    
+    // adjust_for_leap_year: How to handle Feb 29 on non-leap years.
+    // If true: executes on Feb 28 on non-leap years
+    // If false: skips execution on non-leap years
+    bool adjust_for_leap_year = 3;
 }
 
+// BusinessDaysRule schedules execution on business days (non-holidays, non-weekends).
+//
+// Examples:
+//   Every business day:
+//     {business_calendar_id: "us-holidays"}
+//   
+//   Day before each business day (for overnight processing):
+//     {business_calendar_id: "us-holidays", day_offset: -1}
+//   
+//   Day after each business day:
+//     {business_calendar_id: "us-holidays", day_offset: 1}
 message BusinessDaysRule {
-    string business_calendar_id = 1;  // reference to business calendar
-    int32 day_offset = 2;             // offset from business day (e.g., -1 for day before)
+    // business_calendar_id: Reference to BusinessCalendar defining holidays/weekends.
+    // Must match a calendar_id in CalendarSchedule.business_calendar.
+    string business_calendar_id = 1;
+    
+    // day_offset: Offset from business day.
+    // 0 = on business day
+    // -1 = day before business day (useful for overnight prep jobs)
+    // 1 = day after business day
+    // Note: Offset day might land on non-business day; schedule skips those.
+    int32 day_offset = 2;
 }
 
+// CustomRule allows complex scheduling logic via custom expressions.
+// Useful when built-in rules don't support your use case.
+//
+// Example - Last business day of each quarter:
+//   {
+//     expression: "last_business_day_of_quarter",
+//     rule_type: "business_calendar_expression",
+//     parameters: {"calendar_id": "us-holidays", "quarters": "1,2,3,4"}
+//   }
 message CustomRule {
-    string expression = 1;            // custom expression for complex rules
-    string rule_type = 2;             // identifier for custom rule processor
-    map<string, string> parameters = 3;  // rule-specific parameters
+    // expression: Custom scheduling expression.
+    // Format depends on rule_type. See ChronoQueue documentation for supported expressions.
+    string expression = 1;
+    
+    // rule_type: Identifies which custom rule processor to use.
+    // Built-in types: "business_calendar_expression", "lua_expression"
+    // Extensible via server plugins.
+    string rule_type = 2;
+    
+    // parameters: Additional configuration for the rule processor.
+    // Contents depend on rule_type.
+    map<string, string> parameters = 3;
 }
 
+// TimeOfDay specifies a time within a day (wall clock time).
+//
+// Examples:
+//   9 AM: {hour: 9}
+//   2:30 PM: {hour: 14, minute: 30}
+//   Midnight: {hour: 0}
+//   11:59:59 PM: {hour: 23, minute: 59, second: 59}
 message TimeOfDay {
-    int32 hour = 1;      // 0-23
-    int32 minute = 2;    // 0-59
-    int32 second = 3;    // 0-59 (optional, default: 0)
+    // hour: Hour of day (0-23), 24-hour format.
+    int32 hour = 1;
+    
+    // minute: Minute of hour (0-59). Default: 0
+    int32 minute = 2;
+    
+    // second: Second of minute (0-59). Default: 0
+    // Most schedules don't need second precision.
+    int32 second = 3;
 }
 
+// BusinessCalendar defines holidays and weekends for a region/organization.
+// Used by BusinessDaysRule to determine working vs non-working days.
+//
+// Example - US federal holidays:
+//   calendar := &schedule.BusinessCalendar{
+//       CalendarId: "us-federal",
+//       Name: "US Federal Holidays",
+//       Holidays: []*schedule.Holiday{
+//           {Name: "New Year's Day", Rule: &schedule.HolidayRule{...}},
+//           {Name: "Independence Day", Rule: &schedule.HolidayRule{...}},
+//           {Name: "Thanksgiving", Rule: &schedule.HolidayRule{...}},
+//           // ... more holidays
+//       },
+//       WeekendDays: []int32{6, 7},  // Saturday, Sunday
+//       Timezone: "America/New_York",
+//   }
 message BusinessCalendar {
+    // calendar_id: Unique identifier for this calendar.
+    // Referenced by BusinessDaysRule.business_calendar_id.
     string calendar_id = 1;
+    
+    // name: Human-readable name.
+    // Example: "US Federal Holidays", "UK Bank Holidays", "ACME Corp Custom Calendar"
     string name = 2;
+    
+    // description: Optional detailed description.
     string description = 3;
+    
+    // holidays: List of holidays (days to skip for business day schedules).
+    // Can be fixed dates (Dec 25) or relative (first Monday in May).
     repeated Holiday holidays = 4;
-    repeated int32 weekend_days = 5;  // 1=Monday, 7=Sunday
+    
+    // weekend_days: Days considered weekends (1=Monday, 7=Sunday).
+    // Common values:
+    //   [6, 7] = Saturday, Sunday (most countries)
+    //   [5, 6] = Friday, Saturday (some Middle Eastern countries)
+    //   [7] = Sunday only
+    repeated int32 weekend_days = 5;
+    
+    // timezone: IANA timezone for this calendar.
+    // Affects date boundaries for holidays.
     string timezone = 6;
 }
 
+// Holiday represents a non-working day in a BusinessCalendar.
+//
+// Examples:
+//   Fixed date holiday (Christmas):
+//     {
+//       name: "Christmas",
+//       recurring_yearly: true,
+//       rule: {fixed: {month: 12, day: 25}}
+//     }
+//   
+//   Relative date holiday (US Thanksgiving - 4th Thursday of November):
+//     {
+//       name: "Thanksgiving",
+//       recurring_yearly: true,
+//       rule: {relative: {month: 11, weekday: 4, occurrence: 4}}
+//     }
+//   
+//   Easter-based holiday (Good Friday - 2 days before Easter):
+//     {
+//       name: "Good Friday",
+//       recurring_yearly: true,
+//       rule: {easter_offset: {days_offset: -2}}
+//     }
 message Holiday {
+    // name: Holiday name (e.g., "New Year's Day", "Memorial Day").
     string name = 1;
+    
+    // date: Specific date for one-time holidays.
+    // For recurring holidays, use rule instead.
     google.protobuf.Timestamp date = 2;
+    
+    // recurring_yearly: If true, this holiday repeats every year.
+    // Requires rule to be set to determine the date each year.
     bool recurring_yearly = 3;
-    HolidayRule rule = 4;  // for complex holidays like "first Monday in May"
+    
+    // rule: Logic for calculating holiday date.
+    // Required if recurring_yearly = true.
+    HolidayRule rule = 4;
 }
 
+// HolidayRule defines how to calculate a holiday's date.
 message HolidayRule {
+    // Choose one rule type based on holiday pattern.
     oneof rule {
-        FixedDate fixed = 1;
-        RelativeDate relative = 2;
-        EasterOffset easter_offset = 3;
+        FixedDate fixed = 1;              // Same date every year (Dec 25)
+        RelativeDate relative = 2;        // Relative to month (first Monday in May)
+        EasterOffset easter_offset = 3;   // Days offset from Easter
     }
 }
 
+// FixedDate represents a holiday on the same calendar date every year.
+//
+// Examples:
+//   Christmas: {month: 12, day: 25}
+//   Independence Day (US): {month: 7, day: 4}
+//   New Year's Day: {month: 1, day: 1}
 message FixedDate {
-    int32 month = 1;  // 1-12
-    int32 day = 2;    // 1-31
+    // month: Month (1=January, 12=December).
+    int32 month = 1;
+    
+    // day: Day of month (1-31).
+    int32 day = 2;
 }
 
+// RelativeDate represents a holiday defined by weekday occurrence in a month.
+//
+// Examples:
+//   Memorial Day (US): Last Monday of May
+//     {month: 5, weekday: 1, occurrence: -1}
+//   
+//   Thanksgiving (US): 4th Thursday of November
+//     {month: 11, weekday: 4, occurrence: 4}
+//   
+//   Labor Day (US): First Monday of September
+//     {month: 9, weekday: 1, occurrence: 1}
 message RelativeDate {
-    int32 month = 1;        // 1-12
-    int32 weekday = 2;      // 1=Monday, 7=Sunday
-    int32 occurrence = 3;   // 1=first, 2=second, -1=last
+    // month: Month (1=January, 12=December).
+    int32 month = 1;
+    
+    // weekday: Day of week (1=Monday, 7=Sunday, ISO 8601).
+    int32 weekday = 2;
+    
+    // occurrence: Which occurrence in the month.
+    // 1 = first, 2 = second, 3 = third, 4 = fourth
+    // -1 = last (useful when week count varies by month)
+    int32 occurrence = 3;
 }
 
+// EasterOffset represents holidays calculated relative to Easter Sunday.
+// Easter date varies year-to-year based on lunar calendar.
+//
+// Examples:
+//   Good Friday: {days_offset: -2}
+//   Easter Monday: {days_offset: 1}
+//   Ascension Day: {days_offset: 39}
+//   Pentecost: {days_offset: 49}
 message EasterOffset {
-    int32 days_offset = 1;  // days from Easter Sunday
+    // days_offset: Days to add to Easter Sunday.
+    // Negative = before Easter, positive = after Easter, 0 = Easter itself.
+    int32 days_offset = 1;
 }
 
+// CalendarException modifies schedule behavior for a specific date.
+// Use for one-off changes without modifying the core schedule.
+//
+// Examples:
+//   Skip execution during maintenance:
+//     {date: "2024-06-15", type: SKIP, reason: "System maintenance"}
+//   
+//   Reschedule monthly report when month-end is holiday:
+//     {date: "2024-12-31", type: RESCHEDULE, reschedule_to: "2024-12-30", reason: "New Year's Eve"}
+//   
+//   Add extra execution for special event:
+//     {date: "2024-11-29", type: EXTRA, extra_times: [{hour: 14}], reason: "Black Friday promotions"}
 message CalendarException {
+    // date: Date this exception applies to.
     google.protobuf.Timestamp date = 1;
+    
+    // ExceptionType determines how to modify the schedule.
     enum ExceptionType {
-        SKIP = 0;           // skip execution on this date
-        RESCHEDULE = 1;     // move execution to different date
-        EXTRA = 2;          // add extra execution on this date
+        SKIP = 0;        // Don't execute on this date
+        RESCHEDULE = 1;  // Move execution to a different date
+        EXTRA = 2;       // Add additional execution(s) on this date
     }
+    
+    // type: What kind of exception to apply.
     ExceptionType type = 2;
-    google.protobuf.Timestamp reschedule_to = 3;  // for RESCHEDULE type
-    repeated TimeOfDay extra_times = 4;           // for EXTRA type
-    string reason = 5;      // optional description
+    
+    // reschedule_to: Target date for RESCHEDULE exceptions.
+    // Required if type = RESCHEDULE.
+    google.protobuf.Timestamp reschedule_to = 3;
+    
+    // extra_times: Additional execution times for EXTRA exceptions.
+    // Applied in addition to regular schedule.
+    // Required if type = EXTRA.
+    repeated TimeOfDay extra_times = 4;
+    
+    // reason: Optional explanation for this exception.
+    // Useful for documentation and auditing.
+    // Example: "System maintenance", "Holiday adjustment", "Special event"
+    string reason = 5;
 }

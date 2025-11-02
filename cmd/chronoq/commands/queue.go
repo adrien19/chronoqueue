@@ -42,17 +42,15 @@ func newQueueCreateCommand() *cobra.Command {
 			dequeueAttempts, _ := cmd.Flags().GetInt32("default-max-attempts")
 			leaseDurationStr, _ := cmd.Flags().GetString("lease-duration")
 			exclusivityKey, _ := cmd.Flags().GetString("exclusivity-key")
-			invisibilityDurationStr, _ := cmd.Flags().GetString("invisibility-duration")
 			deadLetterQueueName, _ := cmd.Flags().GetString("dlq-name")
 			autoCreateDLQ, _ := cmd.Flags().GetBool("auto-create-dlq")
 			queueOpts := client.QueueOptions{
-				Type:                 queueTypeInt,
-				DequeueAttempts:      dequeueAttempts,
-				LeaseDuration:        leaseDurationStr,
-				ExclusivityKey:       exclusivityKey,
-				InvisibilityDuration: invisibilityDurationStr,
-				DeadLetterQueueName:  deadLetterQueueName,
-				AutoCreateDLQ:        autoCreateDLQ,
+				Type:                queueTypeInt,
+				DequeueAttempts:     dequeueAttempts,
+				LeaseDuration:       leaseDurationStr,
+				ExclusivityKey:      exclusivityKey,
+				DeadLetterQueueName: deadLetterQueueName,
+				AutoCreateDLQ:       autoCreateDLQ,
 			}
 
 			return WithClient(cmd, func(client *client.ChronoQueueClient) error {

@@ -8,7 +8,6 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
@@ -141,20 +140,11 @@ func (as *storage) updateMessageCalendarSchedule(ctx context.Context, key string
 		return fmt.Errorf("failed to generate message ID: %w", err)
 	}
 
-	// Calculate invisibility duration (time until the message should be visible)
-	invisibilityDuration := time.Until(nextRunTime)
-	if invisibilityDuration < 0 {
-		invisibilityDuration = 0 // Message should be visible immediately
-	}
-
 	runMessageInstanceMetadata := message_pb.Message_Metadata{
-		Priority:      metadata.Priority,
-		LeaseDuration: metadata.LeaseDuration,
-		LeaseExpiry:   0,
-		InvisibilityDuration: &durationpb.Duration{
-			Seconds: int64(invisibilityDuration.Seconds()),
-			Nanos:   int32(invisibilityDuration.Nanoseconds() % 1e9),
-		},
+		Priority:          metadata.Priority,
+		LeaseDuration:     metadata.LeaseDuration,
+		LeaseExpiry:       0,
+		ScheduledTime:     timestamppb.New(nextRunTime),
 		AttemptsLeft:      1,
 		State:             message_pb.Message_Metadata_INVISIBLE,
 		Payload:           metadata.Payload,

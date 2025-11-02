@@ -83,8 +83,10 @@ func (s *Server) Start(ctx context.Context) error {
 	// Initialize metrics
 	gateway.InitMetrics()
 
-	// Initialize storage layer (database) with schema registry
-	s.database = repository.NewQueueStorage(ctx, s.redisClient, s.encryptionKeyManager, s.logger)
+	// Initialize storage layer (database) with schema registry and custom intervals
+	schedulerInterval := time.Duration(s.config.SchedulerIntervalMs) * time.Millisecond
+	reclaimInterval := time.Duration(s.config.ReclaimIntervalMs) * time.Millisecond
+	s.database = repository.NewQueueStorageWithIntervals(ctx, s.redisClient, s.encryptionKeyManager, s.logger, schedulerInterval, reclaimInterval)
 	s.schemaRegistry = schemaRegistry
 
 	// Initialize gRPC server directly with storage
