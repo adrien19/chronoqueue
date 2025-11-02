@@ -258,6 +258,8 @@ test-race:
 build-test-image:
 	@echo "Building ChronoQueue test image (for integration tests)..."
 	DOCKER_BUILDKIT=0 docker build -f images/Dockerfile -t chronoqueue:test-latest .
+	@echo "Verifying image was built..."
+	@docker images chronoqueue:test-latest --format "{{.Repository}}:{{.Tag}} ({{.ID}})" || (echo "ERROR: Image chronoqueue:test-latest not found!" && exit 1)
 
 ################################################################################
 # Target: test-integration                                                     #
@@ -280,13 +282,21 @@ test-integration: check-gotestsum build-test-image
 .PHONY: ci-test-integration
 ci-test-integration: check-gotestsum build-test-image
 	@echo "Running integration tests in CI mode..."
+	@echo "Verifying Docker image availability..."
+	@docker images | grep chronoqueue | grep test-latest || (echo "ERROR: chronoqueue:test-latest not found in local images!" && docker images && exit 1)
+	@docker inspect chronoqueue:test-latest >/dev/null 2>&1 && echo "✓ Image chronoqueue:test-latest is available" || (echo "ERROR: Cannot inspect image!" && exit 1)
+	@echo "Docker info:"
+	@docker info | grep -E "Server Version|Operating System|Storage Driver" || true
 	CGO_ENABLED=$(CGO) \
+		TESTCONTAINERS_RYUK_DISABLED=false \
+		DOCKER_HOST=${DOCKER_HOST} \
 		gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_integration.xml \
 			--format standard-verbose \
 			-- \
 				-timeout 30m \
+				-v \
 				./tests/integration/...
 
 ################################################################################
