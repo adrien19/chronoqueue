@@ -9,12 +9,7 @@ import (
 
 	"github.com/adrien19/chronoqueue/cmd/chronoq/commands"
 	"github.com/adrien19/chronoqueue/internal/server"
-)
-
-var (
-	version = "dev"
-	commit  = "unknown"
-	date    = "unknown"
+	"github.com/adrien19/chronoqueue/pkg/version"
 )
 
 func main() {
@@ -39,7 +34,7 @@ Examples:
   chronoqueue message post my-queue "Hello World"
   chronoqueue message get my-queue
   chronoqueue schedule create --cron "0 */5 * * *" --queue my-queue --message "Scheduled task"`,
-		Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date),
+		Version: version.Info(),
 	}
 
 	// Global flags for client operations
@@ -134,6 +129,11 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// Merge the parsed config (preserving mode setting)
 	parsedConfig.IsDevelopment = config.IsDevelopment
 	config = parsedConfig
+
+	// Inject version information
+	config.Version = version.Short()
+	config.GitCommit = version.GitCommit
+	config.BuildDate = version.BuildDate
 
 	// Create and start server
 	srv, err := server.New(config)

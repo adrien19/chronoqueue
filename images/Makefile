@@ -1,18 +1,31 @@
-IMAGE ?= workflow
-PROJECT ?= workflowsvc
-DOCKER_REGISTRY ?= docker.io
+IMAGE ?= chronoqueue
+PROJECT ?= adrien19
+DOCKER_REGISTRY ?= ghcr.io
 
-# Declaring and calculating the version (tag) for the docker image in the format: <data>-<commit>
-VERSION ?= $(shell date +v%Y%m%d)-$(shell git describe --tags --always)
+# Version information
+GIT_COMMIT := $(shell git rev-list -1 HEAD)
+BUILD_DATE := $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
+ifdef REL_VERSION
+	VERSION := $(REL_VERSION)
+else
+	VERSION := edge
+endif
 
 build-image:
-	docker pull $(DOCKER_REGISTRY)/$(PROJECT)/$(IMAGE):$(VERSION)
+	@echo "Building ChronoQueue Docker image: $(DOCKER_REGISTRY)/$(PROJECT)/$(IMAGE):$(VERSION)"
 	docker build -t $(DOCKER_REGISTRY)/$(PROJECT)/$(IMAGE):$(VERSION) \
-		-f Dockerfile ../../
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		-f Dockerfile ..
 
 build-push: build-image
+	@echo "Pushing ChronoQueue Docker image: $(DOCKER_REGISTRY)/$(PROJECT)/$(IMAGE):$(VERSION)"
 	docker push $(DOCKER_REGISTRY)/$(PROJECT)/$(IMAGE):$(VERSION)
-	docker tag $(DOCKER_REGISTRY)/$(PROJECT)/$(IMAGE):$(VERSION) $(DOCKER_REGISTRY)/$(PROJECT)/$(IMAGE):master
-	docker push $(DOCKER_REGISTRY)/$(PROJECT)/$(IMAGE):master
+ifdef LATEST_RELEASE
+	@echo "Tagging and pushing as latest..."
+	docker tag $(DOCKER_REGISTRY)/$(PROJECT)/$(IMAGE):$(VERSION) $(DOCKER_REGISTRY)/$(PROJECT)/$(IMAGE):latest
+	docker push $(DOCKER_REGISTRY)/$(PROJECT)/$(IMAGE):latest
+endif
 
 .PHONY: build-image build-push

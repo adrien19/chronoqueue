@@ -105,6 +105,13 @@ HELM_REGISTRY?=ghcr.io/chronoqueue
 ################################################################################
 BASE_PACKAGE_NAME := github.com/adrien19/chronoqueue
 
+# Version information to inject at build time
+BUILD_DATE := $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
+VERSION_PKG := $(BASE_PACKAGE_NAME)/pkg/version
+LDFLAGS := -X '$(VERSION_PKG).Version=$(CHRONOQUEUE_VERSION)' \
+           -X '$(VERSION_PKG).GitCommit=$(GIT_COMMIT)' \
+           -X '$(VERSION_PKG).BuildDate=$(BUILD_DATE)'
+
 ifeq ($(origin DEBUG), undefined)
   BUILDTYPE_DIR:=release
 else ifeq ($(DEBUG),0)
@@ -136,7 +143,7 @@ build: $(CHRONOQUEUE_BINS)
 define genBinariesForTarget
 .PHONY: $(5)/$(1)
 $(5)/$(1):
-	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags="" -tags=$(CHRONOQUEUE_GO_BUILD_TAGS) \
+	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags="$(LDFLAGS)" -tags=$(CHRONOQUEUE_GO_BUILD_TAGS) \
 	  -o $(5)/$(1) \
 	  .
 endef
@@ -146,7 +153,7 @@ $(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EX
 define genBinariesForTarget
 .PHONY: $(5)/$(1)
 $(5)/$(1):
-	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags="" -tags=$(CHRONOQUEUE_GO_BUILD_TAGS) \
+	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags="$(LDFLAGS)" -tags=$(CHRONOQUEUE_GO_BUILD_TAGS) \
 	-o $(5)/$(1) $(2)/;
 endef
 
@@ -257,7 +264,11 @@ test-race:
 .PHONY: build-test-image
 build-test-image:
 	@echo "Building ChronoQueue test image (for integration tests)..."
-	DOCKER_BUILDKIT=0 docker build -f images/Dockerfile -t chronoqueue:test-latest .
+	DOCKER_BUILDKIT=0 docker build -f images/Dockerfile \
+		--build-arg VERSION=$(CHRONOQUEUE_VERSION) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		-t chronoqueue:test-latest .
 	@echo "Verifying image was built..."
 	@docker images chronoqueue:test-latest --format "{{.Repository}}:{{.Tag}} ({{.ID}})" || (echo "ERROR: Image chronoqueue:test-latest not found!" && exit 1)
 
