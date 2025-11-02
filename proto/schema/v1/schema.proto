@@ -1,4 +1,19 @@
-// ./proto/schema/v1/schema.proto
+// ChronoQueue Schema API v1
+//
+// This file defines structures for message payload validation.
+// Schemas ensure message payloads conform to expected structure before processing.
+//
+// Benefits:
+// - Catch malformed messages early (before workers process them)
+// - Enforce data contracts between producers and consumers
+// - Support schema evolution with versioning
+// - Enable type-safe deserialization in strongly-typed languages
+//
+// Common use cases:
+// - API request/response validation
+// - Event schema enforcement in event-driven architectures
+// - Data quality checks for analytics pipelines
+// - Integration contract testing
 
 syntax = "proto3";
 
@@ -6,51 +21,271 @@ package chronoqueue.api.schema.v1;
 
 option go_package = "github.com/adrien19/chronoqueue/api/schema/v1;schema";
 
-// Schema defines a message validation schema
+// Schema defines a message validation schema.
+//
+// ChronoQueue validates message payloads against schemas before accepting them.
+// This prevents invalid messages from entering your queues.
+//
+// Schema evolution:
+// 1. Create v1: Initial schema
+// 2. Create v2: Add optional fields (backward compatible)
+// 3. Update producers to v2
+// 4. Update consumers to v2
+// 5. Deprecate v1 when all clients upgraded
+//
+// Example - Order schema:
+//   schema := &schema.Schema{
+//       SchemaId: "order-schema",
+//       Version: 1,
+//       Name: "Order Validation Schema",
+//       Content: `{
+//           "type": "object",
+//           "required": ["orderId", "customerId", "items"],
+//           "properties": {
+//               "orderId": {"type": "string", "pattern": "^ORD-[0-9]+$"},
+//               "customerId": {"type": "string"},
+//               "items": {
+//                   "type": "array",
+//                   "minItems": 1,
+//                   "items": {
+//                       "type": "object",
+//                       "required": ["productId", "quantity"],
+//                       "properties": {
+//                           "productId": {"type": "string"},
+//                           "quantity": {"type": "integer", "minimum": 1}
+//                       }
+//                   }
+//               },
+//               "totalAmount": {"type": "number", "minimum": 0}
+//           }
+//       }`,
+//       ContentType: "json-schema",
+//       IsActive: true,
+//   }
+//
+// Then reference in Queue:
+//   queue := &queue.Queue{
+//       Name: "order-processing",
+//       Metadata: &queue.QueueMetadata{
+//           SchemaId: "order-schema",
+//           SchemaRequired: true,  // Reject invalid messages
+//       },
+//   }
 message Schema {
-    string schema_id = 1;           // Unique schema identifier
-    int32 version = 2;              // Schema version number
-    string name = 3;                // Human-readable schema name
-    string description = 4;         // Schema description
-    string content = 5;             // JSON Schema content
-    string content_type = 6;        // Schema type (default: json-schema)
-    int64 created_at = 7;           // Creation timestamp (Unix milliseconds)
-    int64 updated_at = 8;           // Last update timestamp (Unix milliseconds)
-    bool is_active = 9;             // Whether this schema version is active
-    map<string, string> metadata = 10; // Additional metadata
+    // schema_id: Unique identifier for this schema family.
+    // All versions of the same schema share this ID.
+    // Example: "order-schema", "user-event-schema"
+    string schema_id = 1;
+    
+    // version: Schema version number (positive integer).
+    // Increment when making changes to the schema.
+    // Semantic versioning recommended:
+    //   v1 -> v2: backward compatible changes (add optional fields)
+    //   v2 -> v3: breaking changes (remove/rename fields, change types)
+    int32 version = 2;
+    
+    // name: Human-readable schema name.
+    // Example: "Order Validation Schema v2", "User Registration Event"
+    string name = 3;
+    
+    // description: Detailed description of what this schema validates.
+    // Include changelog for new versions.
+    // Example: "v2: Added optional 'discountCode' field. Removed deprecated 'legacyField'."
+    string description = 4;
+    
+    // content: The actual validation schema.
+    // Format depends on content_type.
+    // For "json-schema": JSON Schema Draft 7 (https://json-schema.org/)
+    // For "protobuf": Base64-encoded FileDescriptorSet
+    // Size limit: 1MB
+    string content = 5;
+    
+    // content_type: Schema format identifier.
+    // Supported values:
+    //   "json-schema" (default): JSON Schema Draft 7
+    //   "protobuf": Protocol Buffers schema
+    //   "avro": Apache Avro schema
+    // ChronoQueue validates content syntax when registering schema.
+    string content_type = 6;
+    
+    // created_at: When this schema version was registered (Unix milliseconds).
+    // Automatically set by ChronoQueue.
+    int64 created_at = 7;
+    
+    // updated_at: When this schema was last modified (Unix milliseconds).
+    // Schemas are immutable after creation; updates create new versions.
+    // This tracks metadata changes (name, description, is_active).
+    int64 updated_at = 8;
+    
+    // is_active: Whether this schema version can be used for validation.
+    // Set to false to deprecate old versions.
+    // Queues configured with this schema_id will use the highest active version.
+    // Use case: Deactivate v1 after all clients migrate to v2.
+    bool is_active = 9;
+    
+    // metadata: Additional schema metadata.
+    // Use for:
+    //   "owner": "team-checkout"
+    //   "deprecation_date": "2025-01-01"
+    //   "changelog_url": "https://..."
+    //   "contact": "checkout-team@example.com"
+    map<string, string> metadata = 10;
 }
 
-// ValidationResult contains the outcome of validation
+// ValidationResult contains the outcome of payload validation.
+//
+// Returned by:
+// - PostMessage API (if validation fails, message is rejected)
+// - ValidatePayload API (dry-run validation before posting)
+//
+// Example - handling validation errors:
+//   result, err := client.PostMessage(ctx, &queueservice.PostMessageRequest{...})
+//   if err != nil {
+//       if status.Code(err) == codes.InvalidArgument {
+//           // Check err.Details() for ValidationResult
+//           for _, detail := range status.Convert(err).Details() {
+//               if vr, ok := detail.(*schema.ValidationResult); ok {
+//                   for _, verr := range vr.Errors {
+//                       log.Printf("Field '%s' failed: %s", verr.Field, verr.Message)
+//                   }
+//               }
+//           }
+//       }
+//   }
 message ValidationResult {
-    bool valid = 1;                 // Whether validation passed
-    repeated ValidationError errors = 2; // List of validation errors
-    int64 validated_at = 3;         // Validation timestamp
-    string schema_id = 4;           // Schema used for validation
-    int32 schema_version = 5;       // Schema version used
+    // valid: True if payload passed validation, false otherwise.
+    bool valid = 1;
+    
+    // errors: List of validation errors (empty if valid = true).
+    // Each error describes one validation rule violation.
+    repeated ValidationError errors = 2;
+    
+    // validated_at: When validation was performed (Unix milliseconds).
+    int64 validated_at = 3;
+    
+    // schema_id: Which schema was used for validation.
+    string schema_id = 4;
+    
+    // schema_version: Which schema version was used.
+    // Helps debug validation failures after schema upgrades.
+    int32 schema_version = 5;
 }
 
-// ValidationError provides detailed error information
+// ValidationError provides detailed information about a validation failure.
+//
+// Each error describes:
+// - Which field failed (field path)
+// - Why it failed (error_code)
+// - Human-readable explanation (message)
+// - Additional context (details)
+//
+// Example errors:
+//   Field "payload.data.orderId" - REQUIRED_FIELD_MISSING:
+//     {field: "payload.data.orderId", error_code: "REQUIRED_FIELD_MISSING",
+//      message: "Required field 'orderId' is missing"}
+//   
+//   Field "payload.data.quantity" - INVALID_TYPE:
+//     {field: "payload.data.quantity", error_code: "INVALID_TYPE",
+//      message: "Expected integer, got string",
+//      details: {"expected": "integer", "actual": "string"}}
 message ValidationError {
-    string field = 1;               // Field path (e.g., "payload.data.orderId")
-    string error_code = 2;          // Error code (e.g., REQUIRED_FIELD_MISSING)
-    string message = 3;             // Human-readable error message
-    map<string, string> details = 4; // Additional error details
+    // field: JSON path to the field that failed validation.
+    // Uses dot notation: "payload.data.orderId", "payload.data.items[0].productId"
+    // Root level: "payload.data"
+    string field = 1;
+    
+    // error_code: Standardized error code from ErrorCode enum.
+    // Enables programmatic error handling across different schema types.
+    string error_code = 2;
+    
+    // message: Human-readable error explanation.
+    // Safe to show to end users or log for debugging.
+    // Example: "Field 'orderId' must match pattern '^ORD-[0-9]+$', got 'invalid'"
+    string message = 3;
+    
+    // details: Additional context about the error.
+    // Contents depend on error_code:
+    //   INVALID_TYPE: {"expected": "integer", "actual": "string"}
+    //   PATTERN_MISMATCH: {"pattern": "^[A-Z]+$", "value": "abc"}
+    //   VALUE_OUT_OF_RANGE: {"min": "0", "max": "100", "value": "150"}
+    map<string, string> details = 4;
 }
 
-// ErrorCode enum for standardized validation errors
+// ErrorCode enum for standardized validation error classification.
+//
+// Use these codes to:
+// - Handle specific error types programmatically
+// - Display user-friendly error messages
+// - Track validation failure metrics by category
+//
+// Mapping to JSON Schema validation errors:
+//   REQUIRED_FIELD_MISSING = "required" keyword
+//   INVALID_TYPE = "type" keyword
+//   PATTERN_MISMATCH = "pattern" keyword
+//   VALUE_OUT_OF_RANGE = "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"
+//   ARRAY_LENGTH_INVALID = "minItems", "maxItems"
+//   ENUM_VALUE_INVALID = "enum" keyword
 enum ErrorCode {
+    // UNKNOWN_ERROR: Unclassified validation error.
+    // Check message field for details.
     UNKNOWN_ERROR = 0;
+    
+    // REQUIRED_FIELD_MISSING: A required field is absent.
+    // Corresponds to JSON Schema "required" keyword.
     REQUIRED_FIELD_MISSING = 1;
+    
+    // INVALID_TYPE: Field has wrong type.
+    // Example: Expected integer, got string.
+    // Corresponds to JSON Schema "type" keyword.
     INVALID_TYPE = 2;
+    
+    // INVALID_FORMAT: Field value doesn't match expected format.
+    // Example: Invalid email, UUID, date-time, URI.
+    // Corresponds to JSON Schema "format" keyword.
     INVALID_FORMAT = 3;
+    
+    // PATTERN_MISMATCH: String doesn't match regex pattern.
+    // Example: Phone number doesn't match "^\d{3}-\d{3}-\d{4}$".
+    // Corresponds to JSON Schema "pattern" keyword.
     PATTERN_MISMATCH = 4;
+    
+    // VALUE_OUT_OF_RANGE: Numeric value outside allowed range.
+    // Example: Age is -5 (minimum is 0).
+    // Corresponds to JSON Schema "minimum", "maximum", etc.
     VALUE_OUT_OF_RANGE = 5;
+    
+    // ARRAY_LENGTH_INVALID: Array has wrong number of elements.
+    // Example: Order must have 1-10 items, got 0.
+    // Corresponds to JSON Schema "minItems", "maxItems".
     ARRAY_LENGTH_INVALID = 6;
+    
+    // OBJECT_PROPERTIES_INVALID: Object has wrong properties.
+    // Example: Missing required nested field.
+    // Corresponds to JSON Schema object validation.
     OBJECT_PROPERTIES_INVALID = 7;
+    
+    // ADDITIONAL_PROPERTIES_NOT_ALLOWED: Object has unexpected fields.
+    // Occurs when schema sets "additionalProperties": false.
     ADDITIONAL_PROPERTIES_NOT_ALLOWED = 8;
+    
+    // ENUM_VALUE_INVALID: Value not in allowed enum set.
+    // Example: status must be "pending" or "completed", got "unknown".
+    // Corresponds to JSON Schema "enum" keyword.
     ENUM_VALUE_INVALID = 9;
+    
+    // SCHEMA_NOT_FOUND: Referenced schema doesn't exist.
+    // Occurs when queue references non-existent schema_id.
     SCHEMA_NOT_FOUND = 10;
+    
+    // CONTENT_TYPE_INVALID: Payload content_type incompatible with schema.
+    // Example: Schema expects JSON, payload is "application/protobuf".
     CONTENT_TYPE_INVALID = 11;
+    
+    // PAYLOAD_SIZE_EXCEEDED: Payload exceeds size limit.
+    // ChronoQueue has a default 1MB payload limit.
     PAYLOAD_SIZE_EXCEEDED = 12;
+    
+    // SCHEMA_VALIDATION_FAILED: Schema content itself is invalid.
+    // Occurs when registering schema with malformed content.
     SCHEMA_VALIDATION_FAILED = 13;
 }
