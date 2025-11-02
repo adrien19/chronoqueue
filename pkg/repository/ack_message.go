@@ -161,6 +161,12 @@ func (as *storage) AcknowledgeMessage(ctx context.Context, request *queueservice
 		return nil, chronoErr.GRPCStatus()
 	}
 
+	// Update state counters for tracking terminal states
+	if err := as.updateStateCounters(ctx, queueName, oldState, request.State); err != nil {
+		as.logger.ErrorWithFields("Failed to update state counters", "error", err, "messageID", messageID)
+		// Don't fail the ACK, just log the error
+	}
+
 	if streamEntryID != "" {
 		if err := as.ackMessage(ctx, queueName, streamEntryID); err != nil {
 			as.logger.ErrorWithFields("Failed to XACK message from stream", "error", err, "messageID", messageID)
@@ -171,4 +177,31 @@ func (as *storage) AcknowledgeMessage(ctx context.Context, request *queueservice
 	}
 
 	return &queueservice_pb.AcknowledgeMessageResponse{Success: true}, nil
+}
+
+// updateStateCounters updates Redis hash counters for state transitions
+// This provides O(1) lookup for GetQueueState instead of scanning all message keys
+func (as *storage) updateStateCounters(ctx context.Context, queueName string, oldState, newState message_pb.Message_Metadata_State) error {
+	statsKey := fmt.Sprintf("stats:%s", queueName)
+
+	// Use pipelined operations for atomicity
+	pipe := as.redisClient.Pipeline()
+
+	// Decrement old state counter
+	oldStateStr := oldState.String()
+	if oldStateStr != "" && oldStateStr != "UNDEFINED" {
+		pipe.HIncrBy(ctx, statsKey, oldStateStr, -1)
+	}
+
+	// Increment new state counter
+	newStateStr := newState.String()
+	if newStateStr != "" && newStateStr != "UNDEFINED" {
+		pipe.HIncrBy(ctx, statsKey, newStateStr, 1)
+	}
+
+	// Set TTL on stats key to auto-cleanup (match message metadata TTL)
+	pipe.Expire(ctx, statsKey, 2*time.Hour)
+
+	_, err := pipe.Exec(ctx)
+	return err
 }

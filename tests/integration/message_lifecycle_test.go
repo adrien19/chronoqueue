@@ -105,6 +105,7 @@ func TestMessageLifecycle_PostJSONMessage(t *testing.T) {
 	// Arrange
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
+
 	conn := env.NewGRPCClientShared(t)
 	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
@@ -171,8 +172,10 @@ func TestMessageLifecycle_PostWithPriority(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	env := helpers.SharedTestEnvironment(t)
+
 	conn := env.NewGRPCClientShared(t)
 	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
@@ -198,6 +201,7 @@ func TestMessageLifecycle_PostWithPriority(t *testing.T) {
 		{"high_priority_alert", 95},
 	}
 
+	// Post all messages first to ensure they're in the schedule
 	for _, mp := range messagePriorities {
 		msgFixture := helpers.LoadMessageFixture(t, mp.fixtureName)
 
@@ -221,11 +225,14 @@ func TestMessageLifecycle_PostWithPriority(t *testing.T) {
 			Message:   message,
 		})
 		require.NoError(t, err, "Posting message should succeed")
+
+		// Small delay to ensure distinct timestamps for proper priority ordering
+		time.Sleep(10 * time.Millisecond)
 	}
 
-	// Wait for background worker to process all message state transitions (INVISIBLE -> PENDING)
-	// Wait longer to ensure messages transition across worker cycles
-	time.Sleep(2500 * time.Millisecond)
+	// Wait for scheduler to process all messages (scheduler runs at 300ms intervals)
+	// Wait longer to ensure all messages are promoted to streams in correct priority order
+	time.Sleep(800 * time.Millisecond)
 
 	// Act - Retrieve messages in order
 	var retrievedMessages []*message_pb.Message
@@ -255,6 +262,7 @@ func TestMessageLifecycle_GetNextMessageFIFO(t *testing.T) {
 	// Arrange
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
+
 	conn := env.NewGRPCClientShared(t)
 	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
@@ -323,12 +331,14 @@ func TestMessageLifecycle_GetNextMessageFIFO(t *testing.T) {
 // Data: Single message with 30s lease
 // Expected: Message unavailable to other consumers during lease period
 func TestMessageLifecycle_MessageLeaseManagement(t *testing.T) {
-	// Skip in parallel mode due to timing dependencies
-	// t.Parallel()
+	t.Parallel() // Enable parallel execution - tests are isolated by unique queue names
 
 	// Arrange
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	env := helpers.SharedTestEnvironment(t)
+
 	conn := env.NewGRPCClientShared(t)
 	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
@@ -365,7 +375,6 @@ func TestMessageLifecycle_MessageLeaseManagement(t *testing.T) {
 		QueueName: queueName,
 		Message:   message,
 	})
-
 	require.NoError(t, err)
 
 	// Wait for background worker to process message state transition (INVISIBLE -> PENDING)
@@ -380,16 +389,19 @@ func TestMessageLifecycle_MessageLeaseManagement(t *testing.T) {
 	require.NotNil(t, getResp1.Message)
 	helpers.AssertLeaseActive(t, getResp1.Message)
 
-	// Try to get the same message immediately (should fail or return nil)
-	getResp2, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
+	// Try to get the same message immediately (should return nil or timeout)
+	// Use a short timeout context to avoid hanging
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel2()
+
+	getResp2, err := client.GetNextMessage(ctx2, &queueservice_pb.GetNextMessageRequest{
 		QueueName:     queueName,
 		LeaseDuration: durationpb.New(10 * time.Second),
 	})
 
 	// Assert - Should not get the same message while lease is active
-	if err == nil && getResp2.Message != nil {
-		// If a message was returned, it should be empty or a different message
-		// In our case, queue should be empty so no message returned
+	// Either timeout error or nil message is acceptable
+	if err == nil && getResp2 != nil && getResp2.Message != nil {
 		t.Error("Should not receive message while it's leased by another consumer")
 	}
 }
@@ -400,11 +412,14 @@ func TestMessageLifecycle_MessageLeaseManagement(t *testing.T) {
 // Data: Message with lease that is renewed before expiration
 // Expected: Lease extended successfully
 func TestMessageLifecycle_RenewMessageLease(t *testing.T) {
-	// t.Parallel()
+	t.Parallel() // Enable parallel execution
 
 	// Arrange
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	env := helpers.SharedTestEnvironment(t)
+
 	conn := env.NewGRPCClientShared(t)
 	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
@@ -478,6 +493,7 @@ func TestMessageLifecycle_AcknowledgeMessage(t *testing.T) {
 	// Arrange
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
+
 	conn := env.NewGRPCClientShared(t)
 	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
@@ -560,6 +576,7 @@ func TestMessageLifecycle_PeekMessages(t *testing.T) {
 	// Arrange
 	ctx := context.Background()
 	env := helpers.SharedTestEnvironment(t)
+
 	conn := env.NewGRPCClientShared(t)
 	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
@@ -629,11 +646,14 @@ func TestMessageLifecycle_PeekMessages(t *testing.T) {
 // Data: Long-running task sending periodic heartbeats
 // Expected: Lease extended automatically
 func TestMessageLifecycle_SendHeartbeat(t *testing.T) {
-	// t.Parallel()
+	t.Parallel() // Enable parallel execution
 
 	// Arrange
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
 	env := helpers.SharedTestEnvironment(t)
+
 	conn := env.NewGRPCClientShared(t)
 	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
@@ -675,17 +695,18 @@ func TestMessageLifecycle_SendHeartbeat(t *testing.T) {
 	// Wait for background worker to process message state transition (INVISIBLE -> PENDING)
 	helpers.WaitForMessageTransition(t)
 
-	// Get message
+	// Get message with a short lease for faster test
 	getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
 		QueueName:     queueName,
-		LeaseDuration: durationpb.New(20 * time.Second), // Short lease
+		LeaseDuration: durationpb.New(5 * time.Second), // Short lease for faster test
 	})
 	require.NoError(t, err)
 	require.NotNil(t, getResp.Message)
 
-	// Act - Send heartbeat multiple times
+	// Act - Send heartbeat multiple times to verify lease extension
+	// Use shorter intervals for faster test execution
 	for i := 0; i < 3; i++ {
-		time.Sleep(5 * time.Second) // Wait before each heartbeat
+		time.Sleep(1 * time.Second) // Wait 1 second between heartbeats (reduced from 5s)
 
 		heartbeatResp, err := client.SendMessageHeartBeat(ctx, &queueservice_pb.SendMessageHeartBeatRequest{
 			QueueName: queueName,

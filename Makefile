@@ -252,10 +252,18 @@ test-race:
 		go test -race
 
 ################################################################################
+# Target: build-test-image                                                     #
+################################################################################
+.PHONY: build-test-image
+build-test-image:
+	@echo "Building ChronoQueue test image (for integration tests)..."
+	DOCKER_BUILDKIT=0 docker build -f images/Dockerfile -t chronoqueue:test-latest .
+
+################################################################################
 # Target: test-integration                                                     #
 ################################################################################
 .PHONY: test-integration
-test-integration: check-gotestsum
+test-integration: check-gotestsum build-test-image
 	@echo "Running integration tests (requires Docker for testcontainers)..."
 	CGO_ENABLED=$(CGO) \
 		gotestsum \
@@ -270,7 +278,7 @@ test-integration: check-gotestsum
 # Target: ci-test-integration (optimized for CI)                               #
 ################################################################################
 .PHONY: ci-test-integration
-ci-test-integration: check-gotestsum
+ci-test-integration: check-gotestsum build-test-image
 	@echo "Running integration tests in CI mode..."
 	CGO_ENABLED=$(CGO) \
 		gotestsum \

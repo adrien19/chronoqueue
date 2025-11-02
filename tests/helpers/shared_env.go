@@ -101,23 +101,34 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 		return nil, fmt.Errorf("failed to get Redis connection string: %w", err)
 	}
 
-	// Use redis:6379 for container-to-container communication
-	redisInternalAddr := "redis:6379"
+	// Get Redis host and port for container-to-container communication
+	redisHost, err := redisContainer.Host(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Redis host: %w", err)
+	}
+	redisPort, err := redisContainer.MappedPort(ctx, "6379")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Redis port: %w", err)
+	}
+	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort.Port())
 
-	// Start ChronoQueue server container
+	// Use pre-built test image (built via `make build-test-image`)
+	// This avoids rebuilding the image every time tests run
 	serverReq := testcontainers.ContainerRequest{
-		FromDockerfile: testcontainers.FromDockerfile{
-			Context:    "../..", // Adjust based on test location
-			Dockerfile: "images/Dockerfile",
-		},
+		Image:        "chronoqueue:test-latest",
 		ExposedPorts: []string{"9000/tcp", "8080/tcp"},
 		Networks:     []string{net.Name},
+		NetworkAliases: map[string][]string{
+			net.Name: {"chronoqueue"},
+		},
 		Env: map[string]string{
-			"SERVER_MODE":       "development",     // Use development mode for tests
-			"REDIS_ADDR":        redisInternalAddr, // Use internal network address
-			"REDIS_DB":          "0",
-			"LOG_LEVEL":         "debug",
-			"ENABLE_ENCRYPTION": "false",
+			"SERVER_MODE":           "development", // Use development mode for tests
+			"REDIS_ADDR":            redisAddr,     // Use host:port format
+			"REDIS_DB":              "0",
+			"LOG_LEVEL":             "debug",
+			"ENABLE_ENCRYPTION":     "false",
+			"SCHEDULER_INTERVAL_MS": "300",  // Faster scheduler for tests (300ms vs 1000ms)
+			"RECLAIM_INTERVAL_MS":   "2000", // Faster reclaim for tests (2s vs 5s)
 		},
 		WaitingFor: wait.ForHTTP("/health").
 			WithPort("8080").
@@ -130,7 +141,7 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 			Started:          true,
 		})
 	if err != nil {
-		return nil, fmt.Errorf("failed to start ChronoQueue server container: %w", err)
+		return nil, fmt.Errorf("failed to start ChronoQueue server container (did you run 'make build-test-image'?): %w", err)
 	}
 
 	serverHost, err := serverContainer.Host(ctx)
@@ -174,6 +185,10 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 		HTTPAddr:        httpAddr,
 		ctx:             ctx,
 	}
+
+	// Allow time for scheduler and reclaim services to initialize
+	// Scheduler runs every 300ms, reclaim every 2s - wait 2.5s to ensure both have started
+	time.Sleep(2500 * time.Millisecond)
 
 	return env, nil
 }

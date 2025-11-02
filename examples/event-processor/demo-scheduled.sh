@@ -42,6 +42,9 @@ cat > /tmp/demo-scheduled.json <<EOF
 }
 EOF
 
+# Initialize event processor queue (if not already done - creates necessary queues)
+./event-processor init --insecure
+
 ./event-processor publish /tmp/demo-scheduled.json --insecure
 echo ""
 

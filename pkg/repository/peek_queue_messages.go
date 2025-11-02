@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
@@ -38,6 +39,35 @@ func (as *storage) fetchMessageIDsFromStreams(ctx context.Context, queueName str
 				break
 			}
 			if msgID, ok := entry.Values["message_id"].(string); ok {
+				// Filter by priority range if specified
+				if priorityRange != nil {
+					// Try to get priority value from stream entry
+					// Redis stores numbers as strings in stream entries
+					var priority int64
+					priorityFound := false
+					switch v := entry.Values["priority"].(type) {
+					case string:
+						if _, err := fmt.Sscanf(v, "%d", &priority); err == nil {
+							priorityFound = true
+						}
+					case int64:
+						priority = v
+						priorityFound = true
+					case int:
+						priority = int64(v)
+						priorityFound = true
+					case float64:
+						priority = int64(v)
+						priorityFound = true
+					}
+
+					if priorityFound {
+						// Check if priority falls within the requested range
+						if priority < priorityRange.Min || priority > priorityRange.Max {
+							continue
+						}
+					}
+				}
 				messageIDs = append(messageIDs, msgID)
 				remaining--
 			}
@@ -47,9 +77,31 @@ func (as *storage) fetchMessageIDsFromStreams(ctx context.Context, queueName str
 	// Also check scheduled messages if there's remaining capacity
 	if remaining > 0 {
 		scheduleKey := as.scheduleKey(queueName)
-		scheduledMsgIDs, err := as.redisClient.ZRange(ctx, scheduleKey, 0, remaining-1).Result()
+		// Get more messages than needed in case some are filtered out
+		scheduledMsgIDs, err := as.redisClient.ZRange(ctx, scheduleKey, 0, -1).Result()
 		if err == nil {
-			messageIDs = append(messageIDs, scheduledMsgIDs...)
+			// Filter scheduled messages by priority range if specified
+			for _, msgID := range scheduledMsgIDs {
+				if remaining <= 0 {
+					break
+				}
+
+				// If priority range filtering is enabled, check the message metadata
+				if priorityRange != nil {
+					metadata, err := as.fetchMessageMetadata(ctx, queueName, msgID)
+					if err != nil {
+						continue
+					}
+
+					priority := metadata.Priority
+					if priority < priorityRange.Min || priority > priorityRange.Max {
+						continue
+					}
+				}
+
+				messageIDs = append(messageIDs, msgID)
+				remaining--
+			}
 		}
 	}
 

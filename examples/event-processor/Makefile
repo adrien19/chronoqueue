@@ -15,13 +15,33 @@ tidy:
 run-init: build
 	./$(BINARY) init
 
-run-publish: build
+run-publish-critical-webhook:
 	./$(BINARY) publish events/critical-webhook.json
 
-run-worker: build
+run-publish-mixed-batch:
+	./$(BINARY) publish events/mixed-batch.json
+
+run-publish-webhook-failures:
+	./$(BINARY) publish events/webhook-failure.json
+
+run-webhook-worker:
 	./$(BINARY) worker --type=webhook --workers=2
 
-run-stats: build
+run-notification-worker:
+	./$(BINARY) worker --type=email --workers=2
+
+run-sms-alerts-worker:
+	./$(BINARY) worker --type=sms --workers=2
+
+run-all-workers:
+	./$(BINARY) worker --type=webhook --workers=2 &
+	./$(BINARY) worker --type=email --workers=2 &
+	./$(BINARY) worker --type=sms --workers=2
+
+stop-workers:
+	pkill -f "./$(BINARY) worker"
+
+run-stats:
 	./$(BINARY) stats
 
 help:

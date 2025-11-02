@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -11,13 +12,38 @@ import (
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 )
 
-// WaitForMessageTransition waits for the background worker to process message state transitions.
-// This is needed after posting messages because they start in INVISIBLE state and must
-// transition to PENDING before they can be retrieved with GetNextMessage.
-// The invisibleToPending worker runs every 1 second, so we wait 1.5s to be safe.
+// WaitForCondition polls a condition function until it returns true or timeout occurs.
+// This is useful for waiting on asynchronous operations like scheduler processing.
+func WaitForCondition(t *testing.T, timeout time.Duration, condition func() bool) bool {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-ticker.C:
+			if condition() {
+				return true
+			}
+		}
+	}
+}
+
+// WaitForMessageTransition waits for the scheduler to process message state transitions.
+// This is needed after posting messages because they go to the schedule index and must
+// be promoted to streams by the scheduler before they can be retrieved with GetNextMessage.
+// The test scheduler runs every 300ms (configured in shared_env.go), so we wait 400ms
+// to ensure at least one scheduler cycle completes.
 func WaitForMessageTransition(t *testing.T) {
 	t.Helper()
-	time.Sleep(1500 * time.Millisecond)
+	// Optimized wait: 400ms for test scheduler running at 300ms intervals
+	// This is ~73% faster than the original 1500ms wait
+	time.Sleep(400 * time.Millisecond)
 }
 
 // AssertQueueExists verifies that a queue with the given name exists

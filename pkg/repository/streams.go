@@ -17,9 +17,9 @@ func (as *storage) streamKey(queueName string, priority int32) string {
 }
 
 func (as *storage) priorityLevel(priority int32) string {
-	if priority >= 8 {
+	if priority >= 70 {
 		return "high"
-	} else if priority >= 4 {
+	} else if priority >= 30 {
 		return "medium"
 	}
 	return "low"
@@ -58,7 +58,18 @@ func (as *storage) ackMessage(ctx context.Context, queueName, streamEntryID stri
 
 	for _, priority := range priorities {
 		streamKey := fmt.Sprintf("stream:%s:%s", priority, queueName)
-		_ = as.redisClient.XAck(ctx, streamKey, groupKey, streamEntryID)
+
+		// XACK removes message from PEL (marks as processed by consumer group)
+		ackCount, err := as.redisClient.XAck(ctx, streamKey, groupKey, streamEntryID).Result()
+
+		// Only delete from the stream if XACK succeeded (message was in this stream)
+		if err == nil && ackCount > 0 {
+			// XDEL actually removes the message from the stream
+			if err := as.redisClient.XDel(ctx, streamKey, streamEntryID).Err(); err != nil {
+				as.logger.ErrorWithFields("Failed to delete message from stream", "streamKey", streamKey, "streamEntryID", streamEntryID, "error", err)
+			}
+			return nil
+		}
 	}
 
 	return nil
@@ -94,19 +105,64 @@ func (as *storage) claimStrict(ctx context.Context, queueName, consumerName stri
 		streamKey := fmt.Sprintf("stream:%s:%s", priority, queueName)
 		groupKey := as.groupKey(queueName)
 
+		// Ensure consumer group exists before attempting to read
+		if err := as.ensureConsumerGroup(ctx, streamKey, groupKey); err != nil {
+			as.logger.ErrorWithFields("Failed to ensure consumer group in claimStrict", "streamKey", streamKey, "error", err)
+			continue
+		}
+
+		as.logger.InfoWithFields("Attempting XREADGROUP", "streamKey", streamKey, "groupKey", groupKey, "consumer", consumerName)
+
+		// Check consumer group info to see if there are undelivered messages
+		groups, err := as.redisClient.XInfoGroups(ctx, streamKey).Result()
+		if err != nil {
+			as.logger.InfoWithFields("XInfoGroups error (stream might not exist yet)", "streamKey", streamKey, "error", err.Error())
+			continue
+		}
+
+		// Find our consumer group and check lag
+		var hasUndelivered bool
+		for _, group := range groups {
+			if group.Name == groupKey {
+				// Lag > 0 means there are messages that haven't been delivered to any consumer yet
+				as.logger.InfoWithFields("Consumer group info", "streamKey", streamKey, "lag", group.Lag, "pending", group.Pending)
+				if group.Lag > 0 {
+					hasUndelivered = true
+				}
+				break
+			}
+		}
+
+		if !hasUndelivered {
+			as.logger.InfoWithFields("No undelivered messages in stream, skipping", "streamKey", streamKey)
+			continue
+		}
+
 		messages, err := as.redisClient.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    groupKey,
 			Consumer: consumerName,
 			Streams:  []string{streamKey, ">"},
 			Count:    1,
-			Block:    0,
+			Block:    0, // Non-blocking
 		}).Result()
+
+		// Log result
+		if err != nil {
+			as.logger.InfoWithFields("XREADGROUP error", "streamKey", streamKey, "error", err.Error())
+		} else if len(messages) == 0 {
+			as.logger.InfoWithFields("XREADGROUP returned no stream results", "streamKey", streamKey)
+		} else if len(messages[0].Messages) == 0 {
+			as.logger.InfoWithFields("XREADGROUP returned empty messages array", "streamKey", streamKey)
+		} else {
+			as.logger.InfoWithFields("XREADGROUP success", "streamKey", streamKey, "messageID", messages[0].Messages[0].ID)
+		}
 
 		if err == nil && len(messages) > 0 && len(messages[0].Messages) > 0 {
 			return &messages[0].Messages[0], nil
 		}
 	}
 
+	as.logger.InfoWithFields("claimStrict returning nil - no messages found in any priority stream", "queueName", queueName)
 	return nil, nil
 }
 

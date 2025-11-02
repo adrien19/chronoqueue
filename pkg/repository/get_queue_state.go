@@ -105,9 +105,28 @@ func (as *storage) GetQueueState(ctx context.Context, request *queueservice_pb.G
 		}
 	}
 
-	// Note: COMPLETED, CANCELED, and ERRORED states are not tracked in streams
-	// These messages are acknowledged and removed from streams
-	// DLQ messages (ERRORED) would need to be queried from dlq:{queueName} stream
+	// Read terminal state counts from Redis hash (O(1) lookup)
+	// These counters are maintained by AcknowledgeMessage for COMPLETED, CANCELED, ERRORED states
+	statsKey := fmt.Sprintf("stats:%s", queueName)
+	terminalStates := []string{"COMPLETED", "CANCELED", "ERRORED"}
+
+	for _, stateStr := range terminalStates {
+		count, err := as.redisClient.HGet(ctx, statsKey, stateStr).Int64()
+		if err != nil && err != redis.Nil {
+			as.logger.ErrorWithFields("Error reading state counter", "state", stateStr, "error", err)
+			continue
+		}
+		if count > 0 {
+			switch stateStr {
+			case "COMPLETED":
+				stateCounts[message_pb.Message_Metadata_COMPLETED] = int32(count)
+			case "CANCELED":
+				stateCounts[message_pb.Message_Metadata_CANCELED] = int32(count)
+			case "ERRORED":
+				stateCounts[message_pb.Message_Metadata_ERRORED] = int32(count)
+			}
+		}
+	}
 
 	return &queueservice_pb.GetQueueStateResponse{
 		StateCounts: map[string]int32{

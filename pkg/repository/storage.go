@@ -77,6 +77,11 @@ type storage struct {
 }
 
 func NewQueueStorage(ctx context.Context, redisClient *redis.Client, encryptionKeyManager *keymanager.EncryptionKeyManager, logger *log.Logger) Storage {
+	return NewQueueStorageWithIntervals(ctx, redisClient, encryptionKeyManager, logger, time.Second, 5*time.Second)
+}
+
+// NewQueueStorageWithIntervals creates a storage instance with custom scheduler and reclaim intervals
+func NewQueueStorageWithIntervals(ctx context.Context, redisClient *redis.Client, encryptionKeyManager *keymanager.EncryptionKeyManager, logger *log.Logger, schedulerInterval, reclaimInterval time.Duration) Storage {
 	pool := goredis.NewPool(redisClient)
 	rs := redsync.New(pool)
 	storage := &storage{
@@ -86,12 +91,12 @@ func NewQueueStorage(ctx context.Context, redisClient *redis.Client, encryptionK
 		logger:               logger,
 	}
 
-	scheduler := NewScheduler(storage, time.Second)
+	scheduler := NewScheduler(storage, schedulerInterval)
 	storage.scheduler = scheduler
 	go scheduler.Start(ctx)
 
 	// Start the reclaim service for XAUTOCLAIM-based stuck message recovery
-	reclaimService := NewReclaimService(storage, 5*time.Second)
+	reclaimService := NewReclaimService(storage, reclaimInterval)
 	storage.reclaimService = reclaimService
 	go reclaimService.Start(ctx)
 

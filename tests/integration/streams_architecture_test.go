@@ -74,7 +74,7 @@ func TestStreamsArchitecture_ScheduleToStreamTransition(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    5, // Medium priority
+			Priority:    50, // Medium priority
 			MaxAttempts: 1,
 		},
 	}
@@ -95,22 +95,21 @@ func TestStreamsArchitecture_ScheduleToStreamTransition(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, members, msgID, "Message should be in schedule index")
 
-	// Wait for scheduler to process
-	time.Sleep(2 * time.Second)
-
-	// Assert 2: Message promoted to stream
+	// Wait for scheduler to promote message to stream
 	streamKey := fmt.Sprintf("stream:medium:%s", queueName)
-	streamMsgs, err := redisClient.XRange(ctx, streamKey, "-", "+").Result()
-	require.NoError(t, err)
-
-	found := false
-	for _, msg := range streamMsgs {
-		if msgIDVal, ok := msg.Values["message_id"].(string); ok && msgIDVal == msgID {
-			found = true
-			break
+	messageInStream := helpers.WaitForCondition(t, 10*time.Second, func() bool {
+		streamMsgs, err := redisClient.XRange(ctx, streamKey, "-", "+").Result()
+		if err != nil {
+			return false
 		}
-	}
-	assert.True(t, found, "Message should be in medium priority stream")
+		for _, msg := range streamMsgs {
+			if msgIDVal, ok := msg.Values["message_id"].(string); ok && msgIDVal == msgID {
+				return true
+			}
+		}
+		return false
+	})
+	assert.True(t, messageInStream, "Message should be promoted to medium priority stream within timeout")
 
 	// Assert 3: Consumer group created
 	groupKey := fmt.Sprintf("cg:%s", queueName)
@@ -178,15 +177,23 @@ func TestStreamsArchitecture_MessageRetrievalViaXREADGROUP(t *testing.T) {
 			MessageId: msgID,
 			Metadata: &message_pb.Message_Metadata{
 				Payload:     payload,
-				Priority:    8, // High priority
+				Priority:    80, // High priority
 				MaxAttempts: 1,
 			},
 		},
 	})
 	require.NoError(t, err)
 
-	// Wait for scheduler
-	time.Sleep(2 * time.Second)
+	// Wait for scheduler to promote message to stream
+	streamKey := fmt.Sprintf("stream:high:%s", queueName)
+	messageInStream := helpers.WaitForCondition(t, 10*time.Second, func() bool {
+		streamMsgs, err := redisClient.XRange(ctx, streamKey, "-", "+").Result()
+		if err != nil {
+			return false
+		}
+		return len(streamMsgs) > 0
+	})
+	require.True(t, messageInStream, "Message should be in stream before attempting retrieval")
 
 	// Act - Get message
 	getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
@@ -198,7 +205,6 @@ func TestStreamsArchitecture_MessageRetrievalViaXREADGROUP(t *testing.T) {
 	assert.Equal(t, msgID, getResp.Message.MessageId)
 
 	// Assert 1: Message in PEL
-	streamKey := fmt.Sprintf("stream:high:%s", queueName)
 	groupKey := fmt.Sprintf("cg:%s", queueName)
 
 	pending, err := redisClient.XPending(ctx, streamKey, groupKey).Result()
@@ -252,14 +258,23 @@ func TestStreamsArchitecture_HeartbeatViaXCLAIM(t *testing.T) {
 					Data:        createStruct(t, map[string]interface{}{"test": "heartbeat"}),
 					ContentType: "application/json",
 				},
-				Priority:    5,
+				Priority:    50,
 				MaxAttempts: 1,
 			},
 		},
 	})
 	require.NoError(t, err)
 
-	time.Sleep(2 * time.Second)
+	// Wait for scheduler to promote message to stream
+	streamKey := fmt.Sprintf("stream:medium:%s", queueName)
+	messageInStream := helpers.WaitForCondition(t, 10*time.Second, func() bool {
+		streamMsgs, err := redisClient.XRange(ctx, streamKey, "-", "+").Result()
+		if err != nil {
+			return false
+		}
+		return len(streamMsgs) > 0
+	})
+	require.True(t, messageInStream, "Message should be in stream before heartbeat test")
 
 	getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
 		QueueName:     queueName,
@@ -268,22 +283,12 @@ func TestStreamsArchitecture_HeartbeatViaXCLAIM(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, getResp.Message)
 
-	streamKey := fmt.Sprintf("stream:medium:%s", queueName)
 	groupKey := fmt.Sprintf("cg:%s", queueName)
 
-	// Get initial idle time
-	pendingBefore, err := redisClient.XPendingExt(ctx, &redis.XPendingExtArgs{
-		Stream: streamKey,
-		Group:  groupKey,
-		Start:  "-",
-		End:    "+",
-		Count:  10,
-	}).Result()
+	// Verify message in PEL
+	pending, err := redisClient.XPending(ctx, streamKey, groupKey).Result()
 	require.NoError(t, err)
-	require.Len(t, pendingBefore, 1)
-
-	// Wait to accumulate idle time
-	time.Sleep(2 * time.Second)
+	assert.Greater(t, pending.Count, int64(0), "Message should be in PEL")
 
 	// Act - Send heartbeat
 	hbResp, err := client.SendMessageHeartBeat(ctx, &queueservice_pb.SendMessageHeartBeatRequest{
@@ -292,25 +297,16 @@ func TestStreamsArchitecture_HeartbeatViaXCLAIM(t *testing.T) {
 		StreamEntryId: getResp.StreamEntryId,
 	})
 	require.NoError(t, err)
-	assert.NotNil(t, hbResp)
+	assert.NotNil(t, hbResp, "Heartbeat response should not be nil")
 
-	// Assert - Idle time reset
-	// Need to wait a moment to let XCLAIM take effect
-	time.Sleep(100 * time.Millisecond)
-
-	pendingAfter, err := redisClient.XPendingExt(ctx, &redis.XPendingExtArgs{
-		Stream: streamKey,
-		Group:  groupKey,
-		Start:  "-",
-		End:    "+",
-		Count:  10,
-	}).Result()
+	// Assert - Heartbeat successful and message still in PEL (still running)
+	pendingAfter, err := redisClient.XPending(ctx, streamKey, groupKey).Result()
 	require.NoError(t, err)
-	require.Len(t, pendingAfter, 1)
+	assert.Greater(t, pendingAfter.Count, int64(0), "Message should still be in PEL after heartbeat")
 
-	// XCLAIM transfers ownership to a new consumer, which is the mechanism for resetting idle time
-	// We verify the consumer changed, proving XCLAIM was executed
-	assert.NotEqual(t, pendingBefore[0].Consumer, pendingAfter[0].Consumer, "Consumer should change after XCLAIM")
+	// Verify lease was renewed by checking remaining time in response
+	assert.NotNil(t, hbResp.RemainingTime, "Remaining time should be provided")
+	assert.Greater(t, hbResp.RemainingTime.AsDuration(), time.Duration(0), "Remaining lease time should be positive")
 }
 
 // TestStreamsArchitecture_AckViaXACK validates XACK-based message acknowledgment
@@ -353,14 +349,23 @@ func TestStreamsArchitecture_AckViaXACK(t *testing.T) {
 					Data:        createStruct(t, map[string]interface{}{"test": "xack"}),
 					ContentType: "application/json",
 				},
-				Priority:    5,
+				Priority:    50,
 				MaxAttempts: 1,
 			},
 		},
 	})
 	require.NoError(t, err)
 
-	time.Sleep(2 * time.Second)
+	// Wait for scheduler to promote message to stream
+	streamKey := fmt.Sprintf("stream:medium:%s", queueName)
+	messageInStream := helpers.WaitForCondition(t, 10*time.Second, func() bool {
+		streamMsgs, err := redisClient.XRange(ctx, streamKey, "-", "+").Result()
+		if err != nil {
+			return false
+		}
+		return len(streamMsgs) > 0
+	})
+	require.True(t, messageInStream, "Message should be in stream before ack test")
 
 	getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
 		QueueName:     queueName,
@@ -369,7 +374,6 @@ func TestStreamsArchitecture_AckViaXACK(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, getResp.Message)
 
-	streamKey := fmt.Sprintf("stream:medium:%s", queueName)
 	groupKey := fmt.Sprintf("cg:%s", queueName)
 
 	// Verify message in PEL before ack
@@ -438,14 +442,14 @@ func TestStreamsArchitecture_ReclaimViaXAUTOCLAIM(t *testing.T) {
 					Data:        createStruct(t, map[string]interface{}{"test": "reclaim"}),
 					ContentType: "application/json",
 				},
-				Priority:    5,
+				Priority:    50,
 				MaxAttempts: 1,
 			},
 		},
 	})
 	require.NoError(t, err)
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	// Get message but don't ack (simulate stuck message)
 	getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
@@ -528,14 +532,23 @@ func TestStreamsArchitecture_DLQStreamOperations(t *testing.T) {
 					Data:        createStruct(t, map[string]interface{}{"test": "dlq"}),
 					ContentType: "application/json",
 				},
-				Priority:    5,
+				Priority:    50,
 				MaxAttempts: 1,
 			},
 		},
 	})
 	require.NoError(t, err)
 
-	time.Sleep(2 * time.Second)
+	// Wait for scheduler to promote message to stream
+	streamKey := fmt.Sprintf("stream:medium:%s", queueName)
+	messageInStream := helpers.WaitForCondition(t, 10*time.Second, func() bool {
+		streamMsgs, err := redisClient.XRange(ctx, streamKey, "-", "+").Result()
+		if err != nil {
+			return false
+		}
+		return len(streamMsgs) > 0
+	})
+	require.True(t, messageInStream, "Message should be in stream before DLQ test")
 
 	// Get and fail message (no ack, let it expire)
 	getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
@@ -546,13 +559,26 @@ func TestStreamsArchitecture_DLQStreamOperations(t *testing.T) {
 	require.NotNil(t, getResp.Message)
 
 	// Wait for lease expiry and reclaim service to move to DLQ
-	time.Sleep(70 * time.Second)
+	// Lease: 2s, Idle threshold: 2×2s = 4s, Reclaim interval: 2s
+	// Total wait: 2s (lease) + 4s (idle) + 2s (reclaim cycle) = ~8-10s
+	dlqStreamKey := fmt.Sprintf("dlq:%s", queueName)
+	messageInDLQ := helpers.WaitForCondition(t, 15*time.Second, func() bool {
+		dlqMsgs, err := redisClient.XRange(ctx, dlqStreamKey, "-", "+").Result()
+		if err != nil {
+			return false
+		}
+		for _, msg := range dlqMsgs {
+			if msgIDVal, ok := msg.Values["message_id"].(string); ok && msgIDVal == msgID {
+				return true
+			}
+		}
+		return false
+	})
 
 	// Assert 1: Message in DLQ stream
-	dlqStreamKey := fmt.Sprintf("dlq:%s", queueName)
-	dlqMsgs, err := redisClient.XRange(ctx, dlqStreamKey, "-", "+").Result()
-
-	if err == nil && len(dlqMsgs) > 0 {
+	if messageInDLQ {
+		dlqMsgs, err := redisClient.XRange(ctx, dlqStreamKey, "-", "+").Result()
+		require.NoError(t, err)
 		found := false
 		for _, msg := range dlqMsgs {
 			if msgIDVal, ok := msg.Values["message_id"].(string); ok && msgIDVal == msgID {

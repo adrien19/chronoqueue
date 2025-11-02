@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -75,6 +76,11 @@ func (r *ReclaimService) reclaimStuckMessages(ctx context.Context) {
 			for {
 				msgs, nextID, err := r.xAutoClaim(ctx, streamKey, groupKey, startID, minIdleMs, 10)
 				if err != nil {
+					// NOGROUP error means stream or consumer group doesn't exist yet (no messages published)
+					// This is expected for empty queues, so don't log as error
+					if strings.Contains(err.Error(), "NOGROUP") || strings.Contains(err.Error(), "no such key") {
+						break
+					}
 					r.storage.logger.ErrorWithFields("XAUTOCLAIM failed", "queue", queueName, "priority", priority, "error", err)
 					break
 				}
