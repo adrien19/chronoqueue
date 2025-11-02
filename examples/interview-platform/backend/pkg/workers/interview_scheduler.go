@@ -59,8 +59,9 @@ func (w *InterviewSchedulerWorker) Start(ctx context.Context) error {
 
 			// Process the message
 			msg := response.GetMessage()
+			streamEntryID := response.GetStreamEntryId()
 			log.Printf("[Interview Scheduler] Received message: %s", msg.GetMessageId())
-			if err := w.processMessage(ctx, queueName, msg); err != nil {
+			if err := w.processMessage(ctx, queueName, msg, streamEntryID); err != nil {
 				log.Printf("[Interview Scheduler] Error processing message %s: %v", msg.GetMessageId(), err)
 				// Message lease will expire and become available again
 			}
@@ -69,21 +70,21 @@ func (w *InterviewSchedulerWorker) Start(ctx context.Context) error {
 }
 
 // processMessage handles a single interview scheduling message
-func (w *InterviewSchedulerWorker) processMessage(ctx context.Context, queueName string, msg *message_pb.Message) error {
+func (w *InterviewSchedulerWorker) processMessage(ctx context.Context, queueName string, msg *message_pb.Message, streamEntryID string) error {
 	log.Printf("[Interview Scheduler] Processing message: %s", msg.GetMessageId())
 
 	// Get payload data
 	metadata := msg.GetMetadata()
 	if metadata == nil || metadata.GetPayload() == nil {
 		log.Printf("[Interview Scheduler] Empty payload")
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
 		return nil
 	}
 
 	payloadData := metadata.GetPayload().GetData()
 	if payloadData == nil {
 		log.Printf("[Interview Scheduler] Empty payload data")
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
 		return nil
 	}
 
@@ -97,7 +98,7 @@ func (w *InterviewSchedulerWorker) processMessage(ctx context.Context, queueName
 
 	if interviewID == "" {
 		log.Printf("[Interview Scheduler] Missing interview_id")
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
 		return nil
 	}
 
@@ -105,7 +106,7 @@ func (w *InterviewSchedulerWorker) processMessage(ctx context.Context, queueName
 	interview, err := w.db.GetInterview(interviewID)
 	if err != nil {
 		log.Printf("[Interview Scheduler] Interview not found: %v", err)
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
 		return err
 	}
 
@@ -223,7 +224,7 @@ func (w *InterviewSchedulerWorker) processMessage(ctx context.Context, queueName
 	}
 
 	// Acknowledge message as completed
-	if _, err := w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED); err != nil {
+	if _, err := w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID); err != nil {
 		log.Printf("[Interview Scheduler] Failed to acknowledge message: %v", err)
 		return err
 	}
