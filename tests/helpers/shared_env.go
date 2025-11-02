@@ -101,16 +101,10 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 		return nil, fmt.Errorf("failed to get Redis connection string: %w", err)
 	}
 
-	// Get Redis host and port for container-to-container communication
-	redisHost, err := redisContainer.Host(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get Redis host: %w", err)
-	}
-	redisPort, err := redisContainer.MappedPort(ctx, "6379")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get Redis port: %w", err)
-	}
-	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort.Port())
+	// For container→container connections, use network alias
+	// ChronoQueue container will connect to Redis via internal Docker network
+	// (connectionString is used by test code to connect from host → Redis)
+	redisInternalAddr := "redis:6379"
 
 	// Use pre-built test image (built via `make build-test-image`)
 	// This avoids rebuilding the image every time tests run
@@ -122,8 +116,8 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 			net.Name: {"chronoqueue"},
 		},
 		Env: map[string]string{
-			"SERVER_MODE":           "development", // Use development mode for tests
-			"REDIS_ADDR":            redisAddr,     // Use host:port format
+			"SERVER_MODE":           "development",     // Use development mode for tests
+			"REDIS_ADDR":            redisInternalAddr, // Use internal network address for container→Redis
 			"REDIS_DB":              "0",
 			"LOG_LEVEL":             "debug",
 			"ENABLE_ENCRYPTION":     "false",
