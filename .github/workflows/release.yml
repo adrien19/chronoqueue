@@ -202,7 +202,7 @@ jobs:
           provenance: false
           build-args: |
             VERSION=${{ needs.prepare-release.outputs.version }}
-            COMMIT=${{ github.sha }}
+            GIT_COMMIT=${{ github.sha }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
 
   generate-sbom:

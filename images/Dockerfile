@@ -19,8 +19,16 @@ COPY go.mod go.sum ./
 RUN go mod download
 # && go mod verify
 
-# building server binary
-RUN go build -o chronoqueue main.go
+# Build arguments for version injection
+ARG VERSION=1.0.0
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+# building server binary with version information
+RUN go build -ldflags="-X 'github.com/adrien19/chronoqueue/pkg/version.Version=${VERSION}' \
+    -X 'github.com/adrien19/chronoqueue/pkg/version.GitCommit=${GIT_COMMIT}' \
+    -X 'github.com/adrien19/chronoqueue/pkg/version.BuildDate=${BUILD_DATE}'" \
+    -o chronoqueue main.go
 
 ## Using the multi-stage image to just run the binary
 FROM alpine:latest as final

@@ -60,7 +60,10 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.logger = logger
 
-	s.logger.Info("Starting ChronoQueue server...")
+	s.logger.Info("Starting ChronoQueue server...",
+		"version", s.config.Version,
+		"commit", s.config.GitCommit,
+		"build_date", s.config.BuildDate)
 
 	// Initialize Redis connection
 	redisClient, err := s.initializeRedis(ctx)

@@ -10,6 +10,11 @@ import (
 
 // Config holds the complete server configuration
 type Config struct {
+	// Version Information
+	Version   string
+	GitCommit string
+	BuildDate string
+
 	// Network Configuration
 	GRPCAddr string
 	HTTPAddr string
