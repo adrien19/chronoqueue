@@ -1,7 +1,7 @@
 # Build the cipher service binary
 # FROM golang:1.19.7-stretch as base
 # FROM golang:1.19.7-alpine3.17 as base
-FROM golang:1.25.0-alpine3.22 as base
+FROM golang:1.25.3-alpine3.22 as base
 
 # add the working directory for the workflow service
 WORKDIR /go/src/chronoqueuesvr
