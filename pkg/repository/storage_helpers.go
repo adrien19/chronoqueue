@@ -82,7 +82,7 @@ func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, m
 		}
 	}()
 
-	key := fmt.Sprintf("%s:%s:meta", queueName, messageID)
+	key := as.messageMetaKey(queueName, messageID)
 	result, err := as.redisClient.HGet(ctx, key, "metadata").Result()
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func (as *storage) getMetadata(ctx context.Context, key string, metadata interfa
 }
 
 func (as *storage) GetQueueMetadata(ctx context.Context, queueName string) (*queue_pb.QueueMetadata, error) {
-	queueMetaKey := fmt.Sprintf("queue:%s:meta", queueName)
+	queueMetaKey := as.queueMetaKey(queueName)
 	var queueMeta queue_pb.QueueMetadata
 	if err := as.getMetadata(ctx, queueMetaKey, &queueMeta); err != nil {
 		return nil, err
@@ -141,8 +141,8 @@ func (as *storage) GetQueueMetadata(ctx context.Context, queueName string) (*que
 
 func (as *storage) getScheduleMetadata(ctx context.Context, scheduleId string) (*schedule_pb.Schedule_Metadata, error) {
 	scheduleMetaKey := scheduleId
-	if !strings.HasPrefix(scheduleId, "schedule:") || !strings.HasSuffix(scheduleId, ":meta") {
-		scheduleMetaKey = fmt.Sprintf("schedule:%s:meta", scheduleId)
+	if !strings.HasPrefix(scheduleId, "chronoqueue:schedule:") || !strings.HasSuffix(scheduleId, ":meta") {
+		scheduleMetaKey = as.scheduleMetaKey(scheduleId)
 	}
 	var scheduleMeta schedule_pb.Schedule_Metadata
 	if err := as.getMetadata(ctx, scheduleMetaKey, &scheduleMeta); err != nil {
@@ -195,9 +195,9 @@ func (as *storage) listMetadataIDs(ctx context.Context, keyType string, prefix s
 	switch keyType {
 	case "queue":
 		fmt.Println("Listing queue metadata IDs with prefix:", prefix)
-		queryStr = "queue:" + prefix + "*" + ":meta"
+		queryStr = "chronoqueue:queue:" + urlEncode(prefix) + "*" + ":meta"
 	case "schedule":
-		queryStr = "schedule:" + prefix + "*" + ":meta"
+		queryStr = "chronoqueue:schedule:" + urlEncode(prefix) + "*" + ":meta"
 	default:
 		return nil, errors.New("invalid key type: " + queryStr)
 	}
@@ -295,7 +295,7 @@ func (as *storage) transitionStateIndex(ctx context.Context, pipeline redis.Pipe
 }
 
 func (as *storage) saveMessageMetadata(ctx context.Context, queueName, messageID string, meta *message_pb.Message_Metadata) error {
-	key := fmt.Sprintf("%s:%s:meta", queueName, messageID)
+	key := as.messageMetaKey(queueName, messageID)
 	data, err := protojson.Marshal(meta)
 	if err != nil {
 		return err
@@ -312,12 +312,18 @@ func (as *storage) listQueueNames(ctx context.Context) ([]string, error) {
 	var queues []string
 	seen := make(map[string]bool)
 
-	iter := as.redisClient.Scan(ctx, 0, "queue:*:meta", 0).Iterator()
+	iter := as.redisClient.Scan(ctx, 0, "chronoqueue:queue:*:meta", 0).Iterator()
 	for iter.Next(ctx) {
 		key := iter.Val()
+		// Key format: chronoqueue:queue:{encoded_name}:meta
 		parts := strings.Split(key, ":")
-		if len(parts) >= 2 {
-			queueName := parts[1]
+		if len(parts) >= 4 {
+			encodedQueueName := parts[2]
+			queueName, err := urlDecode(encodedQueueName)
+			if err != nil {
+				as.logger.ErrorWithFields("Failed to decode queue name", "encodedName", encodedQueueName, "error", err)
+				continue
+			}
 			if !seen[queueName] {
 				queues = append(queues, queueName)
 				seen[queueName] = true

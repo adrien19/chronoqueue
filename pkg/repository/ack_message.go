@@ -48,7 +48,7 @@ func (as *storage) saveMessageMetadataWithOldState(ctx context.Context, queueNam
 		}
 	}()
 
-	key := fmt.Sprintf("%s:%s:meta", queueName, messageID)
+	key := as.messageMetaKey(queueName, messageID)
 
 	// If oldState is -1, we need to fetch the old state
 	if oldState == message_pb.Message_Metadata_State(-1) {
@@ -170,7 +170,7 @@ func (as *storage) AcknowledgeMessage(ctx context.Context, request *queueservice
 			as.logger.ErrorWithFields("Failed to XACK message from stream", "error", err, "messageID", messageID)
 		}
 
-		metaKey := fmt.Sprintf("%s:%s:meta", queueName, messageID)
+		metaKey := as.messageMetaKey(queueName, messageID)
 		as.redisClient.Expire(ctx, metaKey, 1*time.Hour)
 	}
 
@@ -180,7 +180,7 @@ func (as *storage) AcknowledgeMessage(ctx context.Context, request *queueservice
 // updateStateCounters updates Redis hash counters for state transitions
 // This provides O(1) lookup for GetQueueState instead of scanning all message keys
 func (as *storage) updateStateCounters(ctx context.Context, queueName string, oldState, newState message_pb.Message_Metadata_State) error {
-	statsKey := fmt.Sprintf("stats:%s", queueName)
+	statsKey := as.statsKey(queueName)
 
 	// Use pipelined operations for atomicity
 	pipe := as.redisClient.Pipeline()

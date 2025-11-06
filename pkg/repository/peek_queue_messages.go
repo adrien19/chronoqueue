@@ -17,16 +17,16 @@ func (as *storage) fetchMessageIDsFromStreams(ctx context.Context, queueName str
 	var messageIDs []string
 
 	// Query priority streams - use priority levels (high, medium, low) instead of individual priorities
-	priorityLevels := []string{"high", "medium", "low"}
+	priorities := []int32{100, 50, 10} // high, medium, low
 	remaining := limit
 
 	// Query streams in priority order (high to low)
-	for _, level := range priorityLevels {
+	for _, priority := range priorities {
 		if remaining <= 0 {
 			break
 		}
 
-		streamKey := "stream:" + level + ":" + queueName
+		streamKey := as.streamKey(queueName, priority)
 
 		// Use XRANGE to peek at messages without consuming
 		entries, err := as.redisClient.XRange(ctx, streamKey, "-", "+").Result()

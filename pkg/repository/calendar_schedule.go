@@ -59,7 +59,13 @@ import (
 
 // updateMessageCalendarSchedule handles calendar-based schedule updates
 func (as *storage) updateMessageCalendarSchedule(ctx context.Context, key string, metadata *schedule_pb.Schedule_Metadata) error {
-	scheduleID := strings.Split(key, ":")[1]
+	// Key format: chronoqueue:schedule:{encoded_id}:meta
+	parts := strings.Split(key, ":")
+	encodedScheduleID := parts[2]
+	scheduleID, err := urlDecode(encodedScheduleID)
+	if err != nil {
+		return fmt.Errorf("failed to decode schedule ID: %w", err)
+	}
 	queueID := metadata.GetQueueName()
 
 	// Create or fetch the mutex for this specific schedule
@@ -184,10 +190,10 @@ func (as *storage) updateMessageCalendarSchedule(ctx context.Context, key string
 	}
 
 	// Add the message to the schedule sorted set using the next run time as score
-	messageInfo := fmt.Sprintf("%s:%s", queueID, randomID)
-	_, err = as.redisClient.ZAdd(ctx, scheduleID, redis.Z{
+	// Member is just the message ID (not full key) - scheduler extracts this directly
+	_, err = as.redisClient.ZAdd(ctx, as.scheduleSetKey(scheduleID), redis.Z{
 		Score:  float64(nextRunMillis),
-		Member: messageInfo,
+		Member: randomID,
 	}).Result()
 	if err != nil {
 		return fmt.Errorf("failed to add message to schedule sorted set: %w", err)

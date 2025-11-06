@@ -13,7 +13,7 @@ import (
 
 func (as *storage) streamKey(queueName string, priority int32) string {
 	level := as.priorityLevel(priority)
-	return fmt.Sprintf("stream:%s:%s", level, queueName)
+	return fmt.Sprintf("chronoqueue:stream:%s:%s", level, urlEncode(queueName))
 }
 
 func (as *storage) priorityLevel(priority int32) string {
@@ -26,15 +26,15 @@ func (as *storage) priorityLevel(priority int32) string {
 }
 
 func (as *storage) scheduleKey(queueName string) string {
-	return fmt.Sprintf("schedule:%s", queueName)
+	return fmt.Sprintf("chronoqueue:schedule:%s", urlEncode(queueName))
 }
 
 func (as *storage) groupKey(queueName string) string {
-	return fmt.Sprintf("cg:%s", queueName)
+	return fmt.Sprintf("chronoqueue:cg:%s", urlEncode(queueName))
 }
 
 func (as *storage) dlqStreamKey(queueName string) string {
-	return fmt.Sprintf("dlq:%s", queueName)
+	return fmt.Sprintf("chronoqueue:dlq:%s", urlEncode(queueName))
 }
 
 func (as *storage) addToSchedule(ctx context.Context, queueName, messageID string, scheduledTime int64) error {
@@ -53,11 +53,11 @@ func (as *storage) ensureConsumerGroup(ctx context.Context, streamKey, groupKey 
 }
 
 func (as *storage) ackMessage(ctx context.Context, queueName, streamEntryID string) error {
-	priorities := []string{"high", "medium", "low"}
+	priorities := []int32{100, 50, 10} // high, medium, low
 	groupKey := as.groupKey(queueName)
 
 	for _, priority := range priorities {
-		streamKey := fmt.Sprintf("stream:%s:%s", priority, queueName)
+		streamKey := as.streamKey(queueName, priority)
 
 		// XACK removes message from PEL (marks as processed by consumer group)
 		ackCount, err := as.redisClient.XAck(ctx, streamKey, groupKey, streamEntryID).Result()
@@ -76,11 +76,11 @@ func (as *storage) ackMessage(ctx context.Context, queueName, streamEntryID stri
 }
 
 func (as *storage) sendHeartbeat(ctx context.Context, queueName, consumerName, streamEntryID string) error {
-	priorities := []string{"high", "medium", "low"}
+	priorities := []int32{100, 50, 10} // high, medium, low
 	groupKey := as.groupKey(queueName)
 
 	for _, priority := range priorities {
-		streamKey := fmt.Sprintf("stream:%s:%s", priority, queueName)
+		streamKey := as.streamKey(queueName, priority)
 
 		_, err := as.redisClient.XClaim(ctx, &redis.XClaimArgs{
 			Stream:   streamKey,
@@ -99,10 +99,10 @@ func (as *storage) sendHeartbeat(ctx context.Context, queueName, consumerName, s
 }
 
 func (as *storage) claimStrict(ctx context.Context, queueName, consumerName string) (*redis.XMessage, error) {
-	priorities := []string{"high", "medium", "low"}
+	priorities := []int32{100, 50, 10} // high, medium, low
 
 	for _, priority := range priorities {
-		streamKey := fmt.Sprintf("stream:%s:%s", priority, queueName)
+		streamKey := as.streamKey(queueName, priority)
 		groupKey := as.groupKey(queueName)
 
 		// Ensure consumer group exists before attempting to read
@@ -167,23 +167,23 @@ func (as *storage) claimStrict(ctx context.Context, queueName, consumerName stri
 }
 
 func (as *storage) claimWeightedWithAging(ctx context.Context, queueName, consumerName string, config *queue_pb.PriorityConfig) (*redis.XMessage, error) {
-	effectiveWeights := make(map[string]int32)
+	effectiveWeights := make(map[int32]int32)
 
-	priorities := []string{"high", "medium", "low"}
-	for _, priority := range priorities {
-		baseWeight := as.getBaseWeight(priority, config)
-		hasAgedMessages := as.hasAgedMessages(ctx, queueName, priority, config.AgeBoostThreshold.AsDuration())
+	prioritiesMap := map[string]int32{"high": 100, "medium": 50, "low": 10}
+	for priorityStr, priorityVal := range prioritiesMap {
+		baseWeight := as.getBaseWeight(priorityStr, config)
+		hasAgedMessages := as.hasAgedMessages(ctx, queueName, priorityStr, config.AgeBoostThreshold.AsDuration())
 
 		if hasAgedMessages {
-			effectiveWeights[priority] = baseWeight * config.AgeBoostMultiplier
+			effectiveWeights[priorityVal] = baseWeight * config.AgeBoostMultiplier
 		} else {
-			effectiveWeights[priority] = baseWeight
+			effectiveWeights[priorityVal] = baseWeight
 		}
 	}
 
 	selectedPriority := as.weightedRandomSelect(effectiveWeights)
 
-	streamKey := fmt.Sprintf("stream:%s:%s", selectedPriority, queueName)
+	streamKey := as.streamKey(queueName, selectedPriority)
 	groupKey := as.groupKey(queueName)
 
 	messages, err := as.redisClient.XReadGroup(ctx, &redis.XReadGroupArgs{
@@ -198,12 +198,13 @@ func (as *storage) claimWeightedWithAging(ctx context.Context, queueName, consum
 		return &messages[0].Messages[0], nil
 	}
 
-	for _, priority := range priorities {
+	allPriorities := []int32{100, 50, 10} // high, medium, low
+	for _, priority := range allPriorities {
 		if priority == selectedPriority {
 			continue
 		}
 
-		streamKey := fmt.Sprintf("stream:%s:%s", priority, queueName)
+		streamKey := as.streamKey(queueName, priority)
 		messages, err := as.redisClient.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    groupKey,
 			Consumer: consumerName,
@@ -257,7 +258,9 @@ func (as *storage) getBaseWeight(priority string, config *queue_pb.PriorityConfi
 }
 
 func (as *storage) hasAgedMessages(ctx context.Context, queueName, priority string, threshold time.Duration) bool {
-	streamKey := fmt.Sprintf("stream:%s:%s", priority, queueName)
+	priorityMap := map[string]int32{"high": 100, "medium": 50, "low": 10}
+	priorityVal := priorityMap[priority]
+	streamKey := as.streamKey(queueName, priorityVal)
 	groupKey := as.groupKey(queueName)
 
 	pending, err := as.redisClient.XPendingExt(ctx, &redis.XPendingExtArgs{
@@ -275,9 +278,9 @@ func (as *storage) hasAgedMessages(ctx context.Context, queueName, priority stri
 	return pending[0].Idle >= threshold
 }
 
-func (as *storage) weightedRandomSelect(weights map[string]int32) string {
+func (as *storage) weightedRandomSelect(weights map[int32]int32) int32 {
 	if len(weights) == 0 {
-		return "medium"
+		return 50 // medium
 	}
 
 	var totalWeight int32
@@ -286,25 +289,25 @@ func (as *storage) weightedRandomSelect(weights map[string]int32) string {
 	}
 
 	if totalWeight == 0 {
-		return "high"
+		return 100 // high
 	}
 
 	randValue := rand.Int31n(totalWeight)
 
 	var cumulative int32
-	for _, weight := range []struct {
-		name   string
-		weight int32
+	for _, item := range []struct {
+		priority int32
+		weight   int32
 	}{
-		{"high", weights["high"]},
-		{"medium", weights["medium"]},
-		{"low", weights["low"]},
+		{100, weights[100]}, // high
+		{50, weights[50]},   // medium
+		{10, weights[10]},   // low
 	} {
-		cumulative += weight.weight
+		cumulative += item.weight
 		if randValue < cumulative {
-			return weight.name
+			return item.priority
 		}
 	}
 
-	return "high"
+	return 100 // high
 }

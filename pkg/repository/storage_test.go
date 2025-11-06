@@ -349,7 +349,7 @@ func Test_storage_GetQueueMessage(t *testing.T) {
 	}
 
 	// Second, directly set up a message in PENDING state and add to the stream for testing
-	testMessageKey := "test_queue:test_message_id:meta"
+	testMessageKey := as.(*storage).messageMetaKey("test_queue", "test_message_id")
 	testMessage := &message_pb.Message{
 		MessageId: "test_message_id",
 		Metadata: &message_pb.Message_Metadata{
@@ -512,7 +512,7 @@ func Test_storage_AcknowledgeMessage(t *testing.T) {
 	}
 
 	// Second, set up a message in RUNNING state (ready for acknowledgment)
-	testMessageKey := "test_queue:test_message_id:meta"
+	testMessageKey := as.(*storage).messageMetaKey("test_queue", "test_message_id")
 	testMessage := &message_pb.Message{
 		MessageId: "test_message_id",
 		Metadata: &message_pb.Message_Metadata{
@@ -594,7 +594,7 @@ func Test_storage_RenewMessageLease(t *testing.T) {
 	}
 
 	// Second, set up a message in RUNNING state (leases can only be renewed for running messages)
-	testMessageKey := "test_queue:test_message_id:meta"
+	testMessageKey := as.(*storage).messageMetaKey("test_queue", "test_message_id")
 	testMessage := &message_pb.Message{
 		MessageId: "test_message_id",
 		Metadata: &message_pb.Message_Metadata{
@@ -704,7 +704,7 @@ func Test_storage_PeekQueueMessages(t *testing.T) {
 	}
 
 	// Second, add message directly to the stream (simulate scheduler)
-	testMessageKey := "test_queue:test_message_id:meta"
+	testMessageKey := as.(*storage).messageMetaKey("test_queue", "test_message_id")
 	testMessage := &message_pb.Message{
 		MessageId: "test_message_id",
 		Metadata: &message_pb.Message_Metadata{
@@ -798,7 +798,7 @@ func Test_storage_GetQueueState(t *testing.T) {
 	}
 
 	// Second, set up a message in PENDING state for state counting
-	testMessageKey := "test_queue:test_message_id:meta"
+	testMessageKey := as.(*storage).messageMetaKey("test_queue", "test_message_id")
 	testMessage := &message_pb.Message{
 		MessageId: "test_message_id",
 		Metadata: &message_pb.Message_Metadata{
@@ -854,61 +854,3 @@ func Test_storage_GetQueueState(t *testing.T) {
 		})
 	}
 }
-
-// func Test_storage_RunLuaScripts(t *testing.T) {
-// 	setup()
-// 	defer teardown()
-
-// 	type args struct {
-// 		ctx context.Context
-// 	}
-// 	tests := []struct {
-// 		name string
-// 		args args
-// 	}{
-// 		// TODO: Add more test cases.
-// 		{
-// 			name: "Test successful running lua script",
-// 			args: args{
-// 				ctx: context.TODO(),
-// 			},
-// 		},
-// 	}
-
-// 	// First, create a queue.
-// 	as := &storage{
-// 		redisClient: redisClient,
-// 	}
-// 	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
-// 		Queue: &queueservice_pb.Queue{
-// 			Name: "test_queue",
-// 		},
-// 	})
-// 	if err != nil {
-// 		t.Errorf("storage.CreateQueue() error = %v", err)
-// 		return
-// 	}
-
-// 	// Second, add messages to the queue.
-// 	_, err = as.CreateQueueMessage(context.TODO(), &queueservice_pb.PostMessageRequest{
-// 		QueueName: "test_queue",
-// 		Message: &queueservice_pb.Message{
-// 			MessageId: "test_message_id",
-// 			Priority:  time.Now().Unix(),
-// 			Metadata: &queueservice_pb.Message_Metadata{
-// 				Payload: &queueservice_pb.Payload{},
-// 				State:   queueservice_pb.Message_Metadata_INVISIBLE,
-// 			},
-// 		},
-// 	})
-// 	if err != nil {
-// 		t.Errorf("storage.CreateQueueMessage() error = %v", err)
-// 		return
-// 	}
-
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			as.RunLuaScripts(tt.args.ctx)
-// 		})
-// 	}
-// }

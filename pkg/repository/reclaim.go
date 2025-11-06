@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -69,8 +68,8 @@ func (r *ReclaimService) reclaimStuckMessages(ctx context.Context) {
 			minIdleMs = 60000
 		}
 
-		for _, priority := range []string{"high", "medium", "low"} {
-			streamKey := fmt.Sprintf("stream:%s:%s", priority, queueName)
+		for _, priorityVal := range []int32{100, 50, 10} { // high, medium, low
+			streamKey := r.storage.streamKey(queueName, priorityVal)
 			groupKey := r.storage.groupKey(queueName)
 			startID := "0-0"
 			for {
@@ -81,7 +80,7 @@ func (r *ReclaimService) reclaimStuckMessages(ctx context.Context) {
 					if strings.Contains(err.Error(), "NOGROUP") || strings.Contains(err.Error(), "no such key") {
 						break
 					}
-					r.storage.logger.ErrorWithFields("XAUTOCLAIM failed", "queue", queueName, "priority", priority, "error", err)
+					r.storage.logger.ErrorWithFields("XAUTOCLAIM failed", "queue", queueName, "priorityVal", priorityVal, "error", err)
 					break
 				}
 				if len(msgs) == 0 {

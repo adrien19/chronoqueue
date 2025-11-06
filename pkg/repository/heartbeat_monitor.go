@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -73,7 +72,7 @@ func (as *storage) SendMessageHeartBeat(ctx context.Context, request *queueservi
 			return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to save metadata for heartbeat.").GRPCStatus()
 		}
 
-		metaKey := fmt.Sprintf("meta:%s:%s", queueName, messageID)
+		metaKey := as.messageMetaKey(queueName, messageID)
 		as.redisClient.Expire(ctx, metaKey, 2*renewalDuration)
 	}
 

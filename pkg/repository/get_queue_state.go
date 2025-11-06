@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -31,11 +30,11 @@ func (as *storage) GetQueueState(ctx context.Context, request *queueservice_pb.G
 	}
 
 	// Query all priority streams for this queue
-	priorityLevels := []string{"high", "medium", "low"}
+	priorities := []int32{100, 50, 10} // high, medium, low
 	groupKey := as.groupKey(queueName)
 
-	for _, level := range priorityLevels {
-		streamKey := fmt.Sprintf("stream:%s:%s", level, queueName)
+	for _, priority := range priorities {
+		streamKey := as.streamKey(queueName, priority)
 
 		// Get stream length (PENDING messages in stream)
 		streamLen, err := as.redisClient.XLen(ctx, streamKey).Result()
@@ -107,7 +106,7 @@ func (as *storage) GetQueueState(ctx context.Context, request *queueservice_pb.G
 
 	// Read terminal state counts from Redis hash (O(1) lookup)
 	// These counters are maintained by AcknowledgeMessage for COMPLETED, CANCELED, ERRORED states
-	statsKey := fmt.Sprintf("stats:%s", queueName)
+	statsKey := as.statsKey(queueName)
 	terminalStates := []string{"COMPLETED", "CANCELED", "ERRORED"}
 
 	for _, stateStr := range terminalStates {

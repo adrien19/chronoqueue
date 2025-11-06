@@ -122,7 +122,7 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	_, err = as.redisClient.HSet(ctx, fmt.Sprintf("%s:%s:meta", queueName, message.MessageId), "metadata", string(messageMetadataByte)).Result()
+	_, err = as.redisClient.HSet(ctx, as.messageMetaKey(queueName, message.MessageId), "metadata", string(messageMetadataByte)).Result()
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while saving message metadata")
 		return nil, chronoErr.GRPCStatus()
@@ -133,7 +133,7 @@ func (as *storage) CreateQueueMessage(ctx context.Context, request *queueservice
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	metaKey := fmt.Sprintf("%s:%s:meta", queueName, message.MessageId)
+	metaKey := as.messageMetaKey(queueName, message.MessageId)
 	as.redisClient.Expire(ctx, metaKey, 24*time.Hour)
 
 	return &queueservice_pb.PostMessageResponse{Success: true}, nil

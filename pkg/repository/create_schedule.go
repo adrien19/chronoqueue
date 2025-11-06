@@ -88,7 +88,8 @@ func (as *storage) CreateSchedule(ctx context.Context, request *queueservice_pb.
 	}
 
 	txPipeline := as.redisClient.TxPipeline()
-	_, err = txPipeline.ZAdd(ctx, scheduleInfo.GetScheduleId(), redis.Z{}).Result()
+	scheduleSetKey := as.scheduleSetKey(scheduleInfo.GetScheduleId())
+	_, err = txPipeline.ZAdd(ctx, scheduleSetKey, redis.Z{}).Result()
 	if err != nil {
 		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while creating schedule")
 		return &queueservice_pb.CreateScheduleResponse{
@@ -118,8 +119,8 @@ func (as *storage) CreateSchedule(ctx context.Context, request *queueservice_pb.
 }
 
 func (as *storage) checkScheduleExistence(ctx context.Context, scheduleId string) (bool, error) {
-	exists, err := as.redisClient.Exists(ctx, scheduleId, fmt.Sprintf("schedule:%s:meta", scheduleId)).Result()
-	return exists >= 2, err
+	exists, err := as.redisClient.Exists(ctx, as.scheduleMetaKey(scheduleId)).Result()
+	return exists >= 1, err
 }
 
 func (as *storage) setScheduleMetadata(ctx context.Context, scheduleInfo *schedule_pb.Schedule, txPipeline redis.Pipeliner) error {
@@ -141,7 +142,7 @@ func (as *storage) setScheduleMetadata(ctx context.Context, scheduleInfo *schedu
 	}
 
 	as.logger.DebugWithFields("Updating schedule metadata payload", "scheduleID", scheduleInfo.GetScheduleId(), "metadata", scheduleInfo.GetMetadata())
-	_, err = txPipeline.HSet(ctx, fmt.Sprintf("schedule:%s:meta", scheduleInfo.GetScheduleId()), "metadata", string(scheduleMetadataByte)).Result()
+	_, err = txPipeline.HSet(ctx, as.scheduleMetaKey(scheduleInfo.GetScheduleId()), "metadata", string(scheduleMetadataByte)).Result()
 	return err
 }
 
@@ -160,7 +161,7 @@ func (as *storage) setPausedScheduleMetadata(ctx context.Context, scheduleInfo *
 		"scheduleID", scheduleInfo.GetScheduleId(),
 		"metadata", scheduleInfo.GetMetadata(),
 	)
-	_, err = as.redisClient.HSet(ctx, fmt.Sprintf("schedule:%s:meta", scheduleInfo.GetScheduleId()), "metadata", string(scheduleMetadataByte)).Result()
+	_, err = as.redisClient.HSet(ctx, as.scheduleMetaKey(scheduleInfo.GetScheduleId()), "metadata", string(scheduleMetadataByte)).Result()
 	return err
 }
 
@@ -213,7 +214,7 @@ func (as *storage) GetSchedule(ctx context.Context, request *queueservice_pb.Get
 		return nil, errors.New("error: schedule information missing")
 	}
 
-	scheduleMetadata, err := as.redisClient.HGet(ctx, fmt.Sprintf("schedule:%s:meta", request.GetScheduleId()), "metadata").Result()
+	scheduleMetadata, err := as.redisClient.HGet(ctx, as.scheduleMetaKey(request.GetScheduleId()), "metadata").Result()
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +241,14 @@ func (as *storage) ListSchedules(ctx context.Context, request *queueservice_pb.L
 
 	schedules := make([]*schedule_pb.Schedule, len(scheduleMetadataIDs))
 	for i, scheduleMetadataID := range scheduleMetadataIDs {
-		scheduleID := strings.Split(scheduleMetadataID, ":")[1]
+		// Key format: chronoqueue:schedule:{scheduleID}:meta
+		scheduleID := strings.Split(scheduleMetadataID, ":")[2]
+		scheduleID, err := urlDecode(scheduleID)
+		if err != nil {
+			msg := fmt.Sprintf("error decoding schedule ID from %s", scheduleMetadataID)
+			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, msg)
+			return nil, chronoErr.GRPCStatus()
+		}
 		metadata, err := as.getScheduleMetadata(ctx, scheduleID)
 		if err != nil {
 			msg := fmt.Sprintf("error fetching metadata for schedule %s", scheduleID)
@@ -280,7 +288,7 @@ func (as *storage) GetScheduleMessages(ctx context.Context, scheduleId string) (
 	for i, messageInfo := range messageIds {
 		queueName := strings.Split(messageInfo, ":")[0]
 		messageId := strings.Split(messageInfo, ":")[1]
-		messageMetadata, err := as.redisClient.HGet(ctx, fmt.Sprintf("%s:%s:meta", queueName, messageId), "metadata").Result()
+		messageMetadata, err := as.redisClient.HGet(ctx, as.messageMetaKey(queueName, messageId), "metadata").Result()
 		if err != nil {
 			return nil, err
 		}
@@ -305,7 +313,7 @@ func (as *storage) GetScheduleHistory(ctx context.Context, request *queueservice
 		return nil, errors.New("error: schedule information missing")
 	}
 
-	scheduleMetadata, err := as.redisClient.HGet(ctx, fmt.Sprintf("schedule:%s:meta", request.GetScheduleId()), "metadata").Result()
+	scheduleMetadata, err := as.redisClient.HGet(ctx, as.scheduleMetaKey(request.GetScheduleId()), "metadata").Result()
 	if err != nil {
 		return nil, err
 	}
