@@ -22,8 +22,18 @@ func (as *storage) ListQueues(ctx context.Context, request *queueservice_pb.List
 
 	queues := make([]*queue_pb.Queue, len(queueMetadataIDs))
 	for i, queueMetadataID := range queueMetadataIDs {
-		queueID := strings.Split(queueMetadataID, ":")[1]  // Extract queue name from "queue:<name>:meta"
-		metadata, err := as.GetQueueMetadata(ctx, queueID) // Use extracted queue name
+		// Key format: chronoqueue:queue:{encoded_name}:meta
+		parts := strings.Split(queueMetadataID, ":")
+		if len(parts) < 4 {
+			continue
+		}
+		encodedQueueName := parts[2]
+		queueID, err := urlDecode(encodedQueueName)
+		if err != nil {
+			as.logger.ErrorWithFields("Failed to decode queue name", "encodedName", encodedQueueName, "error", err)
+			continue
+		}
+		metadata, err := as.GetQueueMetadata(ctx, queueID)
 		if err != nil {
 			msg := fmt.Sprintf("error fetching metadata for queue %s", queueID)
 			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, msg)

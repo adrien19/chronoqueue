@@ -158,7 +158,7 @@ func (as *storage) DeleteQueue(ctx context.Context, request *queueservice_pb.Del
 	checker.Start(ctx)
 
 	// Delete legacy queue sorted set and metadata
-	iter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("queue:%s*", queueName), 0).Iterator()
+	iter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("chronoqueue:queue:%s*", urlEncode(queueName)), 0).Iterator()
 	for iter.Next(ctx) {
 		checker.Add(iter.Val())
 	}
@@ -167,11 +167,11 @@ func (as *storage) DeleteQueue(ctx context.Context, request *queueservice_pb.Del
 	}
 
 	// Delete all priority streams for this queue
-	priorityLevels := []string{"high", "medium", "low"}
+	priorities := []int32{100, 50, 10} // high, medium, low
 	groupKey := as.groupKey(queueName)
 
-	for _, level := range priorityLevels {
-		streamKey := fmt.Sprintf("stream:%s:%s", level, queueName)
+	for _, priority := range priorities {
+		streamKey := as.streamKey(queueName, priority)
 
 		// Destroy consumer group first if it exists
 		err := as.redisClient.XGroupDestroy(ctx, streamKey, groupKey).Err()
@@ -187,8 +187,8 @@ func (as *storage) DeleteQueue(ctx context.Context, request *queueservice_pb.Del
 	scheduleKey := as.scheduleKey(queueName)
 	checker.Add(scheduleKey)
 
-	// Delete message metadata keys
-	metaIter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("%s:*:meta", queueName), 0).Iterator()
+	// Delete message metadata keys - scan for chronoqueue:{queueName}:msg:*:meta pattern
+	metaIter := as.redisClient.Scan(ctx, 0, fmt.Sprintf("chronoqueue:%s:msg:*:meta", urlEncode(queueName)), 0).Iterator()
 	for metaIter.Next(ctx) {
 		checker.Add(metaIter.Val())
 	}
@@ -233,7 +233,13 @@ func calculateNextRunTime(cronSchedule string) (int64, error) {
 }
 
 func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, metadata *schedule_pb.Schedule_Metadata) error {
-	scheduleID := strings.Split(key, ":")[1]
+	// Key format: chronoqueue:schedule:{encoded_id}:meta
+	parts := strings.Split(key, ":")
+	encodedScheduleID := parts[2]
+	scheduleID, err := urlDecode(encodedScheduleID)
+	if err != nil {
+		return err
+	}
 	queueID := metadata.GetQueueName()
 
 	// Create or fetch the mutex for this specific queue
@@ -311,11 +317,11 @@ func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, me
 			return err
 		}
 
-		messageInfo := fmt.Sprintf("%s:%s", queueID, randomID)
 		// Add the message to the schedule sorted set using the next run time as score
-		_, err = as.redisClient.ZAdd(ctx, scheduleID, redis.Z{
+		// Member is just the message ID (not full key) - scheduler extracts this directly
+		_, err = as.redisClient.ZAdd(ctx, as.scheduleSetKey(scheduleID), redis.Z{
 			Score:  float64(nextRunTime),
-			Member: messageInfo,
+			Member: randomID,
 		}).Result()
 		if err != nil {
 			return err
@@ -332,7 +338,7 @@ func (as *storage) updateAllCronSchedules(ctx context.Context) error {
 	var keys []string
 
 	for {
-		keys, cursor, err = as.redisClient.Scan(ctx, cursor, "schedule:*:meta", 10).Result()
+		keys, cursor, err = as.redisClient.Scan(ctx, cursor, "chronoqueue:schedule:*:meta", 10).Result()
 		if err != nil {
 			return err
 		}
