@@ -264,6 +264,8 @@ jobs:
           output-file: sbom-${{ needs.prepare-release.outputs.version }}.spdx.json
           registry-username: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
+          upload-artifact: true
+          upload-release-assets: false
 
       - name: Upload SBOM as artifact
         uses: actions/upload-artifact@v4
