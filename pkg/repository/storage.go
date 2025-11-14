@@ -118,18 +118,6 @@ func NewQueueStorageWithIntervals(ctx context.Context, redisClient *redis.Client
 	return storage
 }
 
-// NewQueueStorageForTesting creates a storage instance without background workers for testing
-func NewQueueStorageForTesting(redisClient *redis.Client, encryptionKeyManager *keymanager.EncryptionKeyManager, logger *log.Logger) Storage {
-	pool := goredis.NewPool(redisClient)
-	rs := redsync.New(pool)
-	return &storage{
-		redisClient:          redisClient,
-		rs:                   rs,
-		encryptionKeyManager: encryptionKeyManager,
-		logger:               logger,
-	}
-}
-
 func (as *storage) DeleteQueue(ctx context.Context, request *queueservice_pb.DeleteQueueRequest) (*queueservice_pb.DeleteQueueResponse, error) {
 	// Create or fetch the mutex for this specific queue
 	queueMutex := as.rs.NewMutex("mutex:" + request.GetName())

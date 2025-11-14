@@ -40,7 +40,8 @@ func setupTestStorage(t *testing.T) (repository.Storage, *miniredis.Miniredis, f
 	require.NoError(t, err, "Failed to create encryption key manager")
 
 	// Create storage layer using the testing constructor to avoid background workers
-	storage := repository.NewQueueStorageForTesting(client, keyManager, logger)
+	ctx := context.Background()
+	storage := repository.NewQueueStorageWithIntervals(ctx, client, keyManager, logger, 100*time.Millisecond, 5*time.Second)
 
 	// Return cleanup function
 	cleanup := func() {

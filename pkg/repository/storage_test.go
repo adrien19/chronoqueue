@@ -86,7 +86,7 @@ func Test_storage_CreateQueue(t *testing.T) {
 
 	// Create a proper storage instance for testing (without background workers)
 	logger := log.NewLogger()
-	storage := NewQueueStorageForTesting(redisClient, nil, logger)
+	storage := NewQueueStorageWithIntervals(context.TODO(), redisClient, nil, logger, 100*time.Millisecond, 5*time.Second)
 
 	type args struct {
 		ctx     context.Context
@@ -159,7 +159,7 @@ func Test_storage_DeleteQueue(t *testing.T) {
 
 	// Create a proper storage instance for testing (without background workers)
 	logger := log.NewLogger()
-	storage := NewQueueStorageForTesting(redisClient, nil, logger)
+	storage := NewQueueStorageWithIntervals(context.TODO(), redisClient, nil, logger, 100*time.Millisecond, 5*time.Second)
 
 	// First create a queue to delete in the successful test case
 	createRequest := &queueservice_pb.CreateQueueRequest{
@@ -278,7 +278,7 @@ func Test_storage_CreateQueueMessage(t *testing.T) {
 	}
 	// First, create a queue.
 	logger := log.NewLogger()
-	as := NewQueueStorageForTesting(redisClient, nil, logger)
+	as := NewQueueStorageWithIntervals(context.TODO(), redisClient, nil, logger, 100*time.Millisecond, 5*time.Second)
 	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
 		Name: "test_queue",
 		Metadata: &queue_pb.QueueMetadata{
@@ -336,7 +336,7 @@ func Test_storage_GetQueueMessage(t *testing.T) {
 
 	// First, create a queue.
 	logger := log.NewLogger()
-	as := NewQueueStorageForTesting(redisClient, nil, logger)
+	as := NewQueueStorageWithIntervals(context.TODO(), redisClient, nil, logger, 100*time.Millisecond, 5*time.Second)
 	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
 		Name: "test_queue",
 		Metadata: &queue_pb.QueueMetadata{
@@ -429,7 +429,7 @@ func Test_storage_DeleteQueueMessage(t *testing.T) {
 
 	// First, create a queue.
 	logger := log.NewLogger()
-	as := NewQueueStorageForTesting(redisClient, nil, logger)
+	as := NewQueueStorageWithIntervals(context.TODO(), redisClient, nil, logger, 100*time.Millisecond, 5*time.Second)
 	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
 		Name: "test_queue",
 		Metadata: &queue_pb.QueueMetadata{
@@ -499,7 +499,7 @@ func Test_storage_AcknowledgeMessage(t *testing.T) {
 
 	// First, create a queue.
 	logger := log.NewLogger()
-	as := NewQueueStorageForTesting(redisClient, nil, logger)
+	as := NewQueueStorageWithIntervals(context.TODO(), redisClient, nil, logger, 100*time.Millisecond, 5*time.Second)
 	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
 		Name: "test_queue",
 		Metadata: &queue_pb.QueueMetadata{
@@ -581,7 +581,7 @@ func Test_storage_RenewMessageLease(t *testing.T) {
 
 	// First, create a queue.
 	logger := log.NewLogger()
-	as := NewQueueStorageForTesting(redisClient, nil, logger)
+	as := NewQueueStorageWithIntervals(context.TODO(), redisClient, nil, logger, 100*time.Millisecond, 5*time.Second)
 	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
 		Name: "test_queue",
 		Metadata: &queue_pb.QueueMetadata{
@@ -691,7 +691,7 @@ func Test_storage_PeekQueueMessages(t *testing.T) {
 
 	// First, create a queue.
 	logger := log.NewLogger()
-	as := NewQueueStorageForTesting(redisClient, nil, logger)
+	as := NewQueueStorageWithIntervals(context.TODO(), redisClient, nil, logger, 100*time.Millisecond, 5*time.Second)
 	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
 		Name: "test_queue",
 		Metadata: &queue_pb.QueueMetadata{
@@ -785,7 +785,7 @@ func Test_storage_GetQueueState(t *testing.T) {
 
 	// First, create a queue.
 	logger := log.NewLogger()
-	as := NewQueueStorageForTesting(redisClient, nil, logger)
+	as := NewQueueStorageWithIntervals(context.TODO(), redisClient, nil, logger, 100*time.Millisecond, 5*time.Second)
 	_, err := as.CreateQueue(context.TODO(), &queueservice_pb.CreateQueueRequest{
 		Name: "test_queue",
 		Metadata: &queue_pb.QueueMetadata{
