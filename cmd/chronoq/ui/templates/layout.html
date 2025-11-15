@@ -1,0 +1,49 @@
+{{/* Base layout template */}}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - ChronoQueue</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://unpkg.com/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
+</head>
+
+<body class="bg-gray-50">
+    <div class="min-h-screen flex">
+        <!-- Sidebar -->
+        <aside class="w-64 bg-gray-900 text-white">
+            <div class="p-4">
+                <h1 class="text-2xl font-bold">ChronoQueue</h1>
+                <p class="text-gray-400 text-sm">Message Queue Management</p>
+            </div>
+            <nav class="mt-8">
+                <a href="/" class="block px-4 py-2 {{if eq .CurrentPage " dashboard"}}bg-gray-800{{end}}
+                    hover:bg-gray-800">
+                    Dashboard
+                </a>
+                <a href="/queues" class="block px-4 py-2 {{if eq .CurrentPage " queues"}}bg-gray-800{{end}}
+                    hover:bg-gray-800">
+                    Queues
+                </a>
+                <a href="/schedules" class="block px-4 py-2 {{if eq .CurrentPage " schedules"}}bg-gray-800{{end}}
+                    hover:bg-gray-800">
+                    Schedules
+                </a>
+                <a href="/dlq" class="block px-4 py-2 {{if eq .CurrentPage " dlq"}}bg-gray-800{{end}}
+                    hover:bg-gray-800">
+                    Dead Letter Queues
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main content -->
+        <main class="flex-1 p-8">
+            {{template "page-content" .}}
+        </main>
+    </div>
+</body>
+
+</html>

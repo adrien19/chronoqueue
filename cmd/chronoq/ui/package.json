@@ -1,0 +1,13 @@
+{
+    "name": "chronoqueue-ui",
+    "version": "0.1.0",
+    "description": "ChronoQueue Web UI",
+    "scripts": {
+        "build:css": "tailwindcss -i ./static/css/input.css -o ./static/css/styles.css --minify",
+        "watch:css": "tailwindcss -i ./static/css/input.css -o ./static/css/styles.css --watch"
+    },
+    "devDependencies": {
+        "@tailwindcss/forms": "^0.5.7",
+        "tailwindcss": "^3.4.0"
+    }
+}

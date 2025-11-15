@@ -1,0 +1,55 @@
+{{define "queues-page-content"}}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Queues</h1>
+            <p class="mt-2 text-gray-600">Manage and monitor your message queues</p>
+        </div>
+    </div>
+
+    {{if .Queues}}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {{range .Queues}}
+        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
+            <div class="flex justify-between items-start mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">{{.Name}}</h3>
+                <span class="px-2 py-1 text-xs font-medium rounded {{if eq .Metadata.Type.String " SIMPLE"}}bg-blue-100
+                    text-blue-800{{else}}bg-purple-100 text-purple-800{{end}}">
+                    {{.Metadata.Type}}
+                </span>
+            </div>
+
+            <div class="space-y-2 text-sm text-gray-600">
+                <div class="flex justify-between">
+                    <span>Max Attempts:</span>
+                    <span class="font-medium">{{.Metadata.DefaultMaxAttempts}}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Lease Duration:</span>
+                    <span class="font-medium">{{.Metadata.LeaseDuration.Seconds}}s</span>
+                </div>
+            </div>
+
+            <div class="mt-4 pt-4 border-t border-gray-200">
+                <a href="/queues/{{.Name}}" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                    View Details →
+                </a>
+            </div>
+        </div>
+        {{end}}
+    </div>
+    {{else}}
+    <div class="bg-white rounded-lg shadow p-12 text-center">
+        <div class="text-gray-400 mb-4">
+            <svg class="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4">
+                </path>
+            </svg>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">No queues found</h3>
+        <p class="text-gray-500">Create your first queue to get started</p>
+    </div>
+    {{end}}
+</div>
+{{end}}

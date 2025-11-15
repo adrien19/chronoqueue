@@ -1,0 +1,66 @@
+{{define "dashboard-page-content"}}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-bold text-gray-900">Dashboard</h1>
+        <div class="text-sm text-gray-500">
+            Last updated: {{formatTime .Timestamp}}
+        </div>
+    </div>
+
+    <!-- Metrics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6" hx-get="/api/metrics/dashboard" hx-trigger="every 5s"
+        hx-swap="innerHTML">
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-600">Total Queues</div>
+            <div class="mt-2 text-3xl font-semibold text-gray-900">
+                {{.TotalQueues}}
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-600">Pending Messages</div>
+            <div class="mt-2 text-3xl font-semibold text-blue-600">
+                {{.TotalPending}}
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-600">Running Messages</div>
+            <div class="mt-2 text-3xl font-semibold text-yellow-600">
+                {{.TotalRunning}}
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-600">DLQ Messages</div>
+            <div class="mt-2 text-3xl font-semibold text-red-600">
+                {{.TotalDLQ}}
+            </div>
+        </div>
+    </div>
+
+    <!-- Queues List -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-900">Queues</h2>
+        </div>
+        <div class="p-6">
+            {{if .Queues}}
+            <div class="space-y-4">
+                {{range .Queues}}
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <a href="/queues/{{.Name}}" class="text-lg font-medium text-blue-600 hover:text-blue-800">
+                        {{.Name}}
+                    </a>
+                    <div class="mt-2 text-sm text-gray-600">
+                        Type: {{.Metadata.Type}}
+                    </div>
+                </div>
+                {{end}}
+            </div>
+            {{else}}
+            <div class="text-center py-8 text-gray-500">
+                No queues found. Create your first queue to get started.
+            </div>
+            {{end}}
+        </div>
+    </div>
+</div>
+{{end}}
