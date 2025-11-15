@@ -39,6 +39,9 @@ vendor/**/*_test.go
 *.swo
 *~
 
+# Node.js dependencies (only needed at build time for Tailwind CSS)
+node_modules/
+
 
 
 # Created by https://www.gitignore.io/api/python
