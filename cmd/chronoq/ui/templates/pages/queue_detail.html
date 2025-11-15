@@ -14,8 +14,15 @@
             </div>
             <p class="mt-2 text-gray-600">View and manage messages in this queue</p>
         </div>
-        <button class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-            Peek Messages
+        <button onclick="showPeekDialog()"
+            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            <span>Peek Messages</span>
         </button>
     </div>
 
@@ -64,7 +71,22 @@
                         <tbody class="bg-white divide-y divide-gray-200">
                             {{range .Messages}}
                             <tr class="hover:bg-gray-50">
-                                <td class="px-6 py-4 text-sm font-mono text-gray-900">{{.Id}}</td>
+                                <td class="px-6 py-4 text-sm font-mono">
+                                    <span title="{{.Id}}" class="cursor-help">{{.ShortId}}</span>
+                                    <button onclick="copyToClipboard('{{.Id}}')"
+                                        class="ml-2 text-gray-400 hover:text-gray-600" title="Copy ID">
+                                        <svg class="w-4 h-4 inline" fill="none" stroke="currentColor"
+                                            viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                    </button>
+                                    <button onclick="toggleMessageModal('{{.Id}}')" data-message-id="{{.Id}}"
+                                        class="ml-2 text-blue-600 hover:text-blue-800 text-xs view-btn"
+                                        title="View Details">
+                                        View
+                                    </button>
+                                </td>
                                 <td class="px-6 py-4 text-sm">
                                     <span class="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">
                                         {{.State}}
@@ -94,4 +116,153 @@
         </div>
     </div>
 </div>
+
+<!-- Modal Containers -->
+<div id="message-modal"></div>
+<div id="peek-dialog" data-current-limit="{{if .Messages}}{{len .Messages}}{{else}}20{{end}}"></div>
+
+<script>
+    function copyToClipboard(text) {
+        // Use modern Clipboard API
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(function () {
+                // Show success feedback
+                showCopyFeedback();
+            }).catch(function (err) {
+                console.error('Failed to copy:', err);
+            });
+        } else {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showCopyFeedback();
+            } catch (err) {
+                console.error('Failed to copy:', err);
+            }
+            document.body.removeChild(textArea);
+        }
+    }
+
+    function showCopyFeedback() {
+        // Create temporary toast notification
+        const toast = document.createElement('div');
+        toast.className = 'fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center space-x-2';
+        toast.innerHTML = `
+        <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+        <span>Message ID copied!</span>
+    `;
+        document.body.appendChild(toast);
+
+        // Remove after 2 seconds
+        setTimeout(function () {
+            toast.style.opacity = '0';
+            toast.style.transition = 'opacity 0.3s';
+            setTimeout(function () {
+                document.body.removeChild(toast);
+            }, 300);
+        }, 2000);
+    }
+
+    function toggleMessageModal(messageId) {
+        const modal = document.getElementById('message-modal');
+        const currentMessageId = modal.getAttribute('data-current-message');
+
+        // If modal is open and showing the same message, close it
+        if (currentMessageId === messageId && modal.innerHTML !== '') {
+            modal.innerHTML = '';
+            modal.removeAttribute('data-current-message');
+            return;
+        }
+
+        // Otherwise, fetch and display the message details
+        modal.setAttribute('data-current-message', messageId);
+        const queueName = '{{.QueueName}}';
+        fetch(`/api/queues/${queueName}/message-detail?message_id=${messageId}`)
+            .then(response => response.text())
+            .then(html => {
+                modal.innerHTML = html;
+            })
+            .catch(error => {
+                console.error('Error fetching message details:', error);
+                modal.innerHTML = '';
+                modal.removeAttribute('data-current-message');
+            });
+    }
+
+    // Close modal when clicking outside or on close button
+    function closeModal(event) {
+        const modal = document.getElementById('message-modal');
+        if (!event || event.target === event.currentTarget) {
+            modal.innerHTML = '';
+            modal.removeAttribute('data-current-message');
+        }
+    }
+
+    // Show peek messages dialog
+    function showPeekDialog() {
+        const dialog = document.getElementById('peek-dialog');
+        const currentLimit = parseInt(dialog.getAttribute('data-current-limit')) || 20;
+
+        dialog.innerHTML = `
+            <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50" onclick="closePeekDialog(event)">
+                <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4" onclick="event.stopPropagation()">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-900">Peek Messages</h3>
+                    </div>
+                    <div class="px-6 py-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Number of messages to display
+                        </label>
+                        <input type="number" id="peek-limit" value="${currentLimit}" min="1" max="1000" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Enter limit (1-1000)">
+                        <p class="mt-2 text-sm text-gray-500">
+                            Current: ${currentLimit} messages. Enter a number between 1 and 1000.
+                        </p>
+                    </div>
+                    <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+                        <button onclick="closePeekDialog()" 
+                            class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                            Cancel
+                        </button>
+                        <button onclick="applyPeekLimit()" 
+                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            Apply
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function closePeekDialog(event) {
+        if (!event || event.target === event.currentTarget) {
+            document.getElementById('peek-dialog').innerHTML = '';
+        }
+    }
+
+    function applyPeekLimit() {
+        const limit = parseInt(document.getElementById('peek-limit').value);
+
+        if (isNaN(limit) || limit < 1 || limit > 1000) {
+            alert('Please enter a valid number between 1 and 1000');
+            return;
+        }
+
+        // Close the dialog
+        document.getElementById('peek-dialog').innerHTML = '';
+
+        // Reload the page with the new limit
+        const queueName = '{{.QueueName}}';
+        window.location.href = `/queues/${queueName}?limit=${limit}`;
+    }
+</script>
 {{end}}

@@ -81,7 +81,7 @@ func (s *UIServer) Start(addr string) error {
 	// HTMX API endpoints for real-time updates
 	mux.HandleFunc("/api/metrics/dashboard", dashboardHandler.Metrics)
 	mux.HandleFunc("/api/queues/{name}/stats", queuesHandler.Stats)
-	mux.HandleFunc("/api/messages/peek", queuesHandler.PeekMessages)
+	mux.HandleFunc("/api/queues/{name}/message-detail", queuesHandler.MessageDetail)
 	mux.HandleFunc("/api/schedules/create", schedulesHandler.Create)
 	mux.HandleFunc("/api/schedules/update", schedulesHandler.Update)
 	mux.HandleFunc("/api/schedules/toggle", schedulesHandler.Toggle)

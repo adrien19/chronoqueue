@@ -67,7 +67,15 @@ func (h *BaseHandler) renderTemplate(w http.ResponseWriter, name string, data in
 func (h *BaseHandler) renderComponent(w http.ResponseWriter, name string, data interface{}) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	if err := h.templates.ExecuteTemplate(w, name, data); err != nil {
+	// Clone the template to avoid corrupting the shared template set
+	tmpl, err := h.templates.Clone()
+	if err != nil {
+		h.logger.ErrorWithFields("Failed to clone template for component", "component", name, "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
 		h.logger.ErrorWithFields("Failed to render component", "component", name, "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
@@ -82,7 +90,16 @@ func (h *BaseHandler) renderError(w http.ResponseWriter, statusCode int, message
 		"Code":    statusCode,
 		"Message": http.StatusText(statusCode),
 	}
-	if err := h.templates.ExecuteTemplate(w, "error", data); err != nil {
+
+	// Clone the template to avoid corrupting the shared template set
+	tmpl, err := h.templates.Clone()
+	if err != nil {
+		h.logger.Error("Failed to clone template for error page", "error", err)
+		http.Error(w, message, statusCode)
+		return
+	}
+
+	if err := tmpl.ExecuteTemplate(w, "error", data); err != nil {
 		h.logger.Error("Failed to render error template", "error", err)
 	}
 }

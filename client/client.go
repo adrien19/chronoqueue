@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -473,18 +472,15 @@ func (client *ChronoQueueClient) PeekQueueMessages(ctx context.Context, queue st
 		defer cancel()
 	}
 
-	var priorityRange queueservice_pb.PeekQueueMessagesRequest_PriorityRange
-	priorityRangeBytes, err := json.Marshal(timeRange)
-	if err != nil {
-		return nil, err
-	}
-	err = protojson.Unmarshal(priorityRangeBytes, &priorityRange)
-	if err != nil {
-		log.Println("Failed to deserialize priorityRange - err: ", err)
-		return nil, err
-	}
+	req := &queueservice_pb.PeekQueueMessagesRequest{QueueName: queue, Limit: int64(limit)}
 
-	req := &queueservice_pb.PeekQueueMessagesRequest{QueueName: queue, PriorityRange: &priorityRange}
+	// Only set priority range if it's specified (non-zero values)
+	if timeRange.Min != 0 || timeRange.Max != 0 {
+		req.PriorityRange = &queueservice_pb.PeekQueueMessagesRequest_PriorityRange{
+			Min: timeRange.Min,
+			Max: timeRange.Max,
+		}
+	}
 	res, err := client.service.PeekQueueMessages(ctx, req)
 	if err != nil {
 		return nil, err
