@@ -30,7 +30,10 @@ type EncryptionKeyManager struct {
 
 func NewEncryptionKeyManager(logger *log.Logger) (*EncryptionKeyManager, error) {
 	encryptionEnabled := envString("ENABLE_ENCRYPTION", "false")
+	logger.InfoWithFields("Checking encryption configuration", "ENABLE_ENCRYPTION", encryptionEnabled)
+
 	if encryptionEnabled != "true" {
+		logger.Info("Encryption is DISABLED - returning disabled key manager")
 		return &EncryptionKeyManager{
 			Enabled:      false,
 			adapter:      nil,
@@ -42,6 +45,8 @@ func NewEncryptionKeyManager(logger *log.Logger) (*EncryptionKeyManager, error) 
 			logger: nil,
 		}, nil
 	}
+
+	logger.Info("Encryption is ENABLED - initializing key manager")
 
 	manager := &EncryptionKeyManager{}
 	var adapter KeyAdapter
@@ -81,6 +86,12 @@ func NewEncryptionKeyManager(logger *log.Logger) (*EncryptionKeyManager, error) 
 	// Start the background routine to refresh the key
 	go manager.keyRefresher()
 
+	manager.logger.InfoWithFields(
+		"Encryption key manager initialized successfully",
+		"enabled", manager.Enabled,
+		"sourceType", sourceType,
+		"refreshDelayMinutes", manager.refreshDelay.Minutes(),
+	)
 	return manager, nil
 }
 

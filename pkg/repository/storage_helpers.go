@@ -11,6 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
@@ -296,7 +297,17 @@ func (as *storage) transitionStateIndex(ctx context.Context, pipeline redis.Pipe
 
 func (as *storage) saveMessageMetadata(ctx context.Context, queueName, messageID string, meta *message_pb.Message_Metadata) error {
 	key := as.messageMetaKey(queueName, messageID)
-	data, err := protojson.Marshal(meta)
+
+	// Make a deep copy to avoid modifying the caller's metadata
+	metaCopy := proto.Clone(meta).(*message_pb.Message_Metadata)
+
+	// Re-encrypt payload before saving (since fetchMessageMetadata decrypts it)
+	err := as.encryptMetadataPayload(metaCopy)
+	if err != nil {
+		return err
+	}
+
+	data, err := protojson.Marshal(metaCopy)
 	if err != nil {
 		return err
 	}

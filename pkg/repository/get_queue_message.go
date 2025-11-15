@@ -55,6 +55,7 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *queueservice_pb
 		return &queueservice_pb.GetNextMessageResponse{}, nil
 	}
 
+	// fetchMessageMetadata returns already decrypted metadata
 	meta, err := as.fetchMessageMetadata(ctx, queueName, messageID)
 	if err != nil {
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to fetch message metadata.").GRPCStatus()
@@ -63,13 +64,9 @@ func (as *storage) GetQueueMessage(ctx context.Context, request *queueservice_pb
 	meta.State = message_pb.Message_Metadata_RUNNING
 	meta.LeaseExpiry = time.Now().Add(request.LeaseDuration.AsDuration()).UnixMilli()
 
+	// saveMessageMetadata will re-encrypt before saving to Redis
 	if err := as.saveMessageMetadata(ctx, queueName, messageID, meta); err != nil {
 		return nil, util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Failed to save message's metadata.").GRPCStatus()
-	}
-
-	err = as.decryptMessageMetadataPayload(meta)
-	if err != nil {
-		return nil, err
 	}
 
 	as.logger.InfoWithFields(

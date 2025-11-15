@@ -29,7 +29,7 @@ func TestDLQImplementation(t *testing.T) {
 
 	logger := log.NewLogger()
 	keyManager := &keymanager.EncryptionKeyManager{}
-	storage := NewQueueStorageForTesting(redisClient, keyManager, logger)
+	storage := NewQueueStorageWithIntervals(ctx, redisClient, keyManager, logger, 100*time.Millisecond, 5*time.Second)
 
 	// Clean up any existing data
 	redisClient.FlushAll(ctx)
