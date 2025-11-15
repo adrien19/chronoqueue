@@ -36,6 +36,12 @@ func shortenID(id string) string {
 	return id[:12]
 }
 
+// isDLQ checks if a queue is a Dead Letter Queue based on naming convention
+func isDLQ(queueName string) bool {
+	// Common DLQ naming patterns: ends with -dlq or _dlq
+	return len(queueName) > 4 && (queueName[len(queueName)-4:] == "-dlq" || queueName[len(queueName)-4:] == "_dlq")
+}
+
 // NewQueuesHandler creates a new queues handler
 func NewQueuesHandler(templates *template.Template, client *client.ChronoQueueClient, logger *log.Logger) *QueuesHandler {
 	return &QueuesHandler{
@@ -47,10 +53,23 @@ func NewQueuesHandler(templates *template.Template, client *client.ChronoQueueCl
 	}
 }
 
-// List renders the queue listing page
+// QueueDisplay represents a queue with DLQ flag for template rendering
+type QueueDisplay struct {
+	Name     string
+	Metadata interface{}
+	IsDLQ    bool
+}
+
+// List renders the queue listing page with optional filtering
 func (h *QueuesHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
+
+	// Get filter type from query parameter (all, regular, dlq)
+	filterType := r.URL.Query().Get("type")
+	if filterType == "" {
+		filterType = "all"
+	}
 
 	queuesResp, err := h.client.ListQueues(ctx, "")
 	if err != nil {
@@ -59,10 +78,32 @@ func (h *QueuesHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Convert to QueueDisplay with DLQ detection and apply filtering
+	queues := queuesResp.GetQueues()
+	displayQueues := make([]QueueDisplay, 0, len(queues))
+	for _, q := range queues {
+		queueIsDLQ := isDLQ(q.GetName())
+
+		// Apply filter
+		if filterType == "regular" && queueIsDLQ {
+			continue // Skip DLQ queues when showing regular queues
+		}
+		if filterType == "dlq" && !queueIsDLQ {
+			continue // Skip regular queues when showing DLQ queues
+		}
+
+		displayQueues = append(displayQueues, QueueDisplay{
+			Name:     q.GetName(),
+			Metadata: q.GetMetadata(),
+			IsDLQ:    queueIsDLQ,
+		})
+	}
+
 	data := map[string]interface{}{
 		"Title":       "Queues",
 		"CurrentPage": "queues",
-		"Queues":      queuesResp.GetQueues(),
+		"Queues":      displayQueues,
+		"FilterType":  filterType,
 	}
 
 	h.renderTemplate(w, "queues.html", data)
@@ -161,6 +202,7 @@ func (h *QueuesHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		"Title":          "Queue: " + queueName,
 		"CurrentPage":    "queues",
 		"QueueName":      queueName,
+		"IsDLQ":          isDLQ(queueName),
 		"PendingCount":   pendingCount,
 		"RunningCount":   runningCount,
 		"CompletedCount": completedCount,
@@ -345,6 +387,91 @@ func (h *QueuesHandler) MessageDetail(w http.ResponseWriter, r *http.Request) {
 	`, foundMsg.ID, foundMsg.ID, foundMsg.Payload)
 
 	if _, err := w.Write([]byte(html)); err != nil {
+		h.logger.ErrorWithFields("Failed to write response", "error", err)
+	}
+}
+
+// RequeueAll requeues all messages from a DLQ back to the original queue
+func (h *QueuesHandler) RequeueAll(w http.ResponseWriter, r *http.Request) {
+	queueName := r.PathValue("name")
+
+	// Verify this is a DLQ
+	if !isDLQ(queueName) {
+		h.logger.WarnWithFields("Attempted to requeue from non-DLQ", "queue", queueName)
+		http.Error(w, "Queue is not a Dead Letter Queue", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second) // Longer timeout for batch operations
+	defer cancel()
+
+	// Extract the original queue name (remove -dlq or _dlq suffix)
+	originalQueue := queueName[:len(queueName)-4]
+
+	h.logger.InfoWithFields("Requeuing all messages from DLQ", "dlq", queueName, "targetQueue", originalQueue)
+
+	// Get all messages from DLQ
+	dlqMessages, err := h.client.GetDLQMessages(ctx, originalQueue, 1000) // Cap at 1000 messages
+	if err != nil {
+		h.logger.ErrorWithFields("Failed to get DLQ messages", "error", err, "dlq", queueName)
+		http.Error(w, fmt.Sprintf("Failed to get messages: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Requeue each message back to the original queue
+	requeuedCount := 0
+	for _, msg := range dlqMessages.GetMessages() {
+		if msg == nil {
+			continue
+		}
+
+		messageID := msg.GetMessageId()
+		// RequeueFromDLQ expects: (ctx, dlqName, messageId, targetQueue)
+		if _, err := h.client.RequeueFromDLQ(ctx, queueName, messageID, originalQueue); err != nil {
+			h.logger.ErrorWithFields("Failed to requeue message", "error", err, "messageId", messageID, "dlq", queueName)
+			continue // Continue with other messages
+		}
+		requeuedCount++
+	}
+
+	h.logger.InfoWithFields("Requeued messages from DLQ", "count", requeuedCount, "dlq", queueName, "targetQueue", originalQueue)
+
+	w.WriteHeader(http.StatusOK)
+	if _, err := fmt.Fprintf(w, "Successfully requeued %d messages", requeuedCount); err != nil {
+		h.logger.ErrorWithFields("Failed to write response", "error", err)
+	}
+}
+
+// Purge permanently deletes all messages from a DLQ
+func (h *QueuesHandler) Purge(w http.ResponseWriter, r *http.Request) {
+	queueName := r.PathValue("name")
+
+	// Verify this is a DLQ
+	if !isDLQ(queueName) {
+		h.logger.WarnWithFields("Attempted to purge non-DLQ", "queue", queueName)
+		http.Error(w, "Queue is not a Dead Letter Queue", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second) // Longer timeout for batch operations
+	defer cancel()
+
+	// Extract the original queue name
+	originalQueue := queueName[:len(queueName)-4]
+
+	h.logger.WarnWithFields("Purging DLQ", "dlq", queueName, "originalQueue", originalQueue)
+
+	// Purge the DLQ (pass the DLQ name, not the original queue name)
+	if _, err := h.client.PurgeDLQ(ctx, queueName); err != nil {
+		h.logger.ErrorWithFields("Failed to purge DLQ", "error", err, "dlq", queueName)
+		http.Error(w, fmt.Sprintf("Failed to purge queue: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.InfoWithFields("Successfully purged DLQ", "dlq", queueName)
+
+	w.WriteHeader(http.StatusOK)
+	if _, err := fmt.Fprint(w, "Queue purged successfully"); err != nil {
 		h.logger.ErrorWithFields("Failed to write response", "error", err)
 	}
 }

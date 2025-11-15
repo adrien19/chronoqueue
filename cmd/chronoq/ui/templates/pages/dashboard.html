@@ -7,59 +7,129 @@
         </div>
     </div>
 
-    <!-- Metrics Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6" hx-get="/api/metrics/dashboard" hx-trigger="every 5s"
-        hx-swap="innerHTML">
-        <div class="bg-white rounded-lg shadow p-6">
-            <div class="text-sm font-medium text-gray-600">Total Queues</div>
-            <div class="mt-2 text-3xl font-semibold text-gray-900">
-                {{.TotalQueues}}
-            </div>
+    <!-- Metrics Cards with HTMX polling -->
+    <div hx-get="/api/metrics/dashboard" hx-trigger="every 5s" hx-swap="innerHTML">
+        {{template "dashboard-metrics" .}}
+    </div>
+
+    <!-- Problem Queues Section -->
+    {{if .ProblemQueues}}
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center">
+            <svg class="w-6 h-6 text-red-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd"
+                    d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                    clip-rule="evenodd" />
+            </svg>
+            <h2 class="text-xl font-semibold text-gray-900">Problem Queues</h2>
         </div>
-        <div class="bg-white rounded-lg shadow p-6">
-            <div class="text-sm font-medium text-gray-600">Pending Messages</div>
-            <div class="mt-2 text-3xl font-semibold text-blue-600">
-                {{.TotalPending}}
-            </div>
-        </div>
-        <div class="bg-white rounded-lg shadow p-6">
-            <div class="text-sm font-medium text-gray-600">Running Messages</div>
-            <div class="mt-2 text-3xl font-semibold text-yellow-600">
-                {{.TotalRunning}}
-            </div>
-        </div>
-        <div class="bg-white rounded-lg shadow p-6">
-            <div class="text-sm font-medium text-gray-600">DLQ Messages</div>
-            <div class="mt-2 text-3xl font-semibold text-red-600">
-                {{.TotalDLQ}}
+        <div class="p-6">
+            <div class="space-y-3">
+                {{range .ProblemQueues}}
+                <a href="{{.Link}}" class="block p-4 border rounded-lg hover:bg-gray-50 transition-colors
+                    {{if eq .Severity " high"}}border-red-300 bg-red-50{{else}}border-yellow-300 bg-yellow-50{{end}}">
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            {{if eq .Severity "high"}}
+                            <svg class="w-6 h-6 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd"
+                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                            {{else}}
+                            <svg class="w-6 h-6 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd"
+                                    d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                            {{end}}
+                        </div>
+                        <div class="ml-3 flex-1">
+                            <h3 class="text-sm font-semibold {{if eq .Severity "
+                                high"}}text-red-900{{else}}text-yellow-900{{end}}">
+                                {{.Name}}
+                            </h3>
+                            <p class="mt-1 text-sm {{if eq .Severity "
+                                high"}}text-red-700{{else}}text-yellow-700{{end}}">
+                                {{.Message}}
+                            </p>
+                        </div>
+                        <svg class="w-5 h-5 {{if eq .Severity " high"}}text-red-400{{else}}text-yellow-400{{end}}"
+                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </div>
+                </a>
+                {{end}}
             </div>
         </div>
     </div>
+    {{end}}
 
-    <!-- Queues List -->
-    <div class="bg-white rounded-lg shadow">
-        <div class="px-6 py-4 border-b border-gray-200">
-            <h2 class="text-xl font-semibold text-gray-900">Queues</h2>
+    <!-- Quick Actions -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
+        <div class="flex flex-wrap gap-3">
+            <a href="/queues"
+                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+                View All Queues
+            </a>
+            <a href="/queues?type=dlq"
+                class="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd"
+                        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                        clip-rule="evenodd" />
+                </svg>
+                View DLQ Queues Only
+            </a>
+            <a href="/schedules"
+                class="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Manage Schedules
+            </a>
         </div>
-        <div class="p-6">
-            {{if .Queues}}
-            <div class="space-y-4">
-                {{range .Queues}}
-                <div class="border border-gray-200 rounded-lg p-4">
-                    <a href="/queues/{{.Name}}" class="text-lg font-medium text-blue-600 hover:text-blue-800">
-                        {{.Name}}
-                    </a>
-                    <div class="mt-2 text-sm text-gray-600">
-                        Type: {{.Metadata.Type}}
-                    </div>
-                </div>
-                {{end}}
-            </div>
-            {{else}}
-            <div class="text-center py-8 text-gray-500">
-                No queues found. Create your first queue to get started.
-            </div>
-            {{end}}
+    </div>
+</div>
+{{end}}
+
+{{define "dashboard-metrics"}}
+<div class="grid grid-cols-1 md:grid-cols-5 gap-6">
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="text-sm font-medium text-gray-600">Total Queues</div>
+        <div class="mt-2 text-3xl font-semibold text-gray-900">
+            {{.TotalQueues}}
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="text-sm font-medium text-gray-600">Pending</div>
+        <div class="mt-2 text-3xl font-semibold text-blue-600">
+            {{.TotalPending}}
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="text-sm font-medium text-gray-600">Running</div>
+        <div class="mt-2 text-3xl font-semibold text-yellow-600">
+            {{.TotalRunning}}
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="text-sm font-medium text-gray-600">Completed</div>
+        <div class="mt-2 text-3xl font-semibold text-green-600">
+            {{.TotalCompleted}}
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="text-sm font-medium text-gray-600">DLQ Messages</div>
+        <div class="mt-2 text-3xl font-semibold text-red-600">
+            {{.TotalDLQ}}
         </div>
     </div>
 </div>

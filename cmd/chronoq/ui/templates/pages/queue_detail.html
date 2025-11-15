@@ -11,19 +11,51 @@
                     </svg>
                 </a>
                 <h1 class="text-3xl font-bold text-gray-900">{{.QueueName}}</h1>
+                {{if .IsDLQ}}
+                <span
+                    class="inline-flex items-center gap-1 px-3 py-1 text-sm font-medium rounded-md bg-red-100 text-red-800">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd"
+                            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                            clip-rule="evenodd" />
+                    </svg>
+                    Dead Letter Queue
+                </span>
+                {{end}}
             </div>
             <p class="mt-2 text-gray-600">View and manage messages in this queue</p>
         </div>
-        <button onclick="showPeekDialog()"
-            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-            <span>Peek Messages</span>
-        </button>
+        <div class="flex items-center space-x-3">
+            {{if .IsDLQ}}
+            <!-- DLQ-specific actions -->
+            <button onclick="confirmRequeueAll()"
+                class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>Requeue All</span>
+            </button>
+            <button onclick="confirmPurge()"
+                class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span>Purge</span>
+            </button>
+            {{end}}
+            <button onclick="showPeekDialog()"
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                <span>Peek Messages</span>
+            </button>
+        </div>
     </div>
 
     <!-- Stats Cards -->
@@ -263,6 +295,64 @@
         // Reload the page with the new limit
         const queueName = '{{.QueueName}}';
         window.location.href = `/queues/${queueName}?limit=${limit}`;
+    }
+
+    // Confirm requeue all messages from DLQ
+    function confirmRequeueAll() {
+        if (confirm('Are you sure you want to requeue all messages from this Dead Letter Queue back to the original queue?')) {
+            const queueName = '{{.QueueName}}';
+            fetch(`/api/queues/${queueName}/requeue-all`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => {
+                    if (response.ok) {
+                        alert('All messages requeued successfully');
+                        window.location.reload();
+                    } else {
+                        return response.text().then(text => {
+                            throw new Error(text || 'Failed to requeue messages');
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error requeuing messages:', error);
+                    alert('Failed to requeue messages: ' + error.message);
+                });
+        }
+    }
+
+    // Confirm purge all messages from DLQ
+    function confirmPurge() {
+        const queueName = '{{.QueueName}}';
+        const confirmation = prompt(`⚠️ WARNING: This will permanently delete ALL messages from "${queueName}".\n\nType the queue name to confirm:`);
+
+        if (confirmation === queueName) {
+            fetch(`/api/queues/${queueName}/purge`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => {
+                    if (response.ok) {
+                        alert('Queue purged successfully');
+                        window.location.reload();
+                    } else {
+                        return response.text().then(text => {
+                            throw new Error(text || 'Failed to purge queue');
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error purging queue:', error);
+                    alert('Failed to purge queue: ' + error.message);
+                });
+        } else if (confirmation !== null) {
+            alert('Queue name did not match. Purge cancelled.');
+        }
     }
 </script>
 {{end}}

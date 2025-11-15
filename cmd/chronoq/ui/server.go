@@ -82,6 +82,8 @@ func (s *UIServer) Start(addr string) error {
 	mux.HandleFunc("/api/metrics/dashboard", dashboardHandler.Metrics)
 	mux.HandleFunc("/api/queues/{name}/stats", queuesHandler.Stats)
 	mux.HandleFunc("/api/queues/{name}/message-detail", queuesHandler.MessageDetail)
+	mux.HandleFunc("/api/queues/{name}/requeue-all", queuesHandler.RequeueAll)
+	mux.HandleFunc("/api/queues/{name}/purge", queuesHandler.Purge)
 	mux.HandleFunc("/api/schedules/create", schedulesHandler.Create)
 	mux.HandleFunc("/api/schedules/update", schedulesHandler.Update)
 	mux.HandleFunc("/api/schedules/toggle", schedulesHandler.Toggle)
