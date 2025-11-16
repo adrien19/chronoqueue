@@ -433,8 +433,8 @@ func (h *SchedulesHandler) parseDaysOfWeek(daysOfWeekStrs []string) []int32 {
 	daysOfWeek := []int32{}
 	for _, day := range daysOfWeekStrs {
 		if dayNum, err := strconv.Atoi(day); err == nil {
-			// Validate day is in range 0-6 (assuming Sunday=0, Saturday=6)
-			if dayNum < 0 || dayNum > 6 {
+			// Validate day is in range 1-7 (ISO 8601: 1=Monday, 7=Sunday)
+			if dayNum < 1 || dayNum > 7 {
 				continue
 			}
 			daysOfWeek = append(daysOfWeek, int32(dayNum))

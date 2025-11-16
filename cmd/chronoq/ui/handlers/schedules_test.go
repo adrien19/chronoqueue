@@ -211,9 +211,9 @@ func TestParseDayOfMonth(t *testing.T) {
 			expected: 1,
 		},
 		{
-			name:     "zero value",
+			name:     "zero value defaults to 1",
 			input:    "0",
-			expected: 0,
+			expected: 1,
 		},
 	}
 
