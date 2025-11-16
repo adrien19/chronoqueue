@@ -243,6 +243,13 @@ func (as *storage) updateMessageCronSchedule(ctx context.Context, key string, me
 		}
 	}()
 
+	// CRITICAL: Re-fetch metadata after acquiring lock to prevent duplicate message creation
+	// The background goroutine runs every second and could have already processed this execution
+	metadata, err = as.getScheduleMetadata(ctx, key)
+	if err != nil {
+		return fmt.Errorf("failed to re-fetch schedule metadata after lock: %w", err)
+	}
+
 	cronSchedule := metadata.GetCronSchedule()
 	if cronSchedule != "" && (metadata.LastRun == nil || (metadata.LastRun.AsTime().Before(time.Now()) && metadata.NextRun.AsTime().Before(time.Now()))) {
 		// Calculate the next run time for this message

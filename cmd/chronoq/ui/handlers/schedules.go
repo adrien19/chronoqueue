@@ -123,6 +123,12 @@ func (h *SchedulesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate that queue name is not the same as schedule ID
+	if queueName == scheduleID {
+		http.Error(w, "Queue Name cannot be the same as Schedule ID", http.StatusBadRequest)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
