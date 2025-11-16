@@ -512,6 +512,58 @@ func TestScheduling_ListSchedules(t *testing.T) {
 	t.Logf("Found %d schedules for queue %s", len(listResp.Schedules), queueName)
 }
 
+// TestScheduling_CreateSchedule_QueueNameEqualsScheduleID validates that schedules
+// cannot be created when queue_name equals schedule_id to prevent message key conflicts.
+//
+// Test Scenario: Validation test for preventing message key duplication bug
+// Expected: Schedule creation should fail with InvalidArgument error
+func TestScheduling_CreateSchedule_QueueNameEqualsScheduleID(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	ctx := context.Background()
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer func() { _ = conn.Close() }()
+	client := queueservice_pb.NewQueueServiceClient(conn)
+
+	// Use the same value for both schedule ID and queue name (invalid)
+	scheduleID := "financial-report"
+	invalidQueueName := "financial-report" // Same as schedule ID
+
+	payload := &common_pb.Payload{
+		Data:        createStruct(t, map[string]interface{}{"task": "generate report"}),
+		ContentType: "application/json",
+	}
+
+	schedule := &schedule_pb.Schedule{
+		ScheduleId: scheduleID,
+		Metadata: &schedule_pb.Schedule_Metadata{
+			QueueName: invalidQueueName, // This should be rejected
+			Payload:   payload,
+			ScheduleConfig: &schedule_pb.Schedule_Metadata_CronSchedule{
+				CronSchedule: "0 9 * * *",
+			},
+		},
+	}
+
+	// Act
+	createResp, err := client.CreateSchedule(ctx, &queueservice_pb.CreateScheduleRequest{
+		Schedule: schedule,
+	})
+
+	// Assert
+	require.Error(t, err, "Creating schedule with queue_name == schedule_id should fail")
+	assert.Contains(t, err.Error(), "queue_name cannot be the same as schedule_id",
+		"Error message should explain the validation failure")
+
+	if createResp != nil {
+		assert.False(t, createResp.Success, "Response should indicate failure")
+	}
+
+	t.Logf("Validation correctly rejected schedule with queue_name == schedule_id: %v", err)
+}
+
 // Helper function
 func createStruct(t *testing.T, data map[string]interface{}) *structpb.Struct {
 	t.Helper()

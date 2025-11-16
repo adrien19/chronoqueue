@@ -30,7 +30,10 @@ func (as *storage) scheduleMetaKey(scheduleID string) string {
 	return fmt.Sprintf("chronoqueue:schedule:%s:meta", urlEncode(scheduleID))
 }
 
-// scheduleSetKey returns the key for schedule tracking sorted set.
+// scheduleSetKey returns the key for calendar schedule execution history tracking.
+// This is ONLY used for calendar schedules to track which messages have been scheduled.
+// This is NOT processed by the scheduler - it's for history/audit purposes.
+// Do not confuse with scheduleKey() in streams.go which is for queue-level message scheduling.
 func (as *storage) scheduleSetKey(scheduleID string) string {
 	return fmt.Sprintf("chronoqueue:schedule:%s:set", urlEncode(scheduleID))
 }

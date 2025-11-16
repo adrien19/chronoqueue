@@ -63,6 +63,18 @@ func (as *storage) CreateSchedule(ctx context.Context, request *queueservice_pb.
 		}, chronoErr.GRPCStatus()
 	}
 
+	// Validate that queue_name is not the same as schedule_id
+	// This prevents message keys from being created incorrectly
+	queueName := scheduleInfo.GetMetadata().GetQueueName()
+	scheduleID := scheduleInfo.GetScheduleId()
+	if queueName == scheduleID {
+		err := fmt.Errorf("queue_name cannot be the same as schedule_id: both are set to '%s'", queueName)
+		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Invalid input provided")
+		return &queueservice_pb.CreateScheduleResponse{
+			Success: false,
+		}, chronoErr.GRPCStatus()
+	}
+
 	// Validate calendar schedule if present
 	if scheduleInfo.GetMetadata().GetCalendarSchedule() != nil {
 		if err := as.ValidateCalendarSchedule(ctx, scheduleInfo.GetMetadata().GetCalendarSchedule()); err != nil {

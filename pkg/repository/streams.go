@@ -25,6 +25,10 @@ func (as *storage) priorityLevel(priority int32) string {
 	return "low"
 }
 
+// scheduleKey returns the key for queue-level message scheduling.
+// This sorted set holds messages waiting to be moved to the stream at their scheduled time.
+// Processed by scheduler.go every interval.
+// Do not confuse with scheduleSetKey() which is for calendar schedule history.
 func (as *storage) scheduleKey(queueName string) string {
 	return fmt.Sprintf("chronoqueue:schedule:%s", urlEncode(queueName))
 }

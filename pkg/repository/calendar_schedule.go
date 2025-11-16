@@ -68,6 +68,12 @@ func (as *storage) updateMessageCalendarSchedule(ctx context.Context, key string
 	}
 	queueID := metadata.GetQueueName()
 
+	// Log the queue name to help debug message key issues
+	as.logger.DebugWithFields("Processing calendar schedule",
+		"scheduleID", scheduleID,
+		"queueName", queueID,
+		"key", key)
+
 	// Create or fetch the mutex for this specific schedule
 	scheduleMutex := as.rs.NewMutex("mutex:" + key)
 
@@ -81,6 +87,21 @@ func (as *storage) updateMessageCalendarSchedule(ctx context.Context, key string
 			as.logger.ErrorWithFields("Failed to release schedule lock", err, "scheduleID", scheduleID)
 		}
 	}()
+
+	// CRITICAL: Re-fetch metadata after acquiring lock to prevent duplicate message creation
+	// The background goroutine runs every second and could have already processed this execution
+	metadata, err = as.getScheduleMetadata(ctx, key)
+	if err != nil {
+		return fmt.Errorf("failed to re-fetch schedule metadata after lock: %w", err)
+	}
+
+	// Verify schedule is still in SCHEDULED state after re-fetch
+	if metadata.State != schedule_pb.Schedule_Metadata_SCHEDULED {
+		as.logger.DebugWithFields("Schedule no longer in SCHEDULED state after lock acquisition",
+			"scheduleID", scheduleID,
+			"state", metadata.State.String())
+		return nil
+	}
 
 	calendarSchedule := metadata.GetCalendarSchedule()
 	if calendarSchedule == nil {
@@ -157,14 +178,9 @@ func (as *storage) updateMessageCalendarSchedule(ctx context.Context, key string
 		LeaseRenewalCount: 0,
 	}
 
-	// Create the queue message
-	_, err = as.CreateQueueMessage(ctx, &queueservice_pb.PostMessageRequest{
-		Message: &message_pb.Message{
-			MessageId: randomID,
-			Metadata:  &runMessageInstanceMetadata,
-		},
-		QueueName: queueID,
-	}, nil)
+	// Create the calendar schedule message directly (bypass queue scheduling)
+	// This prevents duplicate sorted sets - calendar messages go directly to queue schedule
+	err = as.createCalendarScheduleMessage(ctx, queueID, randomID, &runMessageInstanceMetadata)
 	if err != nil {
 		return fmt.Errorf("failed to create queue message for schedule %s: %w", scheduleID, err)
 	}
@@ -189,14 +205,15 @@ func (as *storage) updateMessageCalendarSchedule(ctx context.Context, key string
 		return fmt.Errorf("failed to update schedule metadata: %w", err)
 	}
 
-	// Add the message to the schedule sorted set using the next run time as score
-	// Member is just the message ID (not full key) - scheduler extracts this directly
+	// Track this execution in the calendar schedule history
+	// This sorted set is ONLY for tracking/history - not for scheduling
+	// The actual scheduling happens via scheduleKey(queueName) in createCalendarScheduleMessage
 	_, err = as.redisClient.ZAdd(ctx, as.scheduleSetKey(scheduleID), redis.Z{
 		Score:  float64(nextRunMillis),
 		Member: randomID,
 	}).Result()
 	if err != nil {
-		return fmt.Errorf("failed to add message to schedule sorted set: %w", err)
+		return fmt.Errorf("failed to add message to schedule history: %w", err)
 	}
 
 	return nil
@@ -280,4 +297,53 @@ func (as *storage) GetCalendarSchedulePreview(ctx context.Context, calendarSched
 		PreviewStart:   timestamppb.New(now),
 		TotalCount:     int32(len(executionTimes)),
 	}, nil
+}
+
+// createCalendarScheduleMessage creates a message for calendar schedule execution
+// without going through the queue scheduling system (which is for user-posted messages).
+// This prevents duplicate sorted sets and ensures messages are only scheduled once.
+func (as *storage) createCalendarScheduleMessage(ctx context.Context, queueName, messageID string, metadata *message_pb.Message_Metadata) error {
+	// Validate inputs
+	if queueName == "" || messageID == "" || metadata == nil {
+		return fmt.Errorf("invalid parameters: queueName, messageID, and metadata are required")
+	}
+
+	// Set message state to INVISIBLE (will be visible at scheduled time)
+	metadata.State = message_pb.Message_Metadata_INVISIBLE
+
+	// Encrypt payload if encryption is enabled
+	if err := as.encryptMetadataPayload(metadata); err != nil {
+		return fmt.Errorf("failed to encrypt message payload: %w", err)
+	}
+
+	// Serialize message metadata
+	messageMetadataByte, err := as.serializeMessageMetadata(metadata)
+	if err != nil {
+		return fmt.Errorf("failed to serialize message metadata: %w", err)
+	}
+
+	// Save message metadata to Redis
+	metaKey := as.messageMetaKey(queueName, messageID)
+	if err := as.redisClient.HSet(ctx, metaKey, "metadata", string(messageMetadataByte)).Err(); err != nil {
+		return fmt.Errorf("failed to save message metadata: %w", err)
+	}
+
+	// Set expiration on metadata (24 hours)
+	if err := as.redisClient.Expire(ctx, metaKey, 24*time.Hour).Err(); err != nil {
+		return fmt.Errorf("failed to set metadata expiration: %w", err)
+	}
+
+	// Add to the queue's schedule sorted set (not calendar schedule set)
+	// The scheduler in scheduler.go will move it to stream at the right time
+	scheduledTime := metadata.GetScheduledTime().AsTime()
+	scheduleKey := as.scheduleKey(queueName)
+
+	if err := as.redisClient.ZAdd(ctx, scheduleKey, redis.Z{
+		Score:  float64(scheduledTime.UnixMilli()),
+		Member: messageID,
+	}).Err(); err != nil {
+		return fmt.Errorf("failed to add message to queue schedule: %w", err)
+	}
+
+	return nil
 }
