@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"html/template"
 	"net/http"
 	"strconv"
@@ -339,11 +340,15 @@ func (h *QueuesHandler) MessageDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Escape message data to prevent XSS injection
+	escapedID := html.EscapeString(foundMsg.ID)
+	escapedPayload := html.EscapeString(foundMsg.Payload)
+
 	// Return modal HTML
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
-	html := fmt.Sprintf(`
+	htmlContent := fmt.Sprintf(`
 		<div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50" onclick="closeModal(event)">
 			<div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
 				<!-- Header -->
@@ -396,9 +401,9 @@ func (h *QueuesHandler) MessageDetail(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		</script>
-	`, foundMsg.ID, foundMsg.ID, foundMsg.Payload)
+	`, escapedID, escapedID, escapedPayload)
 
-	if _, err := w.Write([]byte(html)); err != nil {
+	if _, err := w.Write([]byte(htmlContent)); err != nil {
 		h.logger.ErrorWithFields("Failed to write response", "error", err)
 	}
 }
