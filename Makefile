@@ -416,6 +416,48 @@ modtidy:
 	go mod tidy
 
 ################################################################################
+# Target: ui-deps (install UI dependencies)                                    #
+################################################################################
+.PHONY: ui-deps
+ui-deps:
+	@echo "Installing UI dependencies..."
+	@cd cmd/chronoq/ui && npm install
+
+################################################################################
+# Target: ui-build (build UI CSS)                                              #
+################################################################################
+.PHONY: ui-build
+ui-build: ui-deps
+	@echo "Building UI CSS..."
+	@cd cmd/chronoq/ui && npm run build:css
+
+################################################################################
+# Target: ui-watch (watch and rebuild UI CSS)                                  #
+################################################################################
+.PHONY: ui-watch
+ui-watch: ui-deps
+	@echo "Watching UI CSS for changes..."
+	@cd cmd/chronoq/ui && npm run watch:css
+
+################################################################################
+# Target: ui-dev (run UI server in dev mode)                                   #
+################################################################################
+.PHONY: ui-dev
+ui-dev: ui-build build
+	@echo "Starting UI in development mode..."
+	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue ui start
+
+
+################################################################################
+# Target: server-dev (run ChronoQueue server in dev mode)                      #
+################################################################################
+.PHONY: server-dev
+server-dev: build
+	@echo "Starting ChronoQueue in development mode..."
+	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue server --dev --insecure --redis-password=$(REDIS_PASSWORD)
+
+
+################################################################################
 # Target: format                                                               #
 ################################################################################
 .PHONY: format

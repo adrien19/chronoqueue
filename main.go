@@ -54,6 +54,7 @@ Examples:
 	rootCmd.AddCommand(commands.NewScheduleCommand())
 	rootCmd.AddCommand(commands.NewDLQCommand())
 	rootCmd.AddCommand(commands.NewSchemaCommand()) // Schema registry commands
+	rootCmd.AddCommand(commands.NewUICommand())     // Web UI
 	rootCmd.AddCommand(commands.NewStartCommand())  // Legacy compatibility
 
 	// Execute root command

@@ -239,8 +239,8 @@ func (as *storage) ListSchedules(ctx context.Context, request *queueservice_pb.L
 		return nil, err
 	}
 
-	schedules := make([]*schedule_pb.Schedule, len(scheduleMetadataIDs))
-	for i, scheduleMetadataID := range scheduleMetadataIDs {
+	schedules := make([]*schedule_pb.Schedule, 0, len(scheduleMetadataIDs))
+	for _, scheduleMetadataID := range scheduleMetadataIDs {
 		// Key format: chronoqueue:schedule:{scheduleID}:meta
 		scheduleID := strings.Split(scheduleMetadataID, ":")[2]
 		scheduleID, err := urlDecode(scheduleID)
@@ -251,15 +251,20 @@ func (as *storage) ListSchedules(ctx context.Context, request *queueservice_pb.L
 		}
 		metadata, err := as.getScheduleMetadata(ctx, scheduleID)
 		if err != nil {
-			msg := fmt.Sprintf("error fetching metadata for schedule %s", scheduleID)
-			chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, msg)
-			return nil, chronoErr.GRPCStatus()
+			// Skip schedules with missing metadata (may have been deleted)
+			// Log as warning but don't fail the entire list operation
+			as.logger.WarnWithFields(
+				"Skipping schedule with missing metadata",
+				"scheduleID", scheduleID,
+				"error", err,
+			)
+			continue
 		}
 
-		schedules[i] = &schedule_pb.Schedule{
+		schedules = append(schedules, &schedule_pb.Schedule{
 			ScheduleId: scheduleID,
 			Metadata:   metadata,
-		}
+		})
 	}
 
 	return &queueservice_pb.ListSchedulesResponse{

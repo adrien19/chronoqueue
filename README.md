@@ -76,11 +76,62 @@ The easiest way to get started locally is to use [docker-compose](https://docs.d
 4. Start the ChronoQueue server:
 
     ```bash
-    go run cmd/server/main.go
-
+    go run main.go server --dev --server :9000 --redis-password mypassword
     ```
 
 If you choose to use mTLS option, you will need to generate certificates. You can use already provided script `generate_certs.sh` to quickly generate these certificates.
+
+### Web UI
+
+ChronoQueue includes a built-in web interface for monitoring and managing your queues, schedules, and dead letter queues.
+
+#### Starting the Web UI
+
+1. Build the UI assets (first time only):
+
+    ```bash
+    cd cmd/chronoq/ui
+    npm install
+    npm run build:css
+    cd ../../..
+    ```
+
+2. Build the ChronoQueue binary:
+
+    ```bash
+    go build -o chronoqueue .
+    ```
+
+3. Start the UI server:
+
+    ```bash
+    ./chronoqueue ui start --port 8080 --grpc-address localhost:9000
+    ```
+
+4. Open your browser to `http://localhost:8080`
+
+#### UI Features
+
+- **📊 Real-time Dashboard**: Monitor queue metrics, message counts, and system health
+- **📋 Queue Management**: View queue details, browse messages, and inspect message content
+- **⏰ Schedule Management**: Create, edit, and manage cron and calendar-based schedules
+- **💀 DLQ Management**: Inspect failed messages, requeue or purge items from dead letter queues
+- **🔄 Live Updates**: HTMX-powered real-time updates without page refreshes
+
+#### Development Mode
+
+For UI development with auto-reloading CSS:
+
+```bash
+# Terminal 1: Watch CSS changes
+make ui-watch
+
+# Terminal 2: Run the server
+go run main.go server --dev --server :9000
+
+# Terminal 3: Run the UI
+go run main.go ui start --port 8080
+```
 
 ## Documentation
 
