@@ -66,7 +66,6 @@ func (s *UIServer) Start(addr string) error {
 	dashboardHandler := handlers.NewDashboardHandler(s.templates, s.client, s.logger)
 	queuesHandler := handlers.NewQueuesHandler(s.templates, s.client, s.logger)
 	schedulesHandler := handlers.NewSchedulesHandler(s.templates, s.client, s.logger)
-	dlqHandler := handlers.NewDLQHandler(s.templates, s.client, s.logger)
 
 	// Page routes
 	mux.HandleFunc("/", dashboardHandler.Index)
@@ -75,8 +74,6 @@ func (s *UIServer) Start(addr string) error {
 	mux.HandleFunc("/schedules", schedulesHandler.List)
 	mux.HandleFunc("/schedules/new", schedulesHandler.New)
 	mux.HandleFunc("/schedules/{id}", schedulesHandler.Detail)
-	mux.HandleFunc("/dlq", dlqHandler.List)
-	mux.HandleFunc("/dlq/{queue}", dlqHandler.Detail)
 
 	// HTMX API endpoints for real-time updates
 	mux.HandleFunc("/api/metrics/dashboard", dashboardHandler.Metrics)
@@ -88,9 +85,6 @@ func (s *UIServer) Start(addr string) error {
 	mux.HandleFunc("/api/schedules/update", schedulesHandler.Update)
 	mux.HandleFunc("/api/schedules/toggle", schedulesHandler.Toggle)
 	mux.HandleFunc("/api/schedules/delete", schedulesHandler.Delete)
-	mux.HandleFunc("/api/dlq/messages", dlqHandler.Messages)
-	mux.HandleFunc("/api/dlq/requeue", dlqHandler.Requeue)
-	mux.HandleFunc("/api/dlq/purge", dlqHandler.Purge)
 
 	// Health check
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

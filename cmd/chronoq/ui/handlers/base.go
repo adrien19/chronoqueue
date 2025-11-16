@@ -7,6 +7,7 @@ import (
 
 	"github.com/adrien19/chronoqueue/client"
 	"github.com/adrien19/chronoqueue/pkg/log"
+	"github.com/adrien19/chronoqueue/pkg/version"
 )
 
 // BaseHandler provides common functionality for all handlers
@@ -37,6 +38,11 @@ func (h *BaseHandler) renderTemplate(w http.ResponseWriter, name string, data in
 		h.logger.ErrorWithFields("Unknown template", "template", name)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
+	}
+
+	// Add version information to data if it's a map
+	if dataMap, ok := data.(map[string]interface{}); ok {
+		dataMap["VersionInfo"] = version.Info()
 	}
 
 	// Clone the layout template and add the specific content

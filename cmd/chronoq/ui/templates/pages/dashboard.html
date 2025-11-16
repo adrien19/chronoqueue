@@ -26,8 +26,7 @@
         <div class="p-6">
             <div class="space-y-3">
                 {{range .ProblemQueues}}
-                <a href="{{.Link}}" class="block p-4 border rounded-lg hover:bg-gray-50 transition-colors
-                    {{if eq .Severity " high"}}border-red-300 bg-red-50{{else}}border-yellow-300 bg-yellow-50{{end}}">
+                <a href="{{.Link}}" class="block p-4 border rounded-lg hover:bg-gray-50 transition-colors {{if eq .Severity "high"}}border-red-300 bg-red-50{{else}}border-yellow-300 bg-yellow-50{{end}}">
                     <div class="flex items-start">
                         <div class="flex-shrink-0">
                             {{if eq .Severity "high"}}
@@ -45,17 +44,14 @@
                             {{end}}
                         </div>
                         <div class="ml-3 flex-1">
-                            <h3 class="text-sm font-semibold {{if eq .Severity "
-                                high"}}text-red-900{{else}}text-yellow-900{{end}}">
+                            <h3 class="text-sm font-semibold {{if eq .Severity "high"}}text-red-900{{else}}text-yellow-900{{end}}">
                                 {{.Name}}
                             </h3>
-                            <p class="mt-1 text-sm {{if eq .Severity "
-                                high"}}text-red-700{{else}}text-yellow-700{{end}}">
+                            <p class="mt-1 text-sm {{if eq .Severity "high"}}text-red-700{{else}}text-yellow-700{{end}}">
                                 {{.Message}}
                             </p>
                         </div>
-                        <svg class="w-5 h-5 {{if eq .Severity " high"}}text-red-400{{else}}text-yellow-400{{end}}"
-                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-5 h-5 {{if eq .Severity "high"}}text-red-400{{else}}text-yellow-400{{end}}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                         </svg>
                     </div>
