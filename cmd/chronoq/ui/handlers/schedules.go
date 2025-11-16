@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"html/template"
 	"net/http"
 	"strconv"
@@ -213,7 +214,10 @@ func (h *SchedulesHandler) renderQueueWarningDialog(w http.ResponseWriter, queue
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
-	html := fmt.Sprintf(`
+	// Escape queueName to prevent XSS injection
+	escapedQueueName := html.EscapeString(queueName)
+
+	htmlContent := fmt.Sprintf(`
 		<div class="bg-yellow-50 border border-yellow-400 rounded-lg p-4">
 			<div class="flex">
 				<div class="flex-shrink-0">
@@ -249,9 +253,9 @@ func (h *SchedulesHandler) renderQueueWarningDialog(w http.ResponseWriter, queue
 				htmx.trigger(form, 'submit');
 			}
 		</script>
-	`, queueName)
+	`, escapedQueueName)
 
-	if _, err := w.Write([]byte(html)); err != nil {
+	if _, err := w.Write([]byte(htmlContent)); err != nil {
 		h.logger.Error("Failed to write response", "error", err)
 	}
 }
@@ -429,6 +433,10 @@ func (h *SchedulesHandler) parseDaysOfWeek(daysOfWeekStrs []string) []int32 {
 	daysOfWeek := []int32{}
 	for _, day := range daysOfWeekStrs {
 		if dayNum, err := strconv.Atoi(day); err == nil {
+			// Validate day is in range 0-6 (assuming Sunday=0, Saturday=6)
+			if dayNum < 0 || dayNum > 6 {
+				continue
+			}
 			daysOfWeek = append(daysOfWeek, int32(dayNum))
 		}
 	}
@@ -443,6 +451,10 @@ func (h *SchedulesHandler) parseDaysOfWeek(daysOfWeekStrs []string) []int32 {
 func (h *SchedulesHandler) parseDayOfMonth(dayOfMonthStr string) int32 {
 	if dayOfMonthStr != "" {
 		if day, err := strconv.Atoi(dayOfMonthStr); err == nil {
+			// Validate day is in range 1-31
+			if day < 1 || day > 31 {
+				return 1 // Default to 1st if invalid
+			}
 			return int32(day)
 		}
 	}

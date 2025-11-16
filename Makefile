@@ -449,7 +449,7 @@ ui-dev: ui-build build
 
 
 ################################################################################
-# Target: ui-dev (run UI server in dev mode)                                   #
+# Target: server-dev (run ChronoQueue server in dev mode)                      #
 ################################################################################
 .PHONY: server-dev
 server-dev: build

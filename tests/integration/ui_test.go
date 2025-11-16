@@ -35,55 +35,74 @@ import (
 	"github.com/adrien19/chronoqueue/tests/helpers"
 )
 
-// startUIServer starts the UI server on a random available port and returns the URL
+// startUIServer starts the UI server on a random available port and returns the URL.
+// Uses a retry mechanism to handle potential port binding race conditions.
 func startUIServer(t *testing.T, grpcAddr string) (string, func()) {
-	// Find an available port
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err, "Failed to find available port for UI server")
-
-	port := listener.Addr().(*net.TCPAddr).Port
-	listener.Close() // Close listener, let UI server reopen it
-
-	uiAddr := fmt.Sprintf("127.0.0.1:%d", port)
-	uiURL := fmt.Sprintf("http://%s", uiAddr)
-
 	logger := log.NewLogger()
 
 	// Create UI server
 	server, err := ui.NewUIServer(grpcAddr, logger)
 	require.NoError(t, err, "Failed to create UI server")
 
-	// Start UI server in background goroutine
-	go func() {
-		_ = server.Start(uiAddr) // Ignore error as it will be http.ErrServerClosed on shutdown
-	}()
+	var uiURL string
+	var startErr error
 
-	// Wait for server to be ready
-	maxRetries := 30
-	for i := 0; i < maxRetries; i++ {
-		resp, err := http.Get(uiURL + "/health")
-		if err == nil && resp.StatusCode == http.StatusOK {
-			resp.Body.Close()
-			break
+	// Retry server start with different ports to handle race conditions
+	maxAttempts := 3
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		// Find an available port
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			startErr = fmt.Errorf("failed to find available port: %w", err)
+			continue
 		}
-		if err == nil {
-			resp.Body.Close()
-		}
-		if i == maxRetries-1 {
-			t.Fatalf("UI server failed to start within timeout")
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
 
-	t.Logf("UI server started at %s", uiURL)
+		port := listener.Addr().(*net.TCPAddr).Port
+		_ = listener.Close()
 
-	cleanup := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+		uiAddr := fmt.Sprintf("127.0.0.1:%d", port)
+		uiURL = fmt.Sprintf("http://%s", uiAddr)
+
+		// Start UI server in background goroutine
+		go func() {
+			_ = server.Start(uiAddr) // Ignore error as it will be http.ErrServerClosed on shutdown
+		}()
+
+		// Wait for server to be ready (also serves as port binding validation)
+		ready := false
+		for i := 0; i < 30; i++ {
+			resp, err := http.Get(uiURL + "/health")
+			if err == nil && resp.StatusCode == http.StatusOK {
+				_ = resp.Body.Close()
+				ready = true
+				break
+			}
+			if err == nil {
+				_ = resp.Body.Close()
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+
+		if ready {
+			t.Logf("UI server started at %s", uiURL)
+			cleanup := func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = server.Stop(ctx)
+			}
+			return uiURL, cleanup
+		}
+
+		// Server failed to start, likely port race - retry
+		startErr = fmt.Errorf("server failed to start on port %d (attempt %d/%d)", port, attempt+1, maxAttempts)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		_ = server.Stop(ctx)
+		cancel()
 	}
 
-	return uiURL, cleanup
+	// All attempts failed
+	require.NoError(t, startErr, "Failed to start UI server after retries")
+	return "", nil // Unreachable, but satisfies compiler
 }
 
 // TestUIIntegration_Dashboard_Success validates the dashboard page renders correctly.
@@ -130,7 +149,7 @@ func TestUIIntegration_Dashboard_Success(t *testing.T) {
 
 	// Assert
 	require.NoError(t, err, "Dashboard request should succeed")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "Dashboard should return 200")
 
@@ -181,7 +200,7 @@ func TestUIIntegration_QueuesList_Success(t *testing.T) {
 
 	// Assert
 	require.NoError(t, err, "Queues list request should succeed")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "Queues page should return 200")
 
@@ -230,7 +249,7 @@ func TestUIIntegration_QueueDetail_Success(t *testing.T) {
 
 	// Assert
 	require.NoError(t, err, "Queue detail request should succeed")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "Queue detail page should return 200")
 
@@ -279,7 +298,7 @@ func TestUIIntegration_DashboardMetricsAPI_Success(t *testing.T) {
 
 	// Assert
 	require.NoError(t, err, "Metrics API request should succeed")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "Metrics API should return 200")
 	assert.Equal(t, "text/html; charset=utf-8", resp.Header.Get("Content-Type"), "Should return HTML for HTMX")
@@ -310,7 +329,7 @@ func TestUIIntegration_StaticAssets_Success(t *testing.T) {
 
 	// Assert
 	require.NoError(t, err, "Static asset request should succeed")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "Static CSS should be served")
 	// Note: Content-Type may vary, just verify it loads

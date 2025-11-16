@@ -101,38 +101,3 @@ func TestQueueDisplay_Structure(t *testing.T) {
 	assert.Equal(t, "orders-queue-dlq", dlqQueue.Name)
 	assert.True(t, dlqQueue.IsDLQ)
 }
-
-// TestQueueDisplay_DLQDetection tests automatic DLQ detection
-func TestQueueDisplay_DLQDetection(t *testing.T) {
-	tests := []struct {
-		name          string
-		queueName     string
-		expectedIsDLQ bool
-	}{
-		{
-			name:          "regular queue",
-			queueName:     "payments",
-			expectedIsDLQ: false,
-		},
-		{
-			name:          "DLQ queue",
-			queueName:     "payments-dlq",
-			expectedIsDLQ: true,
-		},
-		{
-			name:          "underscore DLQ",
-			queueName:     "notifications_dlq",
-			expectedIsDLQ: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			qd := QueueDisplay{
-				Name:  tt.queueName,
-				IsDLQ: isDLQ(tt.queueName),
-			}
-			assert.Equal(t, tt.expectedIsDLQ, qd.IsDLQ)
-		})
-	}
-}

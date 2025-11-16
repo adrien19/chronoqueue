@@ -105,15 +105,15 @@
                             <tr class="hover:bg-gray-50">
                                 <td class="px-6 py-4 text-sm font-mono">
                                     <span title="{{.Id}}" class="cursor-help">{{.ShortId}}</span>
-                                    <button onclick="copyToClipboard('{{.Id}}')"
-                                        class="ml-2 text-gray-400 hover:text-gray-600" title="Copy ID">
+                                    <button data-message-id="{{.Id}}"
+                                        class="ml-2 text-gray-400 hover:text-gray-600 copy-btn" title="Copy ID">
                                         <svg class="w-4 h-4 inline" fill="none" stroke="currentColor"
                                             viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                         </svg>
                                     </button>
-                                    <button onclick="toggleMessageModal('{{.Id}}')" data-message-id="{{.Id}}"
+                                    <button data-message-id="{{.Id}}"
                                         class="ml-2 text-blue-600 hover:text-blue-800 text-xs view-btn"
                                         title="View Details">
                                         View
@@ -154,6 +154,31 @@
 <div id="peek-dialog" data-current-limit="{{if .Messages}}{{len .Messages}}{{else}}20{{end}}"></div>
 
 <script>
+    // Event delegation for copy and view buttons on DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', function() {
+        // Handle copy button clicks
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.copy-btn')) {
+                const btn = e.target.closest('.copy-btn');
+                const messageId = btn.dataset.messageId;
+                if (messageId) {
+                    copyToClipboard(messageId);
+                }
+            }
+        });
+
+        // Handle view button clicks
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.view-btn')) {
+                const btn = e.target.closest('.view-btn');
+                const messageId = btn.dataset.messageId;
+                if (messageId) {
+                    toggleMessageModal(messageId);
+                }
+            }
+        });
+    });
+
     function copyToClipboard(text) {
         // Use modern Clipboard API
         if (navigator.clipboard && window.isSecureContext) {

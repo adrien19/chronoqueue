@@ -39,7 +39,7 @@ func shortenID(id string) string {
 // isDLQ checks if a queue is a Dead Letter Queue based on naming convention
 func isDLQ(queueName string) bool {
 	// Common DLQ naming patterns: ends with -dlq or _dlq
-	return len(queueName) > 4 && (queueName[len(queueName)-4:] == "-dlq" || queueName[len(queueName)-4:] == "_dlq")
+	return len(queueName) >= 4 && (queueName[len(queueName)-4:] == "-dlq" || queueName[len(queueName)-4:] == "_dlq")
 }
 
 // NewQueuesHandler creates a new queues handler
@@ -275,8 +275,20 @@ func (h *QueuesHandler) MessageDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, msg := range peekResp.GetMessages() {
+		// Skip nil messages
+		if msg == nil {
+			h.logger.WarnWithFields("Encountered nil message in peek response", "queue", queueName)
+			continue
+		}
+
 		if msg.GetMessageId() == messageID {
 			metadata := msg.GetMetadata()
+
+			// Skip if metadata is nil
+			if metadata == nil {
+				h.logger.WarnWithFields("Message has nil metadata", "queue", queueName, "messageId", messageID)
+				continue
+			}
 
 			// Format payload as JSON
 			payload := "{}"
