@@ -1,0 +1,14 @@
+{
+    "task_id": "task-mkt-001",
+    "task_type": "market_research",
+    "description": "Market research for AI automation tools",
+    "input": {
+        "market_segment": "AI automation tools",
+        "geographic_focus": "North America",
+        "research_depth": "comprehensive",
+        "include_pricing": true,
+        "include_features": true
+    },
+    "priority": 5,
+    "tenant_id": "demo-tenant"
+}

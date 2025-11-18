@@ -1,0 +1,17 @@
+{
+    "task_id": "task-code-001",
+    "task_type": "code_review",
+    "description": "Code review for GitHub repository",
+    "input": {
+        "repository_url": "https://github.com/example/repo",
+        "branch": "main",
+        "focus_areas": [
+            "security",
+            "performance",
+            "best_practices"
+        ],
+        "generate_suggestions": true
+    },
+    "priority": 7,
+    "tenant_id": "demo-tenant"
+}

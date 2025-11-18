@@ -1,0 +1,14 @@
+{
+    "task_id": "task-web-001",
+    "task_type": "web_search",
+    "description": "Simple web search for contact information",
+    "input": {
+        "company_url": "https://example.com",
+        "search_for": "contact information",
+        "include_emails": true,
+        "include_phone": true,
+        "include_social": true
+    },
+    "priority": 3,
+    "tenant_id": "demo-tenant"
+}
