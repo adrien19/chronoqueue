@@ -1,0 +1,11 @@
+{
+    "task_id": "task-research-001",
+    "task_type": "llm_research",
+    "description": "Research the benefits of message queues in distributed systems",
+    "input": {
+        "topic": "Message queues and their role in building scalable distributed systems",
+        "depth": "comprehensive"
+    },
+    "priority": 8,
+    "tenant_id": "demo-tenant"
+}

@@ -1,0 +1,12 @@
+{
+    "task_id": "task-jokes-001",
+    "task_type": "llm_creative",
+    "description": "Generate 3 programming jokes and explain why they're funny",
+    "input": {
+        "prompt": "Generate 3 clever programming jokes and explain the technical humor behind each one",
+        "tone": "witty and educational",
+        "length": "medium"
+    },
+    "priority": 7,
+    "tenant_id": "demo-tenant"
+}

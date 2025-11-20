@@ -6,9 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/adrien19/chronoqueue/pkg/log"
 )
 
 func TestBaseHandler_renderError(t *testing.T) {

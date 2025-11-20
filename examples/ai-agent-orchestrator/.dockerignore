@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+ai-orchestrator
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+*.out
+coverage.html
+
+# Documentation (not needed in container)
+docs/
+*.md
+!README.md
+
+# Development files
+.env
+.env.local
+docker-compose.override.yaml
+
+# Temporary files
+tmp/
+temp/
+*.tmp

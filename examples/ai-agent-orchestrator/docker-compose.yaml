@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  # Ollama LLM Service
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai-orchestrator-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - ai-orchestrator-network
+
+  # AI Agent Orchestrator - Coordinator
+  coordinator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-orchestrator-coordinator
+    command: >
+      /app/ai-orchestrator coordinator
+      --workers 2
+      --llm-provider ollama
+      --llm-base-url http://ollama:11434
+      --server chronoqueue:9000
+      --insecure
+      -v
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - CHRONOQUEUE_SERVER=chronoqueue:9000
+      - LLM_PROVIDER=ollama
+      - LLM_MODEL=llama3.2:3b
+    depends_on:
+      ollama:
+        condition: service_healthy
+      chronoqueue:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - ai-orchestrator-network
+
+  # AI Agent Orchestrator - Mock Agents
+  agents-mock:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-orchestrator-agents-mock
+    command: >
+      /app/ai-orchestrator agents
+      --web-search
+      --code-analyzer
+      --data-processor
+      --aggregator
+      --notification
+      --workers 2
+      --server chronoqueue:9000
+      --insecure
+      -v
+    environment:
+      - CHRONOQUEUE_SERVER=chronoqueue:9000
+    depends_on:
+      - chronoqueue
+    restart: unless-stopped
+    networks:
+      - ai-orchestrator-network
+
+  # AI Agent Orchestrator - LLM Agents
+  agents-llm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-orchestrator-agents-llm
+    command: >
+      /app/ai-orchestrator agents
+      --llm-writer
+      --llm-researcher
+      --llm-coder
+      --llm-provider ollama
+      --llm-base-url http://ollama:11434
+      --workers 2
+      --server chronoqueue:9000
+      --insecure
+      -v
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - CHRONOQUEUE_SERVER=chronoqueue:9000
+      - LLM_PROVIDER=ollama
+      - LLM_MODEL=llama3.2:3b
+      - LLM_CODING_MODEL=qwen2.5-coder:7b
+    depends_on:
+      ollama:
+        condition: service_healthy
+      chronoqueue:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - ai-orchestrator-network
+
+  # ChronoQueue Server (External - assumes already running)
+  # Optionally, you can run "export REDIS_PASSWORD='mypassword' && make server-dev"
+  # at root directory.
+  # chronoqueue:
+  #   # ChronoQueue must be running separately
+  #   # Start it with: make server-dev
+  #   # Or point to an external instance by updating CHRONOQUEUE_SERVER env vars above
+
+volumes:
+  ollama_data:
+    driver: local
+
+networks:
+  ai-orchestrator-network:
+    driver: bridge
