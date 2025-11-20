@@ -27,7 +27,7 @@
         "anthropic"
     ],
     "author": "ChronoQueue Team",
-    "license": "Apache-2.0",
+    "license": "MIT",
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.22.0",
         "@grpc/grpc-js": "^1.12.0",

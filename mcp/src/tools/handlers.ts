@@ -262,6 +262,9 @@ New Lease Expiry: ${response.newLeaseExpiry}`;
 // Schedule Handlers
 
 async function handleCreateSchedule(args: any, client: ChronoQueueClient): Promise<string> {
+    if (!args.schedule_type) {
+        throw new Error('schedule_type is required');
+    }
     const schedule: any = {
         scheduleId: args.schedule_id,
         queueName: args.queue_name,

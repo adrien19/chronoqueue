@@ -123,7 +123,7 @@ When you ask Copilot to work with ChronoQueue, it has access to 13 tools:
 
 ### Custom ChronoQueue Address
 
-If your ChronoQueue server is on a different host/port, update `.vscode/settings.json`:
+If your ChronoQueue server is on a different host/port, update `.vscode/mcp.json`:
 
 ```json
 {
