@@ -171,12 +171,33 @@ export class ChronoQueueClient {
         const deadline = new Date(Date.now() + this.timeout);
         const grpcMetadata = new grpc.Metadata();
 
+        // Parse lease duration from string (e.g., "30s") to seconds
+        let leaseDurationSeconds = 30; // Default 30 seconds
+        if (options.leaseDuration) {
+            const match = options.leaseDuration.match(/^(\d+)(s|m|h)$/);
+            if (match) {
+                const value = parseInt(match[1], 10);
+                const unit = match[2];
+                switch (unit) {
+                    case 's':
+                        leaseDurationSeconds = value;
+                        break;
+                    case 'm':
+                        leaseDurationSeconds = value * 60;
+                        break;
+                    case 'h':
+                        leaseDurationSeconds = value * 60 * 60;
+                        break;
+                }
+            }
+        }
+
         const metadata: any = {
             type: options.type || 0, // 0 = SIMPLE, 1 = EXCLUSIVE
             default_max_attempts: options.dequeueAttempts || 3,
-            lease_duration: { seconds: 30, nanos: 0 }, // Default 30s
+            lease_duration: { seconds: leaseDurationSeconds, nanos: 0 },
             dead_letter_queue_name: options.deadLetterQueueName || `${queueName}-dlq`,
-            auto_create_dlq: options.autoCreateDLQ !== false,
+            auto_create_dlq: options.autoCreateDLQ !== undefined ? options.autoCreateDLQ : true,
         };
 
         if (options.exclusivityKey) {
@@ -219,14 +240,18 @@ export class ChronoQueueClient {
         const metadata = new grpc.Metadata();
 
         const response = await listQueuesAsync({}, metadata, { deadline });
-        return (response.queues || []).map((q: any) => ({
-            queueName: q.name,
-            queueType: q.metadata?.type === 1 ? QueueType.EXCLUSIVE : QueueType.SIMPLE,
-            status: QueueStatus.ACTIVE,
-            leaseDuration: q.metadata?.lease_duration?.seconds || 30,
-            maxAttempts: q.metadata?.default_max_attempts || 3,
-            deadLetterQueueName: q.metadata?.dead_letter_queue_name,
-        }));
+        return (response.queues || []).map((q: any) => {
+            const type = q.metadata?.type;
+            const isExclusive = type === 1 || type === 'EXCLUSIVE' || type === QueueType.EXCLUSIVE;
+            return {
+                queueName: q.name,
+                queueType: isExclusive ? QueueType.EXCLUSIVE : QueueType.SIMPLE,
+                status: QueueStatus.ACTIVE,
+                leaseDuration: q.metadata?.lease_duration?.seconds || 30,
+                maxAttempts: q.metadata?.default_max_attempts || 3,
+                deadLetterQueueName: q.metadata?.dead_letter_queue_name,
+            };
+        });
     }
 
     /**
@@ -250,12 +275,12 @@ export class ChronoQueueClient {
         return {
             queueName: queueName,
             status: QueueStatus.ACTIVE,
-            queueType: 'SIMPLE', // Not provided by server - use listQueues() for accurate value
+            queueType: QueueType.SIMPLE, // Not provided by server - use listQueues() for accurate value
             pending: stateCounts['PENDING'] || 0,
             running: stateCounts['RUNNING'] || 0,
             completed: stateCounts['COMPLETED'] || 0,
             errored: stateCounts['ERRORED'] || 0,
-            leaseDuration: '30s', // Not provided by server - use listQueues() for accurate value
+            leaseDuration: 30, // Not provided by server (seconds) - use listQueues() for accurate value
             maxAttempts: 3, // Not provided by server - use listQueues() for accurate value
             deadLetterQueueName: undefined, // Not provided by server - use listQueues() for accurate value
             throughput: response.throughput,
@@ -456,13 +481,60 @@ export class ChronoQueueClient {
     }
 
     /**
+     * Parse calendar schedule from server response
+     */
+    private parseCalendarSchedule(calendarSchedule: any): any {
+        const typeMap: Record<number | string, string> = {
+            0: 'MONTHLY',
+            1: 'WEEKLY',
+            2: 'DAILY',
+            3: 'YEARLY',
+            4: 'BUSINESS_DAYS',
+            5: 'CUSTOM',
+            'MONTHLY': 'MONTHLY',
+            'WEEKLY': 'WEEKLY',
+            'DAILY': 'DAILY',
+            'YEARLY': 'YEARLY',
+            'BUSINESS_DAYS': 'BUSINESS_DAYS',
+            'CUSTOM': 'CUSTOM',
+        };
+
+        const calType = typeMap[calendarSchedule.type] || 'WEEKLY';
+
+        // Extract times and days from rules
+        const rules = calendarSchedule.rules || [];
+        const firstRule = rules[0] || {};
+
+        // Format execution times as "HH:MM" strings
+        const timesOfDay = (firstRule.execution_times || firstRule.executionTimes || []).map((t: any) => {
+            const hour = String(t.hour || 0).padStart(2, '0');
+            const minute = String(t.minute || 0).padStart(2, '0');
+            return `${hour}:${minute}`;
+        });
+
+        // Extract days of week from weekly rule
+        let daysOfWeek: number[] = [];
+        if (firstRule.weekly) {
+            daysOfWeek = firstRule.weekly.days_of_week || firstRule.weekly.daysOfWeek || [];
+        }
+
+        return {
+            calendarType: calType,
+            timesOfDay: timesOfDay,
+            daysOfWeek: daysOfWeek,
+            skipHolidays: false,
+            timezone: calendarSchedule.timezone || 'UTC',
+        };
+    }
+
+    /**
      * Renew message lease
      */
     async renewMessageLease(
         queueName: string,
         messageId: string,
         streamEntryId: string,
-        leaseDuration?: string
+        leaseDuration?: number // Duration in seconds
     ): Promise<{ success: boolean; newLeaseExpiry: string }> {
         const renewLeaseAsync = promisify(
             this.queueServiceClient.renewMessageLease.bind(this.queueServiceClient)
@@ -471,11 +543,13 @@ export class ChronoQueueClient {
         const deadline = new Date(Date.now() + this.timeout);
         const metadata = new grpc.Metadata();
 
+        const leaseDurationProto = leaseDuration ? { seconds: leaseDuration, nanos: 0 } : undefined;
+
         const response = await renewLeaseAsync({
             queue_name: queueName,
             message_id: messageId,
             stream_entry_id: streamEntryId,
-            lease_duration: leaseDuration,
+            lease_duration: leaseDurationProto,
         }, metadata, { deadline });
 
         return {
@@ -501,19 +575,52 @@ export class ChronoQueueClient {
             queue_name: schedule.queueName,
         };
 
+        // Set the oneof schedule_config field directly on metadata
+        // For protobuf oneof fields, we set the specific field directly, not wrapped in an object
         if (schedule.scheduleType === 'CRON' && schedule.cronSchedule) {
-            metadata.schedule_config = {
-                cron_schedule: schedule.cronSchedule.cronExpression,
-            };
+            metadata.cron_schedule = schedule.cronSchedule.cronExpression;
         } else if (schedule.scheduleType === 'CALENDAR' && schedule.calendarSchedule) {
-            metadata.schedule_config = {
-                calendar_schedule: {
-                    calendar_type: schedule.calendarSchedule.calendarType,
-                    times_of_day: schedule.calendarSchedule.timesOfDay,
-                    days_of_week: schedule.calendarSchedule.daysOfWeek,
-                    skip_holidays: schedule.calendarSchedule.skipHolidays,
-                    timezone: schedule.calendarSchedule.timezone || 'UTC',
-                },
+            // Parse times_of_day from "HH:MM" format to {hour, minute} objects
+            const executionTimes = schedule.calendarSchedule.timesOfDay?.map((time: string) => {
+                const [hour, minute] = time.split(':').map(Number);
+                return { hour, minute: minute || 0 };
+            }) || [{ hour: 0, minute: 0 }];
+
+            // Map calendar type string to enum value
+            const typeMap: Record<string, number> = {
+                'MONTHLY': 0,
+                'WEEKLY': 1,
+                'DAILY': 2,
+                'YEARLY': 3,
+                'BUSINESS_DAYS': 4,
+                'CUSTOM': 5,
+            };
+
+            // Build the rule based on calendar type
+            const rule: any = {
+                execution_times: executionTimes,
+            };
+
+            const calType = schedule.calendarSchedule.calendarType;
+            if (calType === 'WEEKLY') {
+                rule.weekly = {
+                    days_of_week: schedule.calendarSchedule.daysOfWeek || [1, 2, 3, 4, 5],
+                };
+            } else if (calType === 'DAILY') {
+                rule.daily = {
+                    day_interval: 1,
+                    weekdays_only: schedule.calendarSchedule.skipHolidays || false,
+                };
+            } else if (calType === 'BUSINESS_DAYS') {
+                rule.business_days = {
+                    business_calendar_id: 'default',
+                };
+            }
+
+            metadata.calendar_schedule = {
+                type: typeMap[calType] || 1,
+                rules: [rule],
+                timezone: schedule.calendarSchedule.timezone || 'UTC',
             };
         }
 
@@ -547,29 +654,26 @@ export class ChronoQueueClient {
 
         const response = await listSchedulesAsync({}, metadata, { deadline });
         return (response.schedules || []).map((s: any) => {
-            const metadata = s.metadata || {};
-            const payload = metadata.payload || {};
+            const scheduleMetadata = s.metadata || {};
+            const payload = scheduleMetadata.payload || {};
+            // The oneof fields cron_schedule and calendar_schedule are directly on metadata
+            const cronSchedule = scheduleMetadata.cron_schedule || scheduleMetadata.cronSchedule;
+            const calendarSchedule = scheduleMetadata.calendar_schedule || scheduleMetadata.calendarSchedule;
 
             return {
                 scheduleId: s.schedule_id,
-                queueName: metadata.queue_name,
-                scheduleType: metadata.cron_schedule ? 'CRON' : 'CALENDAR',
-                cronSchedule: metadata.cron_schedule
-                    ? { cronExpression: metadata.cron_schedule }
+                queueName: scheduleMetadata.queue_name || scheduleMetadata.queueName,
+                scheduleType: cronSchedule ? 'CRON' : 'CALENDAR',
+                cronSchedule: cronSchedule
+                    ? { cronExpression: cronSchedule }
                     : undefined,
-                calendarSchedule: metadata.calendar_schedule
-                    ? {
-                        calendarType: metadata.calendar_schedule.calendar_type,
-                        timesOfDay: metadata.calendar_schedule.times_of_day,
-                        daysOfWeek: metadata.calendar_schedule.days_of_week,
-                        skipHolidays: metadata.calendar_schedule.skip_holidays,
-                        timezone: metadata.calendar_schedule.timezone,
-                    }
+                calendarSchedule: calendarSchedule
+                    ? this.parseCalendarSchedule(calendarSchedule)
                     : undefined,
                 payloadData: structToObject(payload.data),
-                priority: metadata.priority,
-                enabled: metadata.state === 'SCHEDULED',
-                createdAt: metadata.created_at,
+                priority: scheduleMetadata.priority,
+                enabled: scheduleMetadata.state === 'SCHEDULED',
+                createdAt: scheduleMetadata.created_at || scheduleMetadata.createdAt,
             };
         });
     }

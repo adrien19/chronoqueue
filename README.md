@@ -150,7 +150,7 @@ npm start
 
 **Features:**
 
-- 🤖 12 MCP tools for queue, message, and schedule operations
+- 🤖 13 MCP tools for queue, message, and schedule operations
 - 🔌 Works with VS Code (GitHub Copilot), Claude Desktop, Cursor IDE, and any MCP-compatible client
 - 🔐 Secure gRPC communication with ChronoQueue server
 - 📝 Type-safe TypeScript implementation

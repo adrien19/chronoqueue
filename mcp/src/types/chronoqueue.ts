@@ -37,12 +37,12 @@ export interface QueueInfo {
 export interface QueueState {
     queueName: string;
     status: QueueStatus;
-    queueType: string;
+    queueType: QueueType;
     pending: number;
     running: number;
     completed: number;
     errored: number;
-    leaseDuration: string;
+    leaseDuration: number; // Duration in seconds
     maxAttempts: number;
     deadLetterQueueName?: string;
     throughput?: number;

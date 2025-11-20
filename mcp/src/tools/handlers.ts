@@ -6,6 +6,7 @@
 
 import { ChronoQueueClient } from '../chronoqueue-client.js';
 import { QueueType } from '../types/chronoqueue.js';
+import { parseDuration } from '../config.js';
 
 /**
  * Route tool calls to appropriate handlers
@@ -65,19 +66,34 @@ async function handleCreateQueue(args: any, client: ChronoQueueClient): Promise<
 
     const queueType = args.queue_type === 'exclusive' ? QueueType.EXCLUSIVE : QueueType.SIMPLE;
 
+    // Parse lease_duration if provided
+    let leaseDuration: string | undefined;
+    if (args.lease_duration) {
+        leaseDuration = args.lease_duration;
+    }
+
     await client.createQueue(queueName, {
         type: queueType,
         dequeueAttempts: args.max_attempts || 3,
+        leaseDuration: leaseDuration,
         deadLetterQueueName: args.dlq_name,
-        autoCreateDLQ: args.auto_create_dlq !== false,
+        autoCreateDLQ: args.auto_create_dlq !== undefined ? args.auto_create_dlq : true,
+        exclusivityKey: args.exclusivity_key,
     });
 
-    return `✓ Queue created successfully
+    let result = `✓ Queue created successfully
 
 Queue: ${queueName}
 Type: ${args.queue_type || 'simple'}
+Lease Duration: ${args.lease_duration || '30s'}
 Max Attempts: ${args.max_attempts || 3}
 Auto-create DLQ: ${args.auto_create_dlq !== false ? 'Yes' : 'No'}`;
+
+    if (args.exclusivity_key) {
+        result += `\nExclusivity Key: ${args.exclusivity_key}`;
+    }
+
+    return result;
 }
 
 async function handleDeleteQueue(args: any, client: ChronoQueueClient): Promise<string> {
@@ -96,7 +112,7 @@ async function handleListQueues(args: any, client: ChronoQueueClient): Promise<s
     for (const queue of queues) {
         result += `• ${queue.queueName}\n`;
         result += `  Type: ${queue.queueType === QueueType.EXCLUSIVE ? 'Exclusive' : 'Simple'}\n`;
-        result += `  Lease: ${queue.leaseDuration}\n`;
+        result += `  Lease: ${queue.leaseDuration}s\n`;
         result += `  Max Attempts: ${queue.maxAttempts}\n`;
         if (queue.deadLetterQueueName) {
             result += `  DLQ: ${queue.deadLetterQueueName}\n`;
@@ -109,11 +125,12 @@ async function handleListQueues(args: any, client: ChronoQueueClient): Promise<s
 
 async function handleGetQueueState(args: any, client: ChronoQueueClient): Promise<string> {
     const state = await client.getQueueState(args.queue_name);
+    const queueTypeStr = state.queueType === QueueType.EXCLUSIVE ? 'Exclusive' : 'Simple';
 
     return `📊 Queue State: ${state.queueName}
 
 Status: ${state.status}
-Type: ${state.queueType}
+Type: ${queueTypeStr}
 
 Messages:
   • Pending:   ${state.pending}
@@ -122,7 +139,7 @@ Messages:
   • Errored:   ${state.errored}
 
 Configuration:
-  • Lease Duration: ${state.leaseDuration}
+  • Lease Duration: ${state.leaseDuration}s
   • Max Attempts: ${state.maxAttempts}
   • DLQ: ${state.deadLetterQueueName || 'None'}
 
@@ -133,13 +150,19 @@ ${state.avgProcessingTime ? `Avg Processing Time: ${state.avgProcessingTime}` : 
 // Message Operation Handlers
 
 async function handlePostMessage(args: any, client: ChronoQueueClient): Promise<string> {
+    // Parse lease_duration from string (e.g., "5m") to seconds
+    let leaseDurationSeconds: number | undefined;
+    if (args.lease_duration) {
+        leaseDurationSeconds = Math.floor(parseDuration(args.lease_duration) / 1000);
+    }
+
     const response = await client.postMessage(
         args.queue_name,
         args.message_id,
         args.payload,
         {
             priority: args.priority,
-            leaseDuration: args.lease_duration,
+            leaseDuration: leaseDurationSeconds,
             schemaId: args.schema_id,
             schemaVersion: args.schema_version,
         }
@@ -216,11 +239,17 @@ Status: ${args.status}`;
 }
 
 async function handleRenewMessageLease(args: any, client: ChronoQueueClient): Promise<string> {
+    // Parse lease_duration from string to seconds if provided
+    let leaseDurationSeconds: number | undefined;
+    if (args.lease_duration) {
+        leaseDurationSeconds = Math.floor(parseDuration(args.lease_duration) / 1000);
+    }
+
     const response = await client.renewMessageLease(
         args.queue_name,
         args.message_id,
         args.stream_entry_id,
-        args.lease_duration
+        leaseDurationSeconds
     );
 
     return `✓ Message lease renewed

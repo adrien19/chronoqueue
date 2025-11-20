@@ -22,19 +22,26 @@ export const createQueueTool: Tool = {
             },
             lease_duration: {
                 type: 'string',
-                description: 'Default message lease duration (e.g., "30s", "5m")',
+                description: 'Default message lease duration (e.g., "30s", "5m") (default: "30s")',
+                default: '30s',
             },
             max_attempts: {
                 type: 'number',
                 description: 'Maximum dequeue attempts before moving to DLQ (default: 3)',
+                default: 3,
             },
             auto_create_dlq: {
                 type: 'boolean',
-                description: 'Automatically create dead letter queue (default: false)',
+                description: 'Automatically create dead letter queue (default: true)',
+                default: true,
             },
             dlq_name: {
                 type: 'string',
                 description: 'Custom dead letter queue name',
+            },
+            exclusivity_key: {
+                type: 'string',
+                description: 'Exclusivity key for exclusive queues (required for exclusive queue type)',
             },
         },
         required: ['queue_name'],

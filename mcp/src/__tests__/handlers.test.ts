@@ -30,7 +30,7 @@ describe('Tool Handlers', () => {
     });
 
     describe('Queue Management', () => {
-        it('should handle create_queue', async () => {
+        it('should handle create_queue with default auto_create_dlq=true', async () => {
             mockClient.createQueue.mockResolvedValue({
                 success: true,
                 queueName: 'test-queue',
@@ -52,6 +52,30 @@ describe('Tool Handlers', () => {
             );
             expect(result).toContain('✓ Queue created successfully');
             expect(result).toContain('test-queue');
+        });
+
+        it('should handle create_queue with lease_duration', async () => {
+            mockClient.createQueue.mockResolvedValue({
+                success: true,
+                queueName: 'test-queue',
+            });
+
+            const result = await handleToolCall('create_queue', {
+                queue_name: 'test-queue',
+                lease_duration: '5m',
+                max_attempts: 5,
+                auto_create_dlq: false,
+            }, mockClient);
+
+            expect(mockClient.createQueue).toHaveBeenCalledWith(
+                'test-queue',
+                expect.objectContaining({
+                    leaseDuration: '5m',
+                    dequeueAttempts: 5,
+                    autoCreateDLQ: false,
+                })
+            );
+            expect(result).toContain('Lease Duration: 5m');
         });
 
         it('should handle delete_queue', async () => {
@@ -105,7 +129,7 @@ describe('Tool Handlers', () => {
                 running: 2,
                 completed: 10,
                 errored: 1,
-                leaseDuration: '30s',
+                leaseDuration: 30, // Number of seconds
                 maxAttempts: 3,
             });
 
@@ -169,6 +193,34 @@ describe('Tool Handlers', () => {
                 })
             );
             expect(result).toContain('Schema: user.profile.v1 v1');
+        });
+
+        it('should handle post_message with lease_duration parsing', async () => {
+            mockClient.postMessage.mockResolvedValue({
+                success: true,
+                messageId: 'msg-123',
+                streamEntryId: '1234-0',
+            });
+
+            const result = await handleToolCall('post_message', {
+                queue_name: 'test-queue',
+                message_id: 'msg-123',
+                payload: { key: 'value' },
+                lease_duration: '5m',
+                priority: 7,
+            }, mockClient);
+
+            // Should convert '5m' to 300 seconds
+            expect(mockClient.postMessage).toHaveBeenCalledWith(
+                'test-queue',
+                'msg-123',
+                { key: 'value' },
+                expect.objectContaining({
+                    leaseDuration: 300,
+                    priority: 7,
+                })
+            );
+            expect(result).toContain('✓ Message posted successfully');
         });
 
         it('should handle get_next_message', async () => {
@@ -258,7 +310,7 @@ describe('Tool Handlers', () => {
             expect(result).toContain('✅ Message acknowledged');
         });
 
-        it('should handle renew_message_lease', async () => {
+        it('should handle renew_message_lease with duration parsing', async () => {
             mockClient.renewMessageLease.mockResolvedValue({
                 success: true,
                 newLeaseExpiry: '1234567890',
@@ -271,11 +323,12 @@ describe('Tool Handlers', () => {
                 lease_duration: '60s',
             }, mockClient);
 
+            // Should convert '60s' to 60 (numeric seconds)
             expect(mockClient.renewMessageLease).toHaveBeenCalledWith(
                 'test-queue',
                 'msg-123',
                 '1234-0',
-                '60s'
+                60
             );
             expect(result).toContain('✓ Message lease renewed');
         });

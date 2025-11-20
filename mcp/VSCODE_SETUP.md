@@ -217,11 +217,12 @@ cd mcp && npm run build
 **Solution**: Verify ChronoQueue server is running:
 
 ```bash
-# Check if server is running
-curl localhost:9000 || echo "Server not running"
+# Check if server is running (gRPC health check)
+grpcurl -plaintext localhost:9000 list || echo "Server not running"
 
 # Start the server
-go run main.go server --dev --server :9000
+# From the repository root:
+export REDIS_PASSWORD='mypassword' && make server-dev
 ```
 
 ### Tools Not Appearing
