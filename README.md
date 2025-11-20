@@ -133,6 +133,33 @@ go run main.go server --dev --server :9000
 go run main.go ui start --port 8080
 ```
 
+## AI Integration
+
+### Model Context Protocol (MCP) Server
+
+ChronoQueue provides a **Model Context Protocol (MCP) server** that enables AI assistants like Claude, ChatGPT, and custom agents to interact with ChronoQueue for reliable task queuing and scheduling.
+
+**Quick Start:**
+
+```bash
+cd mcp
+npm install
+npm run build
+npm start
+```
+
+**Features:**
+
+- 🤖 13 MCP tools for queue, message, and schedule operations
+- 🔌 Works with VS Code (GitHub Copilot), Claude Desktop, Cursor IDE, and any MCP-compatible client
+- 🔐 Secure gRPC communication with ChronoQueue server
+- 📝 Type-safe TypeScript implementation
+
+**Setup Guides:**
+
+- **[VS Code Integration →](./mcp/VSCODE_SETUP.md)** - Use ChronoQueue in GitHub Copilot Chat
+- **[MCP Server Documentation →](./mcp/README.md)** - Complete reference for all AI assistants
+
 ## Documentation
 
 For detailed documentation, including API references and usage examples, visit [ChronoQueue Docs](./docs/)

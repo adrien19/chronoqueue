@@ -116,7 +116,6 @@ func (as *storage) fetchMessageMetadata(ctx context.Context, queueName string, m
 }
 
 func (as *storage) getMetadata(ctx context.Context, key string, metadata interface{}) error {
-	fmt.Printf("Fetching metadata for key: %s\n", key)
 	metaResult, err := as.redisClient.HGet(ctx, key, "metadata").Result()
 	if err != nil {
 		return err

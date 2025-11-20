@@ -1,0 +1,54 @@
+{
+    "name": "@chronoqueue/mcp-server",
+    "version": "0.1.0",
+    "description": "ChronoQueue MCP Server - Integrate ChronoQueue with AI assistants via Model Context Protocol",
+    "type": "module",
+    "main": "./dist/index.js",
+    "bin": {
+        "chronoqueue-mcp": "./dist/index.js"
+    },
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch",
+        "start": "node dist/index.js",
+        "test": "vitest",
+        "test:coverage": "vitest run --coverage",
+        "lint": "eslint src --ext .ts",
+        "format": "prettier --write \"src/**/*.ts\""
+    },
+    "keywords": [
+        "chronoqueue",
+        "mcp",
+        "model-context-protocol",
+        "ai",
+        "task-queue",
+        "distributed-systems",
+        "claude",
+        "anthropic"
+    ],
+    "author": "ChronoQueue Team",
+    "license": "MIT",
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.22.0",
+        "@grpc/grpc-js": "^1.12.0",
+        "@grpc/proto-loader": "^0.7.13",
+        "zod": "^3.23.8"
+    },
+    "devDependencies": {
+        "@types/node": "^20.14.0",
+        "@typescript-eslint/eslint-plugin": "^7.0.0",
+        "@typescript-eslint/parser": "^7.0.0",
+        "eslint": "^8.57.0",
+        "prettier": "^3.3.0",
+        "typescript": "^5.5.0",
+        "vitest": "^1.6.0"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/adrien19/chronoqueue.git",
+        "directory": "mcp"
+    }
+}
