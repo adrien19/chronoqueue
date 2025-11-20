@@ -1,0 +1,11 @@
+{
+    "task_id": "task-code-001",
+    "task_type": "llm_coding",
+    "description": "Write a Go function to calculate Fibonacci numbers with memoization",
+    "input": {
+        "task": "Implement a Go function that calculates the nth Fibonacci number using memoization for efficiency. Include unit tests.",
+        "language": "Go"
+    },
+    "priority": 9,
+    "tenant_id": "demo-tenant"
+}

@@ -4,15 +4,6 @@ import (
 	"github.com/adrien19/chronoqueue/examples/ai-agent-orchestrator/pkg/models"
 )
 
-// LLMClient defines the interface for interacting with language models
-type LLMClient interface {
-	// DecomposeTask takes a task and returns a decomposition into subtasks
-	DecomposeTask(task *models.Task) (*models.TaskDecomposition, error)
-
-	// SynthesizeResults takes multiple agent results and creates a final report
-	SynthesizeResults(taskID string, results []*models.AgentResult) (*models.Report, error)
-}
-
 // DecomposeTaskRequest represents a request to decompose a task
 type DecomposeTaskRequest struct {
 	TaskID      string                 `json:"task_id"`

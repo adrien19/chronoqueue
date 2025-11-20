@@ -45,14 +45,15 @@ type Agent interface {
 
 // BaseAgent provides common functionality for all agents
 type BaseAgent struct {
-	client      *client.ChronoQueueClient
-	queueName   string
-	agentType   string
-	workers     int
-	verbose     bool
-	stopChan    chan struct{}
-	wg          sync.WaitGroup
-	resultStore *ResultStore
+	client            *client.ChronoQueueClient
+	queueName         string
+	agentType         string
+	workers           int
+	verbose           bool
+	stopChan          chan struct{}
+	wg                sync.WaitGroup
+	resultStore       *ResultStore
+	skipResultPosting bool // Skip posting results to agent-results queue
 }
 
 // NewBaseAgent creates a new base agent
@@ -172,13 +173,15 @@ func (agent *BaseAgent) processMessage(ctx context.Context, workerID int, resp *
 	}
 
 	// Post result to results queue (for aggregator to pick up)
-	// Skip if posting fails (results queue may not exist in demo)
-	if err := agent.postResult(ctx, result); err != nil {
-		if agent.verbose {
-			fmt.Printf("[%s Worker %d] Failed to post Result: %v\n", agent.agentType, workerID, result)
-			fmt.Printf("[%s Worker %d] Note: Could not post result (queue may not exist): %v\n", agent.agentType, workerID, err)
+	// Skip if agent configured to not post results (e.g., aggregator, notification)
+	if !agent.skipResultPosting {
+		if err := agent.postResult(ctx, result); err != nil {
+			if agent.verbose {
+				fmt.Printf("[%s Worker %d] Failed to post Result: %v\n", agent.agentType, workerID, result)
+				fmt.Printf("[%s Worker %d] Note: Could not post result (queue may not exist): %v\n", agent.agentType, workerID, err)
+			}
+			// Continue anyway - result was processed successfully
 		}
-		// Continue anyway - result was processed successfully
 	}
 
 	// Acknowledge successful processing

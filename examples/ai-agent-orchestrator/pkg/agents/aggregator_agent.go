@@ -2,12 +2,15 @@ package agents
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/adrien19/chronoqueue/client"
 	"github.com/adrien19/chronoqueue/examples/ai-agent-orchestrator/pkg/llm"
 	"github.com/adrien19/chronoqueue/examples/ai-agent-orchestrator/pkg/models"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // AggregatorAgent collects and synthesizes results from other agents
@@ -18,8 +21,10 @@ type AggregatorAgent struct {
 
 // NewAggregatorAgent creates a new aggregator agent
 func NewAggregatorAgent(c *client.ChronoQueueClient, llmClient llm.LLMClient, workers int, verbose bool) *AggregatorAgent {
+	baseAgent := NewBaseAgent(c, "agent-aggregator", "aggregator", workers, verbose)
+	baseAgent.skipResultPosting = true // Aggregator results don't need to be in agent-results
 	return &AggregatorAgent{
-		BaseAgent: NewBaseAgent(c, "agent-aggregator", "aggregator", workers, verbose),
+		BaseAgent: baseAgent,
 		llmClient: llmClient,
 	}
 }
@@ -83,6 +88,29 @@ func (agent *AggregatorAgent) processAggregation(ctx context.Context, subtask *S
 		fmt.Printf("   ✅ Synthesis complete (%d sections)\n", len(report.Sections))
 	}
 
+	// Save aggregated results to file for user inspection
+	outputPath, err := agent.saveResultsToFile(subtask.ParentID, report)
+	if err != nil {
+		if agent.verbose {
+			fmt.Printf("   ⚠️  Could not save results to file: %v\n", err)
+		}
+	} else {
+		// Always show the output file path (not just verbose)
+		fmt.Printf("   💾 Results saved: %s\n", outputPath)
+	}
+
+	// Send aggregated report to notification agent
+	if err := agent.sendToNotification(ctx, subtask.ParentID, aggregatedResult); err != nil {
+		if agent.verbose {
+			fmt.Printf("   ⚠️  Could not send to notification queue: %v\n", err)
+		}
+		// Don't fail - we still return the aggregated result
+	}
+
+	// Log aggregation summary
+	fmt.Printf("   📊 Aggregation complete: %d subtasks → %d sections\n",
+		len(collectedResults), len(report.Sections))
+
 	return &AgentResult{
 		SubtaskID:   subtask.SubtaskID,
 		ParentID:    subtask.ParentID,
@@ -93,65 +121,189 @@ func (agent *AggregatorAgent) processAggregation(ctx context.Context, subtask *S
 	}, nil
 }
 
-// collectResults fetches results from completed dependency subtasks
+// saveResultsToFile writes the aggregated report to a JSON file
+func (agent *AggregatorAgent) saveResultsToFile(parentID string, report *models.Report) (string, error) {
+	// Create output directory if it doesn't exist
+	outputDir := "output"
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	// Generate filename with timestamp
+	timestamp := time.Now().Format("20060102-150405")
+	filename := fmt.Sprintf("%s/%s-%s.json", outputDir, parentID, timestamp)
+
+	// Create output structure
+	output := map[string]interface{}{
+		"task_id":      parentID,
+		"generated_at": report.GeneratedAt.Format(time.RFC3339),
+		"summary":      report.Summary,
+		"sections":     report.Sections,
+		"metadata": map[string]interface{}{
+			"total_sections": len(report.Sections),
+			"aggregator":     "ai-agent-orchestrator",
+			"version":        "1.0.0",
+		},
+	}
+
+	// Marshal to pretty JSON
+	jsonData, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal results: %w", err)
+	}
+
+	// Write to file
+	if err := os.WriteFile(filename, jsonData, 0644); err != nil {
+		return "", fmt.Errorf("failed to write file: %w", err)
+	}
+
+	return filename, nil
+}
+
+// sendToNotification sends the aggregated report to the notification queue
+func (agent *AggregatorAgent) sendToNotification(ctx context.Context, parentID string, reportData map[string]interface{}) error {
+	subtaskID := fmt.Sprintf("%s-notify", parentID)
+
+	// Convert reportData to structpb-compatible format
+	compatibleInput := convertToStructPBCompatible(reportData)
+
+	// Prepare subtask data
+	subtaskData := map[string]interface{}{
+		"subtask_id":  subtaskID,
+		"parent_id":   parentID,
+		"agent_type":  "notification",
+		"description": "Deliver final report",
+		"input":       compatibleInput,
+		"status":      "pending",
+		"priority":    int32(8),
+		"created_at":  time.Now().Unix(),
+	}
+
+	payloadStruct, err := structpb.NewStruct(subtaskData)
+	if err != nil {
+		return fmt.Errorf("failed to create notification payload: %w", err)
+	}
+
+	_, err = agent.client.PostMessage(ctx, "agent-notification", subtaskID, client.MessageOptions{
+		Priority: 8,
+		Payload: client.Payload{
+			Data:        payloadStruct,
+			ContentType: "application/json",
+		},
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to post notification task: %w", err)
+	}
+
+	if agent.verbose {
+		fmt.Printf("   → Sent to notification queue: %s\n", subtaskID)
+	}
+
+	return nil
+}
+
+// collectResults fetches results from agent-results queue and ACKs them
 func (agent *AggregatorAgent) collectResults(ctx context.Context, parentID string, dependencies []string) []map[string]interface{} {
-	// In a real implementation, this would:
-	// 1. Query the results queue for the parent task
-	// 2. Filter by dependency subtask IDs
-	// 3. Return collected results
-
-	// For now, return mock collected results
 	results := make([]map[string]interface{}, 0, len(dependencies))
+	collectedIDs := make(map[string]bool)
 
-	for i, depID := range dependencies {
-		// Mock result based on dependency type
-		var mockResult map[string]interface{}
+	// Create dependency map for quick lookup
+	depMap := make(map[string]bool)
+	for _, dep := range dependencies {
+		depMap[dep] = true
+	}
 
-		if contains(depID, "web") {
-			mockResult = map[string]interface{}{
-				"subtask_id": depID,
-				"agent_type": "web-search",
-				"result": map[string]interface{}{
-					"query":      "sample query",
-					"count":      5,
-					"top_result": "Relevant information found",
-				},
+	if agent.verbose {
+		fmt.Printf("   → Collecting from agent-results queue (need %d results)\n", len(dependencies))
+	}
+
+	// Poll agent-results queue until we have all dependencies
+	maxAttempts := 30 // 30 attempts * 500ms = 15 seconds max wait
+	attempts := 0
+
+	for len(collectedIDs) < len(dependencies) && attempts < maxAttempts {
+		// Get next message from results queue
+		resp, err := agent.client.GetNextMessage(ctx, "agent-results", "30s", true)
+		if err != nil {
+			if agent.verbose {
+				fmt.Printf("   ⚠️  Error fetching from agent-results: %v\n", err)
 			}
-		} else if contains(depID, "code") {
-			mockResult = map[string]interface{}{
-				"subtask_id": depID,
-				"agent_type": "code-analyzer",
-				"result": map[string]interface{}{
-					"quality_score":  85.5,
-					"findings_count": 4,
-					"status":         "analyzed",
-				},
+			time.Sleep(500 * time.Millisecond)
+			attempts++
+			continue
+		}
+
+		if resp.Message == nil {
+			// No messages available, wait and retry
+			time.Sleep(500 * time.Millisecond)
+			attempts++
+			continue
+		}
+
+		msg := resp.Message
+
+		// Parse the result from message payload
+		if msg.Metadata == nil || msg.Metadata.Payload == nil || msg.Metadata.Payload.Data == nil {
+			// Invalid message, ACK to remove it
+			if _, err := agent.client.AcknowledgeMessage(ctx, "agent-results", msg.MessageId, client.MESSAGE_COMPLETED, resp.StreamEntryId); err != nil && agent.verbose {
+				fmt.Printf("   ⚠️  Failed to ACK invalid message: %v\n", err)
 			}
-		} else if contains(depID, "data") {
-			mockResult = map[string]interface{}{
-				"subtask_id": depID,
-				"agent_type": "data-processor",
-				"result": map[string]interface{}{
-					"records_processed": 15780,
-					"insights_count":    4,
-					"trend":             "positive",
-				},
+			continue
+		}
+
+		resultData := msg.Metadata.Payload.Data.AsMap()
+		subtaskID := getStringFromMap(resultData, "subtask_id")
+		resultParentID := getStringFromMap(resultData, "parent_id")
+
+		// Check if this result belongs to our parent task and is in our dependencies
+		if resultParentID == parentID && depMap[subtaskID] {
+			// Only collect if we haven't already
+			if !collectedIDs[subtaskID] {
+				result := map[string]interface{}{
+					"subtask_id": subtaskID,
+					"parent_id":  resultParentID,
+					"agent_type": getStringFromMap(resultData, "agent_type"),
+					"status":     getStringFromMap(resultData, "status"),
+					"result":     resultData["result"],
+				}
+
+				results = append(results, result)
+				collectedIDs[subtaskID] = true
+
+				if agent.verbose {
+					fmt.Printf("   ✓ Collected result %d/%d: %s\n", len(collectedIDs), len(dependencies), subtaskID)
+				}
+
+				// ACK the message to remove it from queue
+				if _, err := agent.client.AcknowledgeMessage(ctx, "agent-results", msg.MessageId, client.MESSAGE_COMPLETED, resp.StreamEntryId); err != nil {
+					if agent.verbose {
+						fmt.Printf("   ⚠️  Failed to ACK message %s: %v\n", msg.MessageId, err)
+					}
+				}
+			} else {
+				// Already collected, just ACK to remove duplicate
+				if _, err := agent.client.AcknowledgeMessage(ctx, "agent-results", msg.MessageId, client.MESSAGE_COMPLETED, resp.StreamEntryId); err != nil {
+					if agent.verbose {
+						fmt.Printf("   ⚠️  Failed to ACK duplicate message %s: %v\n", msg.MessageId, err)
+					}
+				}
 			}
 		} else {
-			mockResult = map[string]interface{}{
-				"subtask_id": depID,
-				"agent_type": "unknown",
-				"result": map[string]interface{}{
-					"status": "completed",
-				},
+			// Not our result, also ACK it (another aggregator task will collect its own results)
+			if _, err := agent.client.AcknowledgeMessage(ctx, "agent-results", msg.MessageId, client.MESSAGE_COMPLETED, resp.StreamEntryId); err != nil {
+				if agent.verbose {
+					fmt.Printf("   ⚠️  Failed to ACK unrelated message %s: %v\n", msg.MessageId, err)
+				}
 			}
 		}
 
-		results = append(results, mockResult)
+		attempts++
+	}
 
-		// Simulate incremental collection
-		if i < len(dependencies)-1 {
-			time.Sleep(100 * time.Millisecond)
+	if len(collectedIDs) < len(dependencies) {
+		if agent.verbose {
+			fmt.Printf("   ⚠️  Timeout: collected %d/%d results\n", len(collectedIDs), len(dependencies))
 		}
 	}
 
@@ -188,18 +340,4 @@ func getStringFromMap(m map[string]interface{}, key string) string {
 		return v
 	}
 	return ""
-}
-
-// contains checks if string contains substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || findSubstring(s, substr))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

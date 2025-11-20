@@ -137,18 +137,26 @@ func newResultsCommand() *cobra.Command {
 
 // newCoordinatorCommand creates the coordinator command to run coordinator agent
 func newCoordinatorCommand() *cobra.Command {
-	var workers int
+	var (
+		workers     int
+		llmProvider string
+		llmModel    string
+		llmBaseURL  string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "coordinator",
 		Short: "Run coordinator agent",
 		Long:  `Start the coordinator agent that decomposes tasks and routes to specialized agents.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCoordinator(workers)
+			return runCoordinator(workers, llmProvider, llmModel, llmBaseURL)
 		},
 	}
 
 	cmd.Flags().IntVarP(&workers, "workers", "w", 2, "Number of worker goroutines")
+	cmd.Flags().StringVar(&llmProvider, "llm-provider", "mock", "LLM provider to use (mock, ollama, openai, anthropic)")
+	cmd.Flags().StringVar(&llmModel, "llm-model", "", "Override LLM model (optional, uses provider defaults)")
+	cmd.Flags().StringVar(&llmBaseURL, "llm-base-url", "", "LLM base URL (optional, uses provider defaults)")
 
 	return cmd
 }
@@ -161,6 +169,13 @@ func newAgentsCommand() *cobra.Command {
 		codeAnalyzer  bool
 		dataProcessor bool
 		aggregator    bool
+		notification  bool
+		llmWriter     bool
+		llmResearcher bool
+		llmCoder      bool
+		llmProvider   string
+		llmModel      string
+		llmBaseURL    string
 		workers       int
 	)
 
@@ -169,15 +184,23 @@ func newAgentsCommand() *cobra.Command {
 		Short: "Run specialized agents",
 		Long:  `Start one or more specialized agent workers.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator, workers)
+			return runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator, notification,
+				llmWriter, llmResearcher, llmCoder, llmProvider, llmModel, llmBaseURL, workers)
 		},
 	}
 
-	cmd.Flags().BoolVar(&all, "all", false, "Run all agents")
+	cmd.Flags().BoolVar(&all, "all", false, "Run all mock agents")
 	cmd.Flags().BoolVar(&webSearch, "web-search", false, "Run web search agent")
 	cmd.Flags().BoolVar(&codeAnalyzer, "code-analyzer", false, "Run code analyzer agent")
 	cmd.Flags().BoolVar(&dataProcessor, "data-processor", false, "Run data processor agent")
 	cmd.Flags().BoolVar(&aggregator, "aggregator", false, "Run aggregator agent")
+	cmd.Flags().BoolVar(&notification, "notification", false, "Run notification agent")
+	cmd.Flags().BoolVar(&llmWriter, "llm-writer", false, "Run LLM writer agent (requires --llm-provider)")
+	cmd.Flags().BoolVar(&llmResearcher, "llm-researcher", false, "Run LLM researcher agent (requires --llm-provider)")
+	cmd.Flags().BoolVar(&llmCoder, "llm-coder", false, "Run LLM coder agent (requires --llm-provider)")
+	cmd.Flags().StringVar(&llmProvider, "llm-provider", "mock", "LLM provider for LLM agents (mock, ollama)")
+	cmd.Flags().StringVar(&llmModel, "llm-model", "", "Override LLM model (optional)")
+	cmd.Flags().StringVar(&llmBaseURL, "llm-base-url", "", "LLM base URL (optional)")
 	cmd.Flags().IntVarP(&workers, "workers", "w", 2, "Number of workers per agent")
 
 	return cmd
@@ -220,6 +243,9 @@ func initQueues() error {
 		{"agent-aggregator", queuev1.QueueType_SIMPLE, "3m", 3, "Result synthesis"},
 		{"agent-notification", queuev1.QueueType_SIMPLE, "1m", 5, "Delivery notifications"},
 		{"agent-results", queuev1.QueueType_SIMPLE, "5m", 3, "Historical agent results storage"},
+		{"agent-llm-writer", queuev1.QueueType_SIMPLE, "3m", 3, "LLM-powered creative writing"},
+		{"agent-llm-researcher", queuev1.QueueType_SIMPLE, "5m", 3, "LLM-powered research and analysis"},
+		{"agent-llm-coder", queuev1.QueueType_SIMPLE, "5m", 3, "LLM-powered code generation"},
 	}
 
 	fmt.Println("🚀 Initializing AI Agent Orchestrator...")
@@ -329,44 +355,91 @@ func submitTask(taskFile string, priority int32) error {
 	return nil
 }
 
-// runCoordinator starts the coordinator agent
-func runCoordinator(workers int) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+// getLLMConfig builds LLM configuration from CLI flags
+func getLLMConfig(provider, model, baseURL string) *llm.LLMConfig {
+	if provider == "" || provider == "mock" {
+		return nil // nil config defaults to mock
+	}
 
+	config := &llm.LLMConfig{
+		DefaultProvider: llm.ProviderType(provider),
+		Providers:       llm.ProvidersConfig{},
+	}
+
+	switch llm.ProviderType(provider) {
+	case llm.ProviderOllama:
+		ollamaConfig := llm.DefaultOllamaConfig()
+		if baseURL != "" {
+			ollamaConfig.BaseURL = baseURL
+		}
+		if model != "" {
+			// Override all models with the specified one
+			for agentType := range ollamaConfig.Models {
+				ollamaConfig.Models[agentType] = model
+			}
+		}
+		config.Providers.Ollama = ollamaConfig
+	case llm.ProviderOpenAI:
+		// Will be implemented in future phases
+	case llm.ProviderAnthropic:
+		// Will be implemented in future phases
+	}
+
+	return config
+}
+
+// runCoordinator starts the coordinator agent
+func runCoordinator(workers int, llmProvider, llmModel, llmBaseURL string) error {
+	ctx := context.Background()
+
+	// Create ChronoQueue client
 	c, err := createClient()
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
 	defer c.Close()
 
-	// Create LLM client
-	llmClient := llm.NewMockLLMClient(verbose)
+	// Setup signal handling
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Create LLM config from CLI flags
+	llmConfig := getLLMConfig(llmProvider, llmModel, llmBaseURL)
+
+	// Create LLM client using factory
+	llmClient, err := llm.NewLLMClient(llmConfig, verbose)
+	if err != nil {
+		return fmt.Errorf("failed to create LLM client: %w", err)
+	}
 
 	// Create coordinator
 	coord := coordinator.NewCoordinator(c, llmClient, workers, verbose)
 
-	// Handle graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	// Start coordinator in goroutine
-	errChan := make(chan error, 1)
-	go func() {
-		errChan <- coord.Start(ctx)
-	}()
-
-	// Wait for shutdown signal or error
-	select {
-	case <-sigChan:
-		fmt.Println("\n\n🛑 Shutting down coordinator...")
-		coord.Stop()
-		cancel()
-		fmt.Println("✓ Coordinator stopped")
-		return nil
-	case err := <-errChan:
-		return err
+	// Start coordinator
+	if err := coord.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start coordinator: %w", err)
 	}
+
+	fmt.Println("✓ Coordinator started")
+	fmt.Printf("  Workers: %d\n", workers)
+	fmt.Printf("  LLM Provider: %s\n", llmProvider)
+	if llmModel != "" {
+		fmt.Printf("  LLM Model: %s\n", llmModel)
+	}
+	if llmBaseURL != "" {
+		fmt.Printf("  LLM Base URL: %s\n", llmBaseURL)
+	}
+	fmt.Println("  Press Ctrl+C to stop")
+
+	// Wait for signal
+	<-sigChan
+	fmt.Println("\nShutting down coordinator...")
+
+	// Stop coordinator
+	coord.Stop()
+
+	fmt.Println("✓ Coordinator stopped")
+	return nil
 }
 
 // checkTaskStatus checks the status of a task
@@ -438,20 +511,20 @@ func checkTaskStatus(taskID string) error {
 	return nil
 }
 
-func formatState(state string) string {
-	switch state {
-	case "COMPLETED":
-		return "✅ COMPLETED"
-	case "PROCESSING":
-		return "⚙️  PROCESSING"
-	case "PENDING":
-		return "⏳ PENDING"
-	case "ERRORED":
-		return "❌ ERRORED"
-	default:
-		return "❓ " + state
-	}
-}
+// func formatState(state string) string {
+// 	switch state {
+// 	case "COMPLETED":
+// 		return "✅ COMPLETED"
+// 	case "PROCESSING":
+// 		return "⚙️  PROCESSING"
+// 	case "PENDING":
+// 		return "⏳ PENDING"
+// 	case "ERRORED":
+// 		return "❌ ERRORED"
+// 	default:
+// 		return "❓ " + state
+// 	}
+// }
 
 // monitorSystem displays monitoring dashboard
 func monitorSystem(follow bool) error {
@@ -585,15 +658,17 @@ func viewResults(taskID, agentType string, exportJSON bool) error {
 }
 
 // runAgents runs specialized agents
-func runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator bool, workers int) error {
+func runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator, notification, llmWriter, llmResearcher, llmCoder bool,
+	llmProvider, llmModel, llmBaseURL string, workers int) error {
 	if all {
 		webSearch = true
 		codeAnalyzer = true
 		dataProcessor = true
 		aggregator = true
+		notification = true
 	}
 
-	if !webSearch && !codeAnalyzer && !dataProcessor && !aggregator {
+	if !webSearch && !codeAnalyzer && !dataProcessor && !aggregator && !notification && !llmWriter && !llmResearcher && !llmCoder {
 		return fmt.Errorf("no agents specified. Use --all or specify individual agents")
 	}
 
@@ -604,8 +679,14 @@ func runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator bool, wor
 	}
 	defer c.Close()
 
-	// Create LLM client for aggregator
-	llmClient := llm.NewMockLLMClient(verbose)
+	// Create LLM config from CLI flags
+	llmConfig := getLLMConfig(llmProvider, llmModel, llmBaseURL)
+
+	// Create LLM client for aggregator and LLM agents
+	llmClient, err := llm.NewLLMClient(llmConfig, verbose)
+	if err != nil {
+		return fmt.Errorf("failed to create LLM client: %w", err)
+	}
 
 	// Context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -685,6 +766,61 @@ func runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator bool, wor
 		}()
 	}
 
+	// Start notification agent
+	if notification {
+		fmt.Printf("  • Notification Agent (%d workers)\n", workers)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			agent := agents.NewNotificationAgent(c, workers, verbose)
+			if err := agent.Start(ctx); err != nil {
+				errChan <- fmt.Errorf("notification agent error: %w", err)
+			}
+		}()
+	}
+
+	// Start LLM writer agent
+	if llmWriter {
+		fmt.Printf("  • LLM Writer Agent (%d workers) [LLM: %s]\n", workers, llmProvider)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			agent := agents.NewLLMWriterAgent(c, llmClient, workers, verbose)
+			agent.SetResultStore(resultStore)
+			if err := agent.Start(ctx); err != nil {
+				errChan <- fmt.Errorf("llm writer agent error: %w", err)
+			}
+		}()
+	}
+
+	// Start LLM researcher agent
+	if llmResearcher {
+		fmt.Printf("  • LLM Researcher Agent (%d workers) [LLM: %s]\n", workers, llmProvider)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			agent := agents.NewLLMResearcherAgent(c, llmClient, workers, verbose)
+			agent.SetResultStore(resultStore)
+			if err := agent.Start(ctx); err != nil {
+				errChan <- fmt.Errorf("llm researcher agent error: %w", err)
+			}
+		}()
+	}
+
+	// Start LLM coder agent
+	if llmCoder {
+		fmt.Printf("  • LLM Coder Agent (%d workers) [LLM: %s]\n", workers, llmProvider)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			agent := agents.NewLLMCoderAgent(c, llmClient, workers, verbose)
+			agent.SetResultStore(resultStore)
+			if err := agent.Start(ctx); err != nil {
+				errChan <- fmt.Errorf("llm coder agent error: %w", err)
+			}
+		}()
+	}
+
 	fmt.Println("\n✓ All agents started. Press Ctrl+C to stop.")
 
 	// Wait for signal or error
@@ -724,6 +860,9 @@ func cleanup() error {
 		"agent-aggregator",
 		"agent-notification",
 		"agent-results",
+		"agent-llm-writer",
+		"agent-llm-researcher",
+		"agent-llm-coder",
 		"agent-coordinator-dlq",
 		"agent-web-search-dlq",
 		"agent-code-analyzer-dlq",
@@ -731,6 +870,9 @@ func cleanup() error {
 		"agent-aggregator-dlq",
 		"agent-notification-dlq",
 		"agent-results-dlq",
+		"agent-llm-writer-dlq",
+		"agent-llm-researcher-dlq",
+		"agent-llm-coder-dlq",
 	}
 
 	fmt.Println("🧹 Cleaning up AI Agent Orchestrator...")

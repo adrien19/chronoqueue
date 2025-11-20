@@ -4,6 +4,7 @@ go 1.25
 
 require (
 	github.com/adrien19/chronoqueue v0.0.0
+	github.com/sashabaranov/go-openai v1.41.2
 	github.com/spf13/cobra v1.10.1
 	google.golang.org/protobuf v1.36.10
 )

@@ -1,0 +1,9 @@
+# Binary
+ai-orchestrator
+
+# Output directory (aggregated results)
+output/
+
+# Logs
+logs/
+*.log
