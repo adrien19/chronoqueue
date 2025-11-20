@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/adrien19/chronoqueue/client"
 	"google.golang.org/protobuf/types/known/structpb"
+
+	"github.com/adrien19/chronoqueue/client"
 )
 
 // ResultStore manages agent results for historical reference and aggregation
@@ -77,7 +78,6 @@ func (rs *ResultStore) StoreResult(ctx context.Context, result *AgentResult) err
 			ContentType: "application/json",
 		},
 	})
-
 	if err != nil {
 		// Don't fail if we can't persist to queue - we have it in cache
 		if rs.verbose {

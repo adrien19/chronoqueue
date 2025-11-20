@@ -5,9 +5,10 @@ import (
 	"net/url"
 	"testing"
 
-	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 )
 
 // TestParseExecutionTimes tests the execution time parsing logic

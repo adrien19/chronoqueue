@@ -109,19 +109,10 @@ services:
   # ChronoQueue Server (External - assumes already running)
   # Optionally, you can run "export REDIS_PASSWORD='mypassword' && make server-dev"
   # at root directory.
-  chronoqueue:
-    image: placeholder/chronoqueue:latest
-    container_name: chronoqueue-server
-    ports:
-      - "9000:9000"
-    # NOTE: Replace with actual ChronoQueue configuration
-    # This is a placeholder - users should either:
-    # 1. Use external ChronoQueue service
-    # 2. Include proper ChronoQueue docker configuration
-    networks:
-      - ai-orchestrator-network
-    profiles:
-      - with-chronoqueue
+  # chronoqueue:
+  #   # ChronoQueue must be running separately
+  #   # Start it with: make server-dev
+  #   # Or point to an external instance by updating CHRONOQUEUE_SERVER env vars above
 
 volumes:
   ollama_data:

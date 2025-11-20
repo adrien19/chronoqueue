@@ -103,7 +103,7 @@ const (
 	TaskTypeCodeReview         TaskType = "code_review"
 	TaskTypeDataAnalysis       TaskType = "data_analysis"
 	TaskTypeWebSearch          TaskType = "web_search"
-        TaskTypeLLMCreative    TaskType = "llm_creative"
-        TaskTypeLLMResearch    TaskType = "llm_research"
-        TaskTypeLLMCoding      TaskType = "llm_coding"
+	TaskTypeLLMCreative        TaskType = "llm_creative"
+	TaskTypeLLMResearch        TaskType = "llm_research"
+	TaskTypeLLMCoding          TaskType = "llm_coding"
 )

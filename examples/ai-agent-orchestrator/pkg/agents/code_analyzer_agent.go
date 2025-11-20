@@ -35,8 +35,14 @@ func (agent *CodeAnalyzerAgent) processCodeAnalysis(ctx context.Context, subtask
 	time.Sleep(700 * time.Millisecond)
 
 	// Extract parameters from input
-	repository, _ := subtask.Input["repository"].(string)
-	analysisType, _ := subtask.Input["analysis_type"].(string)
+	repository, ok := subtask.Input["repository"].(string)
+	if !ok {
+		repository = ""
+	}
+	analysisType, ok := subtask.Input["analysis_type"].(string)
+	if !ok {
+		analysisType = ""
+	}
 
 	if repository == "" {
 		repository = "unknown"

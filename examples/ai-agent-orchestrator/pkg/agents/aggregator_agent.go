@@ -7,10 +7,11 @@ import (
 	"os"
 	"time"
 
+	"google.golang.org/protobuf/types/known/structpb"
+
 	"github.com/adrien19/chronoqueue/client"
 	"github.com/adrien19/chronoqueue/examples/ai-agent-orchestrator/pkg/llm"
 	"github.com/adrien19/chronoqueue/examples/ai-agent-orchestrator/pkg/models"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // AggregatorAgent collects and synthesizes results from other agents
@@ -60,7 +61,7 @@ func (agent *AggregatorAgent) processAggregation(ctx context.Context, subtask *S
 	agentResults := convertToAgentResults(collectedResults)
 
 	// Synthesize final result using LLM
-	report, err := agent.llmClient.SynthesizeResults(subtask.ParentID, agentResults)
+	report, err := agent.llmClient.SynthesizeResults(ctx, subtask.ParentID, agentResults)
 	if err != nil {
 		return nil, fmt.Errorf("failed to synthesize results: %w", err)
 	}
@@ -125,7 +126,7 @@ func (agent *AggregatorAgent) processAggregation(ctx context.Context, subtask *S
 func (agent *AggregatorAgent) saveResultsToFile(parentID string, report *models.Report) (string, error) {
 	// Create output directory if it doesn't exist
 	outputDir := "output"
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -153,7 +154,7 @@ func (agent *AggregatorAgent) saveResultsToFile(parentID string, report *models.
 	}
 
 	// Write to file
-	if err := os.WriteFile(filename, jsonData, 0644); err != nil {
+	if err := os.WriteFile(filename, jsonData, 0o644); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 
@@ -191,7 +192,6 @@ func (agent *AggregatorAgent) sendToNotification(ctx context.Context, parentID s
 			ContentType: "application/json",
 		},
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to post notification task: %w", err)
 	}

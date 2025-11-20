@@ -228,7 +228,7 @@ docker-compose up -d coordinator
 # All services
 docker-compose down
 
-# Keep volumes (Ollama models)
+# Stop services (keeps volumes/models)
 docker-compose down
 
 # Remove everything including volumes
@@ -455,7 +455,7 @@ coordinator:
 
 ## Architecture Diagram
 
-```
+```text
 ┌─────────────────┐
 │   User/Client   │
 └────────┬────────┘

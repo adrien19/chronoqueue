@@ -21,7 +21,7 @@ func NewMockLLMClient(verbose bool) *MockLLMClient {
 }
 
 // DecomposeTask decomposes a task into subtasks based on predefined templates
-func (m *MockLLMClient) DecomposeTask(task *models.Task) (*models.TaskDecomposition, error) {
+func (m *MockLLMClient) DecomposeTask(ctx context.Context, task *models.Task) (*models.TaskDecomposition, error) {
 	if m.verbose {
 		fmt.Printf("[MockLLM] Decomposing task %s (type: %s)\n", task.TaskID, task.TaskType)
 	}
@@ -53,7 +53,7 @@ func (m *MockLLMClient) DecomposeTask(task *models.Task) (*models.TaskDecomposit
 }
 
 // SynthesizeResults synthesizes agent results into a final report
-func (m *MockLLMClient) SynthesizeResults(taskID string, results []*models.AgentResult) (*models.Report, error) {
+func (m *MockLLMClient) SynthesizeResults(ctx context.Context, taskID string, results []*models.AgentResult) (*models.Report, error) {
 	if m.verbose {
 		fmt.Printf("[MockLLM] Synthesizing %d results for task %s\n", len(results), taskID)
 	}
@@ -350,7 +350,6 @@ func (m *MockLLMClient) decomposeDataAnalysis(task *models.Task) *models.TaskDec
 	}
 }
 
-// Generate produces a mock response for general LLM queries
 func (m *MockLLMClient) Generate(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
 	if m.verbose {
 		fmt.Printf("[MockLLM] Generating response (system: %.50s..., user: %.50s...)\n", systemPrompt, userPrompt)

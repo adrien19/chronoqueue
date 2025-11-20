@@ -1,5 +1,5 @@
 {
-    "task_id": "task-code-001",
+    "task_id": "task-code-review-001",
     "task_type": "code_review",
     "description": "Code review for GitHub repository",
     "input": {

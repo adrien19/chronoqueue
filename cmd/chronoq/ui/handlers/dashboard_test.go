@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/adrien19/chronoqueue/client"
-	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/adrien19/chronoqueue/client"
+	"github.com/adrien19/chronoqueue/pkg/log"
 )
 
 func TestNewDashboardHandler(t *testing.T) {

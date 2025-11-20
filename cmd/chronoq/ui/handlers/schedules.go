@@ -11,11 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/types/known/structpb"
+
 	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/client"
 	"github.com/adrien19/chronoqueue/pkg/calendar"
 	"github.com/adrien19/chronoqueue/pkg/log"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // SchedulesHandler handles schedule-related requests

@@ -136,7 +136,7 @@ func (coord *Coordinator) processMessage(ctx context.Context, workerID int, resp
 	}
 
 	// Decompose the task using LLM
-	decomposition, err := coord.llm.DecomposeTask(task)
+	decomposition, err := coord.llm.DecomposeTask(ctx, task)
 	if err != nil {
 		// Acknowledge to remove from queue (decomposition failed)
 		if _, ackErr := coord.client.AcknowledgeMessage(ctx, coord.queueName, msgID, client.MESSAGE_ERRORED, streamEntryID); ackErr != nil {
@@ -279,7 +279,6 @@ func (coord *Coordinator) routeSubtasks(ctx context.Context, decomposition *mode
 				ContentType: "application/json",
 			},
 		})
-
 		if err != nil {
 			return fmt.Errorf("failed to post subtask %s to %s: %w", subtask.SubtaskID, queueName, err)
 		}

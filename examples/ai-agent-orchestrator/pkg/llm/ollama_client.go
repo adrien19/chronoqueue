@@ -7,9 +7,10 @@ import (
 	"strings"
 	"time"
 
+	openai "github.com/sashabaranov/go-openai"
+
 	"github.com/adrien19/chronoqueue/examples/ai-agent-orchestrator/pkg/llm/prompts"
 	"github.com/adrien19/chronoqueue/examples/ai-agent-orchestrator/pkg/models"
-	openai "github.com/sashabaranov/go-openai"
 )
 
 // OllamaClient implements LLMClient using Ollama via OpenAI-compatible API
@@ -52,7 +53,7 @@ func NewOllamaClient(config *OllamaConfig, verbose bool) (*OllamaClient, error) 
 }
 
 // DecomposeTask breaks down a complex task into smaller subtasks using Ollama
-func (c *OllamaClient) DecomposeTask(task *models.Task) (*models.TaskDecomposition, error) {
+func (c *OllamaClient) DecomposeTask(ctx context.Context, task *models.Task) (*models.TaskDecomposition, error) {
 	if c.verbose {
 		fmt.Printf("[OllamaClient] Decomposing task %s (type: %s)\n", task.TaskID, task.TaskType)
 	}
@@ -90,10 +91,9 @@ func (c *OllamaClient) DecomposeTask(task *models.Task) (*models.TaskDecompositi
 	var response string
 	err = c.retryWithBackoff(func() error {
 		var callErr error
-		response, callErr = c.callLLM(model, prompts.DecomposeSystemPrompt, userPrompt)
+		response, callErr = c.callLLM(ctx, model, prompts.DecomposeSystemPrompt, userPrompt)
 		return callErr
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to call LLM: %w", err)
 	}
@@ -112,7 +112,7 @@ func (c *OllamaClient) DecomposeTask(task *models.Task) (*models.TaskDecompositi
 }
 
 // SynthesizeResults combines multiple agent results into a comprehensive report
-func (c *OllamaClient) SynthesizeResults(taskID string, results []*models.AgentResult) (*models.Report, error) {
+func (c *OllamaClient) SynthesizeResults(ctx context.Context, taskID string, results []*models.AgentResult) (*models.Report, error) {
 	if c.verbose {
 		fmt.Printf("[OllamaClient] Synthesizing %d results for task %s\n", len(results), taskID)
 	}
@@ -144,10 +144,9 @@ func (c *OllamaClient) SynthesizeResults(taskID string, results []*models.AgentR
 	var response string
 	err := c.retryWithBackoff(func() error {
 		var callErr error
-		response, callErr = c.callLLM(model, prompts.SynthesizeSystemPrompt, userPrompt)
+		response, callErr = c.callLLM(ctx, model, prompts.SynthesizeSystemPrompt, userPrompt)
 		return callErr
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to call LLM: %w", err)
 	}
@@ -166,8 +165,8 @@ func (c *OllamaClient) SynthesizeResults(taskID string, results []*models.AgentR
 }
 
 // callLLM makes a chat completion request to Ollama
-func (c *OllamaClient) callLLM(model, systemPrompt, userPrompt string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), c.config.Timeout)
+func (c *OllamaClient) callLLM(ctx context.Context, model, systemPrompt, userPrompt string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.config.Timeout)
 	defer cancel()
 
 	req := openai.ChatCompletionRequest{
@@ -430,10 +429,9 @@ func (c *OllamaClient) Generate(ctx context.Context, systemPrompt, userPrompt st
 	var response string
 	err := c.retryWithBackoff(func() error {
 		var callErr error
-		response, callErr = c.callLLM(model, systemPrompt, userPrompt)
+		response, callErr = c.callLLM(ctx, model, systemPrompt, userPrompt)
 		return callErr
 	})
-
 	if err != nil {
 		return "", fmt.Errorf("failed to call LLM: %w", err)
 	}

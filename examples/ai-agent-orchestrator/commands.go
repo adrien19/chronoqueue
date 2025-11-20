@@ -10,6 +10,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	queuev1 "github.com/adrien19/chronoqueue/api/queue/v1"
 	"github.com/adrien19/chronoqueue/client"
 	"github.com/adrien19/chronoqueue/examples/ai-agent-orchestrator/pkg/agents"
@@ -17,8 +20,6 @@ import (
 	"github.com/adrien19/chronoqueue/examples/ai-agent-orchestrator/pkg/llm"
 	"github.com/adrien19/chronoqueue/examples/ai-agent-orchestrator/pkg/models"
 	"github.com/adrien19/chronoqueue/examples/ai-agent-orchestrator/pkg/monitoring"
-	"github.com/spf13/cobra"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // newInitCommand creates the init command to set up all queues
@@ -340,7 +341,6 @@ func submitTask(taskFile string, priority int32) error {
 			ContentType: "application/json",
 		},
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to submit task: %w", err)
 	}
@@ -415,10 +415,11 @@ func runCoordinator(workers int, llmProvider, llmModel, llmBaseURL string) error
 	// Create coordinator
 	coord := coordinator.NewCoordinator(c, llmClient, workers, verbose)
 
-	// Start coordinator
-	if err := coord.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start coordinator: %w", err)
-	}
+	// Start coordinator in background so we can react to OS signals
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- coord.Start(ctx)
+	}()
 
 	fmt.Println("✓ Coordinator started")
 	fmt.Printf("  Workers: %d\n", workers)
@@ -431,15 +432,19 @@ func runCoordinator(workers int, llmProvider, llmModel, llmBaseURL string) error
 	}
 	fmt.Println("  Press Ctrl+C to stop")
 
-	// Wait for signal
-	<-sigChan
-	fmt.Println("\nShutting down coordinator...")
-
-	// Stop coordinator
-	coord.Stop()
-
-	fmt.Println("✓ Coordinator stopped")
-	return nil
+	// Wait for either a signal or coordinator error
+	select {
+	case <-sigChan:
+		fmt.Println("\nShutting down coordinator...")
+		coord.Stop()
+		if err := <-errCh; err != nil {
+			return fmt.Errorf("coordinator stopped with error: %w", err)
+		}
+		fmt.Println("✓ Coordinator stopped")
+		return nil
+	case err := <-errCh:
+		return fmt.Errorf("coordinator terminated: %w", err)
+	}
 }
 
 // checkTaskStatus checks the status of a task
@@ -510,21 +515,6 @@ func checkTaskStatus(taskID string) error {
 
 	return nil
 }
-
-// func formatState(state string) string {
-// 	switch state {
-// 	case "COMPLETED":
-// 		return "✅ COMPLETED"
-// 	case "PROCESSING":
-// 		return "⚙️  PROCESSING"
-// 	case "PENDING":
-// 		return "⏳ PENDING"
-// 	case "ERRORED":
-// 		return "❌ ERRORED"
-// 	default:
-// 		return "❓ " + state
-// 	}
-// }
 
 // monitorSystem displays monitoring dashboard
 func monitorSystem(follow bool) error {
@@ -649,7 +639,7 @@ func viewResults(taskID, agentType string, exportJSON bool) error {
 		fmt.Println("💡 Future Enhancement: Results will be persistently stored and queryable")
 		fmt.Println("   after implementing database backing or Redis-based result retrieval.")
 	} else {
-		fmt.Println("� Specify a task ID to get targeted guidance:")
+		fmt.Println("💡 Specify a task ID to get targeted guidance:")
 		fmt.Println("   ./ai-orchestrator results --task <task-id>")
 	}
 
@@ -659,7 +649,8 @@ func viewResults(taskID, agentType string, exportJSON bool) error {
 
 // runAgents runs specialized agents
 func runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator, notification, llmWriter, llmResearcher, llmCoder bool,
-	llmProvider, llmModel, llmBaseURL string, workers int) error {
+	llmProvider, llmModel, llmBaseURL string, workers int,
+) error {
 	if all {
 		webSearch = true
 		codeAnalyzer = true
@@ -719,7 +710,10 @@ func runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator, notifica
 			agent := agents.NewWebSearchAgent(c, workers, verbose)
 			agent.SetResultStore(resultStore)
 			if err := agent.Start(ctx); err != nil {
-				errChan <- fmt.Errorf("web search agent error: %w", err)
+				select {
+				case errChan <- fmt.Errorf("web search agent error: %w", err):
+				default:
+				}
 			}
 		}()
 	}
@@ -733,7 +727,10 @@ func runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator, notifica
 			agent := agents.NewCodeAnalyzerAgent(c, workers, verbose)
 			agent.SetResultStore(resultStore)
 			if err := agent.Start(ctx); err != nil {
-				errChan <- fmt.Errorf("code analyzer agent error: %w", err)
+				select {
+				case errChan <- fmt.Errorf("code analyzer agent error: %w", err):
+				default:
+				}
 			}
 		}()
 	}
@@ -747,7 +744,10 @@ func runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator, notifica
 			agent := agents.NewDataProcessorAgent(c, workers, verbose)
 			agent.SetResultStore(resultStore)
 			if err := agent.Start(ctx); err != nil {
-				errChan <- fmt.Errorf("data processor agent error: %w", err)
+				select {
+				case errChan <- fmt.Errorf("data processor agent error: %w", err):
+				default:
+				}
 			}
 		}()
 	}
@@ -761,7 +761,10 @@ func runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator, notifica
 			agent := agents.NewAggregatorAgent(c, llmClient, workers, verbose)
 			agent.SetResultStore(resultStore)
 			if err := agent.Start(ctx); err != nil {
-				errChan <- fmt.Errorf("aggregator agent error: %w", err)
+				select {
+				case errChan <- fmt.Errorf("aggregator agent error: %w", err):
+				default:
+				}
 			}
 		}()
 	}
@@ -774,7 +777,10 @@ func runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator, notifica
 			defer wg.Done()
 			agent := agents.NewNotificationAgent(c, workers, verbose)
 			if err := agent.Start(ctx); err != nil {
-				errChan <- fmt.Errorf("notification agent error: %w", err)
+				select {
+				case errChan <- fmt.Errorf("notification agent error: %w", err):
+				default:
+				}
 			}
 		}()
 	}
@@ -788,7 +794,10 @@ func runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator, notifica
 			agent := agents.NewLLMWriterAgent(c, llmClient, workers, verbose)
 			agent.SetResultStore(resultStore)
 			if err := agent.Start(ctx); err != nil {
-				errChan <- fmt.Errorf("llm writer agent error: %w", err)
+				select {
+				case errChan <- fmt.Errorf("llm writer agent error: %w", err):
+				default:
+				}
 			}
 		}()
 	}
@@ -802,7 +811,10 @@ func runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator, notifica
 			agent := agents.NewLLMResearcherAgent(c, llmClient, workers, verbose)
 			agent.SetResultStore(resultStore)
 			if err := agent.Start(ctx); err != nil {
-				errChan <- fmt.Errorf("llm researcher agent error: %w", err)
+				select {
+				case errChan <- fmt.Errorf("llm researcher agent error: %w", err):
+				default:
+				}
 			}
 		}()
 	}
@@ -816,7 +828,10 @@ func runAgents(all, webSearch, codeAnalyzer, dataProcessor, aggregator, notifica
 			agent := agents.NewLLMCoderAgent(c, llmClient, workers, verbose)
 			agent.SetResultStore(resultStore)
 			if err := agent.Start(ctx); err != nil {
-				errChan <- fmt.Errorf("llm coder agent error: %w", err)
+				select {
+				case errChan <- fmt.Errorf("llm coder agent error: %w", err):
+				default:
+				}
 			}
 		}()
 	}
