@@ -1179,6 +1179,49 @@
       "default": "MONTHLY",
       "description": "ScheduleType categorizes the primary scheduling pattern.\nDetermines which rule types are applicable.\n\n - MONTHLY: Executes monthly (1st of month, last Friday, etc.)\n - WEEKLY: Executes weekly (every Monday, bi-weekly, etc.)\n - DAILY: Executes daily (every day, weekdays only, etc.)\n - YEARLY: Executes yearly (birthdays, anniversaries, annual reports)\n - BUSINESS_DAYS: Executes on business days (respects holidays/weekends)\n - CUSTOM: Custom logic via expression language"
     },
+    "MetadataAttemptRuntime": {
+      "type": "object",
+      "properties": {
+        "attemptId": {
+          "type": "string",
+          "description": "Server-generated identifier for the current processing attempt."
+        },
+        "workerId": {
+          "type": "string",
+          "description": "Optional identifier of the worker process currently owning the lease."
+        },
+        "leaseStartedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this attempt acquired the lease."
+        },
+        "leaseExpiry": {
+          "type": "string",
+          "format": "int64",
+          "description": "Current lease deadline for this attempt (Unix ms)."
+        },
+        "leaseExtensionUsed": {
+          "type": "string",
+          "description": "Total extra lease time already consumed beyond base_lease."
+        },
+        "leaseRenewalCount": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of times the lease has been extended (successful heartbeats that changed expiry)."
+        },
+        "lastHeartbeatAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last successful heartbeat time."
+        },
+        "heartbeatExpiry": {
+          "type": "string",
+          "format": "int64",
+          "description": "Heartbeat timeout deadline (Unix ms). Zero if heartbeat timeouts disabled."
+        }
+      },
+      "title": "-----------------------------------------------------------------------\nCurrent attempt runtime\n-----------------------------------------------------------------------"
+    },
     "MonthlyRuleDayType": {
       "type": "string",
       "enum": [
@@ -1211,6 +1254,14 @@
         },
         "streamEntryId": {
           "type": "string"
+        },
+        "workerId": {
+          "type": "string",
+          "title": "Optional stable identifier to consistently represent the same consumer"
+        },
+        "attemptId": {
+          "type": "string",
+          "title": "Attempt identifier to validate acknowledgment against current attempt"
         }
       },
       "title": "Acknowledge the message on the queue"
@@ -1223,6 +1274,14 @@
         },
         "exclusivityKey": {
           "type": "string"
+        },
+        "workerId": {
+          "type": "string",
+          "description": "Optional stable identifier for the worker/consumer. If absent, server may generate one."
+        },
+        "attemptId": {
+          "type": "string",
+          "title": "Attempt identifier to validate lease against current attempt"
         }
       },
       "title": "Get the next message on the queue"
@@ -1265,6 +1324,14 @@
         },
         "streamEntryId": {
           "type": "string"
+        },
+        "workerId": {
+          "type": "string",
+          "title": "Optional stable identifier to consistently represent the same consumer"
+        },
+        "attemptId": {
+          "type": "string",
+          "title": "Attempt identifier to validate heartbeat against current attempt"
         }
       },
       "title": "send a heartbeat to the queue"
@@ -1683,6 +1750,14 @@
         },
         "streamEntryId": {
           "type": "string"
+        },
+        "workerId": {
+          "type": "string",
+          "title": "Echo or assign the worker_id used for this lease"
+        },
+        "attemptId": {
+          "type": "string",
+          "title": "Attempt identifier for this lease"
         }
       }
     },
@@ -1767,6 +1842,28 @@
         }
       },
       "description": "HolidayRule defines how to calculate a holiday's date."
+    },
+    "v1LeasePolicy": {
+      "type": "object",
+      "properties": {
+        "baseLease": {
+          "type": "string",
+          "description": "base_lease:\nInitial lease duration for an attempt (L_base).\nThe attempt starts with this much time before timing out, unless extended."
+        },
+        "maxExtension": {
+          "type": "string",
+          "description": "max_extension:\nMaximum additional time beyond base_lease that an attempt may obtain via\nheartbeats (L_maxExt).\n\nEffective per-attempt cap:\n  base_lease + max_extension"
+        },
+        "heartbeatTimeout": {
+          "type": "string",
+          "description": "heartbeat_timeout:\nMaximum allowed gap between heartbeats (H).\nIf zero/unset, heartbeat-based timeout is disabled."
+        },
+        "extendStep": {
+          "type": "string",
+          "description": "extend_step:\nAmount of time to extend the lease by when a heartbeat is received,\nuntil max_extension is exhausted.\n\nExample:\n  base_lease = 3s\n  max_extension = 10s\n  extend_step = 2s\n\nThe attempt can slide its lease by 2s increments up to ~13s total."
+        }
+      },
+      "description": "LeasePolicy defines how long a single processing attempt is allowed to run,\nand how heartbeats can extend that time."
     },
     "v1ListQueuesResponse": {
       "type": "object",
@@ -1860,6 +1957,14 @@
           "type": "integer",
           "format": "int32",
           "description": "max_attempts: Maximum number of processing attempts before moving to DLQ.\nIf omitted, uses queue's default_max_attempts.\nSet to -1 for infinite retries (use with caution).\nCommon values: 1 (no retry), 3 (standard), 5 (persistent), -1 (infinite)."
+        },
+        "leasePolicy": {
+          "$ref": "#/definitions/v1LeasePolicy",
+          "description": "Per-message lease policy.\n\nSemantics:\n- Any field set here overrides the corresponding field in the queue's\n  QueueMetadata.lease_policy.\n- Unset fields inherit from the queue lease policy.\n\nThis lets you avoid *_override fields; presence is the override."
+        },
+        "currentAttempt": {
+          "$ref": "#/definitions/MetadataAttemptRuntime",
+          "description": "Current processing attempt runtime state."
         },
         "scheduledTime": {
           "type": "string",
@@ -2108,6 +2213,10 @@
         "priorityConfig": {
           "$ref": "#/definitions/v1PriorityConfig",
           "description": "priority_config: Advanced priority scheduling configuration.\nControls how messages with different priorities are processed.\nMost users can omit this - defaults work well for common cases.\nCustomize for: complex fairness requirements, aging prevention, weighted priorities."
+        },
+        "leasePolicy": {
+          "$ref": "#/definitions/v1LeasePolicy",
+          "description": "---------------------------------------------------------------------------\nLease model defaults (queue-level)\n---------------------------------------------------------------------------\nMessage-level policies can selectively override these fields."
         }
       },
       "description": "QueueMetadata defines the configuration and behavior of a queue.\n\nThis controls:\n- Message processing rules (retries, leases, priorities)\n- Data validation (schemas, content types)\n- Error handling (dead letter queues)\n- Consumer patterns (exclusivity, fairness)\n\nExample - Create a queue for order processing:\n  metadata := \u0026queue.QueueMetadata{\n      Type: queue.QueueType_SIMPLE,\n      DefaultMaxAttempts: 3,\n      LeaseDuration: durationpb.New(5*time.Minute),\n      DeadLetterQueueName: \"order-processing-dlq\",\n      AutoCreateDlq: true,\n      SchemaId: \"order.v1\",\n      SchemaRequired: true,\n      MaxPayloadSize: 1024 * 512,  // 512KB\n      AllowedContentTypes: []string{\"application/json\"},\n  }"

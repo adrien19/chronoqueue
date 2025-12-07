@@ -110,66 +110,190 @@ func (as *storage) saveMessageMetadataWithOldState(ctx context.Context, queueNam
 	return err
 }
 
-// IsValidTransition checks if transitioning from the current state to a new state is valid based on the defined rules.
-func isValidTransition(currentState, newState transitionState) bool {
-	switch currentState {
-	case INVISIBLE:
-		return newState == PENDING
-	case PENDING:
-		return newState == RUNNING || newState == CANCELED
-	case RUNNING:
-		return newState == PENDING || newState == COMPLETED || newState == CANCELED || newState == ERRORED
-	case COMPLETED, CANCELED, ERRORED:
+// // IsValidTransition checks if transitioning from the current state to a new state is valid based on the defined rules.
+// func isValidTransition(currentState, newState transitionState) bool {
+// 	switch currentState {
+// 	case INVISIBLE:
+// 		return newState == PENDING
+// 	case PENDING:
+// 		return newState == RUNNING || newState == CANCELED
+// 	case RUNNING:
+// 		return newState == PENDING || newState == COMPLETED || newState == CANCELED || newState == ERRORED
+// 	case COMPLETED, CANCELED, ERRORED:
+// 		return false
+// 	default:
+// 		// For UNDEFINED or any other state not explicitly handled
+// 		return false
+// 	}
+// }
+
+func isValidProtoStateTransition(current, next message_pb.Message_Metadata_State) bool {
+	switch current {
+	case message_pb.Message_Metadata_INVISIBLE:
+		return next == message_pb.Message_Metadata_PENDING
+	case message_pb.Message_Metadata_PENDING:
+		return next == message_pb.Message_Metadata_RUNNING || next == message_pb.Message_Metadata_CANCELED
+	case message_pb.Message_Metadata_RUNNING:
+		return next == message_pb.Message_Metadata_PENDING ||
+			next == message_pb.Message_Metadata_COMPLETED ||
+			next == message_pb.Message_Metadata_CANCELED ||
+			next == message_pb.Message_Metadata_ERRORED
+	case message_pb.Message_Metadata_COMPLETED, message_pb.Message_Metadata_CANCELED, message_pb.Message_Metadata_ERRORED:
 		return false
 	default:
-		// For UNDEFINED or any other state not explicitly handled
 		return false
 	}
 }
 
-func (as *storage) AcknowledgeMessage(ctx context.Context, request *queueservice_pb.AcknowledgeMessageRequest) (*queueservice_pb.AcknowledgeMessageResponse, error) {
+func (as *storage) AcknowledgeMessage(
+	ctx context.Context,
+	request *queueservice_pb.AcknowledgeMessageRequest,
+) (*queueservice_pb.AcknowledgeMessageResponse, error) {
 	queueName := request.GetQueueName()
 	messageID := request.GetMessageId()
 	streamEntryID := request.GetStreamEntryId()
+	attemptID := request.GetAttemptId()
+	workerID := request.GetWorkerId()
 
 	if queueName == "" || messageID == "" {
 		err := errors.New("invalid input: queue name and message ID required")
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.InvalidArgument, err, "Invalid input provided")
+		chronoErr := util.NewChronoError(
+			util.ERROR_LEVEL_ERROR,
+			codes.InvalidArgument,
+			err,
+			"Invalid input provided",
+		)
 		return nil, chronoErr.GRPCStatus()
 	}
 
+	// 1) Load message metadata
 	metadata, err := as.fetchMessageMetadata(ctx, queueName, messageID)
 	if err != nil {
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while fetching message metadata")
+		chronoErr := util.NewChronoError(
+			util.ERROR_LEVEL_ERROR,
+			codes.Internal,
+			err,
+			"Unexpected error occurred while fetching message metadata",
+		)
+		return nil, chronoErr.GRPCStatus()
+	}
+	if metadata == nil {
+		// Message is gone or already cleaned up.
+		return &queueservice_pb.AcknowledgeMessageResponse{Success: false}, nil
+	}
+
+	// 2) Validate we are ACKing a RUNNING message
+	if metadata.State != message_pb.Message_Metadata_RUNNING {
+		err := fmt.Errorf(
+			"cannot acknowledge message in state %v (expected RUNNING), message: %s",
+			metadata.State, messageID,
+		)
+		chronoErr := util.NewChronoError(
+			util.ERROR_LEVEL_ERROR,
+			codes.FailedPrecondition,
+			err,
+			"Invalid message state for acknowledgment",
+		)
 		return nil, chronoErr.GRPCStatus()
 	}
 
+	// 3) Validate ownership via attempt_id
+	currentAttempt := metadata.GetCurrentAttempt()
+	if currentAttempt == nil || currentAttempt.GetAttemptId() == "" {
+		err := fmt.Errorf(
+			"message %s has no current attempt; cannot acknowledge",
+			messageID,
+		)
+		chronoErr := util.NewChronoError(
+			util.ERROR_LEVEL_ERROR,
+			codes.FailedPrecondition,
+			err,
+			"No current attempt found for message",
+		)
+		return nil, chronoErr.GRPCStatus()
+	}
+
+	// Backward compatibility: if attempt_id is absent, default to current attempt
+	if attemptID == "" {
+		attemptID = currentAttempt.GetAttemptId()
+	}
+	if attemptID != currentAttempt.GetAttemptId() {
+		// This ACK is stale or from a different attempt; reject.
+		as.logger.WarnWithFields("Stale or mismatched ACK attempt_id",
+			"queue_name", queueName,
+			"message_id", messageID,
+			"expected_attempt_id", currentAttempt.GetAttemptId(),
+			"got_attempt_id", attemptID,
+		)
+
+		err := fmt.Errorf("attempt ownership mismatch for message %s", messageID)
+		chronoErr := util.NewChronoError(
+			util.ERROR_LEVEL_ERROR,
+			codes.FailedPrecondition,
+			err,
+			"Attempt ownership mismatch for acknowledgment",
+		)
+		return nil, chronoErr.GRPCStatus()
+	}
+
+	// Optional: soft check worker_id for observability
+	if workerID != "" && currentAttempt.GetWorkerId() != "" &&
+		workerID != currentAttempt.GetWorkerId() {
+
+		as.logger.WarnWithFields("ACK worker_id mismatch",
+			"queue_name", queueName,
+			"message_id", messageID,
+			"attempt_id", attemptID,
+			"expected_worker_id", currentAttempt.GetWorkerId(),
+			"got_worker_id", workerID,
+		)
+		// TODO: Should this fail here or just log.
+	}
+
+	// 4) Validate state transition (RUNNING -> COMPLETED/ERRORED/CANCELED)
 	oldState := metadata.State
-	if !isValidTransition(transitionState(metadata.State), transitionState(request.State)) {
-		err := fmt.Errorf("invalid input: requested state transition from %v to %v is not allowed for message: %s", metadata.State, request.State, messageID)
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while changing message state")
+	requestedState := request.GetState()
+
+	if !isValidProtoStateTransition(oldState, requestedState) {
+		err := fmt.Errorf(
+			"invalid state transition from %v to %v for message: %s",
+			oldState, requestedState, messageID,
+		)
+		chronoErr := util.NewChronoError(
+			util.ERROR_LEVEL_ERROR,
+			codes.FailedPrecondition,
+			err,
+			"Unexpected error occurred while changing message state",
+		)
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	metadata.State = request.State
+	metadata.State = requestedState
 
-	err = as.saveMessageMetadataWithOldState(ctx, queueName, messageID, metadata, oldState)
-	if err != nil {
-		chronoErr := util.NewChronoError(util.ERROR_LEVEL_ERROR, codes.Internal, err, "Unexpected error occured while saving updated message metadata")
+	// 5) Persist metadata state change
+	if err := as.saveMessageMetadataWithOldState(ctx, queueName, messageID, metadata, oldState); err != nil {
+		chronoErr := util.NewChronoError(
+			util.ERROR_LEVEL_ERROR,
+			codes.Internal,
+			err,
+			"Unexpected error occurred while saving updated message metadata",
+		)
 		return nil, chronoErr.GRPCStatus()
 	}
 
-	// Update state counters for tracking terminal states
-	if err := as.updateStateCounters(ctx, queueName, oldState, request.State); err != nil {
+	// 6) Update state counters (best-effort)
+	if err := as.updateStateCounters(ctx, queueName, oldState, requestedState); err != nil {
 		as.logger.ErrorWithFields("Failed to update state counters", "error", err, "messageID", messageID)
-		// Don't fail the ACK, just log the error
+		// Do not fail the ACK because of metrics issues
 	}
 
+	// 7) XACK from Redis stream, if we have a stream entry id
 	if streamEntryID != "" {
 		if err := as.ackMessage(ctx, queueName, streamEntryID); err != nil {
 			as.logger.ErrorWithFields("Failed to XACK message from stream", "error", err, "messageID", messageID)
 		}
 
+		// Optionally expire metadata as a cleanup hint
 		metaKey := as.messageMetaKey(queueName, messageID)
 		as.redisClient.Expire(ctx, metaKey, 1*time.Hour)
 	}

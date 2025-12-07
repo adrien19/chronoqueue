@@ -281,6 +281,9 @@ func TestStreamsArchitecture_HeartbeatViaXCLAIM(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, getResp.Message)
+	workerID := getResp.GetWorkerId()
+	attemptID := getResp.GetAttemptId()
+	streamEntryID := getResp.GetStreamEntryId()
 
 	groupKey := helpers.GroupKey(queueName)
 
@@ -293,7 +296,9 @@ func TestStreamsArchitecture_HeartbeatViaXCLAIM(t *testing.T) {
 	hbResp, err := client.SendMessageHeartBeat(ctx, &queueservice_pb.SendMessageHeartBeatRequest{
 		QueueName:     queueName,
 		MessageId:     msgID,
-		StreamEntryId: getResp.StreamEntryId,
+		StreamEntryId: streamEntryID,
+		AttemptId:     &attemptID,
+		WorkerId:      &workerID,
 	})
 	require.NoError(t, err)
 	assert.NotNil(t, hbResp, "Heartbeat response should not be nil")
@@ -380,12 +385,18 @@ func TestStreamsArchitecture_AckViaXACK(t *testing.T) {
 	require.NoError(t, err)
 	assert.Greater(t, pendingBefore.Count, int64(0))
 
+	workerID := getResp.GetWorkerId()
+	attemptID := getResp.GetAttemptId()
+	streamEntryID := getResp.GetStreamEntryId()
+
 	// Act - Acknowledge message
 	ackResp, err := client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
 		QueueName:     queueName,
 		MessageId:     msgID,
-		StreamEntryId: getResp.StreamEntryId,
+		StreamEntryId: streamEntryID,
 		State:         message_pb.Message_Metadata_COMPLETED,
+		AttemptId:     &attemptID,
+		WorkerId:      &workerID,
 	})
 	require.NoError(t, err)
 	assert.True(t, ackResp.Success)

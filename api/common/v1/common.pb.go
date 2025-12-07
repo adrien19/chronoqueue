@@ -13,6 +13,7 @@ package common
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	structpb "google.golang.org/protobuf/types/known/structpb"
 	reflect "reflect"
 	sync "sync"
@@ -144,11 +145,105 @@ func (x *Payload) GetSchemaVersion() int32 {
 	return 0
 }
 
+// LeasePolicy defines how long a single processing attempt is allowed to run,
+// and how heartbeats can extend that time.
+type LeasePolicy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// base_lease:
+	// Initial lease duration for an attempt (L_base).
+	// The attempt starts with this much time before timing out, unless extended.
+	BaseLease *durationpb.Duration `protobuf:"bytes,1,opt,name=base_lease,json=baseLease,proto3" json:"base_lease,omitempty"`
+	// max_extension:
+	// Maximum additional time beyond base_lease that an attempt may obtain via
+	// heartbeats (L_maxExt).
+	//
+	// Effective per-attempt cap:
+	//
+	//	base_lease + max_extension
+	MaxExtension *durationpb.Duration `protobuf:"bytes,2,opt,name=max_extension,json=maxExtension,proto3" json:"max_extension,omitempty"`
+	// heartbeat_timeout:
+	// Maximum allowed gap between heartbeats (H).
+	// If zero/unset, heartbeat-based timeout is disabled.
+	HeartbeatTimeout *durationpb.Duration `protobuf:"bytes,3,opt,name=heartbeat_timeout,json=heartbeatTimeout,proto3" json:"heartbeat_timeout,omitempty"`
+	// extend_step:
+	// Amount of time to extend the lease by when a heartbeat is received,
+	// until max_extension is exhausted.
+	//
+	// Example:
+	//
+	//	base_lease = 3s
+	//	max_extension = 10s
+	//	extend_step = 2s
+	//
+	// The attempt can slide its lease by 2s increments up to ~13s total.
+	ExtendStep    *durationpb.Duration `protobuf:"bytes,4,opt,name=extend_step,json=extendStep,proto3" json:"extend_step,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LeasePolicy) Reset() {
+	*x = LeasePolicy{}
+	mi := &file_proto_common_v1_common_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeasePolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeasePolicy) ProtoMessage() {}
+
+func (x *LeasePolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_common_v1_common_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeasePolicy.ProtoReflect.Descriptor instead.
+func (*LeasePolicy) Descriptor() ([]byte, []int) {
+	return file_proto_common_v1_common_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *LeasePolicy) GetBaseLease() *durationpb.Duration {
+	if x != nil {
+		return x.BaseLease
+	}
+	return nil
+}
+
+func (x *LeasePolicy) GetMaxExtension() *durationpb.Duration {
+	if x != nil {
+		return x.MaxExtension
+	}
+	return nil
+}
+
+func (x *LeasePolicy) GetHeartbeatTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.HeartbeatTimeout
+	}
+	return nil
+}
+
+func (x *LeasePolicy) GetExtendStep() *durationpb.Duration {
+	if x != nil {
+		return x.ExtendStep
+	}
+	return nil
+}
+
 var File_proto_common_v1_common_proto protoreflect.FileDescriptor
 
 const file_proto_common_v1_common_proto_rawDesc = "" +
 	"\n" +
-	"\x1cproto/common/v1/common.proto\x12\x19chronoqueue.api.common.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xc0\x02\n" +
+	"\x1cproto/common/v1/common.proto\x12\x19chronoqueue.api.common.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1egoogle/protobuf/duration.proto\"\xc0\x02\n" +
 	"\aPayload\x12L\n" +
 	"\bmetadata\x18\x01 \x03(\v20.chronoqueue.api.common.v1.Payload.MetadataEntryR\bmetadata\x12+\n" +
 	"\x04data\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x04data\x12!\n" +
@@ -157,7 +252,14 @@ const file_proto_common_v1_common_proto_rawDesc = "" +
 	"\x0eschema_version\x18\x05 \x01(\x05R\rschemaVersion\x1aS\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
-	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01B6Z4github.com/adrien19/chronoqueue/api/common/v1;commonb\x06proto3"
+	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\"\x8b\x02\n" +
+	"\vLeasePolicy\x128\n" +
+	"\n" +
+	"base_lease\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\tbaseLease\x12>\n" +
+	"\rmax_extension\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\fmaxExtension\x12F\n" +
+	"\x11heartbeat_timeout\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\x10heartbeatTimeout\x12:\n" +
+	"\vextend_step\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\n" +
+	"extendStepB6Z4github.com/adrien19/chronoqueue/api/common/v1;commonb\x06proto3"
 
 var (
 	file_proto_common_v1_common_proto_rawDescOnce sync.Once
@@ -171,22 +273,28 @@ func file_proto_common_v1_common_proto_rawDescGZIP() []byte {
 	return file_proto_common_v1_common_proto_rawDescData
 }
 
-var file_proto_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_proto_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_proto_common_v1_common_proto_goTypes = []any{
-	(*Payload)(nil),         // 0: chronoqueue.api.common.v1.Payload
-	nil,                     // 1: chronoqueue.api.common.v1.Payload.MetadataEntry
-	(*structpb.Struct)(nil), // 2: google.protobuf.Struct
-	(*structpb.Value)(nil),  // 3: google.protobuf.Value
+	(*Payload)(nil),             // 0: chronoqueue.api.common.v1.Payload
+	(*LeasePolicy)(nil),         // 1: chronoqueue.api.common.v1.LeasePolicy
+	nil,                         // 2: chronoqueue.api.common.v1.Payload.MetadataEntry
+	(*structpb.Struct)(nil),     // 3: google.protobuf.Struct
+	(*durationpb.Duration)(nil), // 4: google.protobuf.Duration
+	(*structpb.Value)(nil),      // 5: google.protobuf.Value
 }
 var file_proto_common_v1_common_proto_depIdxs = []int32{
-	1, // 0: chronoqueue.api.common.v1.Payload.metadata:type_name -> chronoqueue.api.common.v1.Payload.MetadataEntry
-	2, // 1: chronoqueue.api.common.v1.Payload.data:type_name -> google.protobuf.Struct
-	3, // 2: chronoqueue.api.common.v1.Payload.MetadataEntry.value:type_name -> google.protobuf.Value
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	2, // 0: chronoqueue.api.common.v1.Payload.metadata:type_name -> chronoqueue.api.common.v1.Payload.MetadataEntry
+	3, // 1: chronoqueue.api.common.v1.Payload.data:type_name -> google.protobuf.Struct
+	4, // 2: chronoqueue.api.common.v1.LeasePolicy.base_lease:type_name -> google.protobuf.Duration
+	4, // 3: chronoqueue.api.common.v1.LeasePolicy.max_extension:type_name -> google.protobuf.Duration
+	4, // 4: chronoqueue.api.common.v1.LeasePolicy.heartbeat_timeout:type_name -> google.protobuf.Duration
+	4, // 5: chronoqueue.api.common.v1.LeasePolicy.extend_step:type_name -> google.protobuf.Duration
+	5, // 6: chronoqueue.api.common.v1.Payload.MetadataEntry.value:type_name -> google.protobuf.Value
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_proto_common_v1_common_proto_init() }
@@ -200,7 +308,7 @@ func file_proto_common_v1_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_common_v1_common_proto_rawDesc), len(file_proto_common_v1_common_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

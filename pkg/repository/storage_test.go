@@ -490,6 +490,7 @@ func Test_storage_AcknowledgeMessage(t *testing.T) {
 					QueueName: "test_queue",
 					MessageId: "test_message_id",
 					State:     message_pb.Message_Metadata_COMPLETED,
+					AttemptId: nil, // Will be set below
 				},
 			},
 			want:    &queueservice_pb.AcknowledgeMessageResponse{Success: true},
@@ -513,12 +514,17 @@ func Test_storage_AcknowledgeMessage(t *testing.T) {
 
 	// Second, set up a message in RUNNING state (ready for acknowledgment)
 	testMessageKey := as.(*storage).messageMetaKey("test_queue", "test_message_id")
+	attemptID := "test-attempt-id"
 	testMessage := &message_pb.Message{
 		MessageId: "test_message_id",
 		Metadata: &message_pb.Message_Metadata{
 			Payload:  &common_pb.Payload{},
 			State:    message_pb.Message_Metadata_RUNNING,
 			Priority: 0,
+			CurrentAttempt: &message_pb.Message_Metadata_AttemptRuntime{
+				AttemptId: attemptID,
+				WorkerId:  "test-worker",
+			},
 		},
 	}
 	metadataJSON, err := protojson.Marshal(testMessage.Metadata)
@@ -531,6 +537,9 @@ func Test_storage_AcknowledgeMessage(t *testing.T) {
 		t.Errorf("Failed to set message metadata: %v", err)
 		return
 	}
+
+	// Set the attempt ID in the test request
+	tests[0].args.request.AttemptId = &attemptID
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

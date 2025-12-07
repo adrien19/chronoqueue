@@ -107,6 +107,7 @@ func (s *Scheduler) processQueueSchedule(ctx context.Context, queueName string, 
 		pipe.XAdd(ctx, &redis.XAddArgs{
 			Stream: streamKey,
 			Values: map[string]interface{}{
+				"queue_name":     queueName,
 				"message_id":     messageID,
 				"priority":       priority,
 				"scheduled_time": msg.Score,

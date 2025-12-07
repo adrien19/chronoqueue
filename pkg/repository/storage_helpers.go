@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
+	"os"
 	"strings"
 	"time"
 
@@ -314,8 +316,36 @@ func (as *storage) saveMessageMetadata(ctx context.Context, queueName, messageID
 	return as.redisClient.HSet(ctx, key, "metadata", data).Err()
 }
 
-func (as *storage) generateConsumerName() string {
-	return fmt.Sprintf("worker-%d", time.Now().UnixNano())
+// generateWorkerID creates a unique worker identifier
+// Client code already provides worker IDs, but this is a fallback.
+func (as *storage) generateWorkerID() string {
+	host, err := os.Hostname()
+	if err != nil {
+		host = "unknown-host"
+	}
+
+	// Get MAC address for additional uniqueness
+	interfaces, err := net.Interfaces()
+	if err == nil {
+		for _, iface := range interfaces {
+			// Skip loopback, down interfaces, and zero MACs
+			if iface.Flags&net.FlagLoopback == 0 &&
+				iface.Flags&net.FlagUp != 0 &&
+				len(iface.HardwareAddr) > 0 &&
+				iface.HardwareAddr.String() != "00:00:00:00:00:00" {
+				mac := iface.HardwareAddr.String()
+				return fmt.Sprintf("%s-%s", host, strings.ReplaceAll(mac, ":", ""))
+			}
+		}
+	}
+
+	// Fallback to hostname + timestamp
+	return fmt.Sprintf("%s-%d-%d", host, time.Now().UnixNano(), os.Getpid())
+}
+
+// generateConsumerName creates a consumer name from a worker ID
+func (as *storage) generateConsumerName(workerID string) string {
+	return fmt.Sprintf("worker-%s", workerID)
 }
 
 func (as *storage) listQueueNames(ctx context.Context) ([]string, error) {

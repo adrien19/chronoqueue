@@ -164,6 +164,151 @@ npm start
 
 For detailed documentation, including API references and usage examples, visit [ChronoQueue Docs](./docs/)
 
+## 🤔 Why not just use Kafka or RabbitMQ?
+
+Kafka and RabbitMQ are excellent **message brokers**. ChronoQueue is a **job execution system** built on top of a queue.
+The difference matters once you care about *runtime guarantees, retries, and failure semantics*.
+
+---
+
+### ✅ What Kafka & RabbitMQ Do Well
+
+They are optimized for:
+
+- High-throughput message delivery
+- Fan-out and pub/sub
+- Backpressure control
+- Durable message storage
+- Consumer group mechanics
+
+But they **intentionally avoid owning execution semantics**.
+
+They answer:
+> “Did the message get delivered?”
+
+They do **not** answer:
+> “Is the job still running correctly?”
+
+---
+
+### ❌ What Kafka & RabbitMQ Do *Not* Enforce
+
+| Capability | Kafka | RabbitMQ |
+|------------|--------|-----------|
+| Per-message execution timeout | ❌ | ❌ |
+| Server-side heartbeat enforcement | ❌ | ❌ |
+| Automatic retry on execution timeout | ❌ | ❌ |
+| Lease ownership per attempt | ❌ | ❌ |
+| Dead-letter on timeout | ⚠️ (manual) | ⚠️ (manual) |
+| Stale worker protection | ❌ | ❌ |
+
+**Key limitation:**
+If a consumer gets stuck for 30 minutes but keeps its TCP session alive, **the broker considers the message “healthy” forever**.
+
+Timeouts, retries, and job supervision must be re-implemented **in every worker**.
+
+---
+
+### ✅ What ChronoQueue Adds
+
+ChronoQueue treats every message as a **job with an execution contract**.
+
+Each message attempt has:
+
+- Server-enforced lease
+- Heartbeat supervision
+- Automatic retry
+- Dead-letter on exhaustion
+- Strong ownership via `attempt_id`
+
+#### Core Execution Model
+
+| Feature | ChronoQueue |
+|--------|--------------|
+| Per-message lease | ✅ |
+| Heartbeat-driven lease extension | ✅ |
+| Max execution cap | ✅ |
+| Automatic timeout detection | ✅ |
+| Attempt-based retries | ✅ |
+| Dead-letter queue | ✅ |
+| Stale worker prevention | ✅ |
+
+ChronoQueue answers:
+> “Is this job still valid and executing within its allowed window?”
+
+---
+
+### 🧠 Example: Long-Running File Download
+
+#### Kafka / RabbitMQ
+
+- Consumer starts download
+- Network stalls for 10 minutes
+- Broker assumes everything is fine
+- No timeout
+- No retry
+- No supervision  
+→ System is **blind**
+
+#### ChronoQueue Features
+
+- Job leased for 3s base + up to 10s extension
+- Worker sends heartbeat every 1s
+- Lease extends gradually
+- If:
+  - Heartbeats stop → auto timeout
+  - Max extension exceeded → auto failure
+- Message is retried or DLQ’d automatically
+
+**The server—not the worker—enforces correctness.**
+
+---
+
+### 🔐 Ownership & Safety
+
+Kafka & RabbitMQ:
+
+- Ownership = TCP connection + unacked state
+- If workers race or reconnect, behavior can become ambiguous
+
+ChronoQueue:
+
+- Ownership = **cryptographically unique `attempt_id`**
+- Every:
+  - Heartbeat
+  - ACK
+  - Failure
+  must match the active attempt
+- **Stale workers are automatically rejected**
+
+---
+
+### 🛠 When Should You Use ChronoQueue?
+
+Use ChronoQueue when you need:
+
+- ✅ Execution time guarantees
+- ✅ Automatic retries on timeout
+- ✅ Server-side heartbeats
+- ✅ Job-level supervision
+- ✅ Strong worker ownership
+
+Stick with Kafka/RabbitMQ when you only need:
+
+- ✅ Raw throughput
+- ✅ Stateless consumers
+- ✅ Event streaming
+- ✅ Fire-and-forget messaging
+
+---
+
+### 🧩 Mental Model
+
+- **Kafka/RabbitMQ** = Message Delivery Systems
+- **ChronoQueue** = Job Execution & Supervision System
+
+ChronoQueue is closer to **Temporal Activities** than to traditional brokers.
+
 ## Examples & Use Cases
 
 The [`examples/`](./examples/) directory contains comprehensive real-world applications demonstrating ChronoQueue features and best practices:
