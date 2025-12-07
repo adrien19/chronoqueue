@@ -88,6 +88,16 @@ func responseModifier(ctx context.Context, w http.ResponseWriter, p proto.Messag
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-Frame-Options", "DENY")
 
+	// If the response carries a worker_id, expose it for HTTP clients
+	if resp, ok := p.(*queueservice_pb.GetNextMessageResponse); ok {
+		if resp.GetWorkerId() != "" {
+			w.Header().Set("X-Worker-ID", resp.GetWorkerId())
+		}
+		if resp.GetAttemptId() != "" {
+			w.Header().Set("X-Attempt-ID", resp.GetAttemptId())
+		}
+	}
+
 	return nil
 }
 
@@ -111,6 +121,7 @@ func corsHandler(handler http.Handler, allowedOrigins []string) http.Handler {
 
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization, X-CSRF-Token")
+		w.Header().Set("Access-Control-Expose-Headers", "X-Worker-ID, X-ChronoQueue-Version, X-Attempt-ID")
 
 		// Handle preflight requests
 		if r.Method == "OPTIONS" {

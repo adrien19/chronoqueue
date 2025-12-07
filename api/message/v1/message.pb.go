@@ -227,6 +227,17 @@ type Message_Metadata struct {
 	// Set to -1 for infinite retries (use with caution).
 	// Common values: 1 (no retry), 3 (standard), 5 (persistent), -1 (infinite).
 	MaxAttempts int32 `protobuf:"varint,10,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
+	// Per-message lease policy.
+	//
+	// Semantics:
+	//   - Any field set here overrides the corresponding field in the queue's
+	//     QueueMetadata.lease_policy.
+	//   - Unset fields inherit from the queue lease policy.
+	//
+	// This lets you avoid *_override fields; presence is the override.
+	LeasePolicy *v1.LeasePolicy `protobuf:"bytes,11,opt,name=lease_policy,json=leasePolicy,proto3" json:"lease_policy,omitempty"`
+	// Current processing attempt runtime state.
+	CurrentAttempt *Message_Metadata_AttemptRuntime `protobuf:"bytes,12,opt,name=current_attempt,json=currentAttempt,proto3" json:"current_attempt,omitempty"`
 	// scheduled_time: When this message should become visible for processing.
 	// If set to a future time, message enters INVISIBLE state until that time.
 	// If omitted or past, message immediately becomes PENDING.
@@ -327,6 +338,20 @@ func (x *Message_Metadata) GetMaxAttempts() int32 {
 	return 0
 }
 
+func (x *Message_Metadata) GetLeasePolicy() *v1.LeasePolicy {
+	if x != nil {
+		return x.LeasePolicy
+	}
+	return nil
+}
+
+func (x *Message_Metadata) GetCurrentAttempt() *Message_Metadata_AttemptRuntime {
+	if x != nil {
+		return x.CurrentAttempt
+	}
+	return nil
+}
+
 func (x *Message_Metadata) GetScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ScheduledTime
@@ -341,15 +366,127 @@ func (x *Message_Metadata) GetPriorityLevel() int32 {
 	return 0
 }
 
+// -----------------------------------------------------------------------
+// Current attempt runtime
+// -----------------------------------------------------------------------
+type Message_Metadata_AttemptRuntime struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Server-generated identifier for the current processing attempt.
+	AttemptId string `protobuf:"bytes,1,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	// Optional identifier of the worker process currently owning the lease.
+	WorkerId string `protobuf:"bytes,2,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	// When this attempt acquired the lease.
+	LeaseStartedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=lease_started_at,json=leaseStartedAt,proto3" json:"lease_started_at,omitempty"`
+	// Current lease deadline for this attempt (Unix ms).
+	LeaseExpiry int64 `protobuf:"varint,4,opt,name=lease_expiry,json=leaseExpiry,proto3" json:"lease_expiry,omitempty"`
+	// Total extra lease time already consumed beyond base_lease.
+	LeaseExtensionUsed *durationpb.Duration `protobuf:"bytes,5,opt,name=lease_extension_used,json=leaseExtensionUsed,proto3" json:"lease_extension_used,omitempty"`
+	// Number of times the lease has been extended (successful heartbeats that changed expiry).
+	LeaseRenewalCount int32 `protobuf:"varint,6,opt,name=lease_renewal_count,json=leaseRenewalCount,proto3" json:"lease_renewal_count,omitempty"`
+	// Last successful heartbeat time.
+	LastHeartbeatAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_heartbeat_at,json=lastHeartbeatAt,proto3" json:"last_heartbeat_at,omitempty"`
+	// Heartbeat timeout deadline (Unix ms). Zero if heartbeat timeouts disabled.
+	HeartbeatExpiry int64 `protobuf:"varint,8,opt,name=heartbeat_expiry,json=heartbeatExpiry,proto3" json:"heartbeat_expiry,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *Message_Metadata_AttemptRuntime) Reset() {
+	*x = Message_Metadata_AttemptRuntime{}
+	mi := &file_proto_message_v1_message_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Message_Metadata_AttemptRuntime) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Message_Metadata_AttemptRuntime) ProtoMessage() {}
+
+func (x *Message_Metadata_AttemptRuntime) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_v1_message_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Message_Metadata_AttemptRuntime.ProtoReflect.Descriptor instead.
+func (*Message_Metadata_AttemptRuntime) Descriptor() ([]byte, []int) {
+	return file_proto_message_v1_message_proto_rawDescGZIP(), []int{0, 0, 0}
+}
+
+func (x *Message_Metadata_AttemptRuntime) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
+	}
+	return ""
+}
+
+func (x *Message_Metadata_AttemptRuntime) GetWorkerId() string {
+	if x != nil {
+		return x.WorkerId
+	}
+	return ""
+}
+
+func (x *Message_Metadata_AttemptRuntime) GetLeaseStartedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LeaseStartedAt
+	}
+	return nil
+}
+
+func (x *Message_Metadata_AttemptRuntime) GetLeaseExpiry() int64 {
+	if x != nil {
+		return x.LeaseExpiry
+	}
+	return 0
+}
+
+func (x *Message_Metadata_AttemptRuntime) GetLeaseExtensionUsed() *durationpb.Duration {
+	if x != nil {
+		return x.LeaseExtensionUsed
+	}
+	return nil
+}
+
+func (x *Message_Metadata_AttemptRuntime) GetLeaseRenewalCount() int32 {
+	if x != nil {
+		return x.LeaseRenewalCount
+	}
+	return 0
+}
+
+func (x *Message_Metadata_AttemptRuntime) GetLastHeartbeatAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastHeartbeatAt
+	}
+	return nil
+}
+
+func (x *Message_Metadata_AttemptRuntime) GetHeartbeatExpiry() int64 {
+	if x != nil {
+		return x.HeartbeatExpiry
+	}
+	return 0
+}
+
 var File_proto_message_v1_message_proto protoreflect.FileDescriptor
 
 const file_proto_message_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"\x1eproto/message/v1/message.proto\x12\x1achronoqueue.api.message.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cproto/common/v1/common.proto\"\xfe\x05\n" +
+	"\x1eproto/message/v1/message.proto\x12\x1achronoqueue.api.message.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cproto/common/v1/common.proto\"\xd7\n" +
+	"\n" +
 	"\aMessage\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\x12H\n" +
-	"\bmetadata\x18\x03 \x01(\v2,.chronoqueue.api.message.v1.Message.MetadataR\bmetadata\x1a\x89\x05\n" +
+	"\bmetadata\x18\x03 \x01(\v2,.chronoqueue.api.message.v1.Message.MetadataR\bmetadata\x1a\xe2\t\n" +
 	"\bMetadata\x12<\n" +
 	"\apayload\x18\x01 \x01(\v2\".chronoqueue.api.common.v1.PayloadR\apayload\x12H\n" +
 	"\x05state\x18\x02 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\x12#\n" +
@@ -359,9 +496,21 @@ const file_proto_message_v1_message_proto_rawDesc = "" +
 	"\x13lease_renewal_count\x18\a \x01(\x05R\x11leaseRenewalCount\x12\x1a\n" +
 	"\bpriority\x18\t \x01(\x03R\bpriority\x12!\n" +
 	"\fmax_attempts\x18\n" +
-	" \x01(\x05R\vmaxAttempts\x12A\n" +
+	" \x01(\x05R\vmaxAttempts\x12I\n" +
+	"\flease_policy\x18\v \x01(\v2&.chronoqueue.api.common.v1.LeasePolicyR\vleasePolicy\x12d\n" +
+	"\x0fcurrent_attempt\x18\f \x01(\v2;.chronoqueue.api.message.v1.Message.Metadata.AttemptRuntimeR\x0ecurrentAttempt\x12A\n" +
 	"\x0escheduled_time\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\rscheduledTime\x12%\n" +
-	"\x0epriority_level\x18\x15 \x01(\x05R\rpriorityLevel\"Z\n" +
+	"\x0epriority_level\x18\x15 \x01(\x05R\rpriorityLevel\x1a\xa5\x03\n" +
+	"\x0eAttemptRuntime\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\x01 \x01(\tR\tattemptId\x12\x1b\n" +
+	"\tworker_id\x18\x02 \x01(\tR\bworkerId\x12D\n" +
+	"\x10lease_started_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0eleaseStartedAt\x12!\n" +
+	"\flease_expiry\x18\x04 \x01(\x03R\vleaseExpiry\x12K\n" +
+	"\x14lease_extension_used\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x12leaseExtensionUsed\x12.\n" +
+	"\x13lease_renewal_count\x18\x06 \x01(\x05R\x11leaseRenewalCount\x12F\n" +
+	"\x11last_heartbeat_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0flastHeartbeatAt\x12)\n" +
+	"\x10heartbeat_expiry\x18\b \x01(\x03R\x0fheartbeatExpiry\"Z\n" +
 	"\x05State\x12\r\n" +
 	"\tINVISIBLE\x10\x00\x12\v\n" +
 	"\aPENDING\x10\x01\x12\v\n" +
@@ -383,26 +532,33 @@ func file_proto_message_v1_message_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_message_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_message_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_proto_message_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_proto_message_v1_message_proto_goTypes = []any{
-	(Message_Metadata_State)(0),   // 0: chronoqueue.api.message.v1.Message.Metadata.State
-	(*Message)(nil),               // 1: chronoqueue.api.message.v1.Message
-	(*Message_Metadata)(nil),      // 2: chronoqueue.api.message.v1.Message.Metadata
-	(*v1.Payload)(nil),            // 3: chronoqueue.api.common.v1.Payload
-	(*durationpb.Duration)(nil),   // 4: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
+	(Message_Metadata_State)(0),             // 0: chronoqueue.api.message.v1.Message.Metadata.State
+	(*Message)(nil),                         // 1: chronoqueue.api.message.v1.Message
+	(*Message_Metadata)(nil),                // 2: chronoqueue.api.message.v1.Message.Metadata
+	(*Message_Metadata_AttemptRuntime)(nil), // 3: chronoqueue.api.message.v1.Message.Metadata.AttemptRuntime
+	(*v1.Payload)(nil),                      // 4: chronoqueue.api.common.v1.Payload
+	(*durationpb.Duration)(nil),             // 5: google.protobuf.Duration
+	(*v1.LeasePolicy)(nil),                  // 6: chronoqueue.api.common.v1.LeasePolicy
+	(*timestamppb.Timestamp)(nil),           // 7: google.protobuf.Timestamp
 }
 var file_proto_message_v1_message_proto_depIdxs = []int32{
-	2, // 0: chronoqueue.api.message.v1.Message.metadata:type_name -> chronoqueue.api.message.v1.Message.Metadata
-	3, // 1: chronoqueue.api.message.v1.Message.Metadata.payload:type_name -> chronoqueue.api.common.v1.Payload
-	0, // 2: chronoqueue.api.message.v1.Message.Metadata.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	4, // 3: chronoqueue.api.message.v1.Message.Metadata.lease_duration:type_name -> google.protobuf.Duration
-	5, // 4: chronoqueue.api.message.v1.Message.Metadata.scheduled_time:type_name -> google.protobuf.Timestamp
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	2,  // 0: chronoqueue.api.message.v1.Message.metadata:type_name -> chronoqueue.api.message.v1.Message.Metadata
+	4,  // 1: chronoqueue.api.message.v1.Message.Metadata.payload:type_name -> chronoqueue.api.common.v1.Payload
+	0,  // 2: chronoqueue.api.message.v1.Message.Metadata.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
+	5,  // 3: chronoqueue.api.message.v1.Message.Metadata.lease_duration:type_name -> google.protobuf.Duration
+	6,  // 4: chronoqueue.api.message.v1.Message.Metadata.lease_policy:type_name -> chronoqueue.api.common.v1.LeasePolicy
+	3,  // 5: chronoqueue.api.message.v1.Message.Metadata.current_attempt:type_name -> chronoqueue.api.message.v1.Message.Metadata.AttemptRuntime
+	7,  // 6: chronoqueue.api.message.v1.Message.Metadata.scheduled_time:type_name -> google.protobuf.Timestamp
+	7,  // 7: chronoqueue.api.message.v1.Message.Metadata.AttemptRuntime.lease_started_at:type_name -> google.protobuf.Timestamp
+	5,  // 8: chronoqueue.api.message.v1.Message.Metadata.AttemptRuntime.lease_extension_used:type_name -> google.protobuf.Duration
+	7,  // 9: chronoqueue.api.message.v1.Message.Metadata.AttemptRuntime.last_heartbeat_at:type_name -> google.protobuf.Timestamp
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_proto_message_v1_message_proto_init() }
@@ -416,7 +572,7 @@ func file_proto_message_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_message_v1_message_proto_rawDesc), len(file_proto_message_v1_message_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

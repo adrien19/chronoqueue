@@ -215,6 +215,12 @@ func newMessageGetCommand() *cobra.Command {
 				}
 				outputs.PrintInfo(fmt.Sprintf("Message ID: %s", resp.GetMessage().GetMessageId()))
 				outputs.PrintInfo(fmt.Sprintf("Stream Entry ID: %s", resp.GetStreamEntryId()))
+				if workerID := resp.GetWorkerId(); workerID != "" {
+					outputs.PrintInfo(fmt.Sprintf("Worker ID: %s", workerID))
+				}
+				if attemptID := resp.GetAttemptId(); attemptID != "" {
+					outputs.PrintInfo(fmt.Sprintf("Attempt ID: %s", attemptID))
+				}
 				outputs.PrintInfo(fmt.Sprintf("Metadata: %v", resp.GetMessage().GetMetadata()))
 				outputs.PrintInfo(fmt.Sprintf("Payload: %v", resp.GetMessage().GetMetadata().GetPayload()))
 				outputs.PrintInfo(fmt.Sprintf("Data: %v", resp.GetMessage().GetMetadata().GetPayload().GetData()))

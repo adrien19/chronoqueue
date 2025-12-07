@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	structpb "github.com/golang/protobuf/ptypes/struct"
@@ -29,23 +30,30 @@ type (
 	State int32
 
 	QueueOptions struct {
-		DequeueAttempts     int32  `json:"dequeueAttempts,omitempty"`
-		ExclusivityKey      string `json:"exclusivityKey,omitempty"`
-		LeaseDuration       string `json:"leaseDuration"`
-		Type                int32  `json:"type,omitempty"`
-		DeadLetterQueueName string `json:"deadLetterQueueName,omitempty"`
-		AutoCreateDLQ       bool   `json:"autoCreateDLQ,omitempty"`
+		DequeueAttempts     int32    `json:"dequeueAttempts,omitempty"`
+		ExclusivityKey      string   `json:"exclusivityKey,omitempty"`
+		LeaseDuration       string   `json:"leaseDuration"`
+		Type                int32    `json:"type,omitempty"`
+		DeadLetterQueueName string   `json:"deadLetterQueueName,omitempty"`
+		AutoCreateDLQ       bool     `json:"autoCreateDLQ,omitempty"`
+		SchemaID            string   `json:"schemaId,omitempty"`
+		SchemaRequired      bool     `json:"schemaRequired,omitempty"`
+		MaxPayloadSize      int32    `json:"maxPayloadSize,omitempty"`
+		AllowedContentTypes []string `json:"allowedContentTypes,omitempty"`
+		PriorityConfig      *pb_queue.PriorityConfig
+		LeasePolicy         LeasePolicyOptions `json:"leasePolicy,omitempty"`
 	}
 	MessageOptions struct {
-		Payload            Payload    `json:"payload,omitempty"`
-		AttemptsLeft       int32      `json:"attemptsLeft,omitempty"`
-		MaxAttempts        int32      `json:"maxAttempts,omitempty"`
-		ScheduledTime      *time.Time `json:"scheduledTime,omitempty"`
-		LeaseDuration      string     `json:"leaseDuration"`
-		LeaseExpiry        int64      `json:"leaseExpiry,omitempty"`
-		State              State      `json:"state,omitempty"`
-		InvisibilityExpiry int64      `json:"invisibilityExpiry,omitempty"`
-		Priority           int64      `json:"Priority,omitempty"`
+		Payload            Payload            `json:"payload,omitempty"`
+		AttemptsLeft       int32              `json:"attemptsLeft,omitempty"`
+		MaxAttempts        int32              `json:"maxAttempts,omitempty"`
+		ScheduledTime      *time.Time         `json:"scheduledTime,omitempty"`
+		LeaseDuration      string             `json:"leaseDuration"`
+		LeaseExpiry        int64              `json:"leaseExpiry,omitempty"`
+		State              State              `json:"state,omitempty"`
+		InvisibilityExpiry int64              `json:"invisibilityExpiry,omitempty"`
+		Priority           int64              `json:"Priority,omitempty"`
+		LeasePolicy        LeasePolicyOptions `json:"leasePolicy,omitempty"`
 	}
 	Payload struct {
 		Metadata      map[string]*structpb.Value `json:"metadata,omitempty"`
@@ -78,6 +86,13 @@ type (
 	}
 
 	Connector func(address string, opts ClientOptions) (queueservice_pb.QueueServiceClient, *grpc.ClientConn, error)
+
+	LeasePolicyOptions struct {
+		BaseLease        string `json:"baseLease,omitempty"`
+		MaxExtension     string `json:"maxExtension,omitempty"`
+		HeartbeatTimeout string `json:"heartbeatTimeout,omitempty"`
+		ExtendStep       string `json:"extendStep,omitempty"`
+	}
 )
 
 const (
@@ -121,6 +136,13 @@ type WorkItem struct {
 	queue         string
 	messageID     string
 	streamEntryID string // Redis Stream entry ID for XCLAIM-based heartbeats
+	attemptID     string
+	workerID      string
+}
+
+type attemptInfo struct {
+	attemptID string
+	workerID  string
 }
 
 // ChronoQueueClient is a client to call ChronoQueue RPC
@@ -132,7 +154,10 @@ type ChronoQueueClient struct {
 	closed           bool
 	mu               sync.Mutex
 	opts             ClientOptions
-	activeHeartbeats sync.Map // messageID -> context.CancelFunc for explicit lifecycle management
+	attemptTracker   sync.Map
+	activeHeartbeats sync.Map     // messageID -> context.CancelFunc for explicit lifecycle management
+	workerID         atomic.Value // string
+	workerIDOnce     sync.Once
 }
 
 // NewChronoQueueClient returns a new ChronoQueue client
@@ -225,10 +250,39 @@ func DefaultServerConnector(address string, opts ClientOptions) (queueservice_pb
 	return nil, nil, errors.New("max retry count reached. cannot connect to server")
 }
 
+func (client *ChronoQueueClient) recordAttemptInfo(messageID, attemptID, workerID string) {
+	if messageID == "" {
+		return
+	}
+	client.attemptTracker.Store(messageID, attemptInfo{
+		attemptID: attemptID,
+		workerID:  workerID,
+	})
+}
+
+func (client *ChronoQueueClient) getAttemptInfo(messageID string) attemptInfo {
+	val, ok := client.attemptTracker.Load(messageID)
+	if !ok {
+		return attemptInfo{}
+	}
+	info, ok := val.(attemptInfo)
+	if !ok {
+		return attemptInfo{}
+	}
+	return info
+}
+
+func (client *ChronoQueueClient) clearAttemptInfo(messageID string) {
+	if messageID == "" {
+		return
+	}
+	client.attemptTracker.Delete(messageID)
+}
+
 func (client *ChronoQueueClient) heartbeatWorker() {
 	for workItem := range client.workChan {
 		// Perform work here, e.g., manage heartbeats
-		client.manageHeartbeats(workItem.ctx, workItem.queue, workItem.messageID, workItem.streamEntryID)
+		client.manageHeartbeats(workItem.ctx, workItem.queue, workItem.messageID, workItem.streamEntryID, workItem.attemptID, workItem.workerID)
 	}
 }
 
@@ -250,6 +304,48 @@ func parseDurationToProto(durationStr string) (*durationpb.Duration, error) {
 		return nil, err
 	}
 	return durationpb.New(parsedDuration), nil
+}
+
+func buildLeasePolicy(opts LeasePolicyOptions) (*common_pb.LeasePolicy, error) {
+	if opts.BaseLease == "" && opts.MaxExtension == "" && opts.HeartbeatTimeout == "" && opts.ExtendStep == "" {
+		return nil, nil
+	}
+
+	lp := &common_pb.LeasePolicy{}
+
+	if opts.BaseLease != "" {
+		d, err := parseDurationToProto(opts.BaseLease)
+		if err != nil {
+			return nil, fmt.Errorf("invalid base lease duration: %w", err)
+		}
+		lp.BaseLease = d
+	}
+
+	if opts.MaxExtension != "" {
+		d, err := parseDurationToProto(opts.MaxExtension)
+		if err != nil {
+			return nil, fmt.Errorf("invalid max extension: %w", err)
+		}
+		lp.MaxExtension = d
+	}
+
+	if opts.HeartbeatTimeout != "" {
+		d, err := parseDurationToProto(opts.HeartbeatTimeout)
+		if err != nil {
+			return nil, fmt.Errorf("invalid heartbeat timeout: %w", err)
+		}
+		lp.HeartbeatTimeout = d
+	}
+
+	if opts.ExtendStep != "" {
+		d, err := parseDurationToProto(opts.ExtendStep)
+		if err != nil {
+			return nil, fmt.Errorf("invalid extend step: %w", err)
+		}
+		lp.ExtendStep = d
+	}
+
+	return lp, nil
 }
 
 // Function to convert SIMPLE queue type string to enum
@@ -296,6 +392,11 @@ func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, q
 		return &queueservice_pb.CreateQueueResponse{Success: false}, fmt.Errorf("invalid lease duration: %v", err)
 	}
 
+	leasePolicy, err := buildLeasePolicy(queueOptions.LeasePolicy)
+	if err != nil {
+		return &queueservice_pb.CreateQueueResponse{Success: false}, err
+	}
+
 	req := &queueservice_pb.CreateQueueRequest{
 		Name: name,
 		Metadata: &pb_queue.QueueMetadata{
@@ -305,6 +406,12 @@ func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, q
 			ExclusivityKey:      queueOptions.ExclusivityKey,
 			DeadLetterQueueName: queueOptions.DeadLetterQueueName,
 			AutoCreateDlq:       queueOptions.AutoCreateDLQ,
+			SchemaId:            queueOptions.SchemaID,
+			SchemaRequired:      queueOptions.SchemaRequired,
+			MaxPayloadSize:      queueOptions.MaxPayloadSize,
+			AllowedContentTypes: queueOptions.AllowedContentTypes,
+			PriorityConfig:      queueOptions.PriorityConfig,
+			LeasePolicy:         leasePolicy,
 		},
 	}
 	res, err := client.service.CreateQueue(ctx, req)
@@ -341,6 +448,11 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 		return nil, fmt.Errorf("invalid lease duration: %v", err)
 	}
 
+	leasePolicy, err := buildLeasePolicy(messageOptions.LeasePolicy)
+	if err != nil {
+		return nil, err
+	}
+
 	metadata := &message_pb.Message_Metadata{
 		Payload: &common_pb.Payload{
 			Metadata:      messageOptions.Payload.Metadata,
@@ -355,6 +467,7 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 		LeaseExpiry:   messageOptions.LeaseExpiry,
 		State:         message_pb.Message_Metadata_State(messageOptions.State),
 		Priority:      messageOptions.Priority,
+		LeasePolicy:   leasePolicy,
 	}
 
 	if messageOptions.ScheduledTime != nil {
@@ -375,7 +488,10 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 	return res, nil
 }
 
-func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName string, messageId string, streamEntryID string) {
+func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName string, messageId string, streamEntryID string, attemptID string, workerID string) {
+	if attemptID != "" || workerID != "" {
+		client.recordAttemptInfo(messageId, attemptID, workerID)
+	}
 	// Set up a ticker to send a heartbeat at regular intervals
 	ticker := time.NewTicker(defaultHeartbeatInterval)
 	defer ticker.Stop()
@@ -442,9 +558,47 @@ func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue strin
 		return nil, err
 	}
 	req := &queueservice_pb.GetNextMessageRequest{QueueName: queue, LeaseDuration: leaseDurationpb}
+	widVal := client.workerID.Load()
+	if widStr, ok := widVal.(string); ok && widStr != "" {
+		wid := widStr
+		req.WorkerId = &wid
+	}
 	res, err := client.service.GetNextMessage(ctx, req)
 	if err != nil {
 		return nil, err
+	}
+
+	// Persist worker ID if server assigned it and client has none yet
+	var workerID string
+	var attemptID string
+	if res != nil {
+		workerID = res.GetWorkerId()
+		attemptID = res.GetAttemptId()
+		if res.GetMessage() != nil && res.GetMessage().GetMetadata() != nil {
+			currentAttempt := res.GetMessage().GetMetadata().GetCurrentAttempt()
+			if attemptID == "" && currentAttempt != nil {
+				attemptID = currentAttempt.GetAttemptId()
+			}
+			if workerID == "" && currentAttempt != nil {
+				workerID = currentAttempt.GetWorkerId()
+			}
+		}
+		if workerID == "" {
+			if widVal := client.workerID.Load(); widVal != nil {
+				if widStr, ok := widVal.(string); ok {
+					workerID = widStr
+				}
+			}
+		}
+		if workerID != "" {
+			client.workerIDOnce.Do(func() {
+				client.workerID.Store(workerID)
+			})
+		}
+	}
+
+	if res != nil && res.Message != nil {
+		client.recordAttemptInfo(res.Message.MessageId, attemptID, workerID)
 	}
 
 	if enableHeartbeat && res.Message != nil {
@@ -460,6 +614,8 @@ func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue strin
 			queue:         queue,
 			messageID:     res.Message.MessageId,
 			streamEntryID: res.StreamEntryId, // Capture stream entry ID for Redis Streams
+			attemptID:     attemptID,
+			workerID:      workerID,
 		}
 	}
 	return res, nil
@@ -540,10 +696,26 @@ func (client *ChronoQueueClient) AcknowledgeMessage(ctx context.Context, queue s
 		State:         message_pb.Message_Metadata_State(state),
 		StreamEntryId: streamEntryID,
 	}
+
+	info := client.getAttemptInfo(messageId)
+	if info.attemptID != "" {
+		req.AttemptId = &info.attemptID
+	}
+
+	workerID := info.workerID
+	if workerID == "" {
+		if widStr, ok := client.workerID.Load().(string); ok {
+			workerID = widStr
+		}
+	}
+	if workerID != "" {
+		req.WorkerId = &workerID
+	}
 	res, err := client.service.AcknowledgeMessage(ctx, req)
 	if err != nil {
 		return res, err
 	}
+	client.clearAttemptInfo(messageId)
 	return res, nil
 }
 
@@ -558,10 +730,25 @@ func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queue
 		defer cancel()
 	}
 
+	info := client.getAttemptInfo(messageId)
+	workerID := info.workerID
+	if workerID == "" {
+		if widStr, ok := client.workerID.Load().(string); ok {
+			workerID = widStr
+		}
+	}
+	attemptID := info.attemptID
+
 	req := &queueservice_pb.SendMessageHeartBeatRequest{
 		QueueName:     queueName,
 		MessageId:     messageId,
 		StreamEntryId: streamEntryID,
+	}
+	if workerID != "" {
+		req.WorkerId = &workerID
+	}
+	if attemptID != "" {
+		req.AttemptId = &attemptID
 	}
 	res, err := client.service.SendMessageHeartBeat(ctx, req)
 	if err != nil {

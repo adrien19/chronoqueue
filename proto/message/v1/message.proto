@@ -51,18 +51,18 @@ message Message {
     // If you retry posting the same message_id, ChronoQueue returns the existing message.
     // Recommended format: UUID, task ID, or "{entity_type}:{entity_id}".
     string message_id = 1;
-    
+
     // Metadata contains all message execution and lifecycle information.
     message Metadata {
         // Reserved field numbers from deprecated features (for backward compatibility).
         // These fields were removed as part of Redis Streams migration.
         reserved 3, 8;
         reserved "invisibility_duration", "invisibility_expiry";
-        
+
         // payload: The business data and metadata to be processed.
         // This is what your workers receive and act upon.
         chronoqueue.api.common.v1.Payload payload = 1;
-        
+
         // State represents the message lifecycle stage.
         //
         // State transitions:
@@ -86,53 +86,95 @@ message Message {
             ERRORED = 5;    // Failed after all retries, moved to DLQ (terminal)
         }
         Metadata.State state = 2;
-        
+
         // attempts_left: Number of retry attempts remaining before moving to DLQ.
         // Decrements with each processing failure. When reaches 0 and fails, moves to ERRORED state.
         // Set max_attempts when posting to control retry behavior.
         int32 attempts_left = 4;
-        
+
         // lease_duration: How long a worker can process this message before the lease expires.
         // After this duration, if not acknowledged or renewed, message returns to PENDING state.
         // Workers should call RenewLease or SendHeartbeat if processing takes longer.
         // Typical values: 30s for quick tasks, 5m for longer processing.
         google.protobuf.Duration lease_duration = 5;
-        
+
         // lease_expiry: Unix timestamp (milliseconds) when the current lease expires.
         // Managed automatically by ChronoQueue. Workers can monitor this to know when to renew.
         // If current time > lease_expiry, message will be reclaimed and made PENDING again.
         int64 lease_expiry = 6;
-        
+
         // lease_renewal_count: Number of times the lease has been renewed for this processing attempt.
         // Useful for detecting stuck/zombie workers that keep renewing without completing.
         // Consider implementing a max renewal limit in your worker logic.
         int32 lease_renewal_count = 7;
-        
+
         // priority: Message priority score (0-2147483647, higher = processed first).
         // ChronoQueue uses priority streams (high: ≥70, medium: ≥30, low: <30).
         // Messages with the same priority are processed FIFO.
         // Use for: urgent tasks (100), normal (50), background (10).
         int64 priority = 9;
-        
+
         // max_attempts: Maximum number of processing attempts before moving to DLQ.
         // If omitted, uses queue's default_max_attempts.
         // Set to -1 for infinite retries (use with caution).
         // Common values: 1 (no retry), 3 (standard), 5 (persistent), -1 (infinite).
         int32 max_attempts = 10;
-        
+
+        // Per-message lease policy.
+        //
+        // Semantics:
+        // - Any field set here overrides the corresponding field in the queue's
+        //   QueueMetadata.lease_policy.
+        // - Unset fields inherit from the queue lease policy.
+        //
+        // This lets you avoid *_override fields; presence is the override.
+        chronoqueue.api.common.v1.LeasePolicy lease_policy = 11;
+
+        // -----------------------------------------------------------------------
+        // Current attempt runtime
+        // -----------------------------------------------------------------------
+        message AttemptRuntime {
+            // Server-generated identifier for the current processing attempt.
+            string attempt_id = 1;
+
+            // Optional identifier of the worker process currently owning the lease.
+            string worker_id = 2;
+
+            // When this attempt acquired the lease.
+            google.protobuf.Timestamp lease_started_at = 3;
+
+            // Current lease deadline for this attempt (Unix ms).
+            int64 lease_expiry = 4;
+
+            // Total extra lease time already consumed beyond base_lease.
+            google.protobuf.Duration lease_extension_used = 5;
+
+            // Number of times the lease has been extended (successful heartbeats that changed expiry).
+            int32 lease_renewal_count = 6;
+
+            // Last successful heartbeat time.
+            google.protobuf.Timestamp last_heartbeat_at = 7;
+
+            // Heartbeat timeout deadline (Unix ms). Zero if heartbeat timeouts disabled.
+            int64 heartbeat_expiry = 8;
+        }
+
+        // Current processing attempt runtime state.
+        AttemptRuntime current_attempt = 12;
+
         // scheduled_time: When this message should become visible for processing.
         // If set to a future time, message enters INVISIBLE state until that time.
         // If omitted or past, message immediately becomes PENDING.
         // Use for: scheduled tasks, delayed execution, rate limiting, backoff strategies.
         // Example: Schedule order fulfillment for tomorrow at 9 AM.
         google.protobuf.Timestamp scheduled_time = 20;
-        
+
         // priority_level: Internal priority level for stream routing (auto-calculated).
         // Managed by ChronoQueue based on priority score. Read-only from client perspective.
         // Used internally for routing to high/medium/low priority streams.
         int32 priority_level = 21;
     }
-    
+
     // metadata: All message execution and lifecycle information.
     Message.Metadata metadata = 3;
 }

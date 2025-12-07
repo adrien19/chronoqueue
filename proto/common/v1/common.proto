@@ -6,6 +6,8 @@ syntax = "proto3";
 package chronoqueue.api.common.v1;
 
 import "google/protobuf/struct.proto";
+import "google/protobuf/duration.proto";
+
 option go_package = "github.com/adrien19/chronoqueue/api/common/v1;common";
 
 // Payload represents the user data and metadata for a message.
@@ -38,25 +40,59 @@ message Payload {
     // Common uses: correlation IDs, trace context, source system, user ID, tenant ID.
     // These values are indexed and can be queried without deserializing the data field.
     map<string, google.protobuf.Value> metadata = 1;
-    
+
     // data: The actual message payload as structured data (JSON, Protobuf, etc.).
     // This is your business data - orders, events, tasks, notifications, etc.
     // Stored as google.protobuf.Struct for flexibility across different data formats.
     google.protobuf.Struct data = 2;
-    
+
     // content_type: MIME type indicating the data format.
     // Examples: "application/json", "application/xml", "text/plain", "application/protobuf"
     // Used for automatic deserialization and processing by workers.
     string content_type = 3;
-    
+
     // schema_id: Reference to a registered schema for validation.
     // If provided, ChronoQueue validates the data against this schema before accepting the message.
     // Example: "order.created.v1", "user.profile.v2"
     // Use RegisterSchema API to define schemas.
     string schema_id = 4;
-    
+
     // schema_version: Version number of the schema to use.
     // Allows schema evolution while maintaining backward compatibility.
     // If omitted, uses the latest active version of schema_id.
     int32 schema_version = 5;
+}
+
+// LeasePolicy defines how long a single processing attempt is allowed to run,
+// and how heartbeats can extend that time.
+message LeasePolicy {
+  // base_lease:
+  // Initial lease duration for an attempt (L_base).
+  // The attempt starts with this much time before timing out, unless extended.
+  google.protobuf.Duration base_lease = 1;
+
+  // max_extension:
+  // Maximum additional time beyond base_lease that an attempt may obtain via
+  // heartbeats (L_maxExt).
+  //
+  // Effective per-attempt cap:
+  //   base_lease + max_extension
+  google.protobuf.Duration max_extension = 2;
+
+  // heartbeat_timeout:
+  // Maximum allowed gap between heartbeats (H).
+  // If zero/unset, heartbeat-based timeout is disabled.
+  google.protobuf.Duration heartbeat_timeout = 3;
+
+  // extend_step:
+  // Amount of time to extend the lease by when a heartbeat is received,
+  // until max_extension is exhausted.
+  //
+  // Example:
+  //   base_lease = 3s
+  //   max_extension = 10s
+  //   extend_step = 2s
+  //
+  // The attempt can slide its lease by 2s increments up to ~13s total.
+  google.protobuf.Duration extend_step = 4;
 }

@@ -30,7 +30,7 @@ docker container ls | grep -q "redis" && echo "Redis is running" || echo "Redis 
 if ! command -v node --version &> /dev/null
 then
     echo "Node.js could not be found, installing Node.js"
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -
+    curl -fsSL https://deb.nodesource.com/setup_24.x | sudo bash -
     sudo apt install nodejs -y
 fi
 # Now check node and npm versions

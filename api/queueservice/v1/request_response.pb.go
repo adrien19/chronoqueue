@@ -363,8 +363,12 @@ type GetNextMessageRequest struct {
 	QueueName      string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
 	LeaseDuration  *durationpb.Duration   `protobuf:"bytes,2,opt,name=lease_duration,json=leaseDuration,proto3" json:"lease_duration,omitempty"`
 	ExclusivityKey string                 `protobuf:"bytes,3,opt,name=exclusivity_key,json=exclusivityKey,proto3" json:"exclusivity_key,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Optional stable identifier for the worker/consumer. If absent, server may generate one.
+	WorkerId *string `protobuf:"bytes,4,opt,name=worker_id,json=workerId,proto3,oneof" json:"worker_id,omitempty"`
+	// Attempt identifier to validate lease against current attempt
+	AttemptId     *string `protobuf:"bytes,5,opt,name=attempt_id,json=attemptId,proto3,oneof" json:"attempt_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetNextMessageRequest) Reset() {
@@ -418,10 +422,28 @@ func (x *GetNextMessageRequest) GetExclusivityKey() string {
 	return ""
 }
 
+func (x *GetNextMessageRequest) GetWorkerId() string {
+	if x != nil && x.WorkerId != nil {
+		return *x.WorkerId
+	}
+	return ""
+}
+
+func (x *GetNextMessageRequest) GetAttemptId() string {
+	if x != nil && x.AttemptId != nil {
+		return *x.AttemptId
+	}
+	return ""
+}
+
 type GetNextMessageResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       *v11.Message           `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	StreamEntryId string                 `protobuf:"bytes,2,opt,name=stream_entry_id,json=streamEntryId,proto3" json:"stream_entry_id,omitempty"`
+	// Echo or assign the worker_id used for this lease
+	WorkerId *string `protobuf:"bytes,3,opt,name=worker_id,json=workerId,proto3,oneof" json:"worker_id,omitempty"`
+	// Attempt identifier for this lease
+	AttemptId     *string `protobuf:"bytes,4,opt,name=attempt_id,json=attemptId,proto3,oneof" json:"attempt_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -470,6 +492,20 @@ func (x *GetNextMessageResponse) GetStreamEntryId() string {
 	return ""
 }
 
+func (x *GetNextMessageResponse) GetWorkerId() string {
+	if x != nil && x.WorkerId != nil {
+		return *x.WorkerId
+	}
+	return ""
+}
+
+func (x *GetNextMessageResponse) GetAttemptId() string {
+	if x != nil && x.AttemptId != nil {
+		return *x.AttemptId
+	}
+	return ""
+}
+
 // Acknowledge the message on the queue
 type AcknowledgeMessageRequest struct {
 	state         protoimpl.MessageState     `protogen:"open.v1"`
@@ -477,6 +513,10 @@ type AcknowledgeMessageRequest struct {
 	MessageId     string                     `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
 	State         v11.Message_Metadata_State `protobuf:"varint,3,opt,name=state,proto3,enum=chronoqueue.api.message.v1.Message_Metadata_State" json:"state,omitempty"`
 	StreamEntryId string                     `protobuf:"bytes,4,opt,name=stream_entry_id,json=streamEntryId,proto3" json:"stream_entry_id,omitempty"`
+	// Optional stable identifier to consistently represent the same consumer
+	WorkerId *string `protobuf:"bytes,5,opt,name=worker_id,json=workerId,proto3,oneof" json:"worker_id,omitempty"`
+	// Attempt identifier to validate acknowledgment against current attempt
+	AttemptId     *string `protobuf:"bytes,6,opt,name=attempt_id,json=attemptId,proto3,oneof" json:"attempt_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -535,6 +575,20 @@ func (x *AcknowledgeMessageRequest) GetState() v11.Message_Metadata_State {
 func (x *AcknowledgeMessageRequest) GetStreamEntryId() string {
 	if x != nil {
 		return x.StreamEntryId
+	}
+	return ""
+}
+
+func (x *AcknowledgeMessageRequest) GetWorkerId() string {
+	if x != nil && x.WorkerId != nil {
+		return *x.WorkerId
+	}
+	return ""
+}
+
+func (x *AcknowledgeMessageRequest) GetAttemptId() string {
+	if x != nil && x.AttemptId != nil {
+		return *x.AttemptId
 	}
 	return ""
 }
@@ -904,6 +958,10 @@ type SendMessageHeartBeatRequest struct {
 	QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
 	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
 	StreamEntryId string                 `protobuf:"bytes,3,opt,name=stream_entry_id,json=streamEntryId,proto3" json:"stream_entry_id,omitempty"`
+	// Optional stable identifier to consistently represent the same consumer
+	WorkerId *string `protobuf:"bytes,4,opt,name=worker_id,json=workerId,proto3,oneof" json:"worker_id,omitempty"`
+	// Attempt identifier to validate heartbeat against current attempt
+	AttemptId     *string `protobuf:"bytes,5,opt,name=attempt_id,json=attemptId,proto3,oneof" json:"attempt_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -955,6 +1013,20 @@ func (x *SendMessageHeartBeatRequest) GetMessageId() string {
 func (x *SendMessageHeartBeatRequest) GetStreamEntryId() string {
 	if x != nil {
 		return x.StreamEntryId
+	}
+	return ""
+}
+
+func (x *SendMessageHeartBeatRequest) GetWorkerId() string {
+	if x != nil && x.WorkerId != nil {
+		return *x.WorkerId
+	}
+	return ""
+}
+
+func (x *SendMessageHeartBeatRequest) GetAttemptId() string {
+	if x != nil && x.AttemptId != nil {
+		return *x.AttemptId
 	}
 	return ""
 }
@@ -3298,22 +3370,40 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12=\n" +
 	"\amessage\x18\x02 \x01(\v2#.chronoqueue.api.message.v1.MessageR\amessage\"/\n" +
 	"\x13PostMessageResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xa1\x01\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x84\x02\n" +
 	"\x15GetNextMessageRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12@\n" +
 	"\x0elease_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\rleaseDuration\x12'\n" +
-	"\x0fexclusivity_key\x18\x03 \x01(\tR\x0eexclusivityKey\"\x7f\n" +
+	"\x0fexclusivity_key\x18\x03 \x01(\tR\x0eexclusivityKey\x12 \n" +
+	"\tworker_id\x18\x04 \x01(\tH\x00R\bworkerId\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"attempt_id\x18\x05 \x01(\tH\x01R\tattemptId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_worker_idB\r\n" +
+	"\v_attempt_id\"\xe2\x01\n" +
 	"\x16GetNextMessageResponse\x12=\n" +
 	"\amessage\x18\x01 \x01(\v2#.chronoqueue.api.message.v1.MessageR\amessage\x12&\n" +
-	"\x0fstream_entry_id\x18\x02 \x01(\tR\rstreamEntryId\"\xcb\x01\n" +
+	"\x0fstream_entry_id\x18\x02 \x01(\tR\rstreamEntryId\x12 \n" +
+	"\tworker_id\x18\x03 \x01(\tH\x00R\bworkerId\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"attempt_id\x18\x04 \x01(\tH\x01R\tattemptId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_worker_idB\r\n" +
+	"\v_attempt_id\"\xae\x02\n" +
 	"\x19AcknowledgeMessageRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x02 \x01(\tR\tmessageId\x12H\n" +
 	"\x05state\x18\x03 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\x12&\n" +
-	"\x0fstream_entry_id\x18\x04 \x01(\tR\rstreamEntryId\"6\n" +
+	"\x0fstream_entry_id\x18\x04 \x01(\tR\rstreamEntryId\x12 \n" +
+	"\tworker_id\x18\x05 \x01(\tH\x00R\bworkerId\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"attempt_id\x18\x06 \x01(\tH\x01R\tattemptId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_worker_idB\r\n" +
+	"\v_attempt_id\"6\n" +
 	"\x1aAcknowledgeMessageResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x9a\x01\n" +
 	"\x18RenewMessageLeaseRequest\x12\x1d\n" +
@@ -3344,13 +3434,19 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\x11earliest_deadline\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x10earliestDeadline\x1a>\n" +
 	"\x10StateCountsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x01\"\x83\x01\n" +
+	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x01\"\xe6\x01\n" +
 	"\x1bSendMessageHeartBeatRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x02 \x01(\tR\tmessageId\x12&\n" +
-	"\x0fstream_entry_id\x18\x03 \x01(\tR\rstreamEntryId\"\xaa\x01\n" +
+	"\x0fstream_entry_id\x18\x03 \x01(\tR\rstreamEntryId\x12 \n" +
+	"\tworker_id\x18\x04 \x01(\tH\x00R\bworkerId\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"attempt_id\x18\x05 \x01(\tH\x01R\tattemptId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_worker_idB\r\n" +
+	"\v_attempt_id\"\xaa\x01\n" +
 	"\x1cSendMessageHeartBeatResponse\x12@\n" +
 	"\x0eremaining_time\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\rremainingTime\x12H\n" +
 	"\x05state\x18\x02 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\"+\n" +
@@ -3636,7 +3732,11 @@ func file_proto_queueservice_v1_request_response_proto_init() {
 		return
 	}
 	file_proto_queueservice_v1_request_response_proto_msgTypes[0].OneofWrappers = []any{}
+	file_proto_queueservice_v1_request_response_proto_msgTypes[6].OneofWrappers = []any{}
+	file_proto_queueservice_v1_request_response_proto_msgTypes[7].OneofWrappers = []any{}
+	file_proto_queueservice_v1_request_response_proto_msgTypes[8].OneofWrappers = []any{}
 	file_proto_queueservice_v1_request_response_proto_msgTypes[12].OneofWrappers = []any{}
+	file_proto_queueservice_v1_request_response_proto_msgTypes[16].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

@@ -12,6 +12,7 @@
 package queue
 
 import (
+	v1 "github.com/adrien19/chronoqueue/api/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -213,8 +214,13 @@ type QueueMetadata struct {
 	// Most users can omit this - defaults work well for common cases.
 	// Customize for: complex fairness requirements, aging prevention, weighted priorities.
 	PriorityConfig *PriorityConfig `protobuf:"bytes,12,opt,name=priority_config,json=priorityConfig,proto3" json:"priority_config,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// ---------------------------------------------------------------------------
+	// Lease model defaults (queue-level)
+	// ---------------------------------------------------------------------------
+	// Message-level policies can selectively override these fields.
+	LeasePolicy   *v1.LeasePolicy `protobuf:"bytes,13,opt,name=lease_policy,json=leasePolicy,proto3" json:"lease_policy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *QueueMetadata) Reset() {
@@ -320,6 +326,13 @@ func (x *QueueMetadata) GetAllowedContentTypes() []string {
 func (x *QueueMetadata) GetPriorityConfig() *PriorityConfig {
 	if x != nil {
 		return x.PriorityConfig
+	}
+	return nil
+}
+
+func (x *QueueMetadata) GetLeasePolicy() *v1.LeasePolicy {
+	if x != nil {
+		return x.LeasePolicy
 	}
 	return nil
 }
@@ -496,7 +509,7 @@ var File_proto_queue_v1_queue_proto protoreflect.FileDescriptor
 
 const file_proto_queue_v1_queue_proto_rawDesc = "" +
 	"\n" +
-	"\x1aproto/queue/v1/queue.proto\x12\x18chronoqueue.api.queue.v1\x1a\x1egoogle/protobuf/duration.proto\"\xd6\x04\n" +
+	"\x1aproto/queue/v1/queue.proto\x12\x18chronoqueue.api.queue.v1\x1a\x1cproto/common/v1/common.proto\x1a\x1egoogle/protobuf/duration.proto\"\xa1\x05\n" +
 	"\rQueueMetadata\x127\n" +
 	"\x04type\x18\x01 \x01(\x0e2#.chronoqueue.api.queue.v1.QueueTypeR\x04type\x120\n" +
 	"\x14default_max_attempts\x18\x02 \x01(\x05R\x12defaultMaxAttempts\x12@\n" +
@@ -509,7 +522,8 @@ const file_proto_queue_v1_queue_proto_rawDesc = "" +
 	"\x10max_payload_size\x18\n" +
 	" \x01(\x05R\x0emaxPayloadSize\x122\n" +
 	"\x15allowed_content_types\x18\v \x03(\tR\x13allowedContentTypes\x12Q\n" +
-	"\x0fpriority_config\x18\f \x01(\v2(.chronoqueue.api.queue.v1.PriorityConfigR\x0epriorityConfigJ\x04\b\x05\x10\x06R\x15invisibility_duration\"\xfd\x02\n" +
+	"\x0fpriority_config\x18\f \x01(\v2(.chronoqueue.api.queue.v1.PriorityConfigR\x0epriorityConfig\x12I\n" +
+	"\flease_policy\x18\r \x01(\v2&.chronoqueue.api.common.v1.LeasePolicyR\vleasePolicyJ\x04\b\x05\x10\x06R\x15invisibility_duration\"\xfd\x02\n" +
 	"\x0ePriorityConfig\x12@\n" +
 	"\x06policy\x18\x01 \x01(\x0e2(.chronoqueue.api.queue.v1.FairnessPolicyR\x06policy\x12h\n" +
 	"\x10priority_weights\x18\x02 \x03(\v2=.chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntryR\x0fpriorityWeights\x12I\n" +
@@ -555,20 +569,22 @@ var file_proto_queue_v1_queue_proto_goTypes = []any{
 	(*Queue)(nil),               // 4: chronoqueue.api.queue.v1.Queue
 	nil,                         // 5: chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntry
 	(*durationpb.Duration)(nil), // 6: google.protobuf.Duration
+	(*v1.LeasePolicy)(nil),      // 7: chronoqueue.api.common.v1.LeasePolicy
 }
 var file_proto_queue_v1_queue_proto_depIdxs = []int32{
 	0, // 0: chronoqueue.api.queue.v1.QueueMetadata.type:type_name -> chronoqueue.api.queue.v1.QueueType
 	6, // 1: chronoqueue.api.queue.v1.QueueMetadata.lease_duration:type_name -> google.protobuf.Duration
 	3, // 2: chronoqueue.api.queue.v1.QueueMetadata.priority_config:type_name -> chronoqueue.api.queue.v1.PriorityConfig
-	1, // 3: chronoqueue.api.queue.v1.PriorityConfig.policy:type_name -> chronoqueue.api.queue.v1.FairnessPolicy
-	5, // 4: chronoqueue.api.queue.v1.PriorityConfig.priority_weights:type_name -> chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntry
-	6, // 5: chronoqueue.api.queue.v1.PriorityConfig.age_boost_threshold:type_name -> google.protobuf.Duration
-	2, // 6: chronoqueue.api.queue.v1.Queue.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	7, // 3: chronoqueue.api.queue.v1.QueueMetadata.lease_policy:type_name -> chronoqueue.api.common.v1.LeasePolicy
+	1, // 4: chronoqueue.api.queue.v1.PriorityConfig.policy:type_name -> chronoqueue.api.queue.v1.FairnessPolicy
+	5, // 5: chronoqueue.api.queue.v1.PriorityConfig.priority_weights:type_name -> chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntry
+	6, // 6: chronoqueue.api.queue.v1.PriorityConfig.age_boost_threshold:type_name -> google.protobuf.Duration
+	2, // 7: chronoqueue.api.queue.v1.Queue.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_proto_queue_v1_queue_proto_init() }

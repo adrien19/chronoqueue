@@ -92,10 +92,18 @@ message GetNextMessageRequest{
     string queue_name = 1;
     google.protobuf.Duration lease_duration = 2;
     string exclusivity_key = 3;
+    // Optional stable identifier for the worker/consumer. If absent, server may generate one.
+    optional string worker_id = 4;
+    // Attempt identifier to validate lease against current attempt
+    optional string attempt_id = 5;
 }
 message GetNextMessageResponse{
     chronoqueue.api.message.v1.Message message = 1;
     string stream_entry_id = 2;
+    // Echo or assign the worker_id used for this lease
+    optional string worker_id = 3;
+    // Attempt identifier for this lease
+    optional string attempt_id = 4;
 }
 
 // Acknowledge the message on the queue
@@ -104,6 +112,10 @@ message AcknowledgeMessageRequest{
     string message_id = 2;
     chronoqueue.api.message.v1.Message.Metadata.State state = 3;
     string stream_entry_id = 4;
+    // Optional stable identifier to consistently represent the same consumer
+    optional string worker_id = 5;
+    // Attempt identifier to validate acknowledgment against current attempt
+    optional string attempt_id = 6;
 }
 message AcknowledgeMessageResponse{
     bool success = 1;
@@ -148,6 +160,10 @@ message SendMessageHeartBeatRequest {
     string queue_name = 1;
     string message_id = 2;
     string stream_entry_id = 3;
+    // Optional stable identifier to consistently represent the same consumer
+    optional string worker_id = 4;
+    // Attempt identifier to validate heartbeat against current attempt
+    optional string attempt_id = 5;
 }
 message SendMessageHeartBeatResponse {
     google.protobuf.Duration remaining_time = 1;

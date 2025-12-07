@@ -718,9 +718,12 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 	}
 
 	type args struct {
-		ctx       context.Context
-		queueName string
-		messageId string
+		ctx           context.Context
+		queueName     string
+		messageId     string
+		streamEntryID string
+		attemptID     string
+		workerID      string
 	}
 	tests := []struct {
 		name     string
@@ -888,13 +891,11 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 			tt.setup(&tt.fields, client)
 
 			// Use a separate goroutine as manageHeartbeats is blocking
-			go client.manageHeartbeats(tt.args.ctx, tt.args.queueName, tt.args.messageId, "")
+			go client.manageHeartbeats(tt.args.ctx, tt.args.queueName, tt.args.messageId, tt.args.streamEntryID, tt.args.attemptID, tt.args.workerID)
 
 			// Add a small sleep to allow for asynchronous operations to execute
 			// Note: This might need to be adjusted based on actual behavior
-			time.Sleep(100 * time.Millisecond)
-
-			// Validate the scenario as per test case
+			time.Sleep(100 * time.Millisecond) // Validate the scenario as per test case
 			tt.validate(t, &tt.fields, client)
 		})
 	}
