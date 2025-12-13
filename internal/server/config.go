@@ -51,18 +51,18 @@ type Config struct {
 // DefaultConfig returns a configuration suitable for development
 func DefaultConfig() *Config {
 	return &Config{
-		GRPCAddr:            ":9000",
-		HTTPAddr:            ":8080",
+		GRPCAddr:            getEnv("GRPC_ADDR", ":9000"),
+		HTTPAddr:            getEnv("HTTP_ADDR", ":8080"),
 		RedisAddr:           getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:       getEnv("REDIS_PASSWORD", ""),
 		RedisUsername:       getEnv("REDIS_USERNAME", ""),
 		RedisDB:             getEnvInt("REDIS_DB", 0),
 		RedisTLS:            getEnvBool("REDIS_TLS_ENABLED", false),
-		LogLevel:            "info",
-		LogFormat:           "text",
-		EnableTLS:           false,
-		EnableCORS:          true,
-		AllowOrigins:        []string{"*"},
+		LogLevel:            getEnv("LOG_LEVEL", "info"),
+		LogFormat:           getEnv("LOG_FORMAT", "text"),
+		EnableTLS:           getEnvBool("CHRONOQUEUE_TLS_ENABLED", false),
+		EnableCORS:          getEnvBool("ENABLE_CORS", true),
+		AllowOrigins:        getEnvSlice("ALLOW_ORIGINS", []string{"*"}),
 		SchedulerIntervalMs: getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
 		ReclaimIntervalMs:   getEnvInt("RECLAIM_INTERVAL_MS", 5000),
 		IsDevelopment:       true,
@@ -72,18 +72,18 @@ func DefaultConfig() *Config {
 // ProductionConfig returns a configuration suitable for production
 func ProductionConfig() *Config {
 	return &Config{
-		GRPCAddr:            ":9000",
-		HTTPAddr:            ":8080",
+		GRPCAddr:            getEnv("GRPC_ADDR", ":9000"),
+		HTTPAddr:            getEnv("HTTP_ADDR", ":8080"),
 		RedisAddr:           getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:       getEnv("REDIS_PASSWORD", ""),
 		RedisUsername:       getEnv("REDIS_USERNAME", ""),
 		RedisDB:             getEnvInt("REDIS_DB", 0),
 		RedisTLS:            getEnvBool("REDIS_TLS_ENABLED", false),
-		LogLevel:            "info",
-		LogFormat:           "json",
-		EnableTLS:           false,
-		EnableCORS:          false,
-		AllowOrigins:        []string{},
+		LogLevel:            getEnv("LOG_LEVEL", "info"),
+		LogFormat:           getEnv("LOG_FORMAT", "json"),
+		EnableTLS:           getEnvBool("CHRONOQUEUE_TLS_ENABLED", false),
+		EnableCORS:          getEnvBool("ENABLE_CORS", false),
+		AllowOrigins:        getEnvSlice("ALLOW_ORIGINS", []string{}),
 		SchedulerIntervalMs: getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
 		ReclaimIntervalMs:   getEnvInt("RECLAIM_INTERVAL_MS", 5000),
 		IsDevelopment:       false,
@@ -141,6 +141,22 @@ func getEnvInt(key string, defaultValue int) int {
 func getEnvBool(key string, defaultValue bool) bool {
 	if value := os.Getenv(key); value != "" {
 		return strings.ToLower(value) == "true" || value == "1"
+	}
+	return defaultValue
+}
+
+// getEnvSlice retrieves a comma-separated environment variable as a slice or returns a default value
+func getEnvSlice(key string, defaultValue []string) []string {
+	if value := os.Getenv(key); value != "" {
+		// Split by comma and trim spaces
+		parts := strings.Split(value, ",")
+		result := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if trimmed := strings.TrimSpace(part); trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		return result
 	}
 	return defaultValue
 }

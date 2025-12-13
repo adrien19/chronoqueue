@@ -431,8 +431,8 @@ func (h *QueuesHandler) RequeueAll(w http.ResponseWriter, r *http.Request) {
 	}
 	h.logger.InfoWithFields("Requeuing all messages from DLQ", "dlq", queueName, "targetQueue", originalQueue)
 
-	// Get all messages from DLQ
-	dlqMessages, err := h.client.GetDLQMessages(ctx, originalQueue, 1000) // Cap at 1000 messages
+	// Get all messages from DLQ (pass the DLQ stream name, not original queue)
+	dlqMessages, err := h.client.GetDLQMessages(ctx, queueName, 1000) // Cap at 1000 messages
 	if err != nil {
 		h.logger.ErrorWithFields("Failed to get DLQ messages", "error", err, "dlq", queueName)
 		http.Error(w, fmt.Sprintf("Failed to get messages: %v", err), http.StatusInternalServerError)

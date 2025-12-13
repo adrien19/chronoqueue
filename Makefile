@@ -454,7 +454,8 @@ ui-dev: ui-build build
 .PHONY: server-dev
 server-dev: build
 	@echo "Starting ChronoQueue in development mode..."
-	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue server --dev --insecure --redis-password=$(REDIS_PASSWORD)
+	@mkdir -p logs
+	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue server --dev --insecure --redis-password=$(REDIS_PASSWORD) 2>&1 | tee logs/chronoqueue.log
 
 
 ################################################################################

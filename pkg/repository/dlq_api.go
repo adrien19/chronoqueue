@@ -60,10 +60,12 @@ func (as *storage) RequeueFromDLQ(ctx context.Context, dlqName string, messageID
 	}
 
 	var entryID string
+	var originalQueue string
 	var found bool
 	for _, msg := range streamMessages {
 		if msgID, ok := msg.Values["message_id"].(string); ok && msgID == messageID {
 			entryID = msg.ID
+			originalQueue, _ = msg.Values["original_queue"].(string)
 			found = true
 			break
 		}
@@ -71,6 +73,10 @@ func (as *storage) RequeueFromDLQ(ctx context.Context, dlqName string, messageID
 
 	if !found {
 		return fmt.Errorf("message '%s' not found in DLQ '%s'", messageID, dlqName)
+	}
+
+	if originalQueue == "" {
+		return fmt.Errorf("original queue not found for message '%s' in DLQ '%s'", messageID, dlqName)
 	}
 
 	targetExists, err := as.checkQueueExistence(ctx, targetQueueName)
@@ -86,31 +92,55 @@ func (as *storage) RequeueFromDLQ(ctx context.Context, dlqName string, messageID
 		return fmt.Errorf("failed to get target queue metadata: %w", err)
 	}
 
-	metadata := &message_pb.Message_Metadata{
-		State:        0,
-		MaxAttempts:  targetQueueMeta.DefaultMaxAttempts,
-		AttemptsLeft: targetQueueMeta.DefaultMaxAttempts,
-		Priority:     5,
+	// Fetch existing metadata from original queue (contains payload)
+	existingMetadata, err := as.fetchMessageMetadata(ctx, originalQueue, messageID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch existing message metadata from original queue: %w", err)
 	}
 
+	// Reset state and retry counters for requeue
+	existingMetadata.State = message_pb.Message_Metadata_PENDING
+	existingMetadata.MaxAttempts = targetQueueMeta.DefaultMaxAttempts
+	existingMetadata.AttemptsLeft = targetQueueMeta.DefaultMaxAttempts
+
 	if resetRetries {
-		metadata.AttemptsLeft = metadata.MaxAttempts
+		existingMetadata.AttemptsLeft = existingMetadata.MaxAttempts
 	}
+
+	// Clear all attempt runtime state for fresh start
+	// Note: CurrentAttempt contains new fields (attempt_id, worker_id, lease_started_at, etc.)
+	// while LeaseExpiry/LeaseRenewalCount are legacy top-level fields for backward compatibility
+	existingMetadata.CurrentAttempt = nil
+	existingMetadata.LeaseExpiry = 0
+	existingMetadata.LeaseRenewalCount = 0
+
+	// Preserve LeasePolicy (configuration, not runtime state)
+	// LeasePolicy defines how leases work (base_lease, max_extension, heartbeat_timeout)
+	// and should be retained when requeuing
 
 	scheduledTime := time.Now().UnixMilli()
 	if err := as.addToSchedule(ctx, targetQueueName, messageID, scheduledTime); err != nil {
 		return fmt.Errorf("failed to add message to schedule: %w", err)
 	}
 
-	if err := as.saveMessageMetadata(ctx, targetQueueName, messageID, metadata); err != nil {
+	// Save to target queue (may be different from original queue)
+	if err := as.saveMessageMetadata(ctx, targetQueueName, messageID, existingMetadata); err != nil {
 		return fmt.Errorf("failed to save message metadata: %w", err)
+	}
+
+	// Delete from original queue if target is different
+	if targetQueueName != originalQueue {
+		originalMetaKey := as.messageMetaKey(originalQueue, messageID)
+		if err := as.redisClient.Del(ctx, originalMetaKey).Err(); err != nil {
+			as.logger.WarnWithFields("Failed to delete original queue metadata", "queue", originalQueue, "messageID", messageID, "error", err)
+		}
 	}
 
 	if err := as.redisClient.XDel(ctx, dlqStream, entryID).Err(); err != nil {
 		return fmt.Errorf("failed to delete from DLQ stream: %w", err)
 	}
 
-	as.logger.InfoWithFields("Message requeued from DLQ", "dlqName", dlqName, "targetQueue", targetQueueName, "messageID", messageID)
+	as.logger.InfoWithFields("Message requeued from DLQ", "dlqName", dlqName, "originalQueue", originalQueue, "targetQueue", targetQueueName, "messageID", messageID)
 	return nil
 }
 

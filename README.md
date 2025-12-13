@@ -7,6 +7,21 @@
 
 ChronoQueue is queue management system designed to handle high-volume message processing with efficiency and reliability. It offers a priority-based messaging system, real-time monitoring, and flexible scheduling options, making it an ideal solution for complex asynchronous task management.
 
+---
+
+> **🚧 Development Status**
+>
+> ChronoQueue is currently in **active development** and is not yet production-ready. While the core features are functional, you may encounter bugs, breaking changes, or unexpected behavior.
+>
+> - ⚠️ **Not recommended for production use**
+> - 🐛 **Found a bug?** [Open an issue](https://github.com/adrien19/chronoqueue/issues/new)
+> - 💬 **Questions?** Start a [discussion](https://github.com/adrien19/chronoqueue/discussions)
+> - 🤝 **Want to help?** Check out our [Contributing Guidelines](./CONTRIBUTING.md)
+>
+> We appreciate your feedback and contributions as we work towards a stable release!
+
+---
+
 ## Features
 
 - **Priority Queue Management:** ChronoQueue allows users to assign priorities to messages, ensuring that critical tasks are processed first. This feature is crucial for systems where task urgency varies significantly.
