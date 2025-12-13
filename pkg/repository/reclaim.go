@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -72,7 +74,7 @@ func (r *ReclaimService) reclaimStuckMessages(ctx context.Context) {
 			streamKey := r.storage.streamKey(queueName, priorityVal)
 			groupKey := r.storage.groupKey(queueName)
 
-			startID := "0-0"
+			startID := "-"
 			for {
 				r.storage.logger.DebugWithFields(
 					"Reclaim: checking queue",
@@ -81,27 +83,48 @@ func (r *ReclaimService) reclaimStuckMessages(ctx context.Context) {
 					"minIdle", minIdle,
 				)
 
-				msgs, nextID, err := r.xAutoClaim(ctx, streamKey, groupKey, startID, int64(minIdle.Milliseconds()), 100)
+				// Step 1: Get list of pending entries without claiming them
+				pendingEntries, err := r.xPending(ctx, streamKey, groupKey, startID, "+", 100)
 				if err != nil {
 					if strings.Contains(err.Error(), "NOGROUP") || strings.Contains(err.Error(), "no such key") {
 						break
 					}
-					r.storage.logger.ErrorWithFields("XAUTOCLAIM failed", "queue", queueName, "priority", priorityVal, "error", err)
+					r.storage.logger.ErrorWithFields("XPENDING failed", "queue", queueName, "priority", priorityVal, "error", err)
 					break
 				}
-				if len(msgs) == 0 {
-					// No more stale pending messages at this priority.
+				if len(pendingEntries) == 0 {
+					r.storage.logger.DebugWithFields(
+						"Reclaim: no pending messages found",
+						"queue", queueName,
+						"priority", priorityVal,
+					)
 					break
 				}
 
 				now := time.Now()
 
-				for _, xm := range msgs {
-					messageID, ok := xm.Values["message_id"].(string)
+				// Step 2: For each pending entry, check metadata BEFORE claiming
+				for _, entry := range pendingEntries {
+					streamEntryID := entry.ID
+					idleTime := entry.Idle
+
+					// Step 2a: Fetch the stream entry to get message_id
+					xmsg, err := r.xRangeSingle(ctx, streamKey, streamEntryID)
+					if err != nil {
+						r.storage.logger.ErrorWithFields("Reclaim: failed to fetch stream entry", "streamEntryID", streamEntryID, "error", err)
+						continue
+					}
+					if xmsg == nil {
+						r.storage.logger.DebugWithFields("Reclaim: stream entry not found (may have been processed)", "streamEntryID", streamEntryID)
+						continue
+					}
+
+					messageID, ok := xmsg.Values["message_id"].(string)
 					if !ok || messageID == "" {
 						continue
 					}
 
+					// Step 2b: Fetch metadata
 					meta, err := r.storage.fetchMessageMetadata(ctx, queueName, messageID)
 					if err != nil {
 						r.storage.logger.ErrorWithFields("Reclaim: failed to fetch metadata", "messageID", messageID, "error", err)
@@ -110,19 +133,45 @@ func (r *ReclaimService) reclaimStuckMessages(ctx context.Context) {
 
 					oldState := meta.State
 
-					// Use lease logic as the **real** source of truth:
+					// Step 2c: Check if TRULY timed out using lease logic
 					st := lease.HandleReclaim(queueMeta, meta, now)
 					if !st.LeaseTimedOut && !st.HeartbeatTimedOut {
-						// This message is actually still "in lease" according to metadata.
-						// We accidentally touched it with XAUTOCLAIM; bounce it back.
-						if err := r.requeueLiveMessage(ctx, streamKey, groupKey, xm); err != nil {
-							r.storage.logger.ErrorWithFields("Reclaim: failed to requeue live message", "messageID", messageID, "error", err)
-						}
+						// Still live! Skip this message entirely - don't touch it.
+						r.storage.logger.DebugWithFields(
+							"Reclaim: message still in lease, skipping",
+							"messageID", messageID,
+							"streamEntryID", streamEntryID,
+							"idleTime", idleTime,
+							"leaseExpiry", meta.GetLeaseExpiry(),
+						)
 						continue
 					}
 
-					// At this point, we *know* the attempt is timed out by lease or heartbeat.
-					// Apply retry / DLQ logic.
+					// Step 2d: NOW claim it (we know it's timed out)
+					xm, err := r.xClaimSingle(ctx, streamKey, groupKey, streamEntryID, minIdle)
+					if err != nil {
+						r.storage.logger.ErrorWithFields("Reclaim: failed to claim timed-out message",
+							"messageID", messageID,
+							"streamEntryID", streamEntryID,
+							"error", err)
+						continue
+					}
+					if xm == nil {
+						r.storage.logger.DebugWithFields("Reclaim: message already claimed or deleted",
+							"messageID", messageID,
+							"streamEntryID", streamEntryID)
+						continue
+					}
+
+					r.storage.logger.InfoWithFields(
+						"Reclaim: successfully claimed timed-out message",
+						"messageID", messageID,
+						"leaseTimedOut", st.LeaseTimedOut,
+						"heartbeatTimedOut", st.HeartbeatTimedOut,
+						"idleTime", idleTime,
+					)
+
+					// Step 3: Process the reclaimed message - apply retry / DLQ logic
 
 					// If no attempts left and max_attempts != -1 => terminal ERRORED.
 					if meta.AttemptsLeft == 0 && meta.MaxAttempts != -1 {
@@ -141,8 +190,14 @@ func (r *ReclaimService) reclaimStuckMessages(ctx context.Context) {
 						}
 
 						// DLQ
-						if dlqMeta, err := r.storage.GetQueueMetadata(ctx, queueName); err == nil && dlqMeta.GetDeadLetterQueueName() != "" {
-							_ = r.pushToDLQ(ctx, dlqMeta.GetDeadLetterQueueName(), queueName, messageID, "lease/heartbeat timed out", meta)
+						if dlqMeta, err := r.storage.GetQueueMetadata(ctx, queueName); err == nil && (dlqMeta.GetDeadLetterQueueName() != "" || dlqMeta.AutoCreateDlq) {
+							var dlqName string
+							if dlqMeta.GetDeadLetterQueueName() != "" {
+								dlqName = dlqMeta.GetDeadLetterQueueName()
+							} else {
+								dlqName = queueName + "_dlq"
+							}
+							_ = r.pushToDLQ(ctx, dlqName, queueName, messageID, "lease/heartbeat timed out", meta)
 						}
 
 						// XACK + XDEL (no requeue).
@@ -179,53 +234,90 @@ func (r *ReclaimService) reclaimStuckMessages(ctx context.Context) {
 					)
 
 					// Requeue (XACK + XDEL + XADD).
-					if err := r.requeueAbandonedMessage(ctx, streamKey, groupKey, xm); err != nil {
+					if err := r.requeueAbandonedMessage(ctx, streamKey, groupKey, *xm); err != nil {
 						r.storage.logger.ErrorWithFields("Reclaim: failed to requeue timed-out message", "messageID", messageID, "error", err)
 					}
 				}
 
-				if nextID == startID || nextID == "0-0" {
+				// Pagination: move to next batch
+				lastEntry := pendingEntries[len(pendingEntries)-1]
+				if lastEntry.ID == startID {
+					// No progress, avoid infinite loop
+					r.storage.logger.DebugWithFields(
+						"Reclaim: no more pending messages to process",
+						"queue", queueName,
+						"priority", priorityVal,
+					)
 					break
 				}
-				startID = nextID
+
+				// Increment stream ID to exclude already-processed entry
+				// Redis stream IDs are "timestamp-sequence", so we increment the sequence
+				// to avoid reprocessing the last entry (XPENDING Start is inclusive)
+				parts := strings.Split(lastEntry.ID, "-")
+				if len(parts) == 2 {
+					seq, err := strconv.ParseInt(parts[1], 10, 64)
+					if err == nil {
+						startID = fmt.Sprintf("%s-%d", parts[0], seq+1)
+					} else {
+						// Fallback: use original ID (will hit no-progress guard if stuck)
+						startID = lastEntry.ID
+					}
+				} else {
+					// Fallback for unexpected ID format
+					startID = lastEntry.ID
+				}
 			}
 		}
 	}
 }
 
-func (r *ReclaimService) xAutoClaim(ctx context.Context, streamKey, groupKey, startID string, minIdle int64, count int64) ([]redis.XMessage, string, error) {
-	msgs, nextID, err := r.storage.redisClient.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+// xPending gets a list of pending entries without claiming them.
+// Returns pending entries with their ID, consumer, idle time, and delivery count.
+func (r *ReclaimService) xPending(ctx context.Context, streamKey, groupKey, start, end string, count int64) ([]redis.XPendingExt, error) {
+	pending, err := r.storage.redisClient.XPendingExt(ctx, &redis.XPendingExtArgs{
+		Stream: streamKey,
+		Group:  groupKey,
+		Start:  start,
+		End:    end,
+		Count:  count,
+	}).Result()
+	if err != nil {
+		return nil, err
+	}
+	return pending, nil
+}
+
+// xRangeSingle fetches a single stream entry by its ID.
+// Used to get the message_id and other values from a pending entry.
+func (r *ReclaimService) xRangeSingle(ctx context.Context, streamKey, entryID string) (*redis.XMessage, error) {
+	msgs, err := r.storage.redisClient.XRange(ctx, streamKey, entryID, entryID).Result()
+	if err != nil {
+		return nil, err
+	}
+	if len(msgs) == 0 {
+		return nil, nil
+	}
+	return &msgs[0], nil
+}
+
+// xClaimSingle claims a specific stream entry by ID.
+// Only call this after verifying the message is truly timed out.
+func (r *ReclaimService) xClaimSingle(ctx context.Context, streamKey, groupKey, entryID string, minIdle time.Duration) (*redis.XMessage, error) {
+	msgs, err := r.storage.redisClient.XClaim(ctx, &redis.XClaimArgs{
 		Stream:   streamKey,
 		Group:    groupKey,
 		Consumer: "reclaimer",
-		MinIdle:  time.Duration(minIdle) * time.Millisecond,
-		Start:    startID,
-		Count:    count,
+		MinIdle:  minIdle,
+		Messages: []string{entryID},
 	}).Result()
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return msgs, nextID, nil
-}
-
-func (r *ReclaimService) requeueLiveMessage(ctx context.Context, streamKey, groupKey string, msg redis.XMessage) error {
-	px := r.storage.redisClient.TxPipeline()
-
-	px.XAck(ctx, streamKey, groupKey, msg.ID)
-	px.XDel(ctx, streamKey, msg.ID)
-	px.XAdd(ctx, &redis.XAddArgs{
-		Stream: streamKey,
-		Values: msg.Values,
-	})
-
-	_, err := px.Exec(ctx)
-	if err != nil {
-		r.storage.logger.ErrorWithFields("Reclaim: failed to bounce live message", "streamKey", streamKey, "messageID", msg.Values["message_id"], "error", err)
-		return err
+	if len(msgs) == 0 {
+		return nil, nil
 	}
-
-	r.storage.logger.DebugWithFields("Reclaim: bounced live message back to stream", "messageID", msg.Values["message_id"])
-	return nil
+	return &msgs[0], nil
 }
 
 func (r *ReclaimService) requeueAbandonedMessage(ctx context.Context, streamKey, groupKey string, msg redis.XMessage) error {
