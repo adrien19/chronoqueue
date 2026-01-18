@@ -42,6 +42,7 @@ An interview evaluation platform where:
 | **Multi-tenant Isolation** | Separate queues per company with complete isolation |
 | **Heartbeat & Lease Renewal** | Long-running evaluations maintain lease to prevent redelivery |
 | **Message Metadata** | Track evaluation stages, timestamps, and context |
+| **Message Retention Policy** | Configurable retention: immediate delete, timed retention, or forever |
 
 ---
 
@@ -425,6 +426,61 @@ PostMessage(queue: techcorpQueue, data: {candidate: "Bob"})
 // - No cross-tenant data access
 // - Separate metrics and monitoring
 ```
+
+---
+
+### 8. Message Retention Policy
+
+**Scenario**: Different retention requirements for different queue types
+
+```go
+// Queue 1: Transient scheduling events - delete immediately after processing
+schedulerQueue := client.QueueOptions{
+  LeaseDuration:   "30s",
+  AutoCreateDLQ:   true,
+  RetentionPolicy: nil, // DELETE_IMMEDIATELY (default behavior)
+}
+
+// Queue 2: Evaluation audit trail - retain for 7 days for compliance
+evaluationQueue := client.QueueOptions{
+  LeaseDuration: "30s",
+  AutoCreateDLQ: true,
+  RetentionPolicy: &client.RetentionPolicyOption{
+    Mode:             client.RETENTION_RETAIN_DURATION,
+    RetentionSeconds: 7 * 24 * 60 * 60, // 7 days
+  },
+}
+
+// Queue 3: Report compliance - retain for 30 days
+reportQueue := client.QueueOptions{
+  LeaseDuration: "30s",
+  AutoCreateDLQ: true,
+  RetentionPolicy: &client.RetentionPolicyOption{
+    Mode:             client.RETENTION_RETAIN_DURATION,
+    RetentionSeconds: 30 * 24 * 60 * 60, // 30 days
+  },
+}
+
+// Queue 4: Notification history - retain forever for complete audit
+notificationQueue := client.QueueOptions{
+  LeaseDuration: "30s",
+  AutoCreateDLQ: true,
+  RetentionPolicy: &client.RetentionPolicyOption{
+    Mode: client.RETENTION_RETAIN_FOREVER,
+  },
+}
+
+// Retention modes:
+// - DELETE_IMMEDIATELY: Message hard-deleted on ack (default, backward compatible)
+// - RETAIN_DURATION: Soft-delete, auto-cleanup after retention_seconds
+// - RETAIN_FOREVER: Soft-delete, no auto-cleanup (manual cleanup required)
+```
+
+**Use Cases**:
+
+- **Transient queues**: Use `DELETE_IMMEDIATELY` for ephemeral events
+- **Audit trails**: Use `RETAIN_DURATION` with 7-30 days for compliance
+- **Legal holds**: Use `RETAIN_FOREVER` for messages that must never be auto-deleted
 
 ---
 

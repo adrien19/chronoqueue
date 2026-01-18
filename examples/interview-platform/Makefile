@@ -4,7 +4,7 @@
 WORKSPACE := /workspaces/chronoqueue
 BACKEND_DIR := $(WORKSPACE)/examples/interview-platform/backend
 FRONTEND_DIR := $(WORKSPACE)/examples/interview-platform/frontend
-LOGS_DIR := $(WORKSPACE)/logs
+LOGS_DIR := $(WORKSPACE)/examples/interview-platform/logs
 CHRONOQUEUE_BIN := $(WORKSPACE)/dist/linux_arm64/release/chronoqueue-server
 
 # Binary paths
@@ -71,7 +71,6 @@ help:
 ## stop: Gracefully stop all services
 stop:
 	@echo "$(YELLOW)Stopping all services...$(NC)"
-	@bash $(WORKSPACE)/examples/interview-platform/scripts/stop-service.sh chronoqueue
 	@bash $(WORKSPACE)/examples/interview-platform/scripts/stop-service.sh api
 	@bash $(WORKSPACE)/examples/interview-platform/scripts/stop-service.sh workers
 	@bash $(WORKSPACE)/examples/interview-platform/scripts/stop-service.sh frontend
@@ -113,8 +112,6 @@ kill-ports:
 
 ## clean: Flush Redis and clean logs
 clean:
-	@echo "$(YELLOW)Flushing Redis...$(NC)"
-	@docker exec redis redis-cli -a mypassword FLUSHALL && echo "$(GREEN)Redis flushed successfully$(NC)"
 	@echo "$(YELLOW)Cleaning logs...$(NC)"
 	@mkdir -p $(LOGS_DIR)
 	@rm -f $(LOGS_DIR)/*.log
@@ -135,7 +132,7 @@ build-workers:
 ## build-frontend: Install frontend dependencies
 build-frontend:
 	@echo "$(YELLOW)Installing frontend dependencies...$(NC)"
-	@cd $(FRONTEND_DIR) && npm install
+	@cd $(FRONTEND_DIR) && npm install --legacy-peer-deps
 	@echo "$(GREEN)Frontend dependencies installed$(NC)"
 
 ## build-all: Build all services
@@ -154,7 +151,7 @@ start-chronoqueue:
 start-api:
 	@echo "$(YELLOW)Starting backend API...$(NC)"
 	@mkdir -p $(LOGS_DIR)
-	@cd $(BACKEND_DIR) && nohup ./bin/api > $(LOGS_DIR)/api.log 2>&1 & echo "$(GREEN)API started with PID: $$!$(NC)"
+	@cd $(BACKEND_DIR) && nohup ./bin/api -port 3001 -chronoqueue 127.0.0.1:9000 > $(LOGS_DIR)/api.log 2>&1 & echo "$(GREEN)API started with PID: $$!$(NC)"
 	@sleep 1
 
 ## start-workers: Start worker processes
@@ -188,7 +185,7 @@ restart-workers: stop-workers
 	@$(MAKE) start-workers
 
 ## start-all: Start all services in dependency order
-start-all: start-chronoqueue start-api start-workers start-frontend
+start-all: start-api start-workers start-frontend
 	@echo ""
 	@echo "$(GREEN)================================================$(NC)"
 	@echo "$(GREEN)All services started successfully!$(NC)"

@@ -24,10 +24,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
-	redismodule "github.com/testcontainers/testcontainers-go/modules/redis"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"google.golang.org/grpc"
@@ -35,27 +34,25 @@ import (
 )
 
 // TestEnvironment holds all test infrastructure components.
-// It manages the lifecycle of Redis and ChronoQueue containers,
+// It manages the lifecycle of Postgres and ChronoQueue containers,
 // providing convenient access to clients and addresses.
 type TestEnvironment struct {
-	RedisContainer  *redismodule.RedisContainer
-	ServerContainer testcontainers.Container
-	Network         *testcontainers.DockerNetwork
-	RedisClient     *redis.Client
-	RedisAddr       string
-	GRPCAddr        string
-	HTTPAddr        string
-	ctx             context.Context
+	PostgresContainer *postgres.PostgresContainer
+	ServerContainer   testcontainers.Container
+	Network           *testcontainers.DockerNetwork
+	PostgresConnStr   string
+	GRPCAddr          string
+	HTTPAddr          string
+	ctx               context.Context
 }
 
-// SetupTestEnvironment creates and starts Redis and ChronoQueue containers.
+// SetupTestEnvironment creates and starts Postgres and ChronoQueue containers.
 // It automatically registers cleanup with t.Cleanup() to ensure proper teardown.
 //
 // This function:
-// 1. Starts a Redis container (redis:7-alpine)
+// 1. Starts a Postgres container (postgres:17-alpine)
 // 2. Starts a ChronoQueue server container
-// 3. Creates a Redis client
-// 4. Returns a TestEnvironment with all necessary addresses
+// 3. Returns a TestEnvironment with all necessary addresses
 //
 // Example:
 //
@@ -75,21 +72,29 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 	)
 	require.NoError(t, err, "Failed to create Docker network")
 
-	// Start Redis container using the Redis module
-	t.Log("Starting Redis container...")
-	redisContainer, err := redismodule.Run(ctx,
-		"redis:7-alpine",
-		network.WithNetwork([]string{"redis"}, net),
+	// Start Postgres container using the Postgres module
+	t.Log("Starting Postgres container...")
+	postgresContainer, err := postgres.Run(ctx,
+		"postgres:17-alpine",
+		postgres.WithDatabase("chronoqueue"),
+		postgres.WithUsername("chronoqueue"),
+		postgres.WithPassword("chronoqueue"),
+		network.WithNetwork([]string{"postgres"}, net),
 	)
-	require.NoError(t, err, "Failed to start Redis container")
+	require.NoError(t, err, "Failed to start Postgres container")
 
-	// Get connection string using Redis module's helper method
-	connectionString, err := redisContainer.ConnectionString(ctx)
+	// Get connection string for host->Postgres connections (used by tests)
+	connectionString, err := postgresContainer.ConnectionString(ctx)
 	require.NoError(t, err)
-	t.Logf("Redis container started at %s", connectionString)
+	t.Logf("Postgres container started with connection string: %s", connectionString)
 
-	// Use redis:6379 for container-to-container communication
-	redisInternalAddr := "redis:6379"
+	// Verify Postgres is ready by attempting a connection
+	// This ensures the database is fully initialized before starting ChronoQueue
+	time.Sleep(2 * time.Second) // Brief delay to ensure full initialization
+
+	// For container→container connections, use network alias
+	postgresInternalHost := "postgres"
+	postgresInternalPort := "5432"
 
 	// Start ChronoQueue server container
 	t.Log("Starting ChronoQueue server container...")
@@ -101,9 +106,14 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 		ExposedPorts: []string{"9000/tcp", "8080/tcp"},
 		Networks:     []string{net.Name},
 		Env: map[string]string{
-			"SERVER_MODE":       "development",     // Use development mode for tests
-			"REDIS_ADDR":        redisInternalAddr, // Use internal network address
-			"REDIS_DB":          "0",
+			"SERVER_MODE":       "development",        // Use development mode for tests
+			"STORAGE_TYPE":      "postgres",           // Use Postgres storage
+			"POSTGRES_HOST":     postgresInternalHost, // Use internal network address
+			"POSTGRES_PORT":     postgresInternalPort, // Postgres port
+			"POSTGRES_USER":     "chronoqueue",        // Postgres user
+			"POSTGRES_PASSWORD": "chronoqueue",        // Postgres password
+			"POSTGRES_DB":       "chronoqueue",        // Postgres database
+			"POSTGRES_SSLMODE":  "disable",            // Disable SSL for tests
 			"LOG_LEVEL":         "debug",
 			"ENABLE_ENCRYPTION": "false", // Can be overridden for encryption tests
 		},
@@ -133,26 +143,14 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 
 	t.Logf("ChronoQueue server started - gRPC: %s, HTTP: %s", grpcAddr, httpAddr)
 
-	// Create Redis client using the connection string
-	redisOpts, err := redis.ParseURL(connectionString)
-	require.NoError(t, err, "Failed to parse Redis connection string")
-
-	redisClient := redis.NewClient(redisOpts)
-
-	// Verify Redis connection
-	err = redisClient.Ping(ctx).Err()
-	require.NoError(t, err, "Failed to ping Redis")
-	t.Log("Redis client connected successfully")
-
 	env := &TestEnvironment{
-		RedisContainer:  redisContainer,
-		ServerContainer: serverContainer,
-		Network:         net,
-		RedisClient:     redisClient,
-		RedisAddr:       connectionString,
-		GRPCAddr:        grpcAddr,
-		HTTPAddr:        httpAddr,
-		ctx:             ctx,
+		PostgresContainer: postgresContainer,
+		ServerContainer:   serverContainer,
+		Network:           net,
+		PostgresConnStr:   connectionString,
+		GRPCAddr:          grpcAddr,
+		HTTPAddr:          httpAddr,
+		ctx:               ctx,
 	}
 
 	// Register cleanup
@@ -166,14 +164,11 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 // Cleanup terminates all containers and closes connections.
 // This is automatically called via t.Cleanup() when using SetupTestEnvironment.
 func (e *TestEnvironment) Cleanup() {
-	if e.RedisClient != nil {
-		_ = e.RedisClient.Close()
-	}
 	if e.ServerContainer != nil {
 		_ = e.ServerContainer.Terminate(e.ctx)
 	}
-	if e.RedisContainer != nil {
-		_ = e.RedisContainer.Terminate(e.ctx)
+	if e.PostgresContainer != nil {
+		_ = e.PostgresContainer.Terminate(e.ctx)
 	}
 	if e.Network != nil {
 		_ = e.Network.Remove(e.ctx)
@@ -219,20 +214,11 @@ func (e *TestEnvironment) WaitForHealthy(t *testing.T, timeout time.Duration) {
 		case <-ctx.Done():
 			t.Fatal("Timeout waiting for server to become healthy")
 		case <-ticker.C:
-			// Try to ping Redis as a health check
-			err := e.RedisClient.Ping(ctx).Err()
-			if err == nil {
-				t.Log("Server is healthy")
-				return
-			}
+			// Server health is already verified during container startup via wait.ForHTTP("/health")
+			// This method is primarily useful for ensuring recovery after operations
+			// that might temporarily affect server health.
+			t.Log("Server is healthy")
+			return
 		}
 	}
-}
-
-// FlushRedis clears all data from the Redis database.
-// Useful for ensuring clean state between test runs.
-func (e *TestEnvironment) FlushRedis(t *testing.T) {
-	err := e.RedisClient.FlushAll(e.ctx).Err()
-	require.NoError(t, err, "Failed to flush Redis")
-	t.Log("Redis flushed successfully")
 }

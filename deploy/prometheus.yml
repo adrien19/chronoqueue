@@ -1,0 +1,45 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: "chronoqueue-dev"
+    environment: "development"
+
+# Load alerting rules
+rule_files:
+  - "/etc/prometheus/alerts.yml"
+
+# Alertmanager configuration (optional - uncomment if you have alertmanager)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#             - alertmanager:9093
+
+scrape_configs:
+  # ChronoQueue metrics
+  - job_name: "chronoqueue"
+    static_configs:
+      - targets: ["chronoqueue-server:8080"]
+        labels:
+          service: "chronoqueue"
+          component: "server"
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    metrics_path: "/metrics"
+
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          service: "prometheus"
+
+  # Add additional scrape targets here
+  # Example for additional ChronoQueue instances:
+  # - job_name: 'chronoqueue-prod'
+  #   static_configs:
+  #     - targets: ['chronoqueue-prod:9091']
+  #       labels:
+  #         service: 'chronoqueue'
+  #         environment: 'production'

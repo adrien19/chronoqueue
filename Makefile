@@ -10,6 +10,7 @@ export GOSUMDB ?= sum.golang.org
 GIT_COMMIT  = $(shell git rev-list -1 HEAD)
 GIT_VERSION ?= $(shell git describe --always --abbrev=7 --dirty)
 # By default, disable CGO_ENABLED. See the details on https://golang.org/cmd/cgo
+# Override with CGO=1 for SQLite support: make ci-test CGO=1
 CGO         ?= 0
 BINARIES    ?= chronoqueue
 
@@ -133,6 +134,17 @@ CHRONOQUEUE_LINUX_OUT_DIR := $(OUT_DIR)/linux_$(GOARCH)/$(BUILDTYPE_DIR)
 CHRONOQUEUE_BINS:=$(foreach ITEM,$(BINARIES),$(CHRONOQUEUE_OUT_DIR)/$(ITEM)$(BINARY_EXT))
 build: $(CHRONOQUEUE_BINS)
 
+################################################################################
+# Target: build-full (build with ALL storage backends including SQLite)       #
+################################################################################
+.PHONY: build-full
+build-full:
+	@echo "Building ChronoQueue with ALL storage backends (Redis + SQLite)..."
+	@mkdir -p $(CHRONOQUEUE_OUT_DIR)
+	CGO_ENABLED=1 go build $(GCFLAGS) -ldflags="$(LDFLAGS)" -tags=sqlite \
+	  -o $(CHRONOQUEUE_OUT_DIR)/chronoqueue$(BINARY_EXT) .
+	@echo "✓ Binary built with full feature set: Redis, SQLite, and Schema Registry"
+
 # Generate builds for chronoqueue binaries for the target
 # Params:
 # $(1): the file name for the target
@@ -210,6 +222,20 @@ test: check-gotestsum
 				$(COVERAGE_OPTS)
 
 ################################################################################
+# Target: test-sqlite (run tests with SQLite support)                         #
+################################################################################
+.PHONY: test-sqlite
+test-sqlite: check-gotestsum
+	CGO_ENABLED=1 \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit_sqlite.json \
+			--format pkgname-and-test-fails \
+			-- \
+				-tags=sqlite \
+				./pkg/... ./internal/... ./cmd/... ./client/... \
+				$(COVERAGE_OPTS)
+
+################################################################################
 # Target: ci-test (optimized for CI with coverage)                             #
 ################################################################################
 .PHONY: ci-test
@@ -221,6 +247,22 @@ ci-test: check-gotestsum
 			--format standard-verbose \
 			-- \
 				-coverprofile=coverage.out \
+				-covermode=atomic \
+				./pkg/... ./internal/... ./cmd/... ./client/...
+
+################################################################################
+# Target: ci-test-sqlite (run unit tests with SQLite support)                 #
+################################################################################
+.PHONY: ci-test-sqlite
+ci-test-sqlite: check-gotestsum
+	CGO_ENABLED=1 \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit_sqlite.json \
+			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_unit_sqlite.xml \
+			--format standard-verbose \
+			-- \
+				-tags=sqlite \
+				-coverprofile=coverage_sqlite.out \
 				-covermode=atomic \
 				./pkg/... ./internal/... ./cmd/... ./client/...
 
@@ -263,8 +305,8 @@ test-race:
 ################################################################################
 .PHONY: build-test-image
 build-test-image:
-	@echo "Building ChronoQueue test image (for integration tests)..."
-	DOCKER_BUILDKIT=0 docker build -f images/Dockerfile \
+	@echo "Building ChronoQueue test image with ALL storage backends (Postgres, Redis, SQLite)..."
+	DOCKER_BUILDKIT=0 docker build -f images/Dockerfile.sqlite \
 		--build-arg VERSION=$(CHRONOQUEUE_VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
@@ -451,11 +493,37 @@ ui-dev: ui-build build
 ################################################################################
 # Target: server-dev (run ChronoQueue server in dev mode)                      #
 ################################################################################
+# Usage:
+#   make server-dev                              # Use Redis (default)
+#   make server-dev DATABASE=chronoqueue.db      # Use SQLite
+#   make server-dev DB=./data/chronoqueue.db     # Use SQLite (short form)
+#   make server-dev STORAGE=postgres              # Use Postgres (override with POSTGRES_* vars)
+################################################################################
 .PHONY: server-dev
-server-dev: build
-	@echo "Starting ChronoQueue in development mode..."
+server-dev: build-full
 	@mkdir -p logs
+	@echo "Starting ChronoQueue in development mode..."
+ifneq ($(filter postgres,$(STORAGE) $(STORAGE_TYPE)),)
+	@echo "Using Postgres storage"; \
+	PG_ARGS="--storage-type postgres"; \
+	if [ -n "$(POSTGRES_DSN)" ]; then PG_ARGS="$$PG_ARGS --postgres-dsn $(POSTGRES_DSN)"; fi; \
+	if [ -n "$(POSTGRES_HOST)" ]; then PG_ARGS="$$PG_ARGS --postgres-host $(POSTGRES_HOST)"; fi; \
+	if [ -n "$(POSTGRES_PORT)" ]; then PG_ARGS="$$PG_ARGS --postgres-port $(POSTGRES_PORT)"; fi; \
+	if [ -n "$(POSTGRES_USER)" ]; then PG_ARGS="$$PG_ARGS --postgres-user $(POSTGRES_USER)"; fi; \
+	if [ -n "$(POSTGRES_PASSWORD)" ]; then PG_ARGS="$$PG_ARGS --postgres-password $(POSTGRES_PASSWORD)"; fi; \
+	if [ -n "$(POSTGRES_DB)" ]; then PG_ARGS="$$PG_ARGS --postgres-db $(POSTGRES_DB)"; fi; \
+	if [ -n "$(POSTGRES_SSLMODE)" ]; then PG_ARGS="$$PG_ARGS --postgres-sslmode $(POSTGRES_SSLMODE)"; fi; \
+	./$(CHRONOQUEUE_OUT_DIR)/chronoqueue server --dev --insecure $$PG_ARGS 2>&1 | tee logs/chronoqueue.log
+else ifdef DATABASE
+	@echo "Starting ChronoQueue in development mode with SQLite storage ($(DATABASE))..."
+	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue server --dev --storage-type sqlite --sqlite-db-path $(DATABASE) 2>&1 | tee logs/chronoqueue.log
+else ifdef DB
+	@echo "Starting ChronoQueue in development mode with SQLite storage ($(DB))..."
+	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue server --dev --storage-type sqlite --sqlite-db-path $(DB) 2>&1 | tee logs/chronoqueue.log
+else
+	@echo "Starting ChronoQueue in development mode with Redis storage..."
 	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue server --dev --insecure --redis-password=$(REDIS_PASSWORD) 2>&1 | tee logs/chronoqueue.log
+endif
 
 
 ################################################################################
@@ -584,3 +652,81 @@ check-proto-diff:
 # Target: docker                                                               #
 ################################################################################
 include docker/docker.mk
+################################################################################
+# Target: deployment                                                           #
+################################################################################
+
+# Storage backend selection (default: postgres)
+# Usage:
+#   make deploy-up STORAGE=postgres   # PostgreSQL storage (default, instrumented)
+#   make deploy-up STORAGE=sqlite     # SQLite storage (instrumented)
+#   make deploy-up STORAGE=redis      # Redis storage (not instrumented)
+STORAGE ?= postgres
+
+# Select the appropriate docker-compose file based on storage backend
+ifeq ($(STORAGE),postgres)
+	STORAGE_COMPOSE_FILE := docker-compose.postgres.yaml
+else ifeq ($(STORAGE),sqlite)
+	STORAGE_COMPOSE_FILE := docker-compose.sqlite.yaml
+else ifeq ($(STORAGE),redis)
+	STORAGE_COMPOSE_FILE := docker-compose.redis.yaml
+else
+	$(error Invalid STORAGE value: $(STORAGE). Valid values: postgres, sqlite, redis)
+endif
+
+.PHONY: deploy-up
+deploy-up: ## Start ChronoQueue services with selected storage backend (STORAGE=postgres|sqlite|redis)
+	@echo "Starting ChronoQueue with $(STORAGE) storage..."
+	cd deploy && docker-compose -f $(STORAGE_COMPOSE_FILE) up -d
+
+.PHONY: deploy-down
+deploy-down: ## Stop ChronoQueue services
+	@echo "Stopping ChronoQueue with $(STORAGE) storage..."
+	cd deploy && docker-compose -f $(STORAGE_COMPOSE_FILE) down
+
+.PHONY: deploy-logs
+deploy-logs: ## View ChronoQueue service logs
+	cd deploy && docker-compose -f $(STORAGE_COMPOSE_FILE) logs -f
+
+.PHONY: monitoring-up
+monitoring-up: ## Start monitoring stack (Prometheus + Grafana)
+	cd deploy && docker-compose -f docker-compose.monitoring.yaml up -d
+
+.PHONY: monitoring-down
+monitoring-down: ## Stop monitoring stack
+	cd deploy && docker-compose -f docker-compose.monitoring.yaml down
+
+.PHONY: monitoring-logs
+monitoring-logs: ## View monitoring stack logs
+	cd deploy && docker-compose -f docker-compose.monitoring.yaml logs -f
+
+.PHONY: deploy-all
+deploy-all: ## Start all services (ChronoQueue + Monitoring) with selected storage
+	@echo "Starting ChronoQueue with $(STORAGE) storage and monitoring stack..."
+	cd deploy && docker-compose -f $(STORAGE_COMPOSE_FILE) up -d && docker-compose -f docker-compose.monitoring.yaml up -d
+
+.PHONY: deploy-clean
+deploy-clean: ## Stop all services and remove volumes
+	@echo "Cleaning up ChronoQueue with $(STORAGE) storage and monitoring..."
+	cd deploy && docker-compose -f $(STORAGE_COMPOSE_FILE) down -v && docker-compose -f docker-compose.monitoring.yaml down -v
+
+.PHONY: deploy-rebuild
+deploy-rebuild: ## Rebuild and restart ChronoQueue
+	@echo "Rebuilding ChronoQueue with $(STORAGE) storage..."
+	@echo "Building images without cache..."
+	cd deploy && docker-compose -f $(STORAGE_COMPOSE_FILE) build --no-cache chronoqueuesvc chronoqueueui
+	@echo "Recreating and starting containers..."
+	cd deploy && docker-compose -f $(STORAGE_COMPOSE_FILE) up -d --force-recreate chronoqueuesvc chronoqueueui
+	@echo "Rebuild complete."
+
+.PHONY: deploy-validate
+deploy-validate: ## Validate monitoring stack is working
+	./deploy/validate-monitoring.sh
+
+.PHONY: deploy-status
+deploy-status: ## Show status of deployed services
+	@echo "=== ChronoQueue Services ($(STORAGE) storage) ==="
+	@cd deploy && docker-compose -f $(STORAGE_COMPOSE_FILE) ps
+	@echo ""
+	@echo "=== Monitoring Services ==="
+	@cd deploy && docker-compose -f docker-compose.monitoring.yaml ps 2>/dev/null || echo "Monitoring stack not running"

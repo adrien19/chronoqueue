@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,47 +21,66 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Filter } from "lucide-react";
-import { format } from "date-fns";
+import { Plus, Search, Calendar } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
-import { listInterviews, type Interview } from "@/lib/api/api";
-import { Skeleton } from "@/components/ui/skeleton";
+import { apiClient } from "@/lib/api/client";
+import { LoadingState } from "@/components/ui/loading-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { InterviewStatus } from "@/lib/types/api";
 
-const statusColors = {
-    pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-    scheduled: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-    in_progress: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-    completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-    cancelled: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+const statusColors: Record<InterviewStatus, string> = {
+    pending: "bg-yellow-100 text-yellow-800",
+    scheduled: "bg-blue-100 text-blue-800",
+    in_progress: "bg-purple-100 text-purple-800",
+    completed: "bg-green-100 text-green-800",
+    cancelled: "bg-red-100 text-red-800",
 };
 
 export default function InterviewsPage() {
-    const [statusFilter, setStatusFilter] = useState("all");
+    const [statusFilter, setStatusFilter] = useState<string>("all");
     const [searchQuery, setSearchQuery] = useState("");
-    const [isMounted, setIsMounted] = useState(false);
-
-    useEffect(() => {
-        setIsMounted(true);
-    }, []);
 
     // Fetch interviews using React Query
-    const { data: interviews, isLoading } = useQuery({
+    const { data: response, isLoading, error, refetch } = useQuery({
         queryKey: ["interviews", statusFilter],
-        queryFn: () => listInterviews({
+        queryFn: () => apiClient.listInterviews({
             status: statusFilter === "all" ? undefined : statusFilter,
             page: 1,
-            limit: 100
+            pageSize: 100
         }),
-        refetchInterval: 30000, // Refresh every 30 seconds
+        refetchInterval: 30000,
     });
 
+    // Extract interviews from paginated response
+    const interviews = response?.data || [];
+
     // Filter interviews based on search
-    const filteredInterviews = (interviews || []).filter((interview: Interview) => {
+    const filteredInterviews = interviews.filter((interview) => {
         const matchesSearch =
-            interview.candidateName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            interview.position.toLowerCase().includes(searchQuery.toLowerCase());
+            interview.candidateName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            interview.position?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            interview.candidateEmail?.toLowerCase().includes(searchQuery.toLowerCase());
         return matchesSearch;
     });
+
+    // Format date safely
+    const formatDate = (dateString: string) => {
+        try {
+            return format(parseISO(dateString), "MMM dd, yyyy");
+        } catch {
+            return "Invalid date";
+        }
+    };
+
+    const formatTime = (dateString: string) => {
+        try {
+            return format(parseISO(dateString), "HH:mm");
+        } catch {
+            return "";
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -90,7 +109,7 @@ export default function InterviewsPage() {
                             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                             <Input
                                 type="search"
-                                placeholder="Search by candidate or position..."
+                                placeholder="Search by candidate, position, or email..."
                                 className="pl-10"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -124,34 +143,45 @@ export default function InterviewsPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {isLoading ? (
-                        <div className="space-y-2">
-                            <Skeleton className="h-12 w-full" />
-                            <Skeleton className="h-12 w-full" />
-                            <Skeleton className="h-12 w-full" />
-                        </div>
+                    {error ? (
+                        <ErrorState
+                            message="Failed to load interviews. Please try again."
+                            retry={() => refetch()}
+                        />
+                    ) : isLoading ? (
+                        <LoadingState rows={5} type="table" />
+                    ) : interviews.length === 0 ? (
+                        <EmptyState
+                            icon={Calendar}
+                            title="No interviews yet"
+                            description="Get started by scheduling your first interview"
+                            action={{
+                                label: "Schedule Interview",
+                                onClick: () => window.location.href = "/dashboard/interviews/new"
+                            }}
+                        />
+                    ) : filteredInterviews.length === 0 ? (
+                        <EmptyState
+                            icon={Search}
+                            title="No matching interviews"
+                            description="Try adjusting your search or filter criteria"
+                        />
                     ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Candidate</TableHead>
-                                    <TableHead>Position</TableHead>
-                                    <TableHead>Scheduled</TableHead>
-                                    <TableHead>Duration</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Interviewers</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredInterviews.length === 0 ? (
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
                                     <TableRow>
-                                        <TableCell colSpan={7} className="text-center text-gray-500">
-                                            No interviews found
-                                        </TableCell>
+                                        <TableHead>Candidate</TableHead>
+                                        <TableHead>Position</TableHead>
+                                        <TableHead>Scheduled</TableHead>
+                                        <TableHead>Duration</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Interviewers</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
-                                ) : (
-                                    filteredInterviews.map((interview: Interview) => (
+                                </TableHeader>
+                                <TableBody>
+                                    {filteredInterviews.map((interview) => (
                                         <TableRow key={interview.id}>
                                             <TableCell>
                                                 <div>
@@ -162,16 +192,16 @@ export default function InterviewsPage() {
                                             <TableCell>{interview.position || "N/A"}</TableCell>
                                             <TableCell>
                                                 <div>
-                                                    <p>{isMounted ? format(new Date(interview.scheduledAt), "MMM dd, yyyy") : "Loading..."}</p>
+                                                    <p>{formatDate(interview.scheduledAt)}</p>
                                                     <p className="text-sm text-gray-500">
-                                                        {isMounted ? format(new Date(interview.scheduledAt), "HH:mm") : ""}
+                                                        {formatTime(interview.scheduledAt)}
                                                     </p>
                                                 </div>
                                             </TableCell>
-                                            <TableCell>{interview.duration} min</TableCell>
+                                            <TableCell>{interview.duration || 0} min</TableCell>
                                             <TableCell>
-                                                <Badge className={statusColors[interview.status as keyof typeof statusColors]}>
-                                                    {interview.status}
+                                                <Badge className={statusColors[interview.status as InterviewStatus] || ""}>
+                                                    {interview.status?.replace("_", " ") || "unknown"}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell>
@@ -185,10 +215,10 @@ export default function InterviewsPage() {
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
                     )}
                 </CardContent>
             </Card>

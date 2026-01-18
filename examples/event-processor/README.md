@@ -13,6 +13,7 @@ A comprehensive demonstration of ChronoQueue's Redis Streams architecture for hi
 - ✅ **Stream architecture** - Consumer groups, PEL tracking, stream entry IDs
 - ✅ **Multiple worker types** - Email, webhook, and SMS processors
 - ✅ **JSON payload files** - Easy event definition without CLI formatting
+- ✅ **Message retention policies** - Configurable retention per queue (immediate delete, timed, or forever)
 
 ## 📋 Prerequisites
 

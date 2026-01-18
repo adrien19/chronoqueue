@@ -63,14 +63,8 @@ func (s *Server) Start(ctx context.Context) error {
 	s.logger.Info("Starting ChronoQueue server...",
 		"version", s.config.Version,
 		"commit", s.config.GitCommit,
-		"build_date", s.config.BuildDate)
-
-	// Initialize Redis connection
-	redisClient, err := s.initializeRedis(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to initialize Redis: %w", err)
-	}
-	s.redisClient = redisClient
+		"build_date", s.config.BuildDate,
+		"storage_type", s.config.StorageType)
 
 	// Initialize encryption key manager
 	encryptionKeyManager, err := s.initializeEncryptionKeyManager()
@@ -79,18 +73,41 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.encryptionKeyManager = encryptionKeyManager
 
-	// Initialize schema registry
-	schemaRegistry := schema.NewRedisRegistry(s.redisClient, s.logger)
-	s.logger.Info("Schema registry initialized")
-
 	// Initialize metrics
 	gateway.InitMetrics()
 
-	// Initialize storage layer (database) with schema registry and custom intervals
-	schedulerInterval := time.Duration(s.config.SchedulerIntervalMs) * time.Millisecond
-	reclaimInterval := time.Duration(s.config.ReclaimIntervalMs) * time.Millisecond
-	s.database = repository.NewQueueStorageWithIntervals(ctx, s.redisClient, s.encryptionKeyManager, s.logger, schedulerInterval, reclaimInterval)
-	s.schemaRegistry = schemaRegistry
+	// Initialize storage based on configured type
+	switch s.config.StorageType {
+	case "redis":
+		// Initialize Redis connection
+		redisClient, err := s.initializeRedis(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to initialize Redis: %w", err)
+		}
+		s.redisClient = redisClient
+
+		// Initialize schema registry
+		s.schemaRegistry = schema.NewRedisRegistry(s.redisClient, s.logger)
+		s.logger.Info("Schema registry initialized")
+
+		// TODO: Update to use new repository.NewRedisStorage() when Redis backend is implemented
+		s.logger.Warn("Redis storage backend not yet migrated to new repository layer")
+		return fmt.Errorf("redis storage not yet supported with new repository layer")
+
+	case "sqlite":
+		// Initialize SQLite storage (implementation is in server_sqlite.go with build tag)
+		if err := s.initializeSQLiteStorage(ctx); err != nil {
+			return err
+		}
+
+	case "postgres":
+		if err := s.initializePostgresStorage(ctx); err != nil {
+			return err
+		}
+
+	default:
+		return fmt.Errorf("unsupported storage type: %s", s.config.StorageType)
+	}
 
 	// Initialize gRPC server directly with storage
 	s.grpcServer = chronoqueue.NewChronoQueueServer(s.database, s.schemaRegistry, s.logger)
@@ -113,7 +130,9 @@ func (s *Server) printStartupInfo() {
 		"mode", mode,
 		"grpc_addr", s.config.GRPCAddr,
 		"http_addr", s.config.HTTPAddr,
+		"storage_type", s.config.StorageType,
 		"redis_addr", s.config.RedisAddr,
+		"sqlite_db_path", s.config.SQLiteDBPath,
 		"log_level", s.config.LogLevel,
 		"tls_enabled", s.config.EnableTLS,
 		"cors_enabled", s.config.EnableCORS,
@@ -122,7 +141,25 @@ func (s *Server) printStartupInfo() {
 	fmt.Printf("✓ ChronoQueue server starting in %s mode\n", mode)
 	fmt.Printf("ℹ gRPC server will listen on: %s\n", s.config.GRPCAddr)
 	fmt.Printf("ℹ HTTP gateway will listen on: %s\n", s.config.HTTPAddr)
-	fmt.Printf("ℹ Redis connection: %s\n", s.config.RedisAddr)
+	fmt.Printf("ℹ Storage backend: %s\n", s.config.StorageType)
+	switch s.config.StorageType {
+	case "redis":
+		fmt.Printf("ℹ Redis connection: %s\n", s.config.RedisAddr)
+	case "sqlite":
+		fmt.Printf("ℹ SQLite database: %s\n", s.config.SQLiteDBPath)
+	case "postgres":
+		if s.config.PostgresDSN != "" {
+			fmt.Printf("ℹ Postgres DSN: %s\n", s.config.PostgresDSN)
+		} else {
+			fmt.Printf("ℹ Postgres connection: %s:%d db=%s user=%s sslmode=%s\n",
+				s.config.PostgresHost,
+				s.config.PostgresPort,
+				s.config.PostgresDBName,
+				s.config.PostgresUser,
+				s.config.PostgresSSLMode,
+			)
+		}
+	}
 	fmt.Printf("ℹ Log level: %s\n", s.config.LogLevel)
 
 	if s.config.IsDevelopment {

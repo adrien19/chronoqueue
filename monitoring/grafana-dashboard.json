@@ -1,0 +1,1667 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": "-- Grafana --",
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+            }
+        ]
+    },
+    "editable": true,
+    "gnetId": null,
+    "graphTooltip": 1,
+    "id": null,
+    "links": [],
+    "panels": [
+        {
+            "collapsed": false,
+            "datasource": null,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 0
+            },
+            "id": 100,
+            "panels": [],
+            "title": "Overview",
+            "type": "row"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "Total number of queues in the system",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "red",
+                                "value": 0
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 0,
+                "y": 1
+            },
+            "id": 1,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "pluginVersion": "8.0.0",
+            "targets": [
+                {
+                    "expr": "chronoqueue_queues_total",
+                    "refId": "A"
+                }
+            ],
+            "title": "Total Queues",
+            "type": "stat"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "Message enqueue rate across all queues",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "msg/sec",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "reqps"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 10,
+                "x": 4,
+                "y": 1
+            },
+            "id": 2,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "table",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(chronoqueue_messages_enqueued_total[5m])) by (queue_name)",
+                    "legendFormat": "{{queue_name}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Message Enqueue Rate",
+            "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "Message dequeue (claim) rate across all queues",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "msg/sec",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "reqps"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 10,
+                "x": 14,
+                "y": 1
+            },
+            "id": 3,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "table",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(chronoqueue_messages_dequeued_total[5m])) by (queue_name)",
+                    "legendFormat": "{{queue_name}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Message Dequeue Rate",
+            "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "Total pending messages across all queues",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 100
+                            },
+                            {
+                                "color": "red",
+                                "value": 1000
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 0,
+                "y": 5
+            },
+            "id": 4,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "pluginVersion": "8.0.0",
+            "targets": [
+                {
+                    "expr": "sum(chronoqueue_messages_by_state{state=\"PENDING\"})",
+                    "refId": "A"
+                }
+            ],
+            "title": "Total Pending Messages",
+            "type": "stat"
+        },
+        {
+            "collapsed": false,
+            "datasource": null,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 9
+            },
+            "id": 101,
+            "panels": [],
+            "title": "Message State Distribution",
+            "type": "row"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "Message count by state for each queue",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "messages",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 30,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "normal"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 9,
+                "w": 24,
+                "x": 0,
+                "y": 10
+            },
+            "id": 5,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "chronoqueue_messages_by_state",
+                    "legendFormat": "{{queue_name}} - {{state}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Messages by State (Stacked)",
+            "type": "timeseries"
+        },
+        {
+            "collapsed": false,
+            "datasource": null,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 19
+            },
+            "id": 102,
+            "panels": [],
+            "title": "Message Performance",
+            "type": "row"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "P50, P95, P99 message claim latency",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "seconds",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "line+area"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 0.1
+                            },
+                            {
+                                "color": "red",
+                                "value": 0.5
+                            }
+                        ]
+                    },
+                    "unit": "s"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 20
+            },
+            "id": 6,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "table",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.50, sum(rate(chronoqueue_message_claim_duration_seconds_bucket[5m])) by (le, queue_name))",
+                    "legendFormat": "{{queue_name}} P50",
+                    "refId": "A"
+                },
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(chronoqueue_message_claim_duration_seconds_bucket[5m])) by (le, queue_name))",
+                    "legendFormat": "{{queue_name}} P95",
+                    "refId": "B"
+                },
+                {
+                    "expr": "histogram_quantile(0.99, sum(rate(chronoqueue_message_claim_duration_seconds_bucket[5m])) by (le, queue_name))",
+                    "legendFormat": "{{queue_name}} P99",
+                    "refId": "C"
+                }
+            ],
+            "title": "Message Claim Latency",
+            "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "P50, P95, P99 end-to-end message processing duration",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "seconds",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "line"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 60
+                            },
+                            {
+                                "color": "red",
+                                "value": 300
+                            }
+                        ]
+                    },
+                    "unit": "s"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 20
+            },
+            "id": 7,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "table",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.50, sum(rate(chronoqueue_message_processing_duration_seconds_bucket[5m])) by (le, queue_name))",
+                    "legendFormat": "{{queue_name}} P50",
+                    "refId": "A"
+                },
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(chronoqueue_message_processing_duration_seconds_bucket[5m])) by (le, queue_name))",
+                    "legendFormat": "{{queue_name}} P95",
+                    "refId": "B"
+                },
+                {
+                    "expr": "histogram_quantile(0.99, sum(rate(chronoqueue_message_processing_duration_seconds_bucket[5m])) by (le, queue_name))",
+                    "legendFormat": "{{queue_name}} P99",
+                    "refId": "C"
+                }
+            ],
+            "title": "Message Processing Duration",
+            "type": "timeseries"
+        },
+        {
+            "collapsed": false,
+            "datasource": null,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 28
+            },
+            "id": 103,
+            "panels": [],
+            "title": "Dead Letter Queue (DLQ)",
+            "type": "row"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "Total messages in all DLQs",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 10
+                            },
+                            {
+                                "color": "red",
+                                "value": 100
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 0,
+                "y": 29
+            },
+            "id": 8,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "pluginVersion": "8.0.0",
+            "targets": [
+                {
+                    "expr": "sum(chronoqueue_dlq_messages_total)",
+                    "refId": "A"
+                }
+            ],
+            "title": "Total DLQ Messages",
+            "type": "stat"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "Rate of messages being moved to DLQ by reason",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "msg/sec",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 20,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "normal"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "reqps"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 10,
+                "x": 4,
+                "y": 29
+            },
+            "id": 9,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(chronoqueue_dlq_ingestion_total[5m])) by (source_queue, reason)",
+                    "legendFormat": "{{source_queue}} - {{reason}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "DLQ Ingestion Rate by Reason",
+            "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "Rate of messages being retried from DLQ",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "msg/sec",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "reqps"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 10,
+                "x": 14,
+                "y": 29
+            },
+            "id": 10,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(chronoqueue_dlq_retry_total[5m])) by (dlq_name, destination_queue)",
+                    "legendFormat": "{{dlq_name}} → {{destination_queue}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "DLQ Retry Rate",
+            "type": "timeseries"
+        },
+        {
+            "collapsed": false,
+            "datasource": null,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 37
+            },
+            "id": 104,
+            "panels": [],
+            "title": "Lease Management",
+            "type": "row"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "Lease renewal attempts by status",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "renewals/sec",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 20,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "normal"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "reqps"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 38
+            },
+            "id": 11,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(chronoqueue_lease_renewals_total[5m])) by (queue_name, status)",
+                    "legendFormat": "{{queue_name}} - {{status}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Lease Renewals by Status",
+            "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "Lease expirations by type (lease vs heartbeat timeout)",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "expirations/sec",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 20,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "normal"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "reqps"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 38
+            },
+            "id": 12,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(chronoqueue_lease_expirations_total[5m])) by (queue_name, expiry_type)",
+                    "legendFormat": "{{queue_name}} - {{expiry_type}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Lease Expirations by Type",
+            "type": "timeseries"
+        },
+        {
+            "collapsed": false,
+            "datasource": null,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 46
+            },
+            "id": 105,
+            "panels": [],
+            "title": "Scheduler Performance",
+            "type": "row"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "How far behind (or ahead) the scheduler is from scheduled_time",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "seconds",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "line+area"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 30
+                            },
+                            {
+                                "color": "red",
+                                "value": 60
+                            }
+                        ]
+                    },
+                    "unit": "s"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 47
+            },
+            "id": 13,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "lastNotNull",
+                        "max"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "chronoqueue_schedule_lag_seconds",
+                    "legendFormat": "{{queue_name}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Scheduler Lag (positive = behind schedule)",
+            "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "Rate of messages activated from INVISIBLE to PENDING",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "activations/sec",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "reqps"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 47
+            },
+            "id": 14,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "mean",
+                        "sum"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(chronoqueue_schedule_activations_total[5m])) by (queue_name)",
+                    "legendFormat": "{{queue_name}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Schedule Activation Rate",
+            "type": "timeseries"
+        },
+        {
+            "collapsed": false,
+            "datasource": null,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 55
+            },
+            "id": 106,
+            "panels": [],
+            "title": "Background Services",
+            "type": "row"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "Iteration rate for scheduler and reclaim services",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "iterations/sec",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "reqps"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 56
+            },
+            "id": 15,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "mean"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(chronoqueue_background_service_iterations_total[5m])) by (service, status)",
+                    "legendFormat": "{{service}} - {{status}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Background Service Iterations",
+            "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "P95 iteration duration for background services",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "seconds",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "line"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 5
+                            },
+                            {
+                                "color": "red",
+                                "value": 10
+                            }
+                        ]
+                    },
+                    "unit": "s"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 56
+            },
+            "id": 16,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "lastNotNull",
+                        "max"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(chronoqueue_background_service_iteration_duration_seconds_bucket[5m])) by (le, service))",
+                    "legendFormat": "{{service}} P95",
+                    "refId": "A"
+                }
+            ],
+            "title": "Background Service Iteration Duration (P95)",
+            "type": "timeseries"
+        },
+        {
+            "collapsed": false,
+            "datasource": null,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 64
+            },
+            "id": 107,
+            "panels": [],
+            "title": "Database Performance",
+            "type": "row"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "P95 database query duration by operation",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "seconds",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "line"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 0.05
+                            },
+                            {
+                                "color": "red",
+                                "value": 0.1
+                            }
+                        ]
+                    },
+                    "unit": "s"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 65
+            },
+            "id": 17,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "lastNotNull",
+                        "max"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(chronoqueue_db_query_duration_seconds_bucket[5m])) by (le, backend, operation))",
+                    "legendFormat": "{{backend}}/{{operation}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Database Query Duration (P95)",
+            "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "P95 database transaction duration",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "seconds",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "line"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 0.25
+                            },
+                            {
+                                "color": "red",
+                                "value": 0.5
+                            }
+                        ]
+                    },
+                    "unit": "s"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 65
+            },
+            "id": 18,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "lastNotNull",
+                        "max"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(chronoqueue_db_transaction_duration_seconds_bucket[5m])) by (le, backend, operation))",
+                    "legendFormat": "{{backend}}/{{operation}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Database Transaction Duration (P95)",
+            "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "description": "Database connection pool stats",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisLabel": "connections",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "tooltip": false,
+                            "viz": false,
+                            "legend": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 73
+            },
+            "id": 19,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "chronoqueue_db_connections_active",
+                    "legendFormat": "{{backend}} - active",
+                    "refId": "A"
+                },
+                {
+                    "expr": "chronoqueue_db_connections_idle",
+                    "legendFormat": "{{backend}} - idle",
+                    "refId": "B"
+                },
+                {
+                    "expr": "chronoqueue_db_connections_wait",
+                    "legendFormat": "{{backend}} - waiting",
+                    "refId": "C"
+                }
+            ],
+            "title": "Database Connection Pool",
+            "type": "timeseries"
+        }
+    ],
+    "refresh": "10s",
+    "schemaVersion": 27,
+    "style": "dark",
+    "tags": [
+        "chronoqueue",
+        "messaging",
+        "queue"
+    ],
+    "templating": {
+        "list": []
+    },
+    "time": {
+        "from": "now-1h",
+        "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "",
+    "title": "ChronoQueue - Main Dashboard",
+    "uid": "chronoqueue-main",
+    "version": 1
+}

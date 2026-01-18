@@ -252,12 +252,24 @@ func newMessageAckCommand() *cobra.Command {
 				streamEntryID = args[3]
 			}
 
+			attemptID, err := cmd.Flags().GetString("attempt-id")
+			if err != nil {
+				return err
+			}
+			workerID, err := cmd.Flags().GetString("worker-id")
+			if err != nil {
+				return err
+			}
+
 			state, err := client.ParseMessageState(stateStr)
 			if err != nil {
 				return err
 			}
 
 			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
+				if attemptID != "" || workerID != "" {
+					client.SetAttemptInfo(messageID, attemptID, workerID)
+				}
 				resp, err := client.AcknowledgeMessage(cmd.Context(), queueName, messageID, state, streamEntryID)
 				if err != nil {
 					return err
@@ -267,6 +279,9 @@ func newMessageAckCommand() *cobra.Command {
 			})
 		},
 	}
+
+	cmd.Flags().String("attempt-id", "", "Attempt ID returned by message get (required for Postgres)")
+	cmd.Flags().String("worker-id", "", "Worker ID returned by message get (required for Postgres)")
 
 	return cmd
 }

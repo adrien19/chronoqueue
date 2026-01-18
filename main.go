@@ -74,12 +74,24 @@ func newServerCommand() *cobra.Command {
 This command starts both gRPC and HTTP gateway servers. Use --dev for development
 mode with additional features like API documentation and CORS enabled.
 
+Storage Backends:
+  - PostgreSQL (default): enterprise-grade relational database
+  - SQLite: Development/testing backend, single-file database (requires CGO)
+
 Examples:
-  # Development server with defaults
+  # Development server with defaults (PostgreSQL)
   chronoqueue server --dev
 
-  # Production server with custom configuration
-  chronoqueue server --grpc-addr :9000 --http-addr :8080 --redis-addr localhost:6379
+  # Development server with SQLite (convenience flags)
+  chronoqueue server --dev --database chronoqueue.db
+  chronoqueue server --dev --db ./data/chronoqueue.db
+  chronoqueue server --dev -d chronoqueue.db
+
+  # Development server with SQLite (explicit)
+  chronoqueue server --dev --storage-type sqlite --sqlite-db-path ./chronoqueue.db
+
+  # Production server with PostgreSQL
+  chronoqueue server --storage-type postgresql --postgresql-conn-string "user=postgres dbname=chronoqueue sslmode=disable"
 
   # Server with TLS enabled
   chronoqueue server --enable-tls --cert-file server.crt --key-file server.key`,

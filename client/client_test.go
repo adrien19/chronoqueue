@@ -24,6 +24,8 @@ import (
 
 type mockChronoQueueServer struct {
 	queueservice_pb.UnimplementedQueueServiceServer
+	lastAckAttemptID string
+	lastAckWorkerID  string
 }
 
 func dialer() func(context.Context, string) (net.Conn, error) {
@@ -170,12 +172,22 @@ func (*mockChronoQueueServer) RenewMessageLease(ctx context.Context, req *queues
 	}, nil
 }
 
-func (*mockChronoQueueServer) AcknowledgeMessage(ctx context.Context, req *queueservice_pb.AcknowledgeMessageRequest) (*queueservice_pb.AcknowledgeMessageResponse, error) {
+func (s *mockChronoQueueServer) AcknowledgeMessage(ctx context.Context, req *queueservice_pb.AcknowledgeMessageRequest) (*queueservice_pb.AcknowledgeMessageResponse, error) {
 	if req.GetQueueName() == "" {
 		return &queueservice_pb.AcknowledgeMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot acknowledge message given queue with no name %v", req.GetQueueName())
 	}
 	if req.GetMessageId() == "" {
 		return &queueservice_pb.AcknowledgeMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot acknowledge message with no message ID %v", req.GetMessageId())
+	}
+	if req.AttemptId != nil {
+		s.lastAckAttemptID = req.GetAttemptId()
+	} else {
+		s.lastAckAttemptID = ""
+	}
+	if req.WorkerId != nil {
+		s.lastAckWorkerID = req.GetWorkerId()
+	} else {
+		s.lastAckWorkerID = ""
 	}
 	return &queueservice_pb.AcknowledgeMessageResponse{Success: true}, nil
 }
@@ -1282,6 +1294,48 @@ func TestChronoQueueClient_AcknowledgeMessage(t *testing.T) {
 				t.Errorf("ChronoQueueClient.AcknowledgeMessage() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestChronoQueueClient_AcknowledgeMessage_WithAttemptInfo(t *testing.T) {
+	server := &mockChronoQueueServer{}
+	listener := bufconn.Listen(1024 * 1024)
+	grpcServer := grpc.NewServer()
+	queueservice_pb.RegisterQueueServiceServer(grpcServer, server)
+
+	go func() {
+		_ = grpcServer.Serve(listener)
+	}()
+
+	connector := func(address string, opts ClientOptions) (queueservice_pb.QueueServiceClient, *grpc.ClientConn, error) {
+		dialer := func(context.Context, string) (net.Conn, error) {
+			return listener.Dial()
+		}
+		ctx := context.Background()
+		conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(dialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return nil, nil, err
+		}
+		return queueservice_pb.NewQueueServiceClient(conn), conn, nil
+	}
+
+	client, err := NewChronoQueueClient("bufnet", ClientOptions{Connector: connector})
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+	defer client.Close()
+
+	client.SetAttemptInfo("msg-1", "attempt-123", "worker-xyz")
+	_, err = client.AcknowledgeMessage(context.Background(), "q1", "msg-1", 3, "")
+	if err != nil {
+		t.Fatalf("ack failed: %v", err)
+	}
+
+	if server.lastAckAttemptID != "attempt-123" {
+		t.Fatalf("expected attempt id to propagate, got %s", server.lastAckAttemptID)
+	}
+	if server.lastAckWorkerID != "worker-xyz" {
+		t.Fatalf("expected worker id to propagate, got %s", server.lastAckWorkerID)
 	}
 }
 

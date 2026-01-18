@@ -176,7 +176,17 @@ type LeasePolicy struct {
 	//	extend_step = 2s
 	//
 	// The attempt can slide its lease by 2s increments up to ~13s total.
-	ExtendStep    *durationpb.Duration `protobuf:"bytes,4,opt,name=extend_step,json=extendStep,proto3" json:"extend_step,omitempty"`
+	ExtendStep *durationpb.Duration `protobuf:"bytes,4,opt,name=extend_step,json=extendStep,proto3" json:"extend_step,omitempty"`
+	// max_renewals:
+	// Maximum number of times a lease can be renewed/extended.
+	// If set to 0 or unset, unlimited renewals are allowed.
+	// This prevents messages from being held indefinitely by stuck workers.
+	//
+	// Example:
+	//
+	//	max_renewals = 5
+	//	A worker can renew the lease up to 5 times, after which ExtendMessageLease fails.
+	MaxRenewals   int32 `protobuf:"varint,5,opt,name=max_renewals,json=maxRenewals,proto3" json:"max_renewals,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -239,6 +249,13 @@ func (x *LeasePolicy) GetExtendStep() *durationpb.Duration {
 	return nil
 }
 
+func (x *LeasePolicy) GetMaxRenewals() int32 {
+	if x != nil {
+		return x.MaxRenewals
+	}
+	return 0
+}
+
 var File_proto_common_v1_common_proto protoreflect.FileDescriptor
 
 const file_proto_common_v1_common_proto_rawDesc = "" +
@@ -252,14 +269,15 @@ const file_proto_common_v1_common_proto_rawDesc = "" +
 	"\x0eschema_version\x18\x05 \x01(\x05R\rschemaVersion\x1aS\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
-	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\"\x8b\x02\n" +
+	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\"\xae\x02\n" +
 	"\vLeasePolicy\x128\n" +
 	"\n" +
 	"base_lease\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\tbaseLease\x12>\n" +
 	"\rmax_extension\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\fmaxExtension\x12F\n" +
 	"\x11heartbeat_timeout\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\x10heartbeatTimeout\x12:\n" +
 	"\vextend_step\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\n" +
-	"extendStepB6Z4github.com/adrien19/chronoqueue/api/common/v1;commonb\x06proto3"
+	"extendStep\x12!\n" +
+	"\fmax_renewals\x18\x05 \x01(\x05R\vmaxRenewalsB6Z4github.com/adrien19/chronoqueue/api/common/v1;commonb\x06proto3"
 
 var (
 	file_proto_common_v1_common_proto_rawDescOnce sync.Once

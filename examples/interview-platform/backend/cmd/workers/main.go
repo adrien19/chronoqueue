@@ -18,7 +18,7 @@ func main() {
 	log.Println("Starting ChronoQueue Workers...")
 
 	// Initialize database (shared with API)
-	database, err := db.NewDatabase("/workspaces/chronoqueue/logs/api_interview_platform.db")
+	database, err := db.NewDatabase("/workspaces/chronoqueue/examples/interview-platform/logs/api_interview_platform.db")
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
@@ -26,7 +26,7 @@ func main() {
 	log.Println("Database initialized successfully")
 
 	// Connect to ChronoQueue
-	queueClient, err := client.NewChronoQueueClient("localhost:50051", client.ClientOptions{
+	queueClient, err := client.NewChronoQueueClient("127.0.0.1:9000", client.ClientOptions{
 		MaxRetries:     10,
 		InitialBackoff: 1 * time.Second,
 		MaxBackoff:     10 * time.Second,
@@ -35,7 +35,7 @@ func main() {
 		log.Fatalf("Failed to connect to ChronoQueue: %v", err)
 	}
 	defer queueClient.Close()
-	log.Println("Connected to ChronoQueue at localhost:50051")
+	log.Println("Connected to ChronoQueue at 127.0.0.1:9000")
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())

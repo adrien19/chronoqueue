@@ -1,0 +1,112 @@
+
+services:
+  chronoqueuesvc:
+    container_name: chronoqueue-server
+    hostname: chronoqueue-server
+    build:
+      context: ..
+      dockerfile: ./images/Dockerfile
+    environment:
+      - SERVER_MODE=development
+      - STORAGE_TYPE=postgres
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=chronoqueue
+      - POSTGRES_PASSWORD=chronoqueue_dev_password
+      - POSTGRES_DB=chronoqueue
+      - POSTGRES_SSLMODE=disable
+      - GRPC_ADDR=:9000
+      - HTTP_ADDR=:8080
+      - LOG_LEVEL=debug
+      - LOG_FORMAT=text
+      - SERVER_CERT_PATH=/secrets/server.crt
+      - SERVER_KEY_PATH=/secrets/server.key
+      - CA_CERT_PATH=/secrets/ca.crt
+      - CHRONOQUEUE_TLS_ENABLED=false
+      - ENABLE_ENCRYPTION=true
+      - ENCRYPTION_KEY_SOURCE_TYPE=LOCAL
+      - ENCRYPTION_KEY=0123456789abcdef0123456789abcdef
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - chronoqueue-network
+    volumes:
+      - ${WORKSPACE_FOLDER}/certs:/secrets
+    ports:
+      - "9000:9000"
+      - "8080:8080"
+    restart: unless-stopped
+
+  chronoqueueui:
+    container_name: chronoqueue-ui
+    hostname: chronoqueue-ui
+    build:
+      context: ..
+      dockerfile: ./images/Dockerfile
+    entrypoint: ["/chronoqueue"]
+    command:
+      - ui
+      - start
+      - --port
+      - "8083"
+      - --grpc-address
+      - chronoqueue-server:9000
+    depends_on:
+      - chronoqueuesvc
+    networks:
+      - chronoqueue-network
+    ports:
+      - "8083:8083"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: chronoqueue-postgres
+    hostname: postgres
+    environment:
+      - POSTGRES_USER=chronoqueue
+      - POSTGRES_PASSWORD=chronoqueue_dev_password
+      - POSTGRES_DB=chronoqueue
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    networks:
+      - chronoqueue-network
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chronoqueue"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  pg_admin:
+    image: dpage/pgadmin4:latest
+    container_name: chronoqueue-pgadmin
+    hostname: pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@example.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadminData:/var/lib/pgadmin
+    networks:
+      - chronoqueue-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  chronoqueue-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local
+  pgadminData:
+    driver: local

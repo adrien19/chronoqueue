@@ -52,8 +52,8 @@ func (w *ReportGeneratorWorker) Start(ctx context.Context) error {
 			}
 
 			msg := response.GetMessage()
-			streamEntryID := response.GetStreamEntryId()
-			if err := w.processMessage(ctx, queueName, msg, streamEntryID); err != nil {
+			attemptID := response.GetAttemptId()
+			if err := w.processMessage(ctx, queueName, msg, attemptID); err != nil {
 				log.Printf("[Report Generator] Error processing message %s: %v", msg.GetMessageId(), err)
 			}
 		}
@@ -61,18 +61,18 @@ func (w *ReportGeneratorWorker) Start(ctx context.Context) error {
 }
 
 // processMessage handles a single report generation message
-func (w *ReportGeneratorWorker) processMessage(ctx context.Context, queueName string, msg *message_pb.Message, streamEntryID string) error {
+func (w *ReportGeneratorWorker) processMessage(ctx context.Context, queueName string, msg *message_pb.Message, attemptID string) error {
 	log.Printf("[Report Generator] Processing message: %s", msg.GetMessageId())
 
 	metadata := msg.GetMetadata()
 	if metadata == nil || metadata.GetPayload() == nil {
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, attemptID)
 		return nil
 	}
 
 	payloadData := metadata.GetPayload().GetData()
 	if payloadData == nil {
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, attemptID)
 		return nil
 	}
 
@@ -83,7 +83,7 @@ func (w *ReportGeneratorWorker) processMessage(ctx context.Context, queueName st
 	action, _ := fields["action"].(string)
 
 	if reportID == "" || interviewID == "" {
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, attemptID)
 		return nil
 	}
 
@@ -91,7 +91,7 @@ func (w *ReportGeneratorWorker) processMessage(ctx context.Context, queueName st
 	report, err := w.db.GetReport(reportID)
 	if err != nil {
 		log.Printf("[Report Generator] Report not found: %v", err)
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, attemptID)
 		return err
 	}
 
@@ -146,7 +146,7 @@ func (w *ReportGeneratorWorker) processMessage(ctx context.Context, queueName st
 	}
 
 	// Acknowledge message
-	if _, err := w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID); err != nil {
+	if _, err := w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, attemptID); err != nil {
 		log.Printf("[Report Generator] Failed to acknowledge message: %v", err)
 		return err
 	}

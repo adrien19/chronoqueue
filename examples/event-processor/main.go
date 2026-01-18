@@ -21,7 +21,7 @@ func main() {
 		Long:  `A comprehensive demonstration of high-throughput event processing with Redis Streams architecture.`,
 	}
 
-	rootCmd.PersistentFlags().StringVar(&serverAddr, "server", ":9000", "ChronoQueue server address")
+	rootCmd.PersistentFlags().StringVar(&serverAddr, "server", "host.docker.internal:9000", "ChronoQueue server address")
 	rootCmd.PersistentFlags().BoolVar(&insecure, "insecure", true, "Use insecure connection (no TLS)")
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 

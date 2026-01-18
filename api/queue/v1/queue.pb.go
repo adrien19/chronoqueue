@@ -135,6 +135,64 @@ func (FairnessPolicy) EnumDescriptor() ([]byte, []int) {
 	return file_proto_queue_v1_queue_proto_rawDescGZIP(), []int{1}
 }
 
+type MessageRetentionPolicy_Mode int32
+
+const (
+	// DELETE_IMMEDIATELY: Remove message from database immediately upon acknowledgment.
+	// Default behavior - maintains backward compatibility.
+	// Use when: No audit requirements, minimal storage preferred, development/testing.
+	MessageRetentionPolicy_DELETE_IMMEDIATELY MessageRetentionPolicy_Mode = 0
+	// RETAIN_DURATION: Soft-delete messages and remove after retention_seconds.
+	// Messages remain queryable during retention period.
+	// Use when: Need temporary audit trail, compliance with retention periods.
+	MessageRetentionPolicy_RETAIN_DURATION MessageRetentionPolicy_Mode = 1
+	// RETAIN_FOREVER: Soft-delete messages but never auto-remove them.
+	// Messages remain queryable indefinitely (manual deletion only).
+	// Use when: Permanent audit trail required, event sourcing, compliance.
+	MessageRetentionPolicy_RETAIN_FOREVER MessageRetentionPolicy_Mode = 2
+)
+
+// Enum value maps for MessageRetentionPolicy_Mode.
+var (
+	MessageRetentionPolicy_Mode_name = map[int32]string{
+		0: "DELETE_IMMEDIATELY",
+		1: "RETAIN_DURATION",
+		2: "RETAIN_FOREVER",
+	}
+	MessageRetentionPolicy_Mode_value = map[string]int32{
+		"DELETE_IMMEDIATELY": 0,
+		"RETAIN_DURATION":    1,
+		"RETAIN_FOREVER":     2,
+	}
+)
+
+func (x MessageRetentionPolicy_Mode) Enum() *MessageRetentionPolicy_Mode {
+	p := new(MessageRetentionPolicy_Mode)
+	*p = x
+	return p
+}
+
+func (x MessageRetentionPolicy_Mode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MessageRetentionPolicy_Mode) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_queue_v1_queue_proto_enumTypes[2].Descriptor()
+}
+
+func (MessageRetentionPolicy_Mode) Type() protoreflect.EnumType {
+	return &file_proto_queue_v1_queue_proto_enumTypes[2]
+}
+
+func (x MessageRetentionPolicy_Mode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MessageRetentionPolicy_Mode.Descriptor instead.
+func (MessageRetentionPolicy_Mode) EnumDescriptor() ([]byte, []int) {
+	return file_proto_queue_v1_queue_proto_rawDescGZIP(), []int{1, 0}
+}
+
 // QueueMetadata defines the configuration and behavior of a queue.
 //
 // This controls:
@@ -218,9 +276,13 @@ type QueueMetadata struct {
 	// Lease model defaults (queue-level)
 	// ---------------------------------------------------------------------------
 	// Message-level policies can selectively override these fields.
-	LeasePolicy   *v1.LeasePolicy `protobuf:"bytes,13,opt,name=lease_policy,json=leasePolicy,proto3" json:"lease_policy,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	LeasePolicy *v1.LeasePolicy `protobuf:"bytes,13,opt,name=lease_policy,json=leasePolicy,proto3" json:"lease_policy,omitempty"`
+	// message_retention_policy: Controls how long messages are retained after completion/error.
+	// By default (if not set), messages are deleted immediately upon acknowledgment.
+	// Configure retention for audit trails, debugging, compliance, or analytics.
+	MessageRetentionPolicy *MessageRetentionPolicy `protobuf:"bytes,14,opt,name=message_retention_policy,json=messageRetentionPolicy,proto3" json:"message_retention_policy,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *QueueMetadata) Reset() {
@@ -337,6 +399,87 @@ func (x *QueueMetadata) GetLeasePolicy() *v1.LeasePolicy {
 	return nil
 }
 
+func (x *QueueMetadata) GetMessageRetentionPolicy() *MessageRetentionPolicy {
+	if x != nil {
+		return x.MessageRetentionPolicy
+	}
+	return nil
+}
+
+// MessageRetentionPolicy defines message retention behavior after processing.
+//
+// Use cases:
+// - DELETE_IMMEDIATELY: Ephemeral queues, development, testing (minimal storage)
+// - RETAIN_DURATION: Production queues with audit requirements (e.g., 30 days)
+// - RETAIN_FOREVER: Critical queues with permanent audit trails (e.g., financial transactions)
+//
+// Example configurations:
+//
+//  1. Default behavior (delete immediately):
+//     retention_policy: nil or { mode: DELETE_IMMEDIATELY }
+//
+//  2. Retain for 30 days (audit trail):
+//     retention_policy: { mode: RETAIN_DURATION, retention_seconds: 2592000 }
+//
+//  3. Retain forever (compliance):
+//     retention_policy: { mode: RETAIN_FOREVER }
+type MessageRetentionPolicy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// mode: Retention strategy for this queue's messages.
+	Mode MessageRetentionPolicy_Mode `protobuf:"varint,1,opt,name=mode,proto3,enum=chronoqueue.api.queue.v1.MessageRetentionPolicy_Mode" json:"mode,omitempty"`
+	// retention_seconds: How long to retain messages (used with RETAIN_DURATION mode).
+	// After this period, messages are permanently deleted by background cleanup service.
+	// Common values: 86400 (1 day), 604800 (7 days), 2592000 (30 days).
+	// Ignored for DELETE_IMMEDIATELY and RETAIN_FOREVER modes.
+	RetentionSeconds int64 `protobuf:"varint,2,opt,name=retention_seconds,json=retentionSeconds,proto3" json:"retention_seconds,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *MessageRetentionPolicy) Reset() {
+	*x = MessageRetentionPolicy{}
+	mi := &file_proto_queue_v1_queue_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MessageRetentionPolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageRetentionPolicy) ProtoMessage() {}
+
+func (x *MessageRetentionPolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queue_v1_queue_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageRetentionPolicy.ProtoReflect.Descriptor instead.
+func (*MessageRetentionPolicy) Descriptor() ([]byte, []int) {
+	return file_proto_queue_v1_queue_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *MessageRetentionPolicy) GetMode() MessageRetentionPolicy_Mode {
+	if x != nil {
+		return x.Mode
+	}
+	return MessageRetentionPolicy_DELETE_IMMEDIATELY
+}
+
+func (x *MessageRetentionPolicy) GetRetentionSeconds() int64 {
+	if x != nil {
+		return x.RetentionSeconds
+	}
+	return 0
+}
+
 // PriorityConfig provides fine-grained control over priority-based processing.
 //
 // Example - Weighted fairness with aging:
@@ -377,7 +520,7 @@ type PriorityConfig struct {
 
 func (x *PriorityConfig) Reset() {
 	*x = PriorityConfig{}
-	mi := &file_proto_queue_v1_queue_proto_msgTypes[1]
+	mi := &file_proto_queue_v1_queue_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -389,7 +532,7 @@ func (x *PriorityConfig) String() string {
 func (*PriorityConfig) ProtoMessage() {}
 
 func (x *PriorityConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queue_v1_queue_proto_msgTypes[1]
+	mi := &file_proto_queue_v1_queue_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -402,7 +545,7 @@ func (x *PriorityConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PriorityConfig.ProtoReflect.Descriptor instead.
 func (*PriorityConfig) Descriptor() ([]byte, []int) {
-	return file_proto_queue_v1_queue_proto_rawDescGZIP(), []int{1}
+	return file_proto_queue_v1_queue_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *PriorityConfig) GetPolicy() FairnessPolicy {
@@ -463,7 +606,7 @@ type Queue struct {
 
 func (x *Queue) Reset() {
 	*x = Queue{}
-	mi := &file_proto_queue_v1_queue_proto_msgTypes[2]
+	mi := &file_proto_queue_v1_queue_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -475,7 +618,7 @@ func (x *Queue) String() string {
 func (*Queue) ProtoMessage() {}
 
 func (x *Queue) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queue_v1_queue_proto_msgTypes[2]
+	mi := &file_proto_queue_v1_queue_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -488,7 +631,7 @@ func (x *Queue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Queue.ProtoReflect.Descriptor instead.
 func (*Queue) Descriptor() ([]byte, []int) {
-	return file_proto_queue_v1_queue_proto_rawDescGZIP(), []int{2}
+	return file_proto_queue_v1_queue_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Queue) GetName() string {
@@ -509,7 +652,7 @@ var File_proto_queue_v1_queue_proto protoreflect.FileDescriptor
 
 const file_proto_queue_v1_queue_proto_rawDesc = "" +
 	"\n" +
-	"\x1aproto/queue/v1/queue.proto\x12\x18chronoqueue.api.queue.v1\x1a\x1cproto/common/v1/common.proto\x1a\x1egoogle/protobuf/duration.proto\"\xa1\x05\n" +
+	"\x1aproto/queue/v1/queue.proto\x12\x18chronoqueue.api.queue.v1\x1a\x1cproto/common/v1/common.proto\x1a\x1egoogle/protobuf/duration.proto\"\x8d\x06\n" +
 	"\rQueueMetadata\x127\n" +
 	"\x04type\x18\x01 \x01(\x0e2#.chronoqueue.api.queue.v1.QueueTypeR\x04type\x120\n" +
 	"\x14default_max_attempts\x18\x02 \x01(\x05R\x12defaultMaxAttempts\x12@\n" +
@@ -523,7 +666,15 @@ const file_proto_queue_v1_queue_proto_rawDesc = "" +
 	" \x01(\x05R\x0emaxPayloadSize\x122\n" +
 	"\x15allowed_content_types\x18\v \x03(\tR\x13allowedContentTypes\x12Q\n" +
 	"\x0fpriority_config\x18\f \x01(\v2(.chronoqueue.api.queue.v1.PriorityConfigR\x0epriorityConfig\x12I\n" +
-	"\flease_policy\x18\r \x01(\v2&.chronoqueue.api.common.v1.LeasePolicyR\vleasePolicyJ\x04\b\x05\x10\x06R\x15invisibility_duration\"\xfd\x02\n" +
+	"\flease_policy\x18\r \x01(\v2&.chronoqueue.api.common.v1.LeasePolicyR\vleasePolicy\x12j\n" +
+	"\x18message_retention_policy\x18\x0e \x01(\v20.chronoqueue.api.queue.v1.MessageRetentionPolicyR\x16messageRetentionPolicyJ\x04\b\x05\x10\x06R\x15invisibility_duration\"\xd9\x01\n" +
+	"\x16MessageRetentionPolicy\x12I\n" +
+	"\x04mode\x18\x01 \x01(\x0e25.chronoqueue.api.queue.v1.MessageRetentionPolicy.ModeR\x04mode\x12+\n" +
+	"\x11retention_seconds\x18\x02 \x01(\x03R\x10retentionSeconds\"G\n" +
+	"\x04Mode\x12\x16\n" +
+	"\x12DELETE_IMMEDIATELY\x10\x00\x12\x13\n" +
+	"\x0fRETAIN_DURATION\x10\x01\x12\x12\n" +
+	"\x0eRETAIN_FOREVER\x10\x02\"\xfd\x02\n" +
 	"\x0ePriorityConfig\x12@\n" +
 	"\x06policy\x18\x01 \x01(\x0e2(.chronoqueue.api.queue.v1.FairnessPolicyR\x06policy\x12h\n" +
 	"\x10priority_weights\x18\x02 \x03(\v2=.chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntryR\x0fpriorityWeights\x12I\n" +
@@ -559,32 +710,36 @@ func file_proto_queue_v1_queue_proto_rawDescGZIP() []byte {
 	return file_proto_queue_v1_queue_proto_rawDescData
 }
 
-var file_proto_queue_v1_queue_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_proto_queue_v1_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proto_queue_v1_queue_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_proto_queue_v1_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_proto_queue_v1_queue_proto_goTypes = []any{
-	(QueueType)(0),              // 0: chronoqueue.api.queue.v1.QueueType
-	(FairnessPolicy)(0),         // 1: chronoqueue.api.queue.v1.FairnessPolicy
-	(*QueueMetadata)(nil),       // 2: chronoqueue.api.queue.v1.QueueMetadata
-	(*PriorityConfig)(nil),      // 3: chronoqueue.api.queue.v1.PriorityConfig
-	(*Queue)(nil),               // 4: chronoqueue.api.queue.v1.Queue
-	nil,                         // 5: chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntry
-	(*durationpb.Duration)(nil), // 6: google.protobuf.Duration
-	(*v1.LeasePolicy)(nil),      // 7: chronoqueue.api.common.v1.LeasePolicy
+	(QueueType)(0),                   // 0: chronoqueue.api.queue.v1.QueueType
+	(FairnessPolicy)(0),              // 1: chronoqueue.api.queue.v1.FairnessPolicy
+	(MessageRetentionPolicy_Mode)(0), // 2: chronoqueue.api.queue.v1.MessageRetentionPolicy.Mode
+	(*QueueMetadata)(nil),            // 3: chronoqueue.api.queue.v1.QueueMetadata
+	(*MessageRetentionPolicy)(nil),   // 4: chronoqueue.api.queue.v1.MessageRetentionPolicy
+	(*PriorityConfig)(nil),           // 5: chronoqueue.api.queue.v1.PriorityConfig
+	(*Queue)(nil),                    // 6: chronoqueue.api.queue.v1.Queue
+	nil,                              // 7: chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntry
+	(*durationpb.Duration)(nil),      // 8: google.protobuf.Duration
+	(*v1.LeasePolicy)(nil),           // 9: chronoqueue.api.common.v1.LeasePolicy
 }
 var file_proto_queue_v1_queue_proto_depIdxs = []int32{
-	0, // 0: chronoqueue.api.queue.v1.QueueMetadata.type:type_name -> chronoqueue.api.queue.v1.QueueType
-	6, // 1: chronoqueue.api.queue.v1.QueueMetadata.lease_duration:type_name -> google.protobuf.Duration
-	3, // 2: chronoqueue.api.queue.v1.QueueMetadata.priority_config:type_name -> chronoqueue.api.queue.v1.PriorityConfig
-	7, // 3: chronoqueue.api.queue.v1.QueueMetadata.lease_policy:type_name -> chronoqueue.api.common.v1.LeasePolicy
-	1, // 4: chronoqueue.api.queue.v1.PriorityConfig.policy:type_name -> chronoqueue.api.queue.v1.FairnessPolicy
-	5, // 5: chronoqueue.api.queue.v1.PriorityConfig.priority_weights:type_name -> chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntry
-	6, // 6: chronoqueue.api.queue.v1.PriorityConfig.age_boost_threshold:type_name -> google.protobuf.Duration
-	2, // 7: chronoqueue.api.queue.v1.Queue.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	0,  // 0: chronoqueue.api.queue.v1.QueueMetadata.type:type_name -> chronoqueue.api.queue.v1.QueueType
+	8,  // 1: chronoqueue.api.queue.v1.QueueMetadata.lease_duration:type_name -> google.protobuf.Duration
+	5,  // 2: chronoqueue.api.queue.v1.QueueMetadata.priority_config:type_name -> chronoqueue.api.queue.v1.PriorityConfig
+	9,  // 3: chronoqueue.api.queue.v1.QueueMetadata.lease_policy:type_name -> chronoqueue.api.common.v1.LeasePolicy
+	4,  // 4: chronoqueue.api.queue.v1.QueueMetadata.message_retention_policy:type_name -> chronoqueue.api.queue.v1.MessageRetentionPolicy
+	2,  // 5: chronoqueue.api.queue.v1.MessageRetentionPolicy.mode:type_name -> chronoqueue.api.queue.v1.MessageRetentionPolicy.Mode
+	1,  // 6: chronoqueue.api.queue.v1.PriorityConfig.policy:type_name -> chronoqueue.api.queue.v1.FairnessPolicy
+	7,  // 7: chronoqueue.api.queue.v1.PriorityConfig.priority_weights:type_name -> chronoqueue.api.queue.v1.PriorityConfig.PriorityWeightsEntry
+	8,  // 8: chronoqueue.api.queue.v1.PriorityConfig.age_boost_threshold:type_name -> google.protobuf.Duration
+	3,  // 9: chronoqueue.api.queue.v1.Queue.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_proto_queue_v1_queue_proto_init() }
@@ -597,8 +752,8 @@ func file_proto_queue_v1_queue_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_queue_v1_queue_proto_rawDesc), len(file_proto_queue_v1_queue_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   4,
+			NumEnums:      3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

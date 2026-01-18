@@ -18,8 +18,8 @@ option go_package = "github.com/adrien19/chronoqueue/api/queue/v1;queue";
 // - SIMPLE: Most common. Multiple workers can consume in parallel.
 // - EXCLUSIVE: Single-consumer queues for ordered processing or exclusive access.
 enum QueueType {
-    SIMPLE = 0;     // Multiple workers can consume messages concurrently (default)
-    EXCLUSIVE = 1;  // Only one worker can consume from this queue at a time
+  SIMPLE    = 0; // Multiple workers can consume messages concurrently (default)
+  EXCLUSIVE = 1; // Only one worker can consume from this queue at a time
                     // Use for: ordered processing, singleton workers, exclusive locks
 }
 
@@ -43,7 +43,7 @@ enum QueueType {
 //       MaxPayloadSize: 1024 * 512,  // 512KB
 //       AllowedContentTypes: []string{"application/json"},
 //   }
-message QueueMetadata {
+  message QueueMetadata {
     // Reserved field for backward compatibility (removed invisibility_duration feature)
     reserved 5;
     reserved "invisibility_duration";
@@ -120,66 +120,116 @@ message QueueMetadata {
     // ---------------------------------------------------------------------------
     // Message-level policies can selectively override these fields.
     chronoqueue.api.common.v1.LeasePolicy lease_policy = 13;
-}
+
+    // message_retention_policy: Controls how long messages are retained after completion/error.
+    // By default (if not set), messages are deleted immediately upon acknowledgment.
+    // Configure retention for audit trails, debugging, compliance, or analytics.
+    MessageRetentionPolicy message_retention_policy = 14;
+  }
+
+// MessageRetentionPolicy defines message retention behavior after processing.
+//
+// Use cases:
+// - DELETE_IMMEDIATELY: Ephemeral queues, development, testing (minimal storage)
+// - RETAIN_DURATION: Production queues with audit requirements (e.g., 30 days)
+// - RETAIN_FOREVER: Critical queues with permanent audit trails (e.g., financial transactions)
+//
+// Example configurations:
+//
+// 1. Default behavior (delete immediately):
+//    retention_policy: nil or { mode: DELETE_IMMEDIATELY }
+//
+// 2. Retain for 30 days (audit trail):
+//    retention_policy: { mode: RETAIN_DURATION, retention_seconds: 2592000 }
+//
+// 3. Retain forever (compliance):
+//    retention_policy: { mode: RETAIN_FOREVER }
+  message MessageRetentionPolicy {
+    enum Mode {
+        // DELETE_IMMEDIATELY: Remove message from database immediately upon acknowledgment.
+        // Default behavior - maintains backward compatibility.
+        // Use when: No audit requirements, minimal storage preferred, development/testing.
+      DELETE_IMMEDIATELY = 0;
+
+        // RETAIN_DURATION: Soft-delete messages and remove after retention_seconds.
+        // Messages remain queryable during retention period.
+        // Use when: Need temporary audit trail, compliance with retention periods.
+      RETAIN_DURATION = 1;
+
+        // RETAIN_FOREVER: Soft-delete messages but never auto-remove them.
+        // Messages remain queryable indefinitely (manual deletion only).
+        // Use when: Permanent audit trail required, event sourcing, compliance.
+      RETAIN_FOREVER = 2;
+    }
+
+    // mode: Retention strategy for this queue's messages.
+    Mode mode = 1;
+
+    // retention_seconds: How long to retain messages (used with RETAIN_DURATION mode).
+    // After this period, messages are permanently deleted by background cleanup service.
+    // Common values: 86400 (1 day), 604800 (7 days), 2592000 (30 days).
+    // Ignored for DELETE_IMMEDIATELY and RETAIN_FOREVER modes.
+    int64 retention_seconds = 2;
+  }
 
 // FairnessPolicy determines how messages with different priorities compete for processing.
 //
 // Priority fairness is critical in systems with both urgent and background tasks.
 // Without fairness policies, low-priority messages could starve indefinitely.
-enum FairnessPolicy {
-    STRICT = 0;     // Process strictly by priority (high before medium before low)
+  enum FairnessPolicy {
+    STRICT = 0; // Process strictly by priority (high before medium before low)
                     // Risk: Low-priority messages can starve if high-priority keeps arriving
                     // Use when: Priority is absolute (emergency alerts, system critical tasks)
 
-    WEIGHTED = 1;   // Balance priority with fairness using weights
+    WEIGHTED = 1; // Balance priority with fairness using weights
                     // Example: Process 70% high, 20% medium, 10% low priority messages
                     // Use when: You want guaranteed progress for all priorities
 
-    AGING = 2;      // Boost priority of messages waiting too long
+    AGING = 2; // Boost priority of messages waiting too long
                     // Low-priority messages gradually increase priority over time
                     // Use when: You want to prevent starvation while maintaining priorities
 
-    HYBRID = 3;     // Combines weighted and aging strategies
+    HYBRID = 3; // Combines weighted and aging strategies
                     // Most sophisticated - maintains priorities while ensuring progress
                     // Use when: Complex requirements (e.g., SLA-based processing)
-}
+  }
 
 // PriorityConfig provides fine-grained control over priority-based processing.
 //
 // Example - Weighted fairness with aging:
 //   config := &queue.PriorityConfig{
 //       Policy: queue.FairnessPolicy_HYBRID,
-//       PriorityWeights: map[int32]int32{
-//           100: 70,  // High priority: 70% of processing capacity
-//           50:  20,  // Medium priority: 20%
-//           10:  10,  // Low priority: 10%
-//       },
+    //       PriorityWeights: map[int32]int32{
+      //           100: 70,  // High priority: 70% of processing capacity
+      //           50:  20,  // Medium priority: 20%
+      //           10:  10,  // Low priority: 10%
+      //       },
 //       AgeBoostThreshold: durationpb.New(30*time.Minute),  // Boost after 30min wait
 //       AgeBoostMultiplier: 2,  // Double the priority every 30min
 //   }
-message PriorityConfig {
+    message PriorityConfig {
     // policy: The fairness strategy to use.
     // See FairnessPolicy enum for detailed descriptions.
-    FairnessPolicy policy = 1;
+      FairnessPolicy policy = 1;
 
     // priority_weights: For WEIGHTED/HYBRID policies, maps priority levels to weights.
     // Key: priority level (e.g., 100, 50, 10)
     // Value: relative weight (e.g., 70, 20, 10 = 70% high, 20% medium, 10% low)
     // Weights are relative - they're normalized to percentages.
-    map<int32, int32> priority_weights = 2;
+      map<int32, int32> priority_weights = 2;
 
     // age_boost_threshold: For AGING/HYBRID policies, how long before boosting priority.
     // Messages waiting longer than this duration get their priority boosted.
     // Prevents indefinite starvation of low-priority messages.
     // Typical values: 15m (aggressive), 30m (standard), 1h (relaxed).
-    google.protobuf.Duration age_boost_threshold = 3;
+      google.protobuf.Duration age_boost_threshold = 3;
 
     // age_boost_multiplier: For AGING/HYBRID policies, how much to boost priority.
     // Priority multiplied by this factor every age_boost_threshold period.
     // Example: multiplier=2, threshold=30m means priority doubles every 30 minutes.
     // Typical values: 1.5 (gentle), 2 (standard), 3 (aggressive).
-    int32 age_boost_multiplier = 4;
-}
+      int32 age_boost_multiplier = 4;
+    }
 
 // Queue represents a named message container with specific processing behavior.
 //
@@ -196,13 +246,13 @@ message PriorityConfig {
 // - "webhook-deliveries"        // External API calls
 // - "data-analytics-high"       // Time-sensitive analytics
 // - "cleanup-tasks-low"         // Background maintenance
-message Queue {
+    message Queue {
     // name: Unique identifier for this queue.
     // Must be unique across your ChronoQueue instance.
     // Naming convention: lowercase, hyphens, descriptive
     // Examples: "order-processing", "email-sender", "webhook-delivery"
-    string name = 1;
+      string name = 1;
 
     // metadata: Queue configuration and behavior settings.
-    QueueMetadata metadata = 2;
-}
+      QueueMetadata metadata = 2;
+    }

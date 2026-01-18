@@ -19,11 +19,11 @@ option go_package = "github.com/adrien19/chronoqueue/api/common/v1;common";
 //
 // Example usage in Go:
 //   payload := &common.Payload{
-//       Metadata: map[string]*structpb.Value{
-//           "source": structpb.NewStringValue("web-api"),
-//           "user_id": structpb.NewStringValue("user-123"),
-//           "correlation_id": structpb.NewStringValue("req-xyz"),
-//       },
+  //       Metadata: map[string]*structpb.Value{
+    //           "source": structpb.NewStringValue("web-api"),
+    //           "user_id": structpb.NewStringValue("user-123"),
+    //           "correlation_id": structpb.NewStringValue("req-xyz"),
+    //       },
 //       Data: dataStruct, // Your business data
 //       ContentType: "application/json",
 //       SchemaId: "order.v1",      // Optional: enforce schema
@@ -35,7 +35,7 @@ option go_package = "github.com/adrien19/chronoqueue/api/common/v1;common";
 // - Use content_type to indicate data format (aids debugging and processing)
 // - Use schema_id for validation in production to catch data quality issues early
 // - Keep payloads under 256KB for optimal performance (configurable per queue)
-message Payload {
+  message Payload {
     // metadata: Custom key-value pairs for message routing, filtering, and tracking.
     // Common uses: correlation IDs, trace context, source system, user ID, tenant ID.
     // These values are indexed and can be queried without deserializing the data field.
@@ -61,15 +61,15 @@ message Payload {
     // Allows schema evolution while maintaining backward compatibility.
     // If omitted, uses the latest active version of schema_id.
     int32 schema_version = 5;
-}
+  }
 
 // LeasePolicy defines how long a single processing attempt is allowed to run,
 // and how heartbeats can extend that time.
-message LeasePolicy {
+  message LeasePolicy {
   // base_lease:
   // Initial lease duration for an attempt (L_base).
   // The attempt starts with this much time before timing out, unless extended.
-  google.protobuf.Duration base_lease = 1;
+    google.protobuf.Duration base_lease = 1;
 
   // max_extension:
   // Maximum additional time beyond base_lease that an attempt may obtain via
@@ -77,12 +77,12 @@ message LeasePolicy {
   //
   // Effective per-attempt cap:
   //   base_lease + max_extension
-  google.protobuf.Duration max_extension = 2;
+    google.protobuf.Duration max_extension = 2;
 
   // heartbeat_timeout:
   // Maximum allowed gap between heartbeats (H).
   // If zero/unset, heartbeat-based timeout is disabled.
-  google.protobuf.Duration heartbeat_timeout = 3;
+    google.protobuf.Duration heartbeat_timeout = 3;
 
   // extend_step:
   // Amount of time to extend the lease by when a heartbeat is received,
@@ -94,5 +94,15 @@ message LeasePolicy {
   //   extend_step = 2s
   //
   // The attempt can slide its lease by 2s increments up to ~13s total.
-  google.protobuf.Duration extend_step = 4;
-}
+    google.protobuf.Duration extend_step = 4;
+
+  // max_renewals:
+  // Maximum number of times a lease can be renewed/extended.
+  // If set to 0 or unset, unlimited renewals are allowed.
+  // This prevents messages from being held indefinitely by stuck workers.
+  //
+  // Example:
+  //   max_renewals = 5
+  //   A worker can renew the lease up to 5 times, after which ExtendMessageLease fails.
+    int32 max_renewals = 5;
+  }

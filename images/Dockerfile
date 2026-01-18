@@ -1,45 +1,52 @@
-# Build the cipher service binary
-# FROM golang:1.19.7-stretch as base
-# FROM golang:1.19.7-alpine3.17 as base
-FROM golang:1.25.0-alpine3.22 as base
+# Production Dockerfile (Postgres/Redis)
+# Pure Go build - no CGO, fully static binary, cross-platform compatible
+# For SQLite support, use Dockerfile.sqlite instead
 
-# add the working directory for the workflow service
-WORKDIR /go/src/chronoqueuesvr
+FROM golang:1.25.0-alpine3.22 as builder
 
-# Copy the server code
+# Set working directory
+WORKDIR /build
+
+# Copy dependency files first (better layer caching)
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
 COPY api api
 COPY cmd/chronoq cmd/chronoq
 COPY client client
-# COPY client client
 COPY internal internal
 COPY pkg pkg
-
 COPY main.go ./
-COPY go.mod go.sum ./
-RUN go mod download
-# && go mod verify
 
 # Build arguments for version injection
 ARG VERSION=1.0.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
-# building server binary with version information
-RUN go build -ldflags="-X 'github.com/adrien19/chronoqueue/pkg/version.Version=${VERSION}' \
+# Build static binary (no CGO, fully portable)
+# Production backends: Postgres, Redis - no SQLite
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s -X 'github.com/adrien19/chronoqueue/pkg/version.Version=${VERSION}' \
     -X 'github.com/adrien19/chronoqueue/pkg/version.GitCommit=${GIT_COMMIT}' \
     -X 'github.com/adrien19/chronoqueue/pkg/version.BuildDate=${BUILD_DATE}'" \
-    -o chronoqueue main.go
+    -o chronoqueue \
+    main.go
 
-## Using the multi-stage image to just run the binary
-FROM alpine:latest as final
+## Runtime stage - minimal image with just the binary
+FROM alpine:latest
 
-# Init working directory to root /
+# Install CA certificates for HTTPS/TLS and timezone data for calendar schedules
+RUN apk add --no-cache ca-certificates tzdata
+
+# Set working directory
 WORKDIR /
 
-# Copy just the binary from the base image
-RUN mkdir ./config
-RUN mkdir /secrets
-COPY --from=base /go/src/chronoqueuesvr/chronoqueue .
+# Create necessary directories
+RUN mkdir -p /config /secrets
+
+# Copy binary from builder
+COPY --from=builder /build/chronoqueue /chronoqueue
 
 # Copy entrypoint script
 COPY images/entrypoint.sh /entrypoint.sh

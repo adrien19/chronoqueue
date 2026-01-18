@@ -1179,6 +1179,16 @@
       "default": "MONTHLY",
       "description": "ScheduleType categorizes the primary scheduling pattern.\nDetermines which rule types are applicable.\n\n - MONTHLY: Executes monthly (1st of month, last Friday, etc.)\n - WEEKLY: Executes weekly (every Monday, bi-weekly, etc.)\n - DAILY: Executes daily (every day, weekdays only, etc.)\n - YEARLY: Executes yearly (birthdays, anniversaries, annual reports)\n - BUSINESS_DAYS: Executes on business days (respects holidays/weekends)\n - CUSTOM: Custom logic via expression language"
     },
+    "MessageRetentionPolicyMode": {
+      "type": "string",
+      "enum": [
+        "DELETE_IMMEDIATELY",
+        "RETAIN_DURATION",
+        "RETAIN_FOREVER"
+      ],
+      "default": "DELETE_IMMEDIATELY",
+      "description": " - DELETE_IMMEDIATELY: DELETE_IMMEDIATELY: Remove message from database immediately upon acknowledgment.\nDefault behavior - maintains backward compatibility.\nUse when: No audit requirements, minimal storage preferred, development/testing.\n - RETAIN_DURATION: RETAIN_DURATION: Soft-delete messages and remove after retention_seconds.\nMessages remain queryable during retention period.\nUse when: Need temporary audit trail, compliance with retention periods.\n - RETAIN_FOREVER: RETAIN_FOREVER: Soft-delete messages but never auto-remove them.\nMessages remain queryable indefinitely (manual deletion only).\nUse when: Permanent audit trail required, event sourcing, compliance."
+    },
     "MetadataAttemptRuntime": {
       "type": "object",
       "properties": {
@@ -1861,6 +1871,11 @@
         "extendStep": {
           "type": "string",
           "description": "extend_step:\nAmount of time to extend the lease by when a heartbeat is received,\nuntil max_extension is exhausted.\n\nExample:\n  base_lease = 3s\n  max_extension = 10s\n  extend_step = 2s\n\nThe attempt can slide its lease by 2s increments up to ~13s total."
+        },
+        "maxRenewals": {
+          "type": "integer",
+          "format": "int32",
+          "description": "max_renewals:\nMaximum number of times a lease can be renewed/extended.\nIf set to 0 or unset, unlimited renewals are allowed.\nThis prevents messages from being held indefinitely by stuck workers.\n\nExample:\n  max_renewals = 5\n  A worker can renew the lease up to 5 times, after which ExtendMessageLease fails."
         }
       },
       "description": "LeasePolicy defines how long a single processing attempt is allowed to run,\nand how heartbeats can extend that time."
@@ -1991,6 +2006,21 @@
       ],
       "default": "INVISIBLE",
       "description": "State represents the message lifecycle stage.\n\nState transitions:\n  POST -\u003e INVISIBLE (if scheduled_time is set)\n  POST -\u003e PENDING (if no scheduled_time or scheduled_time is past)\n  INVISIBLE -\u003e PENDING (when scheduled_time arrives)\n  PENDING -\u003e RUNNING (when worker calls GetNextMessage)\n  RUNNING -\u003e COMPLETED (when worker calls AcknowledgeMessage)\n  RUNNING -\u003e PENDING (if lease expires without acknowledgment)\n  RUNNING -\u003e ERRORED (if max_attempts exhausted)\n  * -\u003e CANCELED (when CancelMessage is called)\n\nImportant: Messages in COMPLETED, CANCELED, and ERRORED states are terminal\nand won't be processed again (unless explicitly requeued from DLQ).\n\n - INVISIBLE: Scheduled for future, not yet visible to workers\n - PENDING: Ready to be consumed by workers (visible in queue)\n - RUNNING: Currently being processed (lease acquired)\n - COMPLETED: Successfully processed and acknowledged (terminal)\n - CANCELED: Manually canceled (terminal)\n - ERRORED: Failed after all retries, moved to DLQ (terminal)"
+    },
+    "v1MessageRetentionPolicy": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "$ref": "#/definitions/MessageRetentionPolicyMode",
+          "description": "mode: Retention strategy for this queue's messages."
+        },
+        "retentionSeconds": {
+          "type": "string",
+          "format": "int64",
+          "description": "retention_seconds: How long to retain messages (used with RETAIN_DURATION mode).\nAfter this period, messages are permanently deleted by background cleanup service.\nCommon values: 86400 (1 day), 604800 (7 days), 2592000 (30 days).\nIgnored for DELETE_IMMEDIATELY and RETAIN_FOREVER modes."
+        }
+      },
+      "description": "MessageRetentionPolicy defines message retention behavior after processing.\n\nUse cases:\n- DELETE_IMMEDIATELY: Ephemeral queues, development, testing (minimal storage)\n- RETAIN_DURATION: Production queues with audit requirements (e.g., 30 days)\n- RETAIN_FOREVER: Critical queues with permanent audit trails (e.g., financial transactions)\n\nExample configurations:\n\n1. Default behavior (delete immediately):\n   retention_policy: nil or { mode: DELETE_IMMEDIATELY }\n\n2. Retain for 30 days (audit trail):\n   retention_policy: { mode: RETAIN_DURATION, retention_seconds: 2592000 }\n\n3. Retain forever (compliance):\n   retention_policy: { mode: RETAIN_FOREVER }"
     },
     "v1MonthlyRule": {
       "type": "object",
@@ -2217,6 +2247,10 @@
         "leasePolicy": {
           "$ref": "#/definitions/v1LeasePolicy",
           "description": "---------------------------------------------------------------------------\nLease model defaults (queue-level)\n---------------------------------------------------------------------------\nMessage-level policies can selectively override these fields."
+        },
+        "messageRetentionPolicy": {
+          "$ref": "#/definitions/v1MessageRetentionPolicy",
+          "description": "message_retention_policy: Controls how long messages are retained after completion/error.\nBy default (if not set), messages are deleted immediately upon acknowledgment.\nConfigure retention for audit trails, debugging, compliance, or analytics."
         }
       },
       "description": "QueueMetadata defines the configuration and behavior of a queue.\n\nThis controls:\n- Message processing rules (retries, leases, priorities)\n- Data validation (schemas, content types)\n- Error handling (dead letter queues)\n- Consumer patterns (exclusivity, fairness)\n\nExample - Create a queue for order processing:\n  metadata := \u0026queue.QueueMetadata{\n      Type: queue.QueueType_SIMPLE,\n      DefaultMaxAttempts: 3,\n      LeaseDuration: durationpb.New(5*time.Minute),\n      DeadLetterQueueName: \"order-processing-dlq\",\n      AutoCreateDlq: true,\n      SchemaId: \"order.v1\",\n      SchemaRequired: true,\n      MaxPayloadSize: 1024 * 512,  // 512KB\n      AllowedContentTypes: []string{\"application/json\"},\n  }"

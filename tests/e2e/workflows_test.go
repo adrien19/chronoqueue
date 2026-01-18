@@ -127,11 +127,13 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 
 		t.Logf("  Message %d: %s (priority: %d)", i, getResp.Message.MessageId, getResp.Message.Metadata.Priority)
 
-		// Acknowledge message
+		// Acknowledge message with attempt_id and stream_entry_id from GetNextMessage response
 		_, err = client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
-			QueueName: queueName,
-			MessageId: getResp.Message.MessageId,
-			State:     message_pb.Message_Metadata_COMPLETED,
+			QueueName:     queueName,
+			MessageId:     getResp.Message.MessageId,
+			State:         message_pb.Message_Metadata_COMPLETED,
+			StreamEntryId: getResp.StreamEntryId,
+			AttemptId:     getResp.AttemptId,
 		})
 		require.NoError(t, err, "Failed to acknowledge message")
 		successfulCount++
@@ -202,11 +204,13 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 				if err == nil && getResp.Message != nil {
 					t.Logf("✓ Retrieved requeued message: %s", getResp.Message.MessageId)
 
-					// Acknowledge it
+					// Acknowledge it with attempt_id and stream_entry_id
 					_, err = client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
-						QueueName: queueName,
-						MessageId: getResp.Message.MessageId,
-						State:     message_pb.Message_Metadata_COMPLETED,
+						QueueName:     queueName,
+						MessageId:     getResp.Message.MessageId,
+						State:         message_pb.Message_Metadata_COMPLETED,
+						StreamEntryId: getResp.StreamEntryId,
+						AttemptId:     getResp.AttemptId,
 					})
 					require.NoError(t, err)
 					t.Log("✓ Requeued message processed successfully")
@@ -502,11 +506,13 @@ func TestE2E_MultiTenantIsolation(t *testing.T) {
 
 			tenantAConsumed++
 
-			// Acknowledge
+			// Acknowledge with attempt_id and stream_entry_id
 			_, _ = client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
-				QueueName: queueName,
-				MessageId: getResp.Message.MessageId,
-				State:     message_pb.Message_Metadata_COMPLETED,
+				QueueName:     queueName,
+				MessageId:     getResp.Message.MessageId,
+				State:         message_pb.Message_Metadata_COMPLETED,
+				StreamEntryId: getResp.StreamEntryId,
+				AttemptId:     getResp.AttemptId,
 			})
 		}
 	}
