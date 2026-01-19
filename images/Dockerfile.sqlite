@@ -2,7 +2,7 @@
 # Requires CGO for SQLite support
 # Used for integration testing and development with full feature set
 
-FROM golang:1.25.0-alpine3.22 as builder
+FROM golang:1.25.6-alpine3.22 as builder
 
 # Install C compiler and musl-dev (required for CGO/SQLite)
 RUN apk add --no-cache gcc musl-dev

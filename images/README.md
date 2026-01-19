@@ -114,7 +114,7 @@ Both Dockerfiles use multi-stage builds for optimization:
 
 ```dockerfile
 # Stage 1: Builder - compiles the Go binary
-FROM golang:1.25.0-alpine3.22 as builder
+FROM golang:6.0-alpine3.22 as builder
 # ... build steps ...
 
 # Stage 2: Runtime - minimal image with only the binary
