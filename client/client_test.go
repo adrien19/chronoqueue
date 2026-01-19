@@ -1312,6 +1312,7 @@ func TestChronoQueueClient_AcknowledgeMessage_WithAttemptInfo(t *testing.T) {
 			return listener.Dial()
 		}
 		ctx := context.Background()
+		//nolint:staticcheck // Using deprecated DialContext for test compatibility with bufconn
 		conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(dialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			return nil, nil, err
