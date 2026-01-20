@@ -6,23 +6,7 @@ go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@latest
 go get github.com/testcontainers/testcontainers-go
 go get github.com/testcontainers/testcontainers-go/wait
 go get github.com/stretchr/testify
-
-# Create services required for the project
-docker volume ls | grep -q "redisStoreData" || docker volume create redisStoreData
-
-# Check if Redis container exists
-if [ -z "$(docker container ls -a --filter name=^/redis$ --format '{{.Names}}')" ]; then
-    echo "Pulling and running Redis"
-    docker pull redis/redis-stack:latest
-    docker run -d --name redis -p 6379:6379 -p 8379:8001 -e REDIS_ARGS="--requirepass mypassword" \
-     -v redisStoreData:/data redis/redis-stack:latest
-else
-    echo "Starting redis"
-    docker start redis
-fi
-
-# Validate that the services are running
-docker container ls | grep -q "redis" && echo "Redis is running" || echo "Redis is not running"
+go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
 
 # Install Node.js dependencies for the frontend
 

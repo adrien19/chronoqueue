@@ -42,21 +42,50 @@ func initializeSystem(ctx context.Context) error {
 	}
 	defer c.Close()
 
+	// Queue configurations with different retention policies based on use case
 	queues := []struct {
-		name        string
-		description string
+		name            string
+		description     string
+		retentionPolicy *client.RetentionPolicyOption
 	}{
-		{EmailQueue, "Email notification events"},
-		{WebhookQueue, "Webhook delivery events"},
-		{SMSQueue, "SMS alert events"},
+		{
+			name:        EmailQueue,
+			description: "Email notification events",
+			// Retain email events for 7 days for delivery tracking and debugging
+			retentionPolicy: &client.RetentionPolicyOption{
+				Mode:             client.RETENTION_RETAIN_DURATION,
+				RetentionSeconds: 7 * 24 * 60 * 60, // 7 days
+			},
+		},
+		{
+			name:        WebhookQueue,
+			description: "Webhook delivery events",
+			// Retain webhook events for 30 days for audit trail and replay capability
+			retentionPolicy: &client.RetentionPolicyOption{
+				Mode:             client.RETENTION_RETAIN_DURATION,
+				RetentionSeconds: 30 * 24 * 60 * 60, // 30 days
+			},
+		},
+		{
+			name:        SMSQueue,
+			description: "SMS alert events",
+			// SMS alerts are transient - delete immediately after processing
+			retentionPolicy: nil, // DELETE_IMMEDIATELY (default)
+		},
 	}
 
 	fmt.Println("Initializing Event Processing System...")
 	for _, q := range queues {
 		queueOpts := client.QueueOptions{
-			Type:            int32(queuev1.QueueType_SIMPLE),
-			LeaseDuration:   "30s",
+			Type: int32(queuev1.QueueType_SIMPLE),
+			LeasePolicy: client.LeasePolicyOptions{
+				BaseLease:        "30s",
+				HeartbeatTimeout: "10s",
+				MaxExtension:     "60s",
+				ExtendStep:       "10s",
+			},
 			DequeueAttempts: 3,
+			RetentionPolicy: q.retentionPolicy,
 		}
 
 		_, err := c.CreateQueue(ctx, q.name, queueOpts)
@@ -73,9 +102,9 @@ func initializeSystem(ctx context.Context) error {
 
 	fmt.Println("\n✨ System initialized successfully!")
 	fmt.Printf("\nQueues created:\n")
-	fmt.Printf("  • %s - High-priority email notifications\n", EmailQueue)
-	fmt.Printf("  • %s - Webhook delivery with retries\n", WebhookQueue)
-	fmt.Printf("  • %s - SMS alerts for critical events\n", SMSQueue)
+	fmt.Printf("  • %s - High-priority email notifications (7-day retention)\n", EmailQueue)
+	fmt.Printf("  • %s - Webhook delivery with retries (30-day retention)\n", WebhookQueue)
+	fmt.Printf("  • %s - SMS alerts for critical events (immediate delete)\n", SMSQueue)
 
 	return nil
 }
@@ -118,9 +147,12 @@ func publishEvents(ctx context.Context, filename string) error {
 				Data:        payloadData,
 				ContentType: "application/json",
 			},
-			LeaseDuration: "30s",
-			MaxAttempts:   3,
-			Priority:      int64(priority),
+			LeasePolicy: client.LeasePolicyOptions{
+				BaseLease:        "30s",
+				HeartbeatTimeout: "10s",
+			},
+			MaxAttempts: 3,
+			Priority:    int64(priority),
 		}
 
 		// Handle scheduled messages

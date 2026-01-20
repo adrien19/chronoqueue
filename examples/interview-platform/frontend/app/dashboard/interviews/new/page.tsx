@@ -1,29 +1,30 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-} from "@/components/ui/card"
-import { ScheduleInterviewForm } from "@/components/forms/schedule-interview-form"
-import { useToast } from "@/hooks/use-toast"
-import { createInterview, type CreateInterviewRequest } from "@/lib/api/api"
+} from "@/components/ui/card";
+import { ScheduleInterviewForm } from "@/components/forms/schedule-interview-form";
+import { useToast } from "@/hooks/use-toast";
+import { apiClient } from "@/lib/api/client";
+import { CreateInterviewRequest } from "@/lib/types/api";
 
 export default function NewInterviewPage() {
-    const router = useRouter()
-    const { toast } = useToast()
-    const [isSubmitting, setIsSubmitting] = useState(false)
+    const router = useRouter();
+    const { toast } = useToast();
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleSubmit = async (data: any) => {
-        setIsSubmitting(true)
+        setIsSubmitting(true);
         try {
             // Transform form data to API format
             const interviewData: CreateInterviewRequest = {
@@ -37,29 +38,34 @@ export default function NewInterviewPage() {
                     : data.interviewers.split(',').map((s: string) => s.trim()).filter(Boolean),
                 tags: Array.isArray(data.tags)
                     ? data.tags
-                    : data.tags ? data.tags.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined,
-            }
+                    : data.tags ? data.tags.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+            };
+
+            console.log('[New Interview] Submitting interview data:', interviewData);
 
             // Call the API
-            const interview = await createInterview(interviewData)
+            const interview = await apiClient.createInterview(interviewData);
+
+            console.log('[New Interview] Interview created successfully:', interview);
 
             toast({
                 title: "Interview Scheduled",
                 description: `Interview with ${interview.candidateName} has been scheduled successfully.`,
-            })
+            });
 
-            router.push("/dashboard/interviews")
+            // Redirect to interviews page
+            router.push("/dashboard/interviews");
         } catch (error) {
-            console.error('Failed to schedule interview:', error)
+            console.error('[New Interview] Failed to schedule:', error);
             toast({
                 title: "Error",
-                description: error instanceof Error ? error.message : "Failed to schedule interview. Please try again.",
+                description: error instanceof Error ? error.message : "Failed to schedule interview. Please check your input and try again.",
                 variant: "destructive",
-            })
+            });
         } finally {
-            setIsSubmitting(false)
+            setIsSubmitting(false);
         }
-    }
+    };
 
     return (
         <div className="container max-w-4xl py-8">

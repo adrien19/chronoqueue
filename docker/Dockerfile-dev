@@ -2,8 +2,9 @@
 # and adapted for ChronoQueue development
 
 # [Choice] Go version: 1, 1.21, etc
-ARG GOVERSION=1.25
-FROM golang:${GOVERSION}rc3-bullseye
+ARG GOVERSION=1.25.6
+ARG LINUX_VARIANT=bookworm
+FROM golang:${GOVERSION}-${LINUX_VARIANT}
 
 # [Option] Install zsh
 ARG INSTALL_ZSH="true"
@@ -35,13 +36,14 @@ ENV DEFAULT_IMAGE_REGISTRY=DOCKER
 COPY cve-scripts/install-subversion.sh /tmp/install-subversion.sh
 RUN chmod +x /tmp/install-subversion.sh
 RUN /tmp/install-subversion.sh \
-  && rm -f /tmp/install-subversion.sh
+    && rm -f /tmp/install-subversion.sh
 
 # Setup image using library scripts and configure non-root user.
 COPY library-scripts/* custom-scripts/* welcome-notice.txt /tmp/staging/
 RUN apt-get update \
     # Install necessary packages
-    && bash /tmp/staging/common-debian.sh "${INSTALL_ZSH}" "${USERNAME}" "${USER_UID}" "${USER_GID}" "true" "true" "true" \
+    # Note: ADD_NON_FREE_PACKAGES (7th arg) must be "false" for Bookworm+ which uses DEB822 sources format
+    && bash /tmp/staging/common-debian.sh "${INSTALL_ZSH}" "${USERNAME}" "${USER_UID}" "${USER_GID}" "true" "true" "false" \
     # extra custom configurations for non-root user
     && bash /tmp/staging/setup-user.sh "${USERNAME}" "${USERNAME}" "${PATH}" \
     # Install Docker CLI and Engine for Docker-in-Docker

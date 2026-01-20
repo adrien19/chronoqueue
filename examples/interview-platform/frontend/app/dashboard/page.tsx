@@ -2,534 +2,276 @@
 
 import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Users, FileText, Clock, TrendingUp } from "lucide-react";
+import { Calendar, Users, FileText, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import {
-    Line,
-    LineChart,
-    Bar,
-    BarChart,
-    Pie,
-    PieChart,
-    Cell,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    Legend,
-    ResponsiveContainer,
-} from "recharts";
-import {
-    getDashboardStats,
-    listInterviews,
-    getPendingEvaluations,
-    listReports,
-    type DashboardStats,
-    type Interview,
-    type Evaluation,
-    type Report,
-} from "@/lib/api/api";
-import { evaluationsApi } from "@/lib/api/evaluations";
-import { interviewsApi } from "@/lib/api/interviews";
+import { format, parseISO } from "date-fns";
+import { apiClient } from "@/lib/api/client";
+import { LoadingState } from "@/components/ui/loading-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { EmptyState } from "@/components/ui/empty-state";
+
+function StatCard({
+    title,
+    value,
+    description,
+    icon: Icon,
+    isLoading
+}: {
+    title: string;
+    value: number | string;
+    description: string;
+    icon: any;
+    isLoading: boolean;
+}) {
+    if (isLoading) {
+        return (
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">{title}</CardTitle>
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    <LoadingState rows={1} />
+                </CardContent>
+            </Card>
+        );
+    }
+
+    return (
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">{title}</CardTitle>
+                <Icon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">{value}</div>
+                <p className="text-xs text-muted-foreground">{description}</p>
+            </CardContent>
+        </Card>
+    );
+}
 
 export default function DashboardPage() {
     // Fetch dashboard stats
     const { data: stats, isLoading: statsLoading, error: statsError } = useQuery({
         queryKey: ['dashboardStats'],
-        queryFn: getDashboardStats,
-        refetchInterval: 30000, // Refetch every 30 seconds
+        queryFn: () => apiClient.getDashboardStats(),
+        refetchInterval: 30000,
     });
 
     // Fetch recent interviews
-    const { data: interviews, isLoading: interviewsLoading } = useQuery({
-        queryKey: ['interviews', { limit: 5 }],
-        queryFn: () => listInterviews({ limit: 5 }),
-        refetchInterval: 30000,
-    });
-
-    // Fetch all interviews for status distribution
-    const { data: allInterviewsResponse } = useQuery({
-        queryKey: ['allInterviews'],
-        queryFn: () => interviewsApi.getAll({ pageSize: 1000 }),
-        refetchInterval: 30000,
-    });
-
-    // Fetch all evaluations for average scores calculation
-    const { data: allEvaluationsResponse } = useQuery({
-        queryKey: ['allEvaluations'],
-        queryFn: () => evaluationsApi.list(undefined, 1, 1000),
+    const { data: interviewsResponse, isLoading: interviewsLoading } = useQuery({
+        queryKey: ['recentInterviews'],
+        queryFn: () => apiClient.listInterviews({ page: 1, pageSize: 5 }),
         refetchInterval: 30000,
     });
 
     // Fetch pending evaluations
-    const { data: evaluations, isLoading: evaluationsLoading } = useQuery({
+    const { data: pendingEvals, isLoading: evalsLoading } = useQuery({
         queryKey: ['pendingEvaluations'],
-        queryFn: getPendingEvaluations,
+        queryFn: () => apiClient.getPendingEvaluations(),
         refetchInterval: 30000,
     });
 
     // Fetch recent reports
-    const { data: reports, isLoading: reportsLoading } = useQuery({
-        queryKey: ['reports', { limit: 5 }],
-        queryFn: () => listReports({ limit: 5 }),
+    const { data: reportsResponse, isLoading: reportsLoading } = useQuery({
+        queryKey: ['recentReports'],
+        queryFn: () => apiClient.listReports({ page: 1, pageSize: 5 }),
         refetchInterval: 30000,
     });
 
-    const recentInterviews = interviews?.slice(0, 3) || [];
-    const pendingEvaluations = evaluations?.slice(0, 2) || [];
+    const recentInterviews = interviewsResponse?.data || [];
+    const pendingEvaluations = pendingEvals || [];
+    const recentReports = reportsResponse?.data || [];
 
-    // Calculate status distribution from real data
-    const statusDistribution = useMemo(() => {
-        if (!stats?.interviewsByStatus) return [];
-
-        const statusMap = stats.interviewsByStatus;
-        return [
-            { name: "Scheduled", value: statusMap.scheduled || 0, color: "#3b82f6" },
-            { name: "Completed", value: statusMap.completed || 0, color: "#10b981" },
-            { name: "Cancelled", value: statusMap.cancelled || 0, color: "#ef4444" },
-        ].filter(item => item.value > 0); // Only show statuses with data
-    }, [stats]);
-
-    // Calculate average evaluation scores from real data
-    const evaluationScores = useMemo(() => {
-        const evals = allEvaluationsResponse?.data || [];
-        if (evals.length === 0) return [];
-
-        const completedEvals = evals.filter((e: any) => e.status === 'completed');
-        if (completedEvals.length === 0) return [];
-
-        const avgTechnical = completedEvals.reduce((sum: number, e: any) => sum + (e.technicalScore || 0), 0) / completedEvals.length;
-        const avgCommunication = completedEvals.reduce((sum: number, e: any) => sum + (e.communicationScore || 0), 0) / completedEvals.length;
-        const avgCultureFit = completedEvals.reduce((sum: number, e: any) => sum + (e.cultureFitScore || 0), 0) / completedEvals.length;
-        const avgOverall = completedEvals.reduce((sum: number, e: any) => sum + (e.overallScore || 0), 0) / completedEvals.length;
-
-        return [
-            { category: "Technical", score: parseFloat(avgTechnical.toFixed(1)) },
-            { category: "Communication", score: parseFloat(avgCommunication.toFixed(1)) },
-            { category: "Culture Fit", score: parseFloat(avgCultureFit.toFixed(1)) },
-            { category: "Overall", score: parseFloat(avgOverall.toFixed(1)) },
-        ];
-    }, [allEvaluationsResponse]);
-
-    // Calculate interview trends from real data (last 6 months)
-    const interviewTrendData = useMemo(() => {
-        const allInterviews = allInterviewsResponse?.data || [];
-        if (allInterviews.length === 0) return [];
-
-        const allEvals = allEvaluationsResponse?.data || [];
-
-        // Get last 6 months
-        const now = new Date();
-        const months: Array<{
-            date: Date;
-            month: string;
-            interviews: number;
-            evaluations: number;
-        }> = [];
-
-        for (let i = 5; i >= 0; i--) {
-            const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-            months.push({
-                date: date,
-                month: date.toLocaleDateString('en-US', { month: 'short' }),
-                interviews: 0,
-                evaluations: 0,
-            });
+    // Format date safely
+    const formatDate = (dateString: string) => {
+        try {
+            return format(parseISO(dateString), "MMM dd, yyyy 'at' HH:mm");
+        } catch {
+            return "Invalid date";
         }
+    };
 
-        // Count interviews and evaluations per month
-        allInterviews.forEach((interview: any) => {
-            const interviewDate = new Date(interview.scheduledAt);
-            const monthData = months.find(m =>
-                m.date.getMonth() === interviewDate.getMonth() &&
-                m.date.getFullYear() === interviewDate.getFullYear()
-            );
-            if (monthData) {
-                monthData.interviews++;
-            }
-        });
+    const getStatusColor = (status: string) => {
+        const colors: Record<string, string> = {
+            pending: "bg-yellow-100 text-yellow-800",
+            scheduled: "bg-blue-100 text-blue-800",
+            in_progress: "bg-purple-100 text-purple-800",
+            completed: "bg-green-100 text-green-800",
+            cancelled: "bg-red-100 text-red-800",
+        };
+        return colors[status] || "bg-gray-100 text-gray-800";
+    };
 
-        allEvals.forEach((evaluation: any) => {
-            const evalDate = new Date(evaluation.createdAt);
-            const monthData = months.find(m =>
-                m.date.getMonth() === evalDate.getMonth() &&
-                m.date.getFullYear() === evalDate.getFullYear()
-            );
-            if (monthData) {
-                monthData.evaluations++;
-            }
-        });
-
-        return months.map(({ month, interviews, evaluations }) => ({
-            month,
-            interviews,
-            evaluations,
-        }));
-    }, [allInterviewsResponse, allEvaluationsResponse]);
+    if (statsError) {
+        return (
+            <div className="p-6">
+                <ErrorState
+                    message="Failed to load dashboard data. Please try again."
+                    retry={() => window.location.reload()}
+                />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
             {/* Page Header */}
             <div>
                 <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-                <p className="text-gray-500">Welcome back! Here's your interview overview.</p>
+                <p className="text-gray-500">Overview of interview platform activity</p>
             </div>
 
-            {/* Stats Grid */}
+            {/* Stats Cards */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Interviews</CardTitle>
-                        <Calendar className="h-4 w-4 text-gray-500" />
-                    </CardHeader>
-                    <CardContent>
-                        {statsLoading ? (
-                            <Skeleton className="h-8 w-20" />
-                        ) : (
-                            <>
-                                <div className="text-2xl font-bold">{stats?.totalInterviews || 0}</div>
-                                <p className="text-xs text-muted-foreground">
-                                    Across all statuses
-                                </p>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Pending Evaluations</CardTitle>
-                        <Users className="h-4 w-4 text-gray-500" />
-                    </CardHeader>
-                    <CardContent>
-                        {statsLoading ? (
-                            <Skeleton className="h-8 w-20" />
-                        ) : (
-                            <>
-                                <div className="text-2xl font-bold">{stats?.pendingEvaluations || 0}</div>
-                                <p className="text-xs text-yellow-600">
-                                    Awaiting submission
-                                </p>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Completed Reports</CardTitle>
-                        <FileText className="h-4 w-4 text-gray-500" />
-                    </CardHeader>
-                    <CardContent>
-                        {statsLoading ? (
-                            <Skeleton className="h-8 w-20" />
-                        ) : (
-                            <>
-                                <div className="text-2xl font-bold">{stats?.completedReports || 0}</div>
-                                <p className="text-xs text-green-600">
-                                    Ready to send
-                                </p>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Completed Evaluations</CardTitle>
-                        <Clock className="h-4 w-4 text-gray-500" />
-                    </CardHeader>
-                    <CardContent>
-                        {statsLoading ? (
-                            <Skeleton className="h-8 w-20" />
-                        ) : (
-                            <>
-                                <div className="text-2xl font-bold">{stats?.completedEvaluations || stats?.evaluationsByStatus?.completed || 0}</div>
-                                <p className="text-xs text-green-600">
-                                    Submitted
-                                </p>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
+                <StatCard
+                    title="Total Interviews"
+                    value={stats?.totalInterviews || 0}
+                    description="All scheduled interviews"
+                    icon={Calendar}
+                    isLoading={statsLoading}
+                />
+                <StatCard
+                    title="Pending Evaluations"
+                    value={stats?.pendingEvaluations || 0}
+                    description="Awaiting review"
+                    icon={Users}
+                    isLoading={statsLoading}
+                />
+                <StatCard
+                    title="Completed Reports"
+                    value={stats?.completedReports || 0}
+                    description="Generated reports"
+                    icon={FileText}
+                    isLoading={statsLoading}
+                />
+                <StatCard
+                    title="Avg Evaluation Time"
+                    value={`${stats?.averageEvaluationTime?.toFixed(1) || 0}h`}
+                    description="Average processing time"
+                    icon={Clock}
+                    isLoading={statsLoading}
+                />
             </div>
 
-            {/* Charts Grid */}
+            {/* Recent Activity */}
             <div className="grid gap-4 md:grid-cols-2">
-                {/* Interview Trend */}
+                {/* Recent Interviews */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Interview Trends</CardTitle>
-                        <CardDescription>Monthly interview and evaluation progress</CardDescription>
+                        <CardTitle>Recent Interviews</CardTitle>
+                        <CardDescription>Latest scheduled interviews</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <LineChart data={interviewTrendData}>
-                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                                <XAxis dataKey="month" className="text-xs" />
-                                <YAxis className="text-xs" />
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: "hsl(var(--background))",
-                                        border: "1px solid hsl(var(--border))",
-                                        borderRadius: "6px",
-                                    }}
-                                />
-                                <Legend />
-                                <Line
-                                    type="monotone"
-                                    dataKey="interviews"
-                                    stroke="#3b82f6"
-                                    strokeWidth={2}
-                                    name="Interviews"
-                                />
-                                <Line
-                                    type="monotone"
-                                    dataKey="evaluations"
-                                    stroke="#10b981"
-                                    strokeWidth={2}
-                                    name="Evaluations"
-                                />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-
-                {/* Status Distribution */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Interview Status</CardTitle>
-                        <CardDescription>Distribution of interview states</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <PieChart>
-                                <Pie
-                                    data={statusDistribution}
-                                    cx="50%"
-                                    cy="50%"
-                                    labelLine={false}
-                                    label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                    outerRadius={80}
-                                    fill="#8884d8"
-                                    dataKey="value"
-                                >
-                                    {statusDistribution.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.color} />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: "hsl(var(--background))",
-                                        border: "1px solid hsl(var(--border))",
-                                        borderRadius: "6px",
-                                    }}
-                                />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-
-                {/* Average Evaluation Scores */}
-                <Card className="md:col-span-2">
-                    <CardHeader>
-                        <CardTitle>Average Evaluation Scores</CardTitle>
-                        <CardDescription>Performance across key evaluation categories</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={evaluationScores}>
-                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                                <XAxis dataKey="category" className="text-xs" />
-                                <YAxis domain={[0, 10]} className="text-xs" />
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: "hsl(var(--background))",
-                                        border: "1px solid hsl(var(--border))",
-                                        borderRadius: "6px",
-                                    }}
-                                />
-                                <Bar dataKey="score" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Two Column Layout */}
-            <div className="grid gap-6 md:grid-cols-2">
-                {/* Upcoming Interviews */}
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle>Upcoming Interviews</CardTitle>
-                                <CardDescription>Scheduled for the next 48 hours</CardDescription>
-                            </div>
-                            <Link href="/dashboard/interviews">
-                                <Button variant="ghost" size="sm">View All</Button>
-                            </Link>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {interviewsLoading ? (
-                                <div className="space-y-4">
-                                    <Skeleton className="h-24 w-full" />
-                                    <Skeleton className="h-24 w-full" />
-                                    <Skeleton className="h-24 w-full" />
-                                </div>
-                            ) : recentInterviews.length === 0 ? (
-                                <div className="text-center text-muted-foreground py-8">
-                                    No interviews scheduled yet
-                                </div>
-                            ) : (
-                                recentInterviews.map((interview) => (
-                                    <div
-                                        key={interview.id}
-                                        className="flex items-center justify-between rounded-lg border p-4"
-                                    >
-                                        <div className="flex-1">
-                                            <div className="flex items-center space-x-2">
-                                                <p className="font-medium">{interview.candidateName}</p>
-                                                <Badge
-                                                    variant={interview.status === "completed" ? "secondary" : "default"}
-                                                >
-                                                    {interview.status}
-                                                </Badge>
-                                            </div>
+                        {interviewsLoading ? (
+                            <LoadingState rows={3} type="list" />
+                        ) : recentInterviews.length === 0 ? (
+                            <EmptyState
+                                title="No interviews yet"
+                                description="Schedule your first interview to get started"
+                                action={{
+                                    label: "Schedule Interview",
+                                    onClick: () => window.location.href = "/dashboard/interviews/new"
+                                }}
+                            />
+                        ) : (
+                            <div className="space-y-4">
+                                {recentInterviews.slice(0, 3).map((interview) => (
+                                    <div key={interview.id} className="flex items-start justify-between border-b pb-3 last:border-0 last:pb-0">
+                                        <div className="space-y-1">
+                                            <p className="font-medium">{interview.candidateName}</p>
                                             <p className="text-sm text-gray-500">{interview.position}</p>
-                                            <p className="text-xs text-gray-400">
-                                                {new Date(interview.scheduledAt).toLocaleString()}
-                                            </p>
+                                            <p className="text-xs text-gray-400">{formatDate(interview.scheduledAt)}</p>
                                         </div>
-                                        <Button variant="outline" size="sm" asChild>
-                                            <Link href={`/dashboard/interviews/${interview.id}`}>View</Link>
-                                        </Button>
+                                        <Badge className={getStatusColor(interview.status)}>
+                                            {interview.status}
+                                        </Badge>
                                     </div>
-                                ))
-                            )}
-                        </div>
+                                ))}
+                                <Button variant="outline" className="w-full" asChild>
+                                    <Link href="/dashboard/interviews">View All Interviews</Link>
+                                </Button>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 
                 {/* Pending Evaluations */}
                 <Card>
                     <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle>Pending Evaluations</CardTitle>
-                                <CardDescription>Requires your feedback</CardDescription>
-                            </div>
-                            <Link href="/dashboard/evaluations">
-                                <Button variant="ghost" size="sm">View All</Button>
-                            </Link>
-                        </div>
+                        <CardTitle>Pending Evaluations</CardTitle>
+                        <CardDescription>Waiting for review</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-4">
-                            {evaluationsLoading ? (
-                                <div className="space-y-4">
-                                    <Skeleton className="h-24 w-full" />
-                                    <Skeleton className="h-24 w-full" />
-                                </div>
-                            ) : pendingEvaluations.length === 0 ? (
-                                <div className="text-center text-muted-foreground py-8">
-                                    No pending evaluations
-                                </div>
-                            ) : (
-                                pendingEvaluations.map((evaluation) => (
-                                    <div
-                                        key={evaluation.id}
-                                        className="flex items-center justify-between rounded-lg border p-4"
-                                    >
-                                        <div className="flex-1">
-                                            <div className="flex items-center space-x-2">
-                                                <p className="font-medium">{evaluation.evaluator_name}</p>
-                                                {evaluation.status === "pending" && (
-                                                    <Badge variant="outline">Pending</Badge>
-                                                )}
-                                            </div>
-                                            <p className="text-sm text-gray-500">Interview ID: {evaluation.interview_id}</p>
-                                            <p className="text-xs text-gray-400">
-                                                Evaluator: {evaluation.evaluator_email}
-                                            </p>
+                        {evalsLoading ? (
+                            <LoadingState rows={3} type="list" />
+                        ) : pendingEvaluations.length === 0 ? (
+                            <EmptyState
+                                title="No pending evaluations"
+                                description="All evaluations are up to date"
+                            />
+                        ) : (
+                            <div className="space-y-4">
+                                {pendingEvaluations.slice(0, 3).map((evaluation) => (
+                                    <div key={evaluation.id} className="flex items-start justify-between border-b pb-3 last:border-0 last:pb-0">
+                                        <div className="space-y-1">
+                                            <p className="font-medium">Interview #{evaluation.interviewId.slice(0, 8)}</p>
+                                            <p className="text-sm text-gray-500">{evaluation.evaluatorName}</p>
+                                            <p className="text-xs text-gray-400">{formatDate(evaluation.createdAt)}</p>
                                         </div>
-                                        <Button size="sm" asChild>
-                                            <Link href={`/dashboard/interviews/${evaluation.interview_id}/evaluate`}>
-                                                Evaluate
-                                            </Link>
-                                        </Button>
+                                        <Badge variant="outline">{evaluation.status}</Badge>
                                     </div>
-                                ))
-                            )}
-                        </div>
+                                ))}
+                                <Button variant="outline" className="w-full" asChild>
+                                    <Link href="/dashboard/evaluations">View All Evaluations</Link>
+                                </Button>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
 
-            {/* Activity Chart Section */}
+            {/* Recent Reports */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Interview Activity</CardTitle>
-                    <CardDescription>Overview of interviews over the last 30 days</CardDescription>
+                    <CardTitle>Recent Reports</CardTitle>
+                    <CardDescription>Latest generated reports</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed">
-                        <div className="text-center">
-                            <TrendingUp className="mx-auto h-12 w-12 text-gray-400" />
-                            <p className="mt-2 text-sm text-gray-500">
-                                Chart will be added with Recharts integration
-                            </p>
+                    {reportsLoading ? (
+                        <LoadingState rows={3} type="list" />
+                    ) : recentReports.length === 0 ? (
+                        <EmptyState
+                            title="No reports yet"
+                            description="Reports will appear here once generated"
+                        />
+                    ) : (
+                        <div className="space-y-4">
+                            {recentReports.slice(0, 5).map((report) => (
+                                <div key={report.id} className="flex items-start justify-between border-b pb-3 last:border-0 last:pb-0">
+                                    <div className="space-y-1 flex-1">
+                                        <p className="font-medium">{report.candidateName}</p>
+                                        <p className="text-sm text-gray-500">{report.position}</p>
+                                        <div className="flex gap-2 text-xs text-gray-400">
+                                            <span>{report.evaluationCount} evaluations</span>
+                                            <span>•</span>
+                                            <span>Overall: {report.averageOverall?.toFixed(1) || 0}/10</span>
+                                        </div>
+                                    </div>
+                                    <Badge className={getStatusColor(report.status)}>
+                                        {report.status}
+                                    </Badge>
+                                </div>
+                            ))}
+                            <Button variant="outline" className="w-full" asChild>
+                                <Link href="/dashboard/reports">View All Reports</Link>
+                            </Button>
                         </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Queue Status Section */}
-            <Card>
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle>ChronoQueue Status</CardTitle>
-                            <CardDescription>Real-time queue monitoring</CardDescription>
-                        </div>
-                        <Link href="/dashboard/queues">
-                            <Button variant="outline" size="sm">View Details</Button>
-                        </Link>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid gap-4 md:grid-cols-3">
-                        <div className="rounded-lg border p-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-gray-500">Interview Scheduler</span>
-                                <Badge variant="default" className="bg-green-500">Active</Badge>
-                            </div>
-                            <p className="mt-2 text-2xl font-bold">12</p>
-                            <p className="text-xs text-gray-500">Messages in queue</p>
-                        </div>
-                        <div className="rounded-lg border p-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-gray-500">Evaluation Processor</span>
-                                <Badge variant="default" className="bg-green-500">Active</Badge>
-                            </div>
-                            <p className="mt-2 text-2xl font-bold">8</p>
-                            <p className="text-xs text-gray-500">Messages in queue</p>
-                        </div>
-                        <div className="rounded-lg border p-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-gray-500">Report Generator</span>
-                                <Badge variant="default" className="bg-green-500">Active</Badge>
-                            </div>
-                            <p className="mt-2 text-2xl font-bold">3</p>
-                            <p className="text-xs text-gray-500">Messages in queue</p>
-                        </div>
-                    </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

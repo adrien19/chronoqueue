@@ -1,0 +1,264 @@
+# ChronoQueue Prometheus Alerting Rules
+#
+# Import these rules into your Prometheus configuration:
+#   rule_files:
+#     - 'chronoqueue-alerts.yml'
+
+groups:
+  - name: chronoqueue_message_processing
+    interval: 30s
+    rules:
+      # Alert when messages are stuck in PENDING state for too long
+      - alert: HighPendingMessageCount
+        expr: chronoqueue_messages_by_state{state="PENDING"} > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: message_processing
+        annotations:
+          summary: "High pending message count for queue {{ $labels.queue_name }}"
+          description: "Queue {{ $labels.queue_name }} has {{ $value }} pending messages for more than 5 minutes. This may indicate workers are not consuming fast enough."
+
+      # Alert when claim latency is too high (P95 > 500ms)
+      - alert: HighMessageClaimLatency
+        expr: histogram_quantile(0.95, rate(chronoqueue_message_claim_duration_seconds_bucket[5m])) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          component: message_processing
+        annotations:
+          summary: "High message claim latency for queue {{ $labels.queue_name }}"
+          description: "P95 message claim latency is {{ $value }}s (>500ms) for queue {{ $labels.queue_name }}. Database may be slow or under heavy load."
+
+      # Alert when processing duration is too high (P95 > 5min)
+      - alert: SlowMessageProcessing
+        expr: histogram_quantile(0.95, rate(chronoqueue_message_processing_duration_seconds_bucket[10m])) > 300
+        for: 5m
+        labels:
+          severity: warning
+          component: message_processing
+        annotations:
+          summary: "Slow message processing for queue {{ $labels.queue_name }}"
+          description: "P95 message processing time is {{ $value }}s (>5min) for queue {{ $labels.queue_name }}. Workers may be overloaded or tasks are too complex."
+
+  - name: chronoqueue_dlq_health
+    interval: 30s
+    rules:
+      # Alert on high DLQ ingestion rate (>10 messages/sec)
+      - alert: HighDLQIngestionRate
+        expr: rate(chronoqueue_dlq_ingestion_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: critical
+          component: dlq
+        annotations:
+          summary: "High DLQ ingestion rate for {{ $labels.source_queue }}"
+          description: "{{ $labels.source_queue }} is sending {{ $value }} messages/sec to DLQ {{ $labels.dlq_name }}. Reason: {{ $labels.reason }}. Investigate failing messages."
+
+      # Alert when DLQ has many messages accumulating
+      - alert: DLQMessageAccumulation
+        expr: chronoqueue_dlq_messages_total > 100
+        for: 10m
+        labels:
+          severity: warning
+          component: dlq
+        annotations:
+          summary: "DLQ {{ $labels.dlq_name }} has accumulated messages"
+          description: "DLQ {{ $labels.dlq_name }} has {{ $value }} messages. Source queue: {{ $labels.source_queue }}. Messages may need manual intervention."
+
+      # Alert when DLQ ingestion is primarily due to max_attempts
+      - alert: PoisonMessagesDetected
+        expr: rate(chronoqueue_dlq_ingestion_total{reason="max_attempts"}[10m]) > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: dlq
+        annotations:
+          summary: "Poison messages detected in {{ $labels.source_queue }}"
+          description: "Queue {{ $labels.source_queue }} is consistently failing messages after max attempts ({{ $value }}/sec). May indicate a systemic issue with message processing logic."
+
+  - name: chronoqueue_lease_management
+    interval: 30s
+    rules:
+      # Alert on high lease expiration rate (workers dying or too slow)
+      - alert: HighLeaseExpirationRate
+        expr: rate(chronoqueue_lease_expirations_total[5m]) > 5
+        for: 3m
+        labels:
+          severity: warning
+          component: lease_management
+        annotations:
+          summary: "High lease expiration rate for queue {{ $labels.queue_name }}"
+          description: "{{ $value }} leases/sec are expiring for queue {{ $labels.queue_name }} (type: {{ $labels.expiry_type }}). Workers may be crashing or processing is too slow."
+
+      # Alert on frequent heartbeat timeouts
+      - alert: FrequentHeartbeatTimeouts
+        expr: rate(chronoqueue_heartbeat_timeouts_total[5m]) > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: lease_management
+        annotations:
+          summary: "Frequent heartbeat timeouts for queue {{ $labels.queue_name }}"
+          description: "{{ $value }} heartbeat timeouts/sec for queue {{ $labels.queue_name }}. Workers may be hanging or network issues preventing heartbeats."
+
+      # Alert when many renewals are denied due to max_renewals limit
+      - alert: LeaseRenewalLimitReached
+        expr: rate(chronoqueue_lease_renewals_total{status="denied_max_renewals"}[5m]) > 1
+        for: 5m
+        labels:
+          severity: info
+          component: lease_management
+        annotations:
+          summary: "Lease renewal limit frequently reached for queue {{ $labels.queue_name }}"
+          description: "{{ $value }} renewals/sec are being denied due to max_renewals limit for queue {{ $labels.queue_name }}. Consider increasing max_renewals or optimizing worker processing."
+
+  - name: chronoqueue_scheduler
+    interval: 30s
+    rules:
+      # Alert when scheduler is falling significantly behind
+      - alert: SchedulerLagging
+        expr: chronoqueue_schedule_lag_seconds > 60
+        for: 2m
+        labels:
+          severity: warning
+          component: scheduler
+        annotations:
+          summary: "Scheduler is lagging for queue {{ $labels.queue_name }}"
+          description: "Scheduler is {{ $value }}s behind schedule for queue {{ $labels.queue_name }}. Messages are being activated later than their scheduled_time."
+
+      # Alert when scheduler service is not running iterations
+      - alert: SchedulerServiceStalled
+        expr: rate(chronoqueue_background_service_iterations_total{service="scheduler"}[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: scheduler
+        annotations:
+          summary: "Scheduler service appears to be stalled"
+          description: "No scheduler iterations detected in the last 5 minutes. Scheduled messages will not be activated."
+
+      # Alert when scheduler iterations are failing
+      - alert: SchedulerIterationFailures
+        expr: rate(chronoqueue_background_service_iterations_total{service="scheduler",status="error"}[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: critical
+          component: scheduler
+        annotations:
+          summary: "Scheduler iterations are failing"
+          description: "{{ $value }} scheduler iterations/sec are failing. Check scheduler service logs for errors."
+
+      # Alert when scheduler iteration duration is too high
+      - alert: SlowSchedulerIterations
+        expr: histogram_quantile(0.95, rate(chronoqueue_background_service_iteration_duration_seconds_bucket{service="scheduler"}[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: scheduler
+        annotations:
+          summary: "Scheduler iterations are taking too long"
+          description: "P95 scheduler iteration time is {{ $value }}s (>10s). Scheduler may be processing too many messages per iteration or database is slow."
+
+  - name: chronoqueue_reclaim_service
+    interval: 30s
+    rules:
+      # Alert when reclaim service is not running
+      - alert: ReclaimServiceStalled
+        expr: rate(chronoqueue_background_service_iterations_total{service="reclaim"}[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: reclaim_service
+        annotations:
+          summary: "Reclaim service appears to be stalled"
+          description: "No reclaim iterations detected in the last 5 minutes. Expired leases will not be reclaimed."
+
+      # Alert when reclaim iterations are failing
+      - alert: ReclaimIterationFailures
+        expr: rate(chronoqueue_background_service_iterations_total{service="reclaim",status="error"}[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: critical
+          component: reclaim_service
+        annotations:
+          summary: "Reclaim iterations are failing"
+          description: "{{ $value }} reclaim iterations/sec are failing. Check reclaim service logs for errors."
+
+  - name: chronoqueue_database
+    interval: 30s
+    rules:
+      # Alert on slow database queries (P95 > 100ms)
+      - alert: SlowDatabaseQueries
+        expr: histogram_quantile(0.95, rate(chronoqueue_db_query_duration_seconds_bucket[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Slow database queries detected"
+          description: "P95 query duration is {{ $value }}s (>100ms) for {{ $labels.backend }}/{{ $labels.operation }}. Database may be under heavy load or needs optimization."
+
+      # Alert on slow database transactions (P95 > 500ms)
+      - alert: SlowDatabaseTransactions
+        expr: histogram_quantile(0.95, rate(chronoqueue_db_transaction_duration_seconds_bucket[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Slow database transactions detected"
+          description: "P95 transaction duration is {{ $value }}s (>500ms) for {{ $labels.backend }}/{{ $labels.operation }}. Database may be under heavy load."
+
+      # Alert when connection pool is exhausted
+      - alert: DatabaseConnectionPoolExhausted
+        expr: chronoqueue_db_connections_wait > 0
+        for: 2m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database connection pool exhausted for {{ $labels.backend }}"
+          description: "{{ $value }} connections are waiting for availability. Increase connection pool size or investigate connection leaks."
+
+      # Alert when connection pool has low idle connections during high load
+      - alert: LowIdleConnections
+        expr: |
+          (chronoqueue_db_connections_idle / (chronoqueue_db_connections_active + chronoqueue_db_connections_idle)) < 0.2
+          and chronoqueue_db_connections_active > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Low idle database connections for {{ $labels.backend }}"
+          description: "Only {{ $value | humanizePercentage }} of connections are idle during high load. Consider increasing pool size."
+
+  - name: chronoqueue_general_health
+    interval: 30s
+    rules:
+      # Alert when total queue count drops unexpectedly
+      - alert: QueueCountDropped
+        expr: |
+          chronoqueue_queues_total < 1
+          and chronoqueue_queues_total offset 5m > 0
+        for: 2m
+        labels:
+          severity: critical
+          component: general
+        annotations:
+          summary: "Queue count dropped to zero"
+          description: "All queues have disappeared. This may indicate a database issue or configuration problem."
+
+      # Alert on zero message throughput when messages exist
+      - alert: NoMessageThroughput
+        expr: |
+          sum(chronoqueue_messages_by_state{state="PENDING"}) > 10
+          and rate(chronoqueue_messages_dequeued_total[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: general
+        annotations:
+          summary: "No message throughput despite pending messages"
+          description: "There are {{ $value }} pending messages but no dequeue activity in 5 minutes. Workers may not be running."

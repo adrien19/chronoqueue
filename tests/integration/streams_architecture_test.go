@@ -1,6 +1,14 @@
+//go:build redis_only
+// +build redis_only
+
 package integration
 
 // Integration tests for Redis Streams-based architecture
+// These tests are disabled because Redis storage is no longer supported.
+// They test Redis-specific implementation details (streams, sorted sets, etc.)
+// that do not apply to the Postgres storage backend.
+//
+// To enable these tests (if you restore Redis support), build with: -tags redis_only
 //
 // These tests validate:
 // - Stream creation and consumer group initialization

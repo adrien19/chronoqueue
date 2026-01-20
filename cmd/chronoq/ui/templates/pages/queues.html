@@ -62,7 +62,31 @@
                 </div>
                 <div class="flex justify-between">
                     <span>Lease Duration:</span>
-                    <span class="font-medium">{{.Metadata.LeaseDuration.Seconds}}s</span>
+                    <span class="font-medium">
+                        {{if and .Metadata.LeasePolicy .Metadata.LeasePolicy.BaseLease}}
+                            {{.Metadata.LeasePolicy.BaseLease.Seconds}}s
+                        {{else if .Metadata.LeaseDuration}}
+                            {{.Metadata.LeaseDuration.Seconds}}s
+                        {{else}}
+                            Default
+                        {{end}}
+                    </span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Retention:</span>
+                    <span class="font-medium">
+                        {{if .Metadata.MessageRetentionPolicy}}
+                            {{if eq .Metadata.MessageRetentionPolicy.Mode.String "RETAIN_DURATION"}}
+                                {{.Metadata.MessageRetentionPolicy.RetentionSeconds}}s
+                            {{else if eq .Metadata.MessageRetentionPolicy.Mode.String "RETAIN_FOREVER"}}
+                                Forever
+                            {{else}}
+                                Immediate
+                            {{end}}
+                        {{else}}
+                            Immediate
+                        {{end}}
+                    </span>
                 </div>
             </div>
 

@@ -41,7 +41,8 @@ type (
 		MaxPayloadSize      int32    `json:"maxPayloadSize,omitempty"`
 		AllowedContentTypes []string `json:"allowedContentTypes,omitempty"`
 		PriorityConfig      *pb_queue.PriorityConfig
-		LeasePolicy         LeasePolicyOptions `json:"leasePolicy,omitempty"`
+		LeasePolicy         LeasePolicyOptions     `json:"leasePolicy,omitempty"`
+		RetentionPolicy     *RetentionPolicyOption `json:"retentionPolicy,omitempty"`
 	}
 	MessageOptions struct {
 		Payload            Payload            `json:"payload,omitempty"`
@@ -93,6 +94,21 @@ type (
 		HeartbeatTimeout string `json:"heartbeatTimeout,omitempty"`
 		ExtendStep       string `json:"extendStep,omitempty"`
 	}
+
+	// RetentionPolicyOption configures message retention after acknowledgment
+	RetentionPolicyOption struct {
+		// Mode specifies the retention strategy:
+		// - RETENTION_DELETE_IMMEDIATELY (0): Messages deleted immediately after ack (default)
+		// - RETENTION_RETAIN_DURATION (1): Soft-delete, auto-cleanup after RetentionSeconds
+		// - RETENTION_RETAIN_FOREVER (2): Soft-delete, never auto-cleanup (manual cleanup required)
+		Mode RetentionMode `json:"mode,omitempty"`
+		// RetentionSeconds specifies how long to retain messages (only used with RETENTION_RETAIN_DURATION)
+		// Common values: 86400 (1 day), 604800 (7 days), 2592000 (30 days)
+		RetentionSeconds int64 `json:"retentionSeconds,omitempty"`
+	}
+
+	// RetentionMode defines message retention strategy
+	RetentionMode int32
 )
 
 const (
@@ -103,6 +119,13 @@ const (
 	MESSAGE_COMPLETED State = 3
 	MESSAGE_CANCELED  State = 4
 	MESSAGE_ERRORED   State = 5
+)
+
+const (
+	// Retention modes for message retention policy
+	RETENTION_DELETE_IMMEDIATELY RetentionMode = 0
+	RETENTION_RETAIN_DURATION    RetentionMode = 1
+	RETENTION_RETAIN_FOREVER     RetentionMode = 2
 )
 
 const (
@@ -279,6 +302,17 @@ func (client *ChronoQueueClient) clearAttemptInfo(messageID string) {
 	client.attemptTracker.Delete(messageID)
 }
 
+// SetAttemptInfo allows callers (e.g., CLI) to seed attempt and worker identifiers
+// when acknowledging messages in a fresh process. This ensures backends that require
+// attempt/worker validation (e.g., Postgres) receive the identifiers even if the
+// message was fetched in a different process.
+func (client *ChronoQueueClient) SetAttemptInfo(messageID, attemptID, workerID string) {
+	client.recordAttemptInfo(messageID, attemptID, workerID)
+	if workerID != "" {
+		client.workerID.Store(workerID)
+	}
+}
+
 func (client *ChronoQueueClient) heartbeatWorker() {
 	for workItem := range client.workChan {
 		// Perform work here, e.g., manage heartbeats
@@ -348,6 +382,18 @@ func buildLeasePolicy(opts LeasePolicyOptions) (*common_pb.LeasePolicy, error) {
 	return lp, nil
 }
 
+// buildRetentionPolicy converts client retention options to proto message
+func buildRetentionPolicy(opts *RetentionPolicyOption) *pb_queue.MessageRetentionPolicy {
+	if opts == nil {
+		return nil
+	}
+
+	return &pb_queue.MessageRetentionPolicy{
+		Mode:             pb_queue.MessageRetentionPolicy_Mode(opts.Mode),
+		RetentionSeconds: opts.RetentionSeconds,
+	}
+}
+
 // Function to convert SIMPLE queue type string to enum
 func ParseQueueType(queueType string) int32 {
 	switch queueType {
@@ -397,21 +443,24 @@ func (client *ChronoQueueClient) CreateQueue(ctx context.Context, name string, q
 		return &queueservice_pb.CreateQueueResponse{Success: false}, err
 	}
 
+	retentionPolicy := buildRetentionPolicy(queueOptions.RetentionPolicy)
+
 	req := &queueservice_pb.CreateQueueRequest{
 		Name: name,
 		Metadata: &pb_queue.QueueMetadata{
-			Type:                pb_queue.QueueType(queueOptions.Type),
-			DefaultMaxAttempts:  int32(queueOptions.DequeueAttempts),
-			LeaseDuration:       leaseDuration,
-			ExclusivityKey:      queueOptions.ExclusivityKey,
-			DeadLetterQueueName: queueOptions.DeadLetterQueueName,
-			AutoCreateDlq:       queueOptions.AutoCreateDLQ,
-			SchemaId:            queueOptions.SchemaID,
-			SchemaRequired:      queueOptions.SchemaRequired,
-			MaxPayloadSize:      queueOptions.MaxPayloadSize,
-			AllowedContentTypes: queueOptions.AllowedContentTypes,
-			PriorityConfig:      queueOptions.PriorityConfig,
-			LeasePolicy:         leasePolicy,
+			Type:                   pb_queue.QueueType(queueOptions.Type),
+			DefaultMaxAttempts:     int32(queueOptions.DequeueAttempts),
+			LeaseDuration:          leaseDuration,
+			ExclusivityKey:         queueOptions.ExclusivityKey,
+			DeadLetterQueueName:    queueOptions.DeadLetterQueueName,
+			AutoCreateDlq:          queueOptions.AutoCreateDLQ,
+			SchemaId:               queueOptions.SchemaID,
+			SchemaRequired:         queueOptions.SchemaRequired,
+			MaxPayloadSize:         queueOptions.MaxPayloadSize,
+			AllowedContentTypes:    queueOptions.AllowedContentTypes,
+			PriorityConfig:         queueOptions.PriorityConfig,
+			LeasePolicy:            leasePolicy,
+			MessageRetentionPolicy: retentionPolicy,
 		},
 	}
 	res, err := client.service.CreateQueue(ctx, req)

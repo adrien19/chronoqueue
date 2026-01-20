@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,7 +26,7 @@ import (
 var (
 	port            = flag.String("port", "8080", "HTTP server port")
 	chronoqueueAddr = flag.String("chronoqueue", "localhost:50051", "ChronoQueue gRPC address")
-	dbPath          = flag.String("db", "/workspaces/chronoqueue/logs/api_interview_platform.db", "SQLite database path")
+	dbPath          = flag.String("db", "/workspaces/chronoqueue/examples/interview-platform/logs/api_interview_platform.db", "SQLite database path")
 )
 
 func main() {
@@ -180,30 +181,88 @@ func main() {
 
 // initializeQueues creates all necessary queues for the interview platform
 func initializeQueues(ctx context.Context, qClient *client.ChronoQueueClient) error {
-	queueNames := []string{
-		"interview-scheduler",
-		"evaluation-processor",
-		"report-generator",
-		"notification-sender",
+	// Queue configurations with different retention policies based on use case
+	queueConfigs := []struct {
+		name            string
+		retentionPolicy *client.RetentionPolicyOption
+		description     string
+	}{
+		{
+			name: "interview-scheduler",
+			// Scheduling messages are transient - delete immediately after processing
+			retentionPolicy: nil, // DELETE_IMMEDIATELY (default)
+			description:     "transient scheduling events",
+		},
+		{
+			name: "evaluation-processor",
+			// Evaluation messages retained for 7 days for audit trail
+			retentionPolicy: &client.RetentionPolicyOption{
+				Mode:             client.RETENTION_RETAIN_DURATION,
+				RetentionSeconds: 7 * 24 * 60 * 60, // 7 days
+			},
+			description: "evaluation audit trail (7 days retention)",
+		},
+		{
+			name: "report-generator",
+			// Report generation messages retained for 30 days for compliance
+			retentionPolicy: &client.RetentionPolicyOption{
+				Mode:             client.RETENTION_RETAIN_DURATION,
+				RetentionSeconds: 30 * 24 * 60 * 60, // 30 days
+			},
+			description: "report compliance records (30 days retention)",
+		},
+		{
+			name: "notification-sender",
+			// Notification messages retained forever for complete communication history
+			retentionPolicy: &client.RetentionPolicyOption{
+				Mode: client.RETENTION_RETAIN_FOREVER,
+			},
+			description: "notification history (retained forever)",
+		},
 	}
 
-	queueOpts := client.QueueOptions{
-		Type:            0, // SIMPLE queue
-		DequeueAttempts: 3,
-		LeaseDuration:   "30s",
-		AutoCreateDLQ:   true,
-	}
+	created := 0
+	skipped := 0
 
-	for _, queueName := range queueNames {
-		_, err := qClient.CreateQueue(ctx, queueName, queueOpts)
-		if err != nil {
-			// Log warning but don't fail if queue already exists
-			log.Printf("Warning: Failed to create queue %s: %v (may already exist)", queueName, err)
-			continue
+	for _, cfg := range queueConfigs {
+		queueOpts := client.QueueOptions{
+			Type:            0, // SIMPLE queue
+			DequeueAttempts: 3,
+			LeaseDuration:   "30s",
+			AutoCreateDLQ:   true,
+			LeasePolicy: client.LeasePolicyOptions{
+				BaseLease:        "30s",
+				MaxExtension:     "5m",
+				HeartbeatTimeout: "10s",
+				ExtendStep:       "15s",
+			},
+			RetentionPolicy: cfg.retentionPolicy,
 		}
-		log.Printf("Created queue: %s", queueName)
+
+		resp, err := qClient.CreateQueue(ctx, cfg.name, queueOpts)
+		if err != nil {
+			// Check if queue already exists (idempotent operation)
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "already exists") ||
+				strings.Contains(errMsg, "duplicate key") ||
+				strings.Contains(errMsg, "AlreadyExists") {
+				log.Printf("Queue '%s' already exists (%s), skipping", cfg.name, cfg.description)
+				skipped++
+				continue
+			}
+			// Actual error - fail fast
+			return fmt.Errorf("failed to create queue '%s': %w", cfg.name, err)
+		}
+
+		if resp != nil && resp.Success {
+			log.Printf("✓ Created queue: %s (%s)", cfg.name, cfg.description)
+			created++
+		} else {
+			log.Printf("⚠ Queue '%s' creation returned success=false", cfg.name)
+			skipped++
+		}
 	}
 
-	log.Println("All queues initialized successfully")
+	log.Printf("Queue initialization complete: %d created, %d already existed", created, skipped)
 	return nil
 }

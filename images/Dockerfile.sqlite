@@ -1,0 +1,62 @@
+# Dockerfile for ALL storage backends (Postgres, Redis, SQLite)
+# Requires CGO for SQLite support
+# Used for integration testing and development with full feature set
+
+FROM golang:1.25.6-alpine3.22 as builder
+
+# Install C compiler and musl-dev (required for CGO/SQLite)
+RUN apk add --no-cache gcc musl-dev
+
+# Set working directory
+WORKDIR /build
+
+# Copy dependency files first (better layer caching)
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY api api
+COPY cmd/chronoq cmd/chronoq
+COPY client client
+COPY internal internal
+COPY pkg pkg
+COPY main.go ./
+
+# Build arguments for version injection
+ARG VERSION=1.0.0
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+# Build binary with SQLite support (CGO enabled)
+RUN CGO_ENABLED=1 go build \
+    -tags=sqlite \
+    -ldflags="-X 'github.com/adrien19/chronoqueue/pkg/version.Version=${VERSION}' \
+    -X 'github.com/adrien19/chronoqueue/pkg/version.GitCommit=${GIT_COMMIT}' \
+    -X 'github.com/adrien19/chronoqueue/pkg/version.BuildDate=${BUILD_DATE}'" \
+    -o chronoqueue \
+    main.go
+
+## Runtime stage - minimal image with just the binary
+FROM alpine:latest
+
+# Install runtime dependencies and timezone data for calendar schedules
+RUN apk add --no-cache ca-certificates tzdata
+
+# Set working directory
+WORKDIR /
+
+# Create necessary directories
+RUN mkdir -p /config /secrets /data
+
+# Copy binary from builder
+COPY --from=builder /build/chronoqueue /chronoqueue
+
+# Copy entrypoint script
+COPY images/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Expose gRPC and HTTP ports
+EXPOSE 9000 8080
+
+# Use entrypoint script
+ENTRYPOINT ["/entrypoint.sh"]

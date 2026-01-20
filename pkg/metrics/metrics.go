@@ -80,6 +80,22 @@ var (
 		[]string{"queue_name"},
 	)
 
+	messagesValidatedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "chronoqueue_messages_validated_total",
+			Help: "Total number of messages validated successfully",
+		},
+		[]string{"queue_name"},
+	)
+
+	validationFailuresTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "chronoqueue_validation_failures_total",
+			Help: "Total number of message validation failures",
+		},
+		[]string{"queue_name", "reason"},
+	)
+
 	redisOperationsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "chronoqueue_redis_operations_total",
@@ -107,18 +123,71 @@ type MetricsRegistry struct {
 func NewMetricsRegistry() *MetricsRegistry {
 	registry := prometheus.NewRegistry()
 
-	// Register all metrics
+	// Register HTTP/gRPC metrics
 	registry.MustRegister(
 		grpcRequestsTotal,
 		grpcRequestDuration,
 		httpRequestsTotal,
 		httpRequestDuration,
+	)
+
+	// Register legacy business metrics
+	registry.MustRegister(
 		queuesTotal,
 		messagesEnqueued,
 		messagesDequeued,
 		messagesPending,
+		messagesValidatedTotal,
+		validationFailuresTotal,
 		redisOperationsTotal,
 		redisOperationDuration,
+	)
+
+	// Register message lifecycle metrics
+	registry.MustRegister(
+		messageStateTransitions,
+		messagesByState,
+		messageClaimLatency,
+		messageProcessingDuration,
+	)
+
+	// Register DLQ metrics
+	registry.MustRegister(
+		dlqMessagesTotal,
+		dlqIngestionRate,
+		dlqRetryTotal,
+	)
+
+	// Register lease management metrics
+	registry.MustRegister(
+		leaseRenewalsTotal,
+		leaseExpirationsTotal,
+		heartbeatTimeoutsTotal,
+	)
+
+	// Register schedule metrics
+	registry.MustRegister(
+		scheduleExecutionsTotal,
+		cronScheduleExecutionsTotal,
+		scheduleActivationsTotal,
+		scheduleLagSeconds,
+	)
+
+	// Register database metrics
+	registry.MustRegister(
+		dbQueryDuration,
+		dbTransactionDuration,
+		dbConnectionsActive,
+		dbConnectionsIdle,
+		dbConnectionsWait,
+	)
+
+	// Register background service metrics
+	registry.MustRegister(
+		backgroundServiceIterations,
+		backgroundServiceProcessedMessages,
+		backgroundServiceIterationDuration,
+		messagesCleanedUpTotal,
 	)
 
 	return &MetricsRegistry{
@@ -156,6 +225,16 @@ func IncrementMessagesEnqueued(queueName string) {
 // IncrementMessagesDequeued increments dequeued message count for a queue
 func IncrementMessagesDequeued(queueName string) {
 	messagesDequeued.WithLabelValues(queueName).Inc()
+}
+
+// IncrementMessagesValidated increments validated message count for a queue
+func IncrementMessagesValidated(queueName string) {
+	messagesValidatedTotal.WithLabelValues(queueName).Inc()
+}
+
+// IncrementValidationFailures increments validation failure count for a queue with reason
+func IncrementValidationFailures(queueName string, reason string) {
+	validationFailuresTotal.WithLabelValues(queueName, reason).Inc()
 }
 
 // SetMessagesPending sets the pending message count for a queue

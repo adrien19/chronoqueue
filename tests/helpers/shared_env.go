@@ -7,10 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
-	redismodule "github.com/testcontainers/testcontainers-go/modules/redis"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"google.golang.org/grpc"
@@ -25,7 +24,7 @@ var (
 
 // SharedTestEnvironment returns a shared test environment for all tests in a package.
 // Containers are created once and reused across all tests. Each test should clean
-// up its own data (e.g., by calling env.FlushRedis(t)).
+// up its own data (e.g., by deleting test queues/messages).
 //
 // This approach significantly speeds up test execution by avoiding container
 // creation overhead for each test.
@@ -38,7 +37,6 @@ var (
 //
 //	func TestSomething(t *testing.T) {
 //	    env := helpers.SharedTestEnvironment(t)
-//	    defer env.FlushRedis(t) // Clean up after test
 //
 //	    // ... perform tests
 //	}
@@ -86,25 +84,32 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 		return nil, fmt.Errorf("failed to create Docker network: %w", err)
 	}
 
-	// Start Redis container using the Redis module
-	redisContainer, err := redismodule.Run(ctx,
-		"redis:7-alpine",
-		network.WithNetwork([]string{"redis"}, net),
+	// Start Postgres container using the Postgres module
+	postgresContainer, err := postgres.Run(ctx,
+		"postgres:17-alpine",
+		postgres.WithDatabase("chronoqueue"),
+		postgres.WithUsername("chronoqueue"),
+		postgres.WithPassword("chronoqueue"),
+		network.WithNetwork([]string{"postgres"}, net),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start Redis container: %w", err)
+		return nil, fmt.Errorf("failed to start Postgres container: %w", err)
 	}
 
-	// Get connection string using Redis module's helper method
-	connectionString, err := redisContainer.ConnectionString(ctx)
+	// Get connection string for host->Postgres connections (used by tests)
+	connectionString, err := postgresContainer.ConnectionString(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get Redis connection string: %w", err)
+		return nil, fmt.Errorf("failed to get Postgres connection string: %w", err)
 	}
+
+	// Verify Postgres is ready by attempting a connection
+	// This ensures the database is fully initialized before starting ChronoQueue
+	time.Sleep(2 * time.Second) // Brief delay to ensure full initialization
 
 	// For container→container connections, use network alias
-	// ChronoQueue container will connect to Redis via internal Docker network
-	// (connectionString is used by test code to connect from host → Redis)
-	redisInternalAddr := "redis:6379"
+	// ChronoQueue container will connect to Postgres via internal Docker network
+	postgresInternalHost := "postgres"
+	postgresInternalPort := "5432"
 
 	// Use pre-built test image (built via `make build-test-image`)
 	// This avoids rebuilding the image every time tests run
@@ -116,13 +121,18 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 			net.Name: {"chronoqueue"},
 		},
 		Env: map[string]string{
-			"SERVER_MODE":           "development",     // Use development mode for tests
-			"REDIS_ADDR":            redisInternalAddr, // Use internal network address for container→Redis
-			"REDIS_DB":              "0",
-			"LOG_LEVEL":             "debug",
-			"ENABLE_ENCRYPTION":     "false",
-			"SCHEDULER_INTERVAL_MS": "300",  // Faster scheduler for tests (300ms vs 1000ms)
-			"RECLAIM_INTERVAL_MS":   "2000", // Faster reclaim for tests (2s vs 5s)
+			"SERVER_MODE":           "development",        // Use development mode for tests
+			"STORAGE_TYPE":          "postgres",           // Use Postgres storage
+			"POSTGRES_HOST":         postgresInternalHost, // Use internal network address
+			"POSTGRES_PORT":         postgresInternalPort, // Postgres port
+			"POSTGRES_USER":         "chronoqueue",        // Postgres user
+			"POSTGRES_PASSWORD":     "chronoqueue",        // Postgres password
+			"POSTGRES_DB":           "chronoqueue",        // Postgres database
+			"POSTGRES_SSLMODE":      "disable",            // Disable SSL for tests
+			"LOG_LEVEL":             "debug",              // Enable debug logging
+			"ENABLE_ENCRYPTION":     "false",              // Disable encryption for tests
+			"SCHEDULER_INTERVAL_MS": "300",                // Faster scheduler for tests (300ms vs 1000ms)
+			"RECLAIM_INTERVAL_MS":   "2000",               // Faster reclaim for tests (2s vs 5s)
 		},
 		WaitingFor: wait.ForHTTP("/health").
 			WithPort("8080").
@@ -156,28 +166,14 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 	grpcAddr := fmt.Sprintf("%s:%s", serverHost, grpcPort.Port())
 	httpAddr := fmt.Sprintf("http://%s:%s", serverHost, httpPort.Port())
 
-	// Create Redis client using the connection string
-	redisOpts, err := redis.ParseURL(connectionString)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse Redis connection string: %w", err)
-	}
-
-	redisClient := redis.NewClient(redisOpts)
-
-	// Verify Redis connection
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("failed to ping Redis: %w", err)
-	}
-
 	env := &TestEnvironment{
-		RedisContainer:  redisContainer,
-		ServerContainer: serverContainer,
-		Network:         net,
-		RedisClient:     redisClient,
-		RedisAddr:       connectionString,
-		GRPCAddr:        grpcAddr,
-		HTTPAddr:        httpAddr,
-		ctx:             ctx,
+		PostgresContainer: postgresContainer,
+		ServerContainer:   serverContainer,
+		Network:           net,
+		PostgresConnStr:   connectionString,
+		GRPCAddr:          grpcAddr,
+		HTTPAddr:          httpAddr,
+		ctx:               ctx,
 	}
 
 	// Allow time for scheduler and reclaim services to initialize
@@ -195,7 +191,6 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 //
 //	func TestWithSharedEnv(t *testing.T) {
 //	    env := helpers.SharedTestEnvironment(t)
-//	    defer env.FlushRedis(t)
 //
 //	    conn := env.NewGRPCClientShared(t)
 //	    defer conn.Close()

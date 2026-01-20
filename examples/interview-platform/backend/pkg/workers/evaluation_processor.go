@@ -51,8 +51,8 @@ func (w *EvaluationProcessorWorker) Start(ctx context.Context) error {
 			}
 
 			msg := response.GetMessage()
-			streamEntryID := response.GetStreamEntryId()
-			if err := w.processMessage(ctx, queueName, msg, streamEntryID); err != nil {
+			attemptID := response.GetAttemptId()
+			if err := w.processMessage(ctx, queueName, msg, attemptID); err != nil {
 				log.Printf("[Evaluation Processor] Error processing message %s: %v", msg.GetMessageId(), err)
 			}
 		}
@@ -60,18 +60,18 @@ func (w *EvaluationProcessorWorker) Start(ctx context.Context) error {
 }
 
 // processMessage handles a single evaluation message
-func (w *EvaluationProcessorWorker) processMessage(ctx context.Context, queueName string, msg *message_pb.Message, streamEntryID string) error {
+func (w *EvaluationProcessorWorker) processMessage(ctx context.Context, queueName string, msg *message_pb.Message, attemptID string) error {
 	log.Printf("[Evaluation Processor] Processing message: %s", msg.GetMessageId())
 
 	metadata := msg.GetMetadata()
 	if metadata == nil || metadata.GetPayload() == nil {
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, attemptID)
 		return nil
 	}
 
 	payloadData := metadata.GetPayload().GetData()
 	if payloadData == nil {
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, attemptID)
 		return nil
 	}
 
@@ -82,7 +82,7 @@ func (w *EvaluationProcessorWorker) processMessage(ctx context.Context, queueNam
 	action, _ := fields["action"].(string)
 
 	if evaluationID == "" {
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, attemptID)
 		return nil
 	}
 
@@ -90,7 +90,7 @@ func (w *EvaluationProcessorWorker) processMessage(ctx context.Context, queueNam
 	evaluation, err := w.db.GetEvaluation(evaluationID)
 	if err != nil {
 		log.Printf("[Evaluation Processor] Evaluation not found: %v", err)
-		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID)
+		w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, attemptID)
 		return err
 	}
 
@@ -131,7 +131,7 @@ func (w *EvaluationProcessorWorker) processMessage(ctx context.Context, queueNam
 	}
 
 	// Acknowledge message
-	if _, err := w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, streamEntryID); err != nil {
+	if _, err := w.queue.AcknowledgeMessage(ctx, queueName, msg.GetMessageId(), client.MESSAGE_COMPLETED, attemptID); err != nil {
 		log.Printf("[Evaluation Processor] Failed to acknowledge message: %v", err)
 		return err
 	}
