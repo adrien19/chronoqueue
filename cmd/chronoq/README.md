@@ -39,7 +39,13 @@ Flags:
       --production             Start in production mode (optimized for production use)
       --grpc-addr string       gRPC server address (default ":9000")
       --http-addr string       HTTP gateway address (default ":8080")
-      --redis-addr string      Redis server address (default "localhost:6379")
+      --storage string         Storage backend: postgres, sqlite, redis (default "postgres")
+      --postgres-host string   PostgreSQL host (default "localhost")
+      --postgres-port int      PostgreSQL port (default 5432)
+      --postgres-user string   PostgreSQL user
+      --postgres-password string PostgreSQL password
+      --postgres-db string     PostgreSQL database name
+      --sqlite-db-path string  SQLite database file path
       --log-level string       Log level: debug, info, warn, error (default "info")
       --log-format string      Log format: text, json (default "text")
       --enable-tls             Enable TLS
@@ -50,11 +56,14 @@ Flags:
       --cors-origins strings   Allowed CORS origins
 
 Examples:
-    # Development server with default settings
+    # Development server with default settings (PostgreSQL)
   chronoqueue server --dev
   
-  # Production server with custom configuration
-  chronoqueue server --grpc-addr :9000 --http-addr :8080 --redis-addr localhost:6379
+  # SQLite storage for local development
+  chronoqueue server --dev --storage sqlite --sqlite-db-path chronoqueue.db
+  
+  # Production server with PostgreSQL
+  chronoqueue server --production --storage postgres --postgres-host localhost --postgres-db chronoqueue
   
   # Server with TLS enabled
   chronoqueue server --enable-tls --cert-file server.crt --key-file server.key
@@ -67,7 +76,7 @@ This starts both gRPC and HTTP gateway servers:
 - **Health Check**: Available at `http://localhost:8080/health`
 - **Metrics**: Available at `http://localhost:8080/metrics`
 - **API Documentation**: Available at `http://localhost:8080/docs/` (dev mode)
-- **Redis Storage**: Connects to Redis for message persistence
+- **Storage**: Supports PostgreSQL (default), SQLite, or Redis (legacy)
 
 ### Queue Management
 
@@ -151,34 +160,26 @@ Examples:
   chronoqueue message get my-queue
   chronoqueue message get my-queue --enable-heartbeat
   chronoqueue message get exclusive-queue --exclusivity-key "key1"
-
-Note: The get command returns a Stream Entry ID which should be used with ack and heartbeat commands
-for optimal performance with Redis Streams architecture.
 ```
 
 #### Acknowledge Message
 
 ```bash
-chronoqueue message ack <queue-name> <message-id> <message-state> [stream-entry-id]
+chronoqueue message ack <queue-name> <message-id> <message-state>
 
 States:
   COMPLETED - Message processed successfully
   CANCELED  - Message processing was canceled
   ERRORED   - Message processing failed
 
-Arguments:
-  stream-entry-id - (Optional) Redis Stream entry ID from get command for optimal performance
-
 Examples:
-  # Basic acknowledgment
+  # Acknowledge successful processing
   chronoqueue message ack my-queue msg-123 COMPLETED
   
-  # With stream entry ID (recommended for Redis Streams architecture)
-  chronoqueue message ack my-queue msg-123 COMPLETED 1234567890-0
-  
+  # Acknowledge failed processing
   chronoqueue message ack my-queue msg-456 ERRORED
+```
 
-Examples:
 #### Peek Messages
 
 ```bash
@@ -203,17 +204,10 @@ Examples:
 #### Send Message Heartbeat
 
 ```bash
-chronoqueue message heartbeat <queue-name> <message-id> [stream-entry-id]
-
-Arguments:
-  stream-entry-id - (Optional) Redis Stream entry ID from get command for optimal performance
+chronoqueue message heartbeat <queue-name> <message-id>
 
 Examples:
-  # Basic heartbeat
   chronoqueue message heartbeat my-queue msg-123
-  
-  # With stream entry ID (recommended for Redis Streams architecture)
-  chronoqueue message heartbeat my-queue msg-123 1234567890-0
 ```
 
 ### Schedule Management
@@ -344,15 +338,14 @@ chronoqueue message post work-queue "Task 2" --priority 5 --insecure --server 0.
 # 4. Check queue state
 chronoqueue queue state work-queue --insecure --server 0.0.0.0:9000
 
-# 5. Get and process messages (note the Stream Entry ID in output)
+# 5. Get and process messages
 chronoqueue message get work-queue --lease-duration 30s --insecure --server 0.0.0.0:9000
 # Output:
 # Message ID: msg-123
-# Stream Entry ID: 1234567890-0
 # ...
 
-# 6. Acknowledge processed message (use both message ID and stream entry ID from step 5)
-chronoqueue message ack work-queue msg-123 COMPLETED 1234567890-0 --insecure --server 0.0.0.0:9000
+# 6. Acknowledge processed message
+chronoqueue message ack work-queue msg-123 COMPLETED --insecure --server 0.0.0.0:9000
 ```
 
 ### Scheduled Tasks Workflow
@@ -407,10 +400,11 @@ chronoqueue message get exclusive-work \
 
 The CLI and server include several performance optimizations:
 
-- **State-Based Sorted Sets**: O(log n) performance for background message processing
-- **Optimized Metadata Operations**: Eliminated redundant database calls
-- **Connection Pooling**: Efficient gRPC connection management
-- **Atomic Transactions**: Redis pipeline operations for consistency
+- **SQL Indexes**: Optimized database queries with proper indexing for O(log n) performance
+- **Connection Pooling**: Efficient database connection management
+- **Prepared Statements**: Cached query execution plans for improved performance
+- **ACID Transactions**: PostgreSQL/SQLite transactions for data consistency
+- **Background Services**: Efficient scheduled message activation and lease reclamation
 
 ## Architecture
 

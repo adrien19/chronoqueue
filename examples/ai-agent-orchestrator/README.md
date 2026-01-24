@@ -57,7 +57,7 @@ Best for quick demos and testing without LLM dependencies.
 ```bash
 # 1. Start ChronoQueue server (in terminal 1)
 cd /workspaces/chronoqueue
-export REDIS_PASSWORD='mypassword' && make server-dev
+make server-dev
 
 # 2. Build orchestrator (in terminal 2)
 cd examples/ai-agent-orchestrator
@@ -99,7 +99,7 @@ ollama pull qwen2.5-coder:7b # ~4.7GB - for coding tasks
 ```bash
 # Terminal 1: Start ChronoQueue
 cd /workspaces/chronoqueue
-export REDIS_PASSWORD='mypassword' && make server-dev
+make server-dev
 ```
 
 #### Step 3: Run Orchestrator with LLM Agents
@@ -591,7 +591,7 @@ Demonstrates multi-agent orchestration without LLM dependencies.
 ```bash
 # Terminal 1: Start ChronoQueue
 cd /workspaces/chronoqueue
-export REDIS_PASSWORD='mypassword' && make server-dev
+make server-dev
 
 # Terminal 2: Setup orchestrator
 cd examples/ai-agent-orchestrator
@@ -638,7 +638,7 @@ ollama list
 
 # Terminal 3: Start ChronoQueue
 cd /workspaces/chronoqueue
-export REDIS_PASSWORD='mypassword' && make server-dev
+make server-dev
 
 # Terminal 4: Setup orchestrator
 cd examples/ai-agent-orchestrator
@@ -688,7 +688,7 @@ Run mock and LLM agents simultaneously for maximum flexibility.
 ```bash
 # Start ChronoQueue (Terminal 1)
 cd /workspaces/chronoqueue
-export REDIS_PASSWORD='mypassword' && make server-dev
+make server-dev
 
 # Setup (Terminal 2)
 cd examples/ai-agent-orchestrator
@@ -840,7 +840,7 @@ Common Flags:
 - Agent health metrics
 - Task status tracking
 - Log aggregation and filtering
-- Redis integration for accuracy
+- Database integration for accurate state tracking
 
 ### ✅ Phase 5: Real LLM Integration (Complete)
 
@@ -911,7 +911,7 @@ Use **Mock Agents Only** (Option 1 from Quick Start):
 ```bash
 # Start ChronoQueue
 cd /workspaces/chronoqueue
-export REDIS_PASSWORD='mypassword' && make server-dev
+make server-dev
 
 # Setup and run
 cd examples/ai-agent-orchestrator
@@ -969,18 +969,17 @@ make docker-setup  # Installs everything including Ollama
 
 ### Scenario 4: ChronoQueue won't start
 
-**Problem**: ChronoQueue needs Redis running first.
+**Problem**: ChronoQueue needs storage backend configured.
 
 **Solution**:
 
 ```bash
-# Check if Redis is running (from project root)
-docker ps | grep redis
+# Check if ChronoQueue is running
+docker ps | grep chronoqueue
 
-# If not, start the full ChronoQueue setup:
+# If not, start the ChronoQueue server:
 cd /workspaces/chronoqueue
-export REDIS_PASSWORD='mypassword'
-make server-dev
+make server-dev  # Uses default PostgreSQL or configured storage
 ```
 
 **Verify**: Check logs for "Server listening on :9000"
@@ -1329,16 +1328,13 @@ A: Normal. llama3.2:3b is ~2GB, qwen2.5-coder:7b is ~4.7GB. Takes 10-30 minutes 
 ### Troubleshooting Questions
 
 **Q: "Connection refused" errors**  
-A: Check if ChronoQueue is running: `docker ps | grep redis` and `make server-dev`
+A: Check if ChronoQueue is running: `docker ps | grep chronoqueue` and `make server-dev`
 
 **Q: Tasks not processing**  
 A: Verify agents are started. Check `ps aux | grep ai-orchestrator` and logs.
 
 **Q: High memory usage**  
 A: LLM models require significant RAM (4-8GB). Adjust Docker resource limits if needed.
-
-**Q: Logs show "maintnotifications" warnings**  
-A: Harmless Redis notifications. Does not affect functionality.
 
 ---
 

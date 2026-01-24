@@ -638,7 +638,7 @@ chronoqueue/examples/interview-platform/
 
 - **Containerization**: Docker & Docker Compose
 - **Queue System**: ChronoQueue Server
-- **Cache/Store**: Redis (ChronoQueue dependency)
+- **Cache/Store**: PostgreSQL/SQLite (ChronoQueue storage backends)
 
 ---
 
@@ -646,7 +646,7 @@ chronoqueue/examples/interview-platform/
 
 ### Prerequisites
 
-- **Docker** & **Docker Compose** (for ChronoQueue server & Redis)
+- **Docker** & **Docker Compose** (for ChronoQueue server & PostgreSQL)
 - **Go 1.21+** (for backend & workers)
 - **Node.js 18+** & **npm/pnpm** (for frontend)
 - **Clerk Account** (free tier available at <https://clerk.com>)

@@ -224,7 +224,7 @@ docker logs <container-id>
 
 ```go
 // In testcontainer.go, add logging:
-t.Logf("Redis running at: %s", redisContainer.Endpoint)
+t.Logf("Database running at: %s", dbContainer.Endpoint)
 t.Logf("ChronoQueue running at: %s", chronoQueueContainer.Endpoint)
 ```
 
@@ -253,7 +253,7 @@ t.Logf("ChronoQueue running at: %s", chronoQueueContainer.Endpoint)
 ```
 Start
   ↓
-Setup Testcontainers (Redis + ChronoQueue)
+Setup Testcontainers (Database + ChronoQueue)
   ↓
 Load Fixtures (queues.json, messages.json, etc.)
   ↓

@@ -44,7 +44,7 @@ ChronoQueue is queue management system designed to handle high-volume message pr
 
 ### Prerequisites
 
-- [Redis](https://redis.io/)
+- [PostgreSQL](https://www.postgresql.org/) or [SQLite](https://www.sqlite.org/) (for storage)
 - [Go](https://golang.org/) (for server-side & client-side SDK)
 - [Python (WIP)](https://www.python.org/) (for client-side SDKs)
 
@@ -52,7 +52,7 @@ ChronoQueue is queue management system designed to handle high-volume message pr
 
 #### Docker Compose Option
 
-The easiest way to get started locally is to use [docker-compose](https://docs.docker.com/compose/). Simply:
+The easiest way to get started locally is to use [docker-compose](https://docs.docker.com/compose/). ChronoQueue supports PostgreSQL and SQLite storage backends. Simply:
 
 1. Clone the repository:
 
@@ -63,7 +63,7 @@ The easiest way to get started locally is to use [docker-compose](https://docs.d
 2. Cd into deploy - `cd deploy` and run:
 
     ```bash
-    docker-compose up
+    docker-compose -f docker-compose.postgres.yaml up
     ```
 
 #### Run Server Option
@@ -86,12 +86,20 @@ The easiest way to get started locally is to use [docker-compose](https://docs.d
     go get https://github.com/adrien19/chronoqueue/client
     ```
 
-3. Configure your environment (refer to the .env.example file for guidance).
+3. Configure your environment:
+   - Choose a storage backend: PostgreSQL (recommended) or SQLite for development
+   - Refer to the .env.example file for configuration guidance
+   - For PostgreSQL: Set `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
+   - For SQLite: Set `SQLITE_DB_PATH` (e.g., `/data/chronoqueue.db`)
 
 4. Start the ChronoQueue server:
 
     ```bash
-    go run main.go server --dev --server :9000 --redis-password mypassword
+    # Using PostgreSQL (recommended)
+    go run main.go server --dev --server :9000
+    
+    # Or using SQLite
+    go run main.go server --dev --server :9000 --storage sqlite --sqlite-db-path chronoqueue.db
     ```
 
 If you choose to use mTLS option, you will need to generate certificates. You can use already provided script `generate_certs.sh` to quickly generate these certificates.

@@ -4,10 +4,10 @@ The `entrypoint.sh` script provides a flexible way to start the ChronoQueue serv
 
 ## Features
 
-- **Redis Connectivity Check**: Validates Redis is reachable before starting the server (30s timeout)
+- **Storage Backend Support**: PostgreSQL (default), SQLite, or Redis (legacy)
 - **Environment-Based Configuration**: Configure server mode and settings via environment variables
 - **Startup Logging**: Clear logging of configuration and startup process
-- **Error Handling**: Fails fast if Redis is not available
+- **Validation**: Validates storage configuration before starting
 
 ## Environment Variables
 
@@ -15,7 +15,7 @@ The `entrypoint.sh` script provides a flexible way to start the ChronoQueue serv
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `REDIS_ADDR` | Redis server address | `localhost:6379` |
+| `STORAGE_TYPE` | Storage backend type | `postgres` |
 
 ### Server Mode
 
@@ -43,7 +43,30 @@ The `entrypoint.sh` script provides a flexible way to start the ChronoQueue serv
 | `GRPC_ADDR` | gRPC server listen address | `:9000` |
 | `HTTP_ADDR` | HTTP gateway listen address | `:8080` |
 
-### Redis Configuration
+### Storage Configuration
+
+| Variable | Description | Default | Values |
+|----------|-------------|---------|--------|
+| `STORAGE_TYPE` | Storage backend | `postgres` | `postgres`, `sqlite`, `redis` |
+
+### PostgreSQL Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------||
+| `POSTGRES_HOST` | PostgreSQL host | `localhost` |
+| `POSTGRES_PORT` | PostgreSQL port | `5432` |
+| `POSTGRES_USER` | PostgreSQL user | `chronoqueue` |
+| `POSTGRES_PASSWORD` | PostgreSQL password | _(required)_ |
+| `POSTGRES_DB` | PostgreSQL database | `chronoqueue` |
+| `POSTGRES_SSLMODE` | SSL mode | `disable` |
+
+### SQLite Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------||
+| `SQLITE_DB_PATH` | SQLite database file path | `chronoqueue.db` |
+
+### Redis Configuration (Legacy)
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -69,25 +92,47 @@ The `entrypoint.sh` script provides a flexible way to start the ChronoQueue serv
 
 ## Usage Examples
 
-### Docker Run - Development Mode
+### Docker Run - Development Mode (PostgreSQL)
 
 ```bash
 docker run -d \
   -e SERVER_MODE=development \
-  -e REDIS_ADDR=redis:6379 \
+  -e STORAGE_TYPE=postgres \
+  -e POSTGRES_HOST=postgres \
+  -e POSTGRES_USER=chronoqueue \
+  -e POSTGRES_PASSWORD=secret \
+  -e POSTGRES_DB=chronoqueue \
   -e LOG_LEVEL=debug \
   -p 9000:9000 \
   -p 8080:8080 \
   chronoqueue:latest
 ```
 
-### Docker Run - Production Mode
+### Docker Run - Development Mode (SQLite)
+
+```bash
+docker run -d \
+  -e SERVER_MODE=development \
+  -e STORAGE_TYPE=sqlite \
+  -e SQLITE_DB_PATH=/data/chronoqueue.db \
+  -e LOG_LEVEL=debug \
+  -v /path/to/data:/data \
+  -p 9000:9000 \
+  -p 8080:8080 \
+  chronoqueue:sqlite
+```
+
+### Docker Run - Production Mode (PostgreSQL)
 
 ```bash
 docker run -d \
   -e SERVER_MODE=production \
-  -e REDIS_ADDR=redis-prod:6379 \
-  -e REDIS_PASSWORD=secret \
+  -e STORAGE_TYPE=postgres \
+  -e POSTGRES_HOST=postgres-prod \
+  -e POSTGRES_USER=chronoqueue \
+  -e POSTGRES_PASSWORD=secret \
+  -e POSTGRES_DB=chronoqueue \
+  -e POSTGRES_SSLMODE=require \
   -e LOG_LEVEL=info \
   -p 9000:9000 \
   -p 8080:8080 \
@@ -99,7 +144,9 @@ docker run -d \
 ```bash
 docker run -d \
   -e SERVER_MODE=production \
-  -e REDIS_ADDR=redis-prod:6379 \
+  -e STORAGE_TYPE=postgres \
+  -e POSTGRES_HOST=postgres-prod \
+  -e POSTGRES_PASSWORD=secret \
   -e ENABLE_TLS=true \
   -e CERT_FILE=/secrets/server.crt \
   -e KEY_FILE=/secrets/server.key \
@@ -120,18 +167,31 @@ services:
     image: chronoqueue:latest
     environment:
       - SERVER_MODE=production
-      - REDIS_ADDR=redis:6379
+      - STORAGE_TYPE=postgres
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=chronoqueue
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=chronoqueue
       - LOG_LEVEL=info
     ports:
       - "9000:9000"
       - "8080:8080"
     depends_on:
-      - redis
+      - postgres
   
-  redis:
-    image: redis:7-alpine
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=chronoqueue
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=chronoqueue
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
     ports:
-      - "6379:6379"
+      - "5432:5432"
+
+volumes:
+  postgres-data:
 ```
 
 ## Kubernetes Deployment
@@ -157,15 +217,24 @@ spec:
         env:
         - name: SERVER_MODE
           value: "production"
-        - name: REDIS_ADDR
-          value: "redis-service:6379"
-        - name: LOG_LEVEL
-          value: "info"
-        - name: REDIS_PASSWORD
+        - name: STORAGE_TYPE
+          value: "postgres"
+        - name: POSTGRES_HOST
+          value: "postgres-service"
+        - name: POSTGRES_DB
+          value: "chronoqueue"
+        - name: POSTGRES_USER
           valueFrom:
             secretKeyRef:
-              name: redis-secret
+              name: postgres-secret
+              key: username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
               key: password
+        - name: LOG_LEVEL
+          value: "info"
         ports:
         - containerPort: 9000
           name: grpc
@@ -187,28 +256,42 @@ spec:
 
 ## Startup Flow
 
-1. **Display Configuration**: Logs all configuration values
-2. **Redis Connectivity Check**: Attempts to connect to Redis (30s timeout with 2s intervals)
-3. **Build Command**: Constructs server command based on `SERVER_MODE` and other env vars
+1. **Display Configuration**: Logs all configuration values including storage backend
+2. **Validate Storage Configuration**: Ensures required environment variables are set for chosen storage
+3. **Build Command**: Constructs server command based on `SERVER_MODE`, `STORAGE_TYPE`, and other env vars
 4. **Start Server**: Executes the ChronoQueue server with the constructed arguments
 
 ## Troubleshooting
 
-### Redis Connection Failures
+### Storage Connection Failures
 
-If the container fails to start with Redis connection errors:
+If the container fails to start with storage connection errors:
+
+**PostgreSQL:**
 
 ```
-[ERROR] Redis is not reachable at redis:6379 after 30s
-[ERROR] Failed to connect to Redis. Server will not start.
+[ERROR] Failed to connect to PostgreSQL. Check connection settings.
 ```
 
 **Solutions:**
 
-- Verify Redis is running: `docker ps | grep redis`
+- Verify PostgreSQL is running: `docker ps | grep postgres`
 - Check network connectivity: `docker network inspect <network-name>`
-- Verify Redis address is correct: `echo $REDIS_ADDR`
-- Ensure Redis port is exposed: `docker port <redis-container>`
+- Verify connection settings: `echo $POSTGRES_HOST $POSTGRES_PORT`
+- Ensure PostgreSQL accepts connections: Check `pg_hba.conf`
+- Verify credentials are correct
+
+**SQLite:**
+
+```
+[ERROR] Failed to open SQLite database
+```
+
+**Solutions:**
+
+- Ensure the directory exists and is writable
+- Verify volume mount is correct: `docker inspect <container-id>`
+- Check file permissions on the host
 
 ### Server Mode Issues
 
@@ -226,7 +309,8 @@ docker logs <container-id>
 [INFO] ChronoQueue Server Startup
 [INFO] ==========================
 [INFO] Server Mode: development
-[INFO] Redis Address: redis:6379
+[INFO] Storage Type: postgres
+[INFO] PostgreSQL Host: postgres:5432
 [INFO] ...
 ```
 
