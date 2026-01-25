@@ -144,6 +144,17 @@ if [ "$ENABLE_CORS" = "true" ]; then
     fi
 fi
 
+# Add API documentation configuration flags
+if [ "$ENABLE_API_DOCS" = "true" ]; then
+    CMD_ARGS="$CMD_ARGS --enable-api-docs"
+    log_info "API documentation enabled"
+
+    if [ -n "$API_DOCS_CORS_ORIGINS" ]; then
+        CMD_ARGS="$CMD_ARGS --api-docs-cors-origins $API_DOCS_CORS_ORIGINS"
+        log_info "API Docs CORS Origins: $API_DOCS_CORS_ORIGINS"
+    fi
+fi
+
 log_info "Starting ChronoQueue server..."
 log_info "Command: /chronoqueue $CMD_ARGS"
 log_info ""

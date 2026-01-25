@@ -312,13 +312,15 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 
 	// Use the gateway helper function from gateway package
 	gatewayConfig := gateway.GatewayConfig{
-		GRPCServerAddr: s.config.GRPCAddr,
-		HTTPAddr:       s.config.HTTPAddr,
-		CORSEnabled:    s.config.EnableCORS,
-		AllowedOrigins: s.config.AllowOrigins,
-		UseTLS:         gatewayUseTLS,
-		TLSInsecure:    gatewayInsecure,
-		ServerCertFile: s.config.CACertFile, // Reuse CA cert for verification
+		GRPCServerAddr:      s.config.GRPCAddr,
+		HTTPAddr:            s.config.HTTPAddr,
+		CORSEnabled:         s.config.EnableCORS,
+		AllowedOrigins:      s.config.AllowOrigins,
+		UseTLS:              gatewayUseTLS,
+		TLSInsecure:         gatewayInsecure,
+		ServerCertFile:      s.config.CACertFile, // Reuse CA cert for verification
+		EnableAPIDocs:       s.config.EnableAPIDocs,
+		APIDocsAllowOrigins: s.config.APIDocsAllowOrigins,
 	}
 
 	gatewayHandler, err := gateway.NewHTTPGateway(ctx, gatewayConfig, s.logger)
@@ -338,11 +340,9 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	// Add metrics endpoint
 	httpMux.Handle("/metrics", gateway.MetricsHandler())
 
-	// Add development endpoints
-	if s.config.IsDevelopment {
-		httpMux.Handle("/docs/", gateway.SwaggerUIHandler())
-		httpMux.Handle("/docs/swagger.json", gateway.SwaggerSpecHandler())
-	}
+	// Add API documentation endpoints (controlled by EnableAPIDocs config)
+	httpMux.Handle("/docs/", gateway.SwaggerUIHandler(gatewayConfig, s.logger))
+	httpMux.Handle("/docs/swagger.json", gateway.SwaggerSpecHandler(gatewayConfig, s.logger))
 
 	// Wrap with metrics middleware
 	var handler http.Handler = httpMux

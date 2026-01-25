@@ -51,6 +51,10 @@ type Config struct {
 	EnableCORS   bool
 	AllowOrigins []string
 
+	// API Documentation Configuration
+	EnableAPIDocs       bool     // Enable API documentation endpoints (default: false in production)
+	APIDocsAllowOrigins []string // Allowed CORS origins for API docs (comma-separated)
+
 	// Background Services Configuration
 	SchedulerIntervalMs int // Scheduler interval in milliseconds (default: 1000ms)
 	ReclaimIntervalMs   int // Reclaim service interval in milliseconds (default: 5000ms)
@@ -103,6 +107,8 @@ func ProductionConfig() *Config {
 		EnableTLS:           getEnvBool("CHRONOQUEUE_TLS_ENABLED", false),
 		EnableCORS:          getEnvBool("ENABLE_CORS", false),
 		AllowOrigins:        getEnvSlice("ALLOW_ORIGINS", []string{}),
+		EnableAPIDocs:       getEnvBool("ENABLE_API_DOCS", false), // Disabled by default in production
+		APIDocsAllowOrigins: getEnvSlice("API_DOCS_CORS_ORIGINS", []string{}),
 		SchedulerIntervalMs: getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
 		ReclaimIntervalMs:   getEnvInt("RECLAIM_INTERVAL_MS", 5000),
 		IsDevelopment:       false,

@@ -595,7 +595,6 @@ gen-proto-$(1):
 	$(PROTOC) --go_out=. --go_opt=module=$(PROTO_PREFIX) --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,module=$(PROTO_PREFIX) ./proto/$(1)/v1/*.proto
 	# Generate gRPC-Gateway reverse proxy code (only for queueservice)
 	@if [ "$(1)" = "queueservice" ]; then \
-		mkdir -p docs/api && \
 		$(PROTOC) --grpc-gateway_out=. \
 			--grpc-gateway_opt=module=$(PROTO_PREFIX) \
 			--grpc-gateway_opt=generate_unbound_methods=true \
@@ -603,9 +602,11 @@ gen-proto-$(1):
 	fi
 	# Generate OpenAPI v2 documentation (only for queueservice)
 	@if [ "$(1)" = "queueservice" ]; then \
-		$(PROTOC) --openapiv2_out=docs/api \
+		mkdir -p pkg/gateway && \
+		$(PROTOC) --openapiv2_out=pkg/gateway \
 			--openapiv2_opt=allow_merge=true,merge_file_name=chronoqueue \
 			./proto/$(1)/v1/service.proto; \
+		echo "Generated OpenAPI spec in pkg/gateway/ for embedding"; \
 	fi
 endef
 

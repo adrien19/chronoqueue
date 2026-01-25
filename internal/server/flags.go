@@ -62,6 +62,8 @@ func AddServerFlagsLegacy(config *Config) {
 	pflag.StringVar(&config.CACertFile, "ca-cert-file", config.CACertFile, "CA certificate file for mutual TLS (optional)")
 	pflag.BoolVar(&config.EnableCORS, "enable-cors", config.EnableCORS, "Enable CORS for HTTP gateway")
 	pflag.StringSliceVar(&config.AllowOrigins, "cors-origins", config.AllowOrigins, "Allowed CORS origins")
+	pflag.BoolVar(&config.EnableAPIDocs, "enable-api-docs", config.EnableAPIDocs, "Enable API documentation endpoints (disabled by default in production)")
+	pflag.StringSliceVar(&config.APIDocsAllowOrigins, "api-docs-cors-origins", config.APIDocsAllowOrigins, "Allowed CORS origins for API documentation (uses --cors-origins if not set)")
 }
 
 // ParseConfigFromFlags parses configuration from cobra command flags
@@ -138,6 +140,12 @@ func ParseConfigFromFlags(cmd *cobra.Command) (*Config, error) {
 	}
 	if cmd.Flags().Changed("cors-origins") {
 		config.AllowOrigins, _ = cmd.Flags().GetStringSlice("cors-origins")
+	}
+	if cmd.Flags().Changed("enable-api-docs") {
+		config.EnableAPIDocs, _ = cmd.Flags().GetBool("enable-api-docs")
+	}
+	if cmd.Flags().Changed("api-docs-cors-origins") {
+		config.APIDocsAllowOrigins, _ = cmd.Flags().GetStringSlice("api-docs-cors-origins")
 	}
 
 	return config, config.Validate()

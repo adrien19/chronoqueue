@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	_ "embed"
 	"fmt"
 	"net/http"
 	"os"
@@ -20,6 +21,9 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/metrics"
 )
 
+//go:embed chronoqueue.swagger.json
+var swaggerSpec []byte
+
 // GatewayConfig holds configuration for the HTTP gateway
 type GatewayConfig struct {
 	GRPCServerAddr string
@@ -31,6 +35,10 @@ type GatewayConfig struct {
 	UseTLS         bool   // Enable TLS for internal gateway→gRPC connection
 	TLSInsecure    bool   // Skip TLS verification (for localhost)
 	ServerCertFile string // Optional: CA cert to verify server certificate
+
+	// API Documentation Configuration
+	EnableAPIDocs       bool     // Enable API documentation endpoints (disabled by default in production)
+	APIDocsAllowOrigins []string // Allowed CORS origins for API docs (empty = use AllowedOrigins)
 }
 
 // NewHTTPGateway creates a new HTTP-to-gRPC gateway
@@ -210,8 +218,24 @@ func MetricsHandler() http.Handler {
 }
 
 // SwaggerUIHandler serves the Swagger UI for API documentation
-func SwaggerUIHandler() http.Handler {
+func SwaggerUIHandler(config GatewayConfig, logger *log.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Security: Check if API docs are enabled
+		if !config.EnableAPIDocs {
+			logger.WarnWithFields("API documentation access denied - disabled in configuration",
+				"remote_addr", r.RemoteAddr,
+				"path", r.URL.Path,
+			)
+			http.Error(w, "API documentation is disabled", http.StatusNotFound)
+			return
+		}
+
+		// Security: Restrict to GET and OPTIONS methods only
+		if r.Method != http.MethodGet && r.Method != http.MethodOptions {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
 		// Check if request is for the root docs path
 		if r.URL.Path == "/docs/" || r.URL.Path == "/docs" {
 			// Serve the Swagger UI HTML
@@ -275,21 +299,54 @@ func SwaggerUIHandler() http.Handler {
 }
 
 // SwaggerSpecHandler serves the OpenAPI specification JSON
-func SwaggerSpecHandler() http.Handler {
+func SwaggerSpecHandler(config GatewayConfig, logger *log.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Read the swagger.json file from the docs directory
-		specPath := "/workspaces/chronoqueue/docs/api/chronoqueue.swagger.json"
+		// Security: Check if API docs are enabled
+		if !config.EnableAPIDocs {
+			logger.WarnWithFields("API documentation access denied - disabled in configuration",
+				"remote_addr", r.RemoteAddr,
+				"path", r.URL.Path,
+			)
+			http.Error(w, "API documentation is disabled", http.StatusNotFound)
+			return
+		}
 
-		specContent, err := os.ReadFile(specPath)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to read OpenAPI spec: %v", err), http.StatusInternalServerError)
+		// Security: Restrict to GET and OPTIONS methods only
+		if r.Method != http.MethodGet && r.Method != http.MethodOptions {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		// Security: Use specific CORS origins instead of wildcard
+		allowedOrigins := config.APIDocsAllowOrigins
+		if len(allowedOrigins) == 0 {
+			// Fall back to main gateway CORS config
+			allowedOrigins = config.AllowedOrigins
+		}
+
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			// Check if origin is allowed
+			allowed := false
+			for _, allowedOrigin := range allowedOrigins {
+				if allowedOrigin == "*" || allowedOrigin == origin {
+					allowed = true
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					break
+				}
+			}
+
+			if !allowed {
+				logger.WarnWithFields("API documentation CORS origin denied",
+					"origin", origin,
+					"remote_addr", r.RemoteAddr,
+				)
+			}
+		}
 
 		// Handle CORS preflight
 		if r.Method == "OPTIONS" {
@@ -298,6 +355,6 @@ func SwaggerSpecHandler() http.Handler {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(specContent)
+		_, _ = w.Write(swaggerSpec)
 	})
 }
