@@ -56,12 +56,12 @@ func newDevServerCommand() *cobra.Command {
 		Long: `Start a ChronoQueue server configured for local development.
 This starts both gRPC and HTTP gateway servers with development-friendly defaults.
 
-The server will use Redis for storage. By default, it connects to localhost:6379,
-but you can specify a different Redis connection string.
+The server will use SQLite for storage by default. You can specify a different
+storage backend (PostgreSQL or SQLite) using the --storage-type flag.
 
 Examples:
   chronoqueue start dev-server
-  chronoqueue start dev-server --redis-addr localhost:6380
+  chronoqueue start dev-server --storage-type postgres
   chronoqueue start dev-server --grpc-addr :9001 --http-addr :8081
   chronoqueue start dev-server --log-level debug`,
 		RunE: runDevServer,
@@ -89,7 +89,7 @@ func runDevServer(cmd *cobra.Command, args []string) error {
 	outputs.PrintSuccess("Development server configuration loaded successfully")
 	outputs.PrintInfo(fmt.Sprintf("gRPC server will listen on: %s", config.GRPCAddr))
 	outputs.PrintInfo(fmt.Sprintf("HTTP gateway will listen on: %s", config.HTTPAddr))
-	outputs.PrintInfo(fmt.Sprintf("Redis connection: %s", config.RedisAddr))
+	outputs.PrintInfo(fmt.Sprintf("Storage backend: %s", config.StorageType))
 	outputs.PrintInfo(fmt.Sprintf("Log level: %s", config.LogLevel))
 	outputs.PrintInfo("Press Ctrl+C to stop the server")
 

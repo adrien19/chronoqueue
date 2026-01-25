@@ -35,9 +35,13 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 	)
 
 	// Set up gRPC client options
+	// Note: We don't use WithBlock() here because the connection is established lazily
+	// The first request will trigger the connection
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
+
+	logger.InfoWithFields("Registering HTTP gateway handler", "grpc_addr", config.GRPCServerAddr)
 
 	// Register the QueueService handler
 	err := queueservice_pb.RegisterQueueServiceHandlerFromEndpoint(
@@ -47,8 +51,11 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 		opts,
 	)
 	if err != nil {
+		logger.ErrorWithFields("Failed to register QueueService handler", "error", err, "grpc_addr", config.GRPCServerAddr)
 		return nil, fmt.Errorf("failed to register QueueService handler: %w", err)
 	}
+
+	logger.InfoWithFields("HTTP gateway handler registered successfully", "grpc_addr", config.GRPCServerAddr)
 
 	// Wrap with CORS if enabled
 	if config.CORSEnabled {

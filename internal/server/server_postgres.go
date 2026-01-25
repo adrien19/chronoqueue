@@ -49,6 +49,7 @@ func (s *Server) initializePostgresStorage(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize Postgres schema registry: %w", err)
 	}
 
+	// Store schema registry for use by ChronoQueueServer
 	s.schemaRegistry = registry
 	s.logger.Info("Postgres schema registry initialized")
 

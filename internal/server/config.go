@@ -20,12 +20,7 @@ type Config struct {
 	HTTPAddr string
 
 	// Storage Configuration
-	StorageType      string // "redis", "sqlite", or "postgres"
-	RedisAddr        string
-	RedisPassword    string
-	RedisUsername    string // For Redis 6+ ACL
-	RedisDB          int
-	RedisTLS         bool
+	StorageType      string // "sqlite" or "postgres"
 	SQLiteDBPath     string // Path to SQLite database file
 	PostgresDSN      string // Optional DSN override
 	PostgresHost     string
@@ -62,12 +57,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		GRPCAddr:            getEnv("GRPC_ADDR", ":9000"),
 		HTTPAddr:            getEnv("HTTP_ADDR", ":8080"),
-		StorageType:         getEnv("STORAGE_TYPE", "redis"),
-		RedisAddr:           getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword:       getEnv("REDIS_PASSWORD", ""),
-		RedisUsername:       getEnv("REDIS_USERNAME", ""),
-		RedisDB:             getEnvInt("REDIS_DB", 0),
-		RedisTLS:            getEnvBool("REDIS_TLS_ENABLED", false),
+		StorageType:         getEnv("STORAGE_TYPE", "postgres"),
 		SQLiteDBPath:        getEnv("SQLITE_DB_PATH", "chronoqueue.db"),
 		PostgresDSN:         getEnv("POSTGRES_DSN", ""),
 		PostgresHost:        getEnv("POSTGRES_HOST", "localhost"),
@@ -92,12 +82,7 @@ func ProductionConfig() *Config {
 	return &Config{
 		GRPCAddr:            getEnv("GRPC_ADDR", ":9000"),
 		HTTPAddr:            getEnv("HTTP_ADDR", ":8080"),
-		StorageType:         getEnv("STORAGE_TYPE", "redis"),
-		RedisAddr:           getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword:       getEnv("REDIS_PASSWORD", ""),
-		RedisUsername:       getEnv("REDIS_USERNAME", ""),
-		RedisDB:             getEnvInt("REDIS_DB", 0),
-		RedisTLS:            getEnvBool("REDIS_TLS_ENABLED", false),
+		StorageType:         getEnv("STORAGE_TYPE", "postgres"),
 		SQLiteDBPath:        getEnv("SQLITE_DB_PATH", "chronoqueue.db"),
 		PostgresDSN:         getEnv("POSTGRES_DSN", ""),
 		PostgresHost:        getEnv("POSTGRES_HOST", "localhost"),
@@ -132,12 +117,8 @@ func (c *Config) Validate() error {
 	}
 
 	// Validate storage configuration
-	if c.StorageType != "redis" && c.StorageType != "sqlite" && c.StorageType != "postgres" {
-		return fmt.Errorf("storage-type must be 'redis', 'sqlite', or 'postgres', got: %s", c.StorageType)
-	}
-
-	if c.StorageType == "redis" && c.RedisAddr == "" {
-		return fmt.Errorf("redis address cannot be empty when using redis storage")
+	if c.StorageType != "sqlite" && c.StorageType != "postgres" {
+		return fmt.Errorf("storage-type must be 'sqlite' or 'postgres', got: %s", c.StorageType)
 	}
 
 	if c.StorageType == "sqlite" && c.SQLiteDBPath == "" {

@@ -28,7 +28,7 @@ help:
 	@echo "Interview Platform - Makefile Commands"
 	@echo ""
 	@echo "Setup Commands:"
-	@echo "  make clean          - Flush Redis and clean up logs"
+	@echo "  make clean          - Clean up logs and temporary files"
 	@echo "  make build-all      - Build all services (API + Workers)"
 	@echo "  make build-api      - Build backend API only"
 	@echo "  make build-workers  - Build workers only"
@@ -110,7 +110,7 @@ kill-ports:
 	@lsof -ti:3000 | xargs kill -9 2>/dev/null || true
 	@echo "$(GREEN)Port cleanup complete$(NC)"
 
-## clean: Flush Redis and clean logs
+## clean: Clean logs and temporary files
 clean:
 	@echo "$(YELLOW)Cleaning logs...$(NC)"
 	@mkdir -p $(LOGS_DIR)
@@ -143,7 +143,7 @@ build-all: build-api build-workers
 start-chronoqueue:
 	@echo "$(YELLOW)Starting ChronoQueue server...$(NC)"
 	@mkdir -p $(LOGS_DIR)
-	@nohup $(CHRONOQUEUE_BIN) server --grpc-addr :50051 --http-addr :8090 --dev --redis-password mypassword > $(LOGS_DIR)/chronoqueue.log 2>&1 & echo "$(GREEN)ChronoQueue started with PID: $$!$(NC)"
+	@nohup $(CHRONOQUEUE_BIN) server --grpc-addr :50051 --http-addr :8090 --dev > $(LOGS_DIR)/chronoqueue.log 2>&1 & echo "$(GREEN)ChronoQueue started with PID: $$!$(NC)"
 	@sleep 2
 	@curl -s http://localhost:8090/health && echo "" || echo "$(RED)ChronoQueue health check failed$(NC)"
 

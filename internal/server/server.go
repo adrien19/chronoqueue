@@ -10,13 +10,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
@@ -33,11 +31,10 @@ import (
 type Server struct {
 	config               *Config
 	logger               *log.Logger
-	redisClient          *redis.Client
 	encryptionKeyManager *keymanager.EncryptionKeyManager
 	grpcServer           *chronoqueue.ChronoQueueServer
 	database             repository.Storage
-	schemaRegistry       schema.Registry
+	schemaRegistry       schema.Registry // Schema registry for message validation
 }
 
 // New creates a new server instance with the given configuration
@@ -78,22 +75,6 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Initialize storage based on configured type
 	switch s.config.StorageType {
-	case "redis":
-		// Initialize Redis connection
-		redisClient, err := s.initializeRedis(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to initialize Redis: %w", err)
-		}
-		s.redisClient = redisClient
-
-		// Initialize schema registry
-		s.schemaRegistry = schema.NewRedisRegistry(s.redisClient, s.logger)
-		s.logger.Info("Schema registry initialized")
-
-		// TODO: Update to use new repository.NewRedisStorage() when Redis backend is implemented
-		s.logger.Warn("Redis storage backend not yet migrated to new repository layer")
-		return fmt.Errorf("redis storage not yet supported with new repository layer")
-
 	case "sqlite":
 		// Initialize SQLite storage (implementation is in server_sqlite.go with build tag)
 		if err := s.initializeSQLiteStorage(ctx); err != nil {
@@ -109,7 +90,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("unsupported storage type: %s", s.config.StorageType)
 	}
 
-	// Initialize gRPC server directly with storage
+	// Initialize gRPC server with storage and schema registry
 	s.grpcServer = chronoqueue.NewChronoQueueServer(s.database, s.schemaRegistry, s.logger)
 
 	// Print startup information
@@ -131,7 +112,6 @@ func (s *Server) printStartupInfo() {
 		"grpc_addr", s.config.GRPCAddr,
 		"http_addr", s.config.HTTPAddr,
 		"storage_type", s.config.StorageType,
-		"redis_addr", s.config.RedisAddr,
 		"sqlite_db_path", s.config.SQLiteDBPath,
 		"log_level", s.config.LogLevel,
 		"tls_enabled", s.config.EnableTLS,
@@ -143,8 +123,6 @@ func (s *Server) printStartupInfo() {
 	fmt.Printf("ℹ HTTP gateway will listen on: %s\n", s.config.HTTPAddr)
 	fmt.Printf("ℹ Storage backend: %s\n", s.config.StorageType)
 	switch s.config.StorageType {
-	case "redis":
-		fmt.Printf("ℹ Redis connection: %s\n", s.config.RedisAddr)
 	case "sqlite":
 		fmt.Printf("ℹ SQLite database: %s\n", s.config.SQLiteDBPath)
 	case "postgres":
@@ -203,37 +181,6 @@ func (s *Server) initializeLogger() (*log.Logger, error) {
 	}
 
 	return log.NewLogger(log.WithLevel(level), log.WithFormatter(formatter)), nil
-}
-
-// initializeRedis creates and tests the Redis connection
-func (s *Server) initializeRedis(ctx context.Context) (*redis.Client, error) {
-	opts := &redis.Options{
-		Addr:     s.config.RedisAddr,
-		Password: s.config.RedisPassword,
-		Username: s.config.RedisUsername,
-		DB:       s.config.RedisDB,
-	}
-
-	// Configure TLS if enabled
-	if s.config.RedisTLS {
-		opts.TLSConfig = &tls.Config{
-			MinVersion: tls.VersionTLS12,
-		}
-	}
-
-	client := redis.NewClient(opts)
-
-	// Test connection with timeout
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	_, err := client.Ping(ctx).Result()
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Redis at %s: %w", s.config.RedisAddr, err)
-	}
-
-	s.logger.InfoWithFields("Connected to Redis", "addr", s.config.RedisAddr, "db", s.config.RedisDB)
-	return client, nil
 }
 
 // initializeEncryptionKeyManager creates the encryption key manager

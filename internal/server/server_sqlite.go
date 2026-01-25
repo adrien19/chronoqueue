@@ -41,6 +41,8 @@ func (s *Server) initializeSQLiteStorage(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize SQLite schema registry: %w", err)
 	}
+
+	// Store schema registry for use by ChronoQueueServer
 	s.schemaRegistry = sqliteRegistry
 	s.logger.Info("SQLite schema registry initialized")
 

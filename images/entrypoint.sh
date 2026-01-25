@@ -65,6 +65,34 @@ case "$SERVER_MODE" in
         ;;
 esac
 
+# Add storage-type flag
+CMD_ARGS="$CMD_ARGS --storage-type $STORAGE_TYPE"
+
+# Add storage-specific configuration
+case "$STORAGE_TYPE" in
+    postgres)
+        if [ -n "$POSTGRES_DSN" ]; then
+            CMD_ARGS="$CMD_ARGS --postgres-dsn $POSTGRES_DSN"
+        else
+            [ -n "$POSTGRES_HOST" ] && CMD_ARGS="$CMD_ARGS --postgres-host $POSTGRES_HOST"
+            [ -n "$POSTGRES_PORT" ] && CMD_ARGS="$CMD_ARGS --postgres-port $POSTGRES_PORT"
+            [ -n "$POSTGRES_USER" ] && CMD_ARGS="$CMD_ARGS --postgres-user $POSTGRES_USER"
+            [ -n "$POSTGRES_PASSWORD" ] && CMD_ARGS="$CMD_ARGS --postgres-password $POSTGRES_PASSWORD"
+            [ -n "$POSTGRES_DB" ] && CMD_ARGS="$CMD_ARGS --postgres-db $POSTGRES_DB"
+            [ -n "$POSTGRES_SSLMODE" ] && CMD_ARGS="$CMD_ARGS --postgres-sslmode $POSTGRES_SSLMODE"
+        fi
+        ;;
+    sqlite)
+        SQLITE_DB_PATH="${SQLITE_DB_PATH:-chronoqueue.db}"
+        CMD_ARGS="$CMD_ARGS --sqlite-db-path $SQLITE_DB_PATH"
+        ;;
+esac
+
+# Add optional flags
+[ -n "$LOG_LEVEL" ] && CMD_ARGS="$CMD_ARGS --log-level $LOG_LEVEL"
+[ -n "$GRPC_ADDR" ] && CMD_ARGS="$CMD_ARGS --grpc-addr $GRPC_ADDR"
+[ -n "$HTTP_ADDR" ] && CMD_ARGS="$CMD_ARGS --http-addr $HTTP_ADDR"
+
 log_info "Starting ChronoQueue server..."
 log_info "Command: /chronoqueue $CMD_ARGS"
 log_info ""

@@ -47,7 +47,7 @@ The `entrypoint.sh` script provides a flexible way to start the ChronoQueue serv
 
 | Variable | Description | Default | Values |
 |----------|-------------|---------|--------|
-| `STORAGE_TYPE` | Storage backend | `postgres` | `postgres`, `sqlite`, `redis` |
+| `STORAGE_TYPE` | Storage backend | `postgres` | `postgres`, `sqlite`|
 
 ### PostgreSQL Configuration
 

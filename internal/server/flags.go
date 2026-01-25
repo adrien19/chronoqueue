@@ -9,12 +9,7 @@ import (
 func AddServerFlags(cmd *cobra.Command, config *Config) {
 	cmd.Flags().StringVar(&config.GRPCAddr, "grpc-addr", config.GRPCAddr, "gRPC server address")
 	cmd.Flags().StringVar(&config.HTTPAddr, "http-addr", config.HTTPAddr, "HTTP gateway address")
-	cmd.Flags().StringVar(&config.StorageType, "storage-type", config.StorageType, "Storage backend type (redis, sqlite, postgres)")
-	cmd.Flags().StringVar(&config.RedisAddr, "redis-addr", config.RedisAddr, "Redis server address")
-	cmd.Flags().StringVar(&config.RedisPassword, "redis-password", config.RedisPassword, "Redis password")
-	cmd.Flags().StringVar(&config.RedisUsername, "redis-username", config.RedisUsername, "Redis username (ACL)")
-	cmd.Flags().IntVar(&config.RedisDB, "redis-db", config.RedisDB, "Redis database number")
-	cmd.Flags().BoolVar(&config.RedisTLS, "redis-tls", config.RedisTLS, "Enable TLS for Redis")
+	cmd.Flags().StringVar(&config.StorageType, "storage-type", config.StorageType, "Storage backend type (sqlite, postgres)")
 	cmd.Flags().StringVar(&config.SQLiteDBPath, "sqlite-db-path", config.SQLiteDBPath, "Path to SQLite database file")
 	cmd.Flags().StringVar(&config.PostgresDSN, "postgres-dsn", config.PostgresDSN, "PostgreSQL DSN (overrides discrete flags)")
 	cmd.Flags().StringVar(&config.PostgresHost, "postgres-host", config.PostgresHost, "PostgreSQL host")
@@ -42,12 +37,7 @@ func AddServerFlags(cmd *cobra.Command, config *Config) {
 func AddServerFlagsLegacy(config *Config) {
 	pflag.StringVar(&config.GRPCAddr, "grpc-addr", config.GRPCAddr, "gRPC server address")
 	pflag.StringVar(&config.HTTPAddr, "http-addr", config.HTTPAddr, "HTTP gateway address")
-	pflag.StringVar(&config.StorageType, "storage-type", config.StorageType, "Storage backend type (redis, sqlite, postgres)")
-	pflag.StringVar(&config.RedisAddr, "redis-addr", config.RedisAddr, "Redis server address")
-	pflag.StringVar(&config.RedisPassword, "redis-password", config.RedisPassword, "Redis password")
-	pflag.StringVar(&config.RedisUsername, "redis-username", config.RedisUsername, "Redis username (ACL)")
-	pflag.IntVar(&config.RedisDB, "redis-db", config.RedisDB, "Redis database number")
-	pflag.BoolVar(&config.RedisTLS, "redis-tls", config.RedisTLS, "Enable TLS for Redis")
+	pflag.StringVar(&config.StorageType, "storage-type", config.StorageType, "Storage backend type (sqlite, postgres)")
 	pflag.StringVar(&config.SQLiteDBPath, "sqlite-db-path", config.SQLiteDBPath, "Path to SQLite database file")
 	pflag.StringVar(&config.PostgresDSN, "postgres-dsn", config.PostgresDSN, "PostgreSQL DSN (overrides discrete flags)")
 	pflag.StringVar(&config.PostgresHost, "postgres-host", config.PostgresHost, "PostgreSQL host")
@@ -93,21 +83,6 @@ func ParseConfigFromFlags(cmd *cobra.Command) (*Config, error) {
 		config.SQLiteDBPath = db
 	}
 
-	if cmd.Flags().Changed("redis-addr") {
-		config.RedisAddr, _ = cmd.Flags().GetString("redis-addr")
-	}
-	if cmd.Flags().Changed("redis-password") {
-		config.RedisPassword, _ = cmd.Flags().GetString("redis-password")
-	}
-	if cmd.Flags().Changed("redis-username") {
-		config.RedisUsername, _ = cmd.Flags().GetString("redis-username")
-	}
-	if cmd.Flags().Changed("redis-db") {
-		config.RedisDB, _ = cmd.Flags().GetInt("redis-db")
-	}
-	if cmd.Flags().Changed("redis-tls") {
-		config.RedisTLS, _ = cmd.Flags().GetBool("redis-tls")
-	}
 	if cmd.Flags().Changed("sqlite-db-path") {
 		config.SQLiteDBPath, _ = cmd.Flags().GetString("sqlite-db-path")
 	}

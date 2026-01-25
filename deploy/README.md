@@ -6,7 +6,6 @@ This directory contains Docker Compose configurations for deploying ChronoQueue 
 
 - `docker-compose.postgres.yaml` - ChronoQueue with PostgreSQL storage (default, **instrumented**)
 - `docker-compose.sqlite.yaml` - ChronoQueue with SQLite storage (**instrumented**)
-- `docker-compose.redis.yaml` - ChronoQueue with Redis storage (**not instrumented**)
 - `docker-compose.monitoring.yaml` - Monitoring stack (Prometheus + Grafana)
 - `prometheus.yml` - Prometheus scrape configuration
 - `grafana/` - Grafana provisioning configuration
@@ -162,9 +161,6 @@ make deploy-up STORAGE=postgres
 
 # SQLite (good for development, embedded deployments)
 make deploy-up STORAGE=sqlite
-
-# Redis (legacy, not instrumented - not recommended)
-make deploy-up STORAGE=redis
 ```
 
 ### PostgreSQL Configuration
@@ -251,7 +247,7 @@ Common across all storage backends:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SERVER_MODE` | `development` | Server mode (development/production) |
-| `STORAGE_TYPE` | varies | Storage backend (postgres/sqlite/redis) |
+| `STORAGE_TYPE` | varies | Storage backend (postgres/sqlite) |
 | `LOG_LEVEL` | `debug` | Log level (debug/info/warn/error) |
 | `LOG_FORMAT` | `text` | Log format (text/json) |
 | `ENABLE_ENCRYPTION` | `true` | Enable message encryption |
@@ -274,14 +270,6 @@ Common across all storage backends:
 |----------|---------|-------------|
 | `SQLITE_DB_PATH` | `/data/chronoqueue.db` | Path to SQLite database file |
 
-### Redis-specific (legacy)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `REDIS_ADDR` | `redis_container:6379` | Redis address |
-| `REDIS_PASSWORD` | empty | Redis password |
-| `REDIS_DB` | `0` | Redis database number |
-
 ## Persistent Data
 
 Volumes are automatically created for data persistence:
@@ -295,8 +283,6 @@ docker volume ls | grep chronoqueue
 #   - postgres-data (PostgreSQL database)
 # SQLite:
 #   - sqlite-data (SQLite database file)
-# Redis:
-#   - deploy_redis_data (Redis data)
 # Monitoring:
 #   - prometheus-data (Prometheus time-series data)
 #   - grafana-data (Grafana dashboards, users, settings)
@@ -567,9 +553,6 @@ make deploy-down STORAGE=postgres
 
 # Start with different storage
 make deploy-up STORAGE=sqlite
-
-# Or switch to Redis (not recommended - no metrics)
-make deploy-up STORAGE=redis
 ```
 
 ## Next Steps

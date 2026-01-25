@@ -112,7 +112,7 @@ func TestDevServerCommand_Examples(t *testing.T) {
 	cmd := newDevServerCommand()
 
 	assert.Contains(t, cmd.Long, "chronoqueue start dev-server")
-	assert.Contains(t, cmd.Long, "chronoqueue start dev-server --redis-addr localhost:6380")
+	assert.Contains(t, cmd.Long, "chronoqueue start dev-server --storage-type postgres")
 	assert.Contains(t, cmd.Long, "chronoqueue start dev-server --grpc-addr :9001 --http-addr :8081")
 	assert.Contains(t, cmd.Long, "chronoqueue start dev-server --log-level debug")
 }
