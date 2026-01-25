@@ -36,7 +36,7 @@ The **dev container** is the recommended approach for developing ChronoQueue. It
 - ✅ **Consistency**: Same environment for all developers and CI
 - ✅ **Isolation**: No conflicts with your local system
 - ✅ **Quick Setup**: Ready to code in minutes
-- ✅ **Includes**: Go 1.25, Redis, Docker, kubectl, all dev tools
+- ✅ **Includes**: Go 1.25, PostgreSQL, SQLite, Docker, kubectl, all dev tools
 
 **Setup Steps:**
 
@@ -67,7 +67,7 @@ The **dev container** is the recommended approach for developing ChronoQueue. It
    ```
 
 4. **Wait for container to build** (first time only, ~5-10 minutes)
-   - Container includes: Go, Redis, Docker-in-Docker, kubectl, and all dev tools
+   - Container includes: Go, PostgreSQL, SQLite, Docker-in-Docker, kubectl, and all dev tools
    - Subsequent starts are instant
 
 5. **Verify setup:**
@@ -86,7 +86,7 @@ The **dev container** is the recommended approach for developing ChronoQueue. It
 
 6. **Start coding!** 🚀
    - All dependencies are ready
-   - Redis is available (managed by testcontainers during tests)
+   - PostgreSQL and SQLite support is available
    - Docker-in-Docker is configured for integration tests
 
 #### 🔧 **Alternative: Manual Setup** (Not Recommended)
@@ -97,7 +97,7 @@ If you cannot use dev containers, you can set up manually:
 
 - Go 1.25 or later
 - Docker and Docker Compose
-- Redis 7.x
+- PostgreSQL 14+ or SQLite 3.35+ (for storage)
 - Make
 - Git
 
@@ -135,7 +135,7 @@ If you cannot use dev containers, you can set up manually:
    make test
    ```
 
-   > **Note**: Integration tests use testcontainers and will automatically manage Redis containers. No manual Redis setup required!
+   > **Note**: Integration tests use testcontainers and will automatically manage PostgreSQL and SQLite containers. No manual database setup required!
 
 ## Development Workflow
 
@@ -300,7 +300,7 @@ import (
 
 // QueueManager handles queue operations with priority support.
 type QueueManager struct {
-    redis *redis.Client
+    storage repository.Storage
     logger *log.Logger
 }
 
@@ -349,10 +349,10 @@ func (qm *QueueManager) CreateQueue(ctx context.Context, cfg *QueueConfig) error
    ```
 
 2. **Integration Tests**
-   - Test with real dependencies (Redis, ChronoQueue server)
+   - Test with real dependencies (PostgreSQL/SQLite, ChronoQueue server)
    - Place in `tests/integration/`
    - Use build tag `//go:build integration`
-   - **Note**: Integration tests use [testcontainers](https://golang.testcontainers.org/) to automatically manage Docker containers for Redis and other dependencies. When using the dev container, Docker-in-Docker is pre-configured, so tests work seamlessly without any additional setup.
+   - **Note**: Integration tests use [testcontainers](https://golang.testcontainers.org/) to automatically manage Docker containers for PostgreSQL, SQLite, and other dependencies. When using the dev container, Docker-in-Docker is pre-configured, so tests work seamlessly without any additional setup.
 
 3. **E2E Tests**
    - Test complete workflows
@@ -366,7 +366,7 @@ func (qm *QueueManager) CreateQueue(ctx context.Context, cfg *QueueConfig) error
 
 ### Running Tests
 
-> **💡 Pro Tip**: When using the **dev container**, all test infrastructure (Docker, testcontainers, Redis) is pre-configured. Simply run the commands below without any setup!
+> **💡 Pro Tip**: When using the **dev container**, all test infrastructure (Docker, testcontainers, PostgreSQL, SQLite) is pre-configured. Simply run the commands below without any setup!
 
 ```bash
 # All tests (unit, integration, e2e)
@@ -397,7 +397,7 @@ make ci-test-all
 make test-race
 ```
 
-**Testcontainers Note**: Integration and E2E tests automatically start required services (Redis, ChronoQueue) in Docker containers and clean them up after tests complete. No manual service management needed!
+**Testcontainers Note**: Integration and E2E tests automatically start required services (PostgreSQL/SQLite, ChronoQueue) in Docker containers and clean them up after tests complete. No manual service management needed!
 
 ## CI/CD Pipeline
 

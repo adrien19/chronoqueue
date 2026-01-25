@@ -1,6 +1,6 @@
 # Event Processing System Demo
 
-A comprehensive demonstration of ChronoQueue's Redis Streams architecture for high-throughput event processing, webhooks, and notifications.
+A comprehensive demonstration of ChronoQueue's SQL-based architecture for high-throughput event processing, webhooks, and notifications.
 
 ## 🎯 What This Demo Demonstrates
 
@@ -17,7 +17,7 @@ A comprehensive demonstration of ChronoQueue's Redis Streams architecture for hi
 
 ## 📋 Prerequisites
 
-- Docker and Docker Compose (for Redis)
+- Docker and Docker Compose (for PostgreSQL/SQLite)
 - Go 1.21+
 - ChronoQueue server running
 
@@ -274,70 +274,48 @@ ChronoQueue supports scheduling messages to be processed in the future using the
     • sms-alerts: 1 event (scheduled)
 ```
 
-#### 4.2 Verify Scheduled Messages in Redis
+#### 4.2 Verify Scheduled Messages
 
-Scheduled messages are stored in the sorted set `schedule:{queueName}` with their scheduled timestamp as the score:
+You can use the ChronoQueue CLI to inspect scheduled messages:
 
 ```bash
-# Check scheduled messages in email queue
-redis-cli ZRANGE schedule:email-notifications 0 -1 WITHSCORES
+# Check queue state to see scheduled message counts
+chronoqueue queue state email-notifications --server localhost:9000 --insecure
 
-# Output:
-# 1) "evt-1730470200-4"
-# 2) "1730470380"  # Unix timestamp for 3 minutes from now
-# 3) "evt-1730470200-0"
-# 4) "1730470500"  # Unix timestamp for 5 minutes from now
-# 5) "evt-1730470200-1"
-# 6) "1730470800"  # Unix timestamp for 10 minutes from now
+# Output shows:
+# - Messages in INVISIBLE state (scheduled, not yet ready)
+# - Messages in PENDING state (ready for processing)
+# - Other state counts
 
-# Check scheduled messages across all queues
-redis-cli KEYS "schedule:*"
+# Peek at messages in the queue
+chronoqueue message peek email-notifications --server localhost:9000 --insecure
 ```
 
-#### 4.3 Watch Messages Move to Stream
+#### 4.3 Watch Messages Become Available
 
 When the scheduled time arrives, ChronoQueue's background scheduler automatically:
 
-1. Checks the sorted set for messages whose timestamp <= current time
-2. Moves them to the appropriate priority stream (`stream:{priority}:{queue}`)
-3. Removes them from the sorted set
+1. Checks for messages in INVISIBLE state whose scheduled time has passed
+2. Transitions them to PENDING state (ready for consumption)
+3. Makes them available for workers to claim
 
-Use the included monitoring script to watch this in real-time:
+You can monitor this by repeatedly checking queue state:
 
 ```bash
-# Monitor scheduled messages moving to streams
-./monitor-scheduled.sh email-notifications
+# Monitor queue state changes
+watch -n 2 'chronoqueue queue state email-notifications --server localhost:9000 --insecure'
 
-# Output:
-# 🔍 Monitoring: email-notifications
-# Time: 16:37:15
-#
-# 📅 Scheduled Messages (schedule:email-notifications):
-#   Count: 2
-#   Messages:
-#     • evt-1762014681-4 → 16:34:21  (past due, will move soon)
-#     • evt-1762014681-1 → 16:41:21
-#
-# 🌊 Active Streams:
-#   Total in Streams: 0
-#
-# 📊 Summary:
-#   Scheduled (waiting): 2
-#   Active (processing): 0
-
-# After a few seconds, you'll see the count decrease in scheduled
-# and increase in active streams as messages are moved
+# You'll see:
+# - INVISIBLE count decrease as scheduled time passes
+# - PENDING count increase as messages become ready
+# - RUNNING count increase as workers claim messages
 ```
 
-You can also check manually in Redis:
+Alternative monitoring using ChronoQueue API:
 
 ```bash
-# Check scheduled message count
-redis-cli ZCARD schedule:email-notifications
-
-# Check stream length (by priority)
-redis-cli XLEN stream:75:email-notifications  # high priority
-redis-cli XLEN stream:50:email-notifications  # medium priority
+# Check message counts by state
+curl -s http://localhost:8080/v1/queues/email-notifications/state | jq
 redis-cli XLEN stream:25:email-notifications  # low priority
 ```
 

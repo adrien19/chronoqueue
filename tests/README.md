@@ -112,7 +112,7 @@ go tool cover -html=coverage.out
 
 ### Integration Tests (`./integration/`)
 
-Test individual features with real Redis and ChronoQueue containers:
+Test individual features with real PostgreSQL/SQLite and ChronoQueue containers:
 
 - ✅ **Queue Management**: Create, delete, list queues
 - ✅ **Message Operations**: Post, get, acknowledge, renew lease
@@ -149,7 +149,7 @@ Utility functions for common test operations:
 
 **Container Management:**
 
-- `SetupTestEnvironment()` - Creates Redis + ChronoQueue containers
+- `SetupTestEnvironment()` - Creates PostgreSQL/SQLite + ChronoQueue containers
 - `NewGRPCClient()` - gRPC client connection
 - `Cleanup()` - Resource teardown
 

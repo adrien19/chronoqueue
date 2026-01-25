@@ -34,9 +34,9 @@ The MCP server is already configured in `.vscode/mcp.json`:
 ### 1. Start ChronoQueue Server
 
 ```bash
-# Terminal 1: Start ChronoQueue
+# Terminal 1: Start ChronoQueue (uses PostgreSQL by default)
 cd /workspaces/chronoqueue
-export REDIS_PASSWORD='mypassword' && make server-dev
+make server-dev
 ```
 
 ### 2. (Optional) - Build MCP Server (if not already built)
@@ -220,9 +220,9 @@ cd mcp && npm run build
 # Check if server is running (gRPC health check)
 grpcurl -plaintext localhost:9000 list || echo "Server not running"
 
-# Start the server
+# Start the server (uses PostgreSQL by default)
 # From the repository root:
-export REDIS_PASSWORD='mypassword' && make server-dev
+make server-dev
 ```
 
 ### Tools Not Appearing
