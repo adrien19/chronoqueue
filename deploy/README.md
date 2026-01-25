@@ -18,9 +18,6 @@ ChronoQueue supports three storage backends:
 |---------|--------|---------|----------|
 | **PostgreSQL** | ✅ Recommended | ✅ Fully instrumented | Production, high availability |
 | **SQLite** | ✅ Supported | ✅ Fully instrumented | Development, embedded deployments |
-| **Redis** | ⚠️ Legacy | ❌ Not instrumented | Legacy support only |
-
-**Note**: Only PostgreSQL and SQLite have full metrics instrumentation. Redis storage does not expose detailed metrics.
 
 ## Quick Start
 
@@ -360,8 +357,6 @@ To send alert notifications (email, Slack, PagerDuty):
 
 2. **Verify storage backend is instrumented**:
    - ✅ PostgreSQL and SQLite have full instrumentation
-   - ❌ Redis does NOT have metrics instrumentation
-   - If using Redis, switch to PostgreSQL or SQLite for metrics
 
 3. **Check Prometheus targets**:
    - Visit <http://localhost:9090/targets>

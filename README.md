@@ -145,7 +145,7 @@ ChronoQueue includes a built-in web interface for monitoring and managing your q
 
 The devcontainer provides all configurations needed to run a development environment.
 
-**⚠️ NOTE**: Before building the `devcontainer`, make sure you have created the required network.`chronoqueue-devnet`.
+**⚠️ NOTE**: Before building the `devcontainer`, make sure you have created the required network `chronoqueue-devnet`.
 
 ```bash
 docker network create chronoqueue-devnet
