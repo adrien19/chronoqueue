@@ -36,6 +36,8 @@ func AddServerFlags(cmd *cobra.Command, config *Config) {
 	cmd.Flags().BoolVar(&config.GatewayInsecure, "gateway-insecure", config.GatewayInsecure, "Skip TLS verification for gateway→gRPC connection (auto-enabled for localhost)")
 	cmd.Flags().BoolVar(&config.EnableCORS, "enable-cors", config.EnableCORS, "Enable CORS for HTTP gateway")
 	cmd.Flags().StringSliceVar(&config.AllowOrigins, "cors-origins", config.AllowOrigins, "Allowed CORS origins")
+	cmd.Flags().BoolVar(&config.EnableAPIDocs, "enable-api-docs", config.EnableAPIDocs, "Enable API documentation endpoints (disabled by default in production)")
+	cmd.Flags().StringSliceVar(&config.APIDocsAllowOrigins, "api-docs-cors-origins", config.APIDocsAllowOrigins, "Allowed CORS origins for API documentation (uses --cors-origins if not set)")
 }
 
 // AddServerFlagsLegacy adds server configuration flags using pflag (for backward compatibility)
