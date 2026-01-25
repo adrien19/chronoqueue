@@ -292,12 +292,33 @@ func (s *Server) startGRPCServer() error {
 
 // startHTTPGateway starts the HTTP gateway server
 func (s *Server) startHTTPGateway(ctx context.Context) error {
+	// Determine gateway TLS settings
+	// By default, use the same TLS setting as the server
+	gatewayUseTLS := s.config.GatewayUseTLS
+	if !s.config.GatewayUseTLS && s.config.EnableTLS {
+		// If not explicitly set, inherit from server TLS setting
+		gatewayUseTLS = s.config.EnableTLS
+	}
+
+	// For localhost connections, we can skip verification to avoid certificate issues
+	gatewayInsecure := s.config.GatewayInsecure
+	if gatewayUseTLS && !gatewayInsecure {
+		// Auto-detect localhost and enable insecure mode
+		if s.config.GRPCAddr == "localhost:9000" || s.config.GRPCAddr == "127.0.0.1:9000" || s.config.GRPCAddr == ":9000" {
+			gatewayInsecure = true
+			s.logger.Debug("Auto-enabling gateway TLS insecure mode for localhost")
+		}
+	}
+
 	// Use the gateway helper function from gateway package
 	gatewayConfig := gateway.GatewayConfig{
 		GRPCServerAddr: s.config.GRPCAddr,
 		HTTPAddr:       s.config.HTTPAddr,
 		CORSEnabled:    s.config.EnableCORS,
 		AllowedOrigins: s.config.AllowOrigins,
+		UseTLS:         gatewayUseTLS,
+		TLSInsecure:    gatewayInsecure,
+		ServerCertFile: s.config.CACertFile, // Reuse CA cert for verification
 	}
 
 	gatewayHandler, err := gateway.NewHTTPGateway(ctx, gatewayConfig, s.logger)

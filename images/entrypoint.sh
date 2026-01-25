@@ -97,6 +97,49 @@ esac
 [ -n "$GRPC_ADDR" ] && CMD_ARGS="$CMD_ARGS --grpc-addr $GRPC_ADDR"
 [ -n "$HTTP_ADDR" ] && CMD_ARGS="$CMD_ARGS --http-addr $HTTP_ADDR"
 
+# Add TLS configuration flags
+if [ "$ENABLE_TLS" = "true" ]; then
+    log_info "TLS enabled"
+    CMD_ARGS="$CMD_ARGS --enable-tls"
+
+    if [ -n "$CERT_FILE" ]; then
+        CMD_ARGS="$CMD_ARGS --cert-file $CERT_FILE"
+        log_info "TLS Certificate: $CERT_FILE"
+    fi
+
+    if [ -n "$KEY_FILE" ]; then
+        CMD_ARGS="$CMD_ARGS --key-file $KEY_FILE"
+        log_info "TLS Key: $KEY_FILE"
+    fi
+
+    if [ -n "$CA_CERT_FILE" ]; then
+        CMD_ARGS="$CMD_ARGS --ca-cert-file $CA_CERT_FILE"
+        log_info "CA Certificate: $CA_CERT_FILE (mTLS enabled)"
+    fi
+fi
+
+# Add gateway TLS configuration flags
+if [ "$GATEWAY_USE_TLS" = "true" ]; then
+    CMD_ARGS="$CMD_ARGS --gateway-use-tls"
+    log_info "Gateway TLS enabled"
+fi
+
+if [ "$GATEWAY_INSECURE" = "true" ]; then
+    CMD_ARGS="$CMD_ARGS --gateway-insecure"
+    log_info "Gateway TLS verification disabled"
+fi
+
+# Add CORS configuration flags
+if [ "$ENABLE_CORS" = "true" ]; then
+    CMD_ARGS="$CMD_ARGS --enable-cors"
+    log_info "CORS enabled"
+
+    if [ -n "$CORS_ORIGINS" ]; then
+        CMD_ARGS="$CMD_ARGS --cors-origins $CORS_ORIGINS"
+        log_info "CORS Origins: $CORS_ORIGINS"
+    fi
+fi
+
 log_info "Starting ChronoQueue server..."
 log_info "Command: /chronoqueue $CMD_ARGS"
 log_info ""

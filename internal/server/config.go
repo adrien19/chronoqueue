@@ -40,6 +40,10 @@ type Config struct {
 	KeyFile    string
 	CACertFile string
 
+	// Gateway TLS Configuration
+	GatewayUseTLS   bool // Use TLS for gateway→gRPC internal connection
+	GatewayInsecure bool // Skip TLS verification for gateway→gRPC (for localhost)
+
 	// HTTP Gateway Configuration
 	EnableCORS   bool
 	AllowOrigins []string

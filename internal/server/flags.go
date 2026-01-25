@@ -29,6 +29,8 @@ func AddServerFlags(cmd *cobra.Command, config *Config) {
 	cmd.Flags().StringVar(&config.CertFile, "cert-file", config.CertFile, "TLS certificate file")
 	cmd.Flags().StringVar(&config.KeyFile, "key-file", config.KeyFile, "TLS key file")
 	cmd.Flags().StringVar(&config.CACertFile, "ca-cert-file", config.CACertFile, "CA certificate file for mutual TLS (optional)")
+	cmd.Flags().BoolVar(&config.GatewayUseTLS, "gateway-use-tls", config.GatewayUseTLS, "Enable TLS for gateway→gRPC internal connection (default: inherits from --enable-tls)")
+	cmd.Flags().BoolVar(&config.GatewayInsecure, "gateway-insecure", config.GatewayInsecure, "Skip TLS verification for gateway→gRPC connection (auto-enabled for localhost)")
 	cmd.Flags().BoolVar(&config.EnableCORS, "enable-cors", config.EnableCORS, "Enable CORS for HTTP gateway")
 	cmd.Flags().StringSliceVar(&config.AllowOrigins, "cors-origins", config.AllowOrigins, "Allowed CORS origins")
 }

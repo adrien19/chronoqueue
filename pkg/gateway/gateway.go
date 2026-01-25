@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 
@@ -23,6 +26,11 @@ type GatewayConfig struct {
 	HTTPAddr       string
 	CORSEnabled    bool
 	AllowedOrigins []string
+
+	// TLS Configuration for gateway→gRPC connection
+	UseTLS         bool   // Enable TLS for internal gateway→gRPC connection
+	TLSInsecure    bool   // Skip TLS verification (for localhost)
+	ServerCertFile string // Optional: CA cert to verify server certificate
 }
 
 // NewHTTPGateway creates a new HTTP-to-gRPC gateway
@@ -37,8 +45,33 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 	// Set up gRPC client options
 	// Note: We don't use WithBlock() here because the connection is established lazily
 	// The first request will trigger the connection
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	var opts []grpc.DialOption
+
+	if config.UseTLS {
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: config.TLSInsecure,
+		}
+
+		// Optionally load server CA cert for verification
+		if config.ServerCertFile != "" && !config.TLSInsecure {
+			caCert, err := os.ReadFile(config.ServerCertFile)
+			if err != nil {
+				logger.ErrorWithFields("Failed to read server CA cert for gateway", "error", err)
+				return nil, fmt.Errorf("read server CA cert: %w", err)
+			}
+
+			caCertPool := x509.NewCertPool()
+			if !caCertPool.AppendCertsFromPEM(caCert) {
+				return nil, fmt.Errorf("failed to parse server CA cert")
+			}
+			tlsConfig.RootCAs = caCertPool
+		}
+
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+		logger.Info("Gateway using TLS for internal gRPC connection")
+	} else {
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		logger.Warn("Gateway using INSECURE connection to gRPC server")
 	}
 
 	logger.InfoWithFields("Registering HTTP gateway handler", "grpc_addr", config.GRPCServerAddr)
