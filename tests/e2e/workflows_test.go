@@ -505,12 +505,13 @@ func TestE2E_MultiTenantIsolation(t *testing.T) {
 			tenantAConsumed++
 
 			// Acknowledge with attempt_id
-			_, _ = client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
+			_, err = client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
 				QueueName: queueName,
 				MessageId: getResp.Message.MessageId,
 				State:     message_pb.Message_Metadata_COMPLETED,
 				AttemptId: getResp.AttemptId,
 			})
+			require.NoError(t, err, "Failed to acknowledge message from Tenant A queue")
 		}
 	}
 	t.Logf("✓ Consumed %d messages from Tenant A", tenantAConsumed)
