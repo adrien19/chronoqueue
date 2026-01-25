@@ -11,13 +11,17 @@ import (
 
 // ConnectionConfig holds PostgreSQL connection configuration.
 type ConnectionConfig struct {
-	DSN             string
-	Host            string
-	Port            int
-	User            string
-	Password        string
-	Database        string
-	SSLMode         string
+	DSN      string
+	Host     string
+	Port     int
+	User     string
+	Password string
+	Database string
+	SSLMode  string
+	// PostgreSQL Client Certificate Configuration (for mTLS with database)
+	ClientCertFile  string // Path to PostgreSQL client certificate file
+	ClientKeyFile   string // Path to PostgreSQL client key file
+	RootCertFile    string // Path to PostgreSQL root CA certificate file
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
@@ -43,9 +47,23 @@ func (c *ConnectionConfig) dsn() string {
 		return c.DSN
 	}
 
-	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+	// Build base DSN
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		c.Host, c.Port, c.User, c.Password, c.Database, c.SSLMode,
 	)
+
+	// Add client certificate parameters if provided
+	if c.ClientCertFile != "" {
+		dsn += fmt.Sprintf(" sslcert=%s", c.ClientCertFile)
+	}
+	if c.ClientKeyFile != "" {
+		dsn += fmt.Sprintf(" sslkey=%s", c.ClientKeyFile)
+	}
+	if c.RootCertFile != "" {
+		dsn += fmt.Sprintf(" sslrootcert=%s", c.RootCertFile)
+	}
+
+	return dsn
 }
 
 // OpenConnection opens and configures a PostgreSQL database connection.

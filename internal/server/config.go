@@ -29,7 +29,10 @@ type Config struct {
 	PostgresPassword string
 	PostgresDBName   string
 	PostgresSSLMode  string
-
+	// PostgreSQL Client Certificate Configuration (for mTLS with database)
+	PostgresClientCertFile string // Path to PostgreSQL client certificate file
+	PostgresClientKeyFile  string // Path to PostgreSQL client key file
+	PostgresRootCertFile   string // Path to PostgreSQL root CA certificate file
 	// Logging Configuration
 	LogLevel  string
 	LogFormat string

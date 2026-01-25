@@ -84,6 +84,10 @@ case "$STORAGE_TYPE" in
             # POSTGRES_PASSWORD is read from environment variable by the binary (not passed via CLI for security)
             [ -n "$POSTGRES_DB" ] && CMD_ARGS="$CMD_ARGS --postgres-db $POSTGRES_DB"
             [ -n "$POSTGRES_SSLMODE" ] && CMD_ARGS="$CMD_ARGS --postgres-sslmode $POSTGRES_SSLMODE"
+            # PostgreSQL Client Certificate Configuration (for mTLS with database)
+            [ -n "$POSTGRES_CLIENT_CERT" ] && CMD_ARGS="$CMD_ARGS --postgres-client-cert $POSTGRES_CLIENT_CERT"
+            [ -n "$POSTGRES_CLIENT_KEY" ] && CMD_ARGS="$CMD_ARGS --postgres-client-key $POSTGRES_CLIENT_KEY"
+            [ -n "$POSTGRES_ROOT_CERT" ] && CMD_ARGS="$CMD_ARGS --postgres-root-cert $POSTGRES_ROOT_CERT"
         fi
         ;;
     sqlite)

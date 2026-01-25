@@ -12,13 +12,16 @@ import (
 // initializePostgresStorage initializes PostgreSQL storage and schema registry.
 func (s *Server) initializePostgresStorage(ctx context.Context) error {
 	connConfig := postgresrepository.ConnectionConfig{
-		DSN:      s.config.PostgresDSN,
-		Host:     s.config.PostgresHost,
-		Port:     s.config.PostgresPort,
-		User:     s.config.PostgresUser,
-		Password: s.config.PostgresPassword,
-		Database: s.config.PostgresDBName,
-		SSLMode:  s.config.PostgresSSLMode,
+		DSN:            s.config.PostgresDSN,
+		Host:           s.config.PostgresHost,
+		Port:           s.config.PostgresPort,
+		User:           s.config.PostgresUser,
+		Password:       s.config.PostgresPassword,
+		Database:       s.config.PostgresDBName,
+		SSLMode:        s.config.PostgresSSLMode,
+		ClientCertFile: s.config.PostgresClientCertFile,
+		ClientKeyFile:  s.config.PostgresClientKeyFile,
+		RootCertFile:   s.config.PostgresRootCertFile,
 	}
 
 	storage, err := repository.NewPostgresStorage(ctx, &postgresrepository.Config{
