@@ -58,6 +58,7 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 	if config.UseTLS {
 		tlsConfig := &tls.Config{
 			InsecureSkipVerify: config.TLSInsecure,
+			MinVersion:         tls.VersionTLS12,
 		}
 
 		// Optionally load server CA cert for verification
@@ -355,6 +356,24 @@ func SwaggerSpecHandler(config GatewayConfig, logger *log.Logger) http.Handler {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(swaggerSpec)
+		n, err := w.Write(swaggerSpec)
+		if err != nil {
+			logger.ErrorWithFields("Failed to write swagger spec",
+				"error", err,
+				"bytes_written", n,
+				"expected_bytes", len(swaggerSpec),
+				"remote_addr", r.RemoteAddr,
+				"path", r.URL.Path,
+			)
+			return
+		}
+		if n != len(swaggerSpec) {
+			logger.WarnWithFields("Short write when sending swagger spec",
+				"bytes_written", n,
+				"expected_bytes", len(swaggerSpec),
+				"remote_addr", r.RemoteAddr,
+				"path", r.URL.Path,
+			)
+		}
 	})
 }

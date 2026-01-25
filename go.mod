@@ -13,7 +13,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 
 	// CLI and Configuration
-	github.com/spf13/pflag v1.0.9
+	github.com/spf13/pflag v1.0.9 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251007200510-49b9836ed3ff
 	// Core gRPC and HTTP Gateway
 	google.golang.org/grpc v1.75.0

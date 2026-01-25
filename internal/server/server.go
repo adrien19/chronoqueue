@@ -300,13 +300,18 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 		gatewayUseTLS = s.config.EnableTLS
 	}
 
-	// For localhost connections, we can skip verification to avoid certificate issues
+	// For localhost connections in development mode, we can skip verification to avoid certificate issues
 	gatewayInsecure := s.config.GatewayInsecure
-	if gatewayUseTLS && !gatewayInsecure {
-		// Auto-detect localhost and enable insecure mode
+	if gatewayUseTLS && !gatewayInsecure && s.config.IsDevelopment {
+		// Auto-detect localhost and enable insecure mode only in development
 		if s.config.GRPCAddr == "localhost:9000" || s.config.GRPCAddr == "127.0.0.1:9000" || s.config.GRPCAddr == ":9000" {
 			gatewayInsecure = true
-			s.logger.Debug("Auto-enabling gateway TLS insecure mode for localhost")
+			s.logger.Debug("Auto-enabling gateway TLS insecure mode for localhost in development")
+		}
+	} else if gatewayUseTLS && !gatewayInsecure && !s.config.IsDevelopment {
+		// In production, warn if localhost is detected but auto-insecure is not enabled
+		if s.config.GRPCAddr == "localhost:9000" || s.config.GRPCAddr == "127.0.0.1:9000" || s.config.GRPCAddr == ":9000" {
+			s.logger.Warn("Gateway TLS verification enabled for localhost in production - consider using --gateway-insecure if needed")
 		}
 	}
 

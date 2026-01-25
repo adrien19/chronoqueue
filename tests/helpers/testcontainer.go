@@ -341,9 +341,9 @@ func SetupTestEnvironmentWithTLS(t *testing.T, certs *TestCertificates) *TestEnv
 	require.NoError(t, err)
 
 	grpcAddr := fmt.Sprintf("%s:%s", serverHost, grpcPort.Port())
-	httpAddr := fmt.Sprintf("https://%s:%s", serverHost, httpPort.Port()) // Note: HTTPS for TLS
+	httpAddr := fmt.Sprintf("http://%s:%s", serverHost, httpPort.Port()) // Note: HTTP (TLS is on gRPC only)
 
-	t.Logf("ChronoQueue server with TLS started - gRPC: %s, HTTPS: %s", grpcAddr, httpAddr)
+	t.Logf("ChronoQueue server with TLS started - gRPC: %s, HTTP: %s", grpcAddr, httpAddr)
 
 	env := &TestEnvironment{
 		PostgresContainer: postgresContainer,
