@@ -21,6 +21,8 @@ services:
       - ENCRYPTION_KEY=0123456789abcdef0123456789abcdef
       - LOG_LEVEL=debug
       - LOG_FORMAT=text
+      - ENABLE_API_DOCS=true
+      - API_DOCS_CORS_ORIGINS=*
     networks:
       - chronoqueue-network
     volumes:

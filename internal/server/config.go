@@ -29,7 +29,10 @@ type Config struct {
 	PostgresPassword string
 	PostgresDBName   string
 	PostgresSSLMode  string
-
+	// PostgreSQL Client Certificate Configuration (for mTLS with database)
+	PostgresClientCertFile string // Path to PostgreSQL client certificate file
+	PostgresClientKeyFile  string // Path to PostgreSQL client key file
+	PostgresRootCertFile   string // Path to PostgreSQL root CA certificate file
 	// Logging Configuration
 	LogLevel  string
 	LogFormat string
@@ -40,9 +43,17 @@ type Config struct {
 	KeyFile    string
 	CACertFile string
 
+	// Gateway TLS Configuration
+	GatewayUseTLS   bool // Use TLS for gateway→gRPC internal connection
+	GatewayInsecure bool // Skip TLS verification for gateway→gRPC (for localhost)
+
 	// HTTP Gateway Configuration
 	EnableCORS   bool
 	AllowOrigins []string
+
+	// API Documentation Configuration
+	EnableAPIDocs       bool     // Enable API documentation endpoints (default: false in production)
+	APIDocsAllowOrigins []string // Allowed CORS origins for API docs (comma-separated)
 
 	// Background Services Configuration
 	SchedulerIntervalMs int // Scheduler interval in milliseconds (default: 1000ms)
@@ -96,6 +107,8 @@ func ProductionConfig() *Config {
 		EnableTLS:           getEnvBool("CHRONOQUEUE_TLS_ENABLED", false),
 		EnableCORS:          getEnvBool("ENABLE_CORS", false),
 		AllowOrigins:        getEnvSlice("ALLOW_ORIGINS", []string{}),
+		EnableAPIDocs:       getEnvBool("ENABLE_API_DOCS", false), // Disabled by default in production
+		APIDocsAllowOrigins: getEnvSlice("API_DOCS_CORS_ORIGINS", []string{}),
 		SchedulerIntervalMs: getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
 		ReclaimIntervalMs:   getEnvInt("RECLAIM_INTERVAL_MS", 5000),
 		IsDevelopment:       false,

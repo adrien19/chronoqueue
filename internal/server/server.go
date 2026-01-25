@@ -292,12 +292,40 @@ func (s *Server) startGRPCServer() error {
 
 // startHTTPGateway starts the HTTP gateway server
 func (s *Server) startHTTPGateway(ctx context.Context) error {
+	// Determine gateway TLS settings
+	// By default, use the same TLS setting as the server
+	gatewayUseTLS := s.config.GatewayUseTLS
+	if !s.config.GatewayUseTLS && s.config.EnableTLS {
+		// If not explicitly set, inherit from server TLS setting
+		gatewayUseTLS = s.config.EnableTLS
+	}
+
+	// For localhost connections in development mode, we can skip verification to avoid certificate issues
+	gatewayInsecure := s.config.GatewayInsecure
+	if gatewayUseTLS && !gatewayInsecure && s.config.IsDevelopment {
+		// Auto-detect localhost and enable insecure mode only in development
+		if s.config.GRPCAddr == "localhost:9000" || s.config.GRPCAddr == "127.0.0.1:9000" || s.config.GRPCAddr == ":9000" {
+			gatewayInsecure = true
+			s.logger.Debug("Auto-enabling gateway TLS insecure mode for localhost in development")
+		}
+	} else if gatewayUseTLS && !gatewayInsecure && !s.config.IsDevelopment {
+		// In production, warn if localhost is detected but auto-insecure is not enabled
+		if s.config.GRPCAddr == "localhost:9000" || s.config.GRPCAddr == "127.0.0.1:9000" || s.config.GRPCAddr == ":9000" {
+			s.logger.Warn("Gateway TLS verification enabled for localhost in production - consider using --gateway-insecure if needed")
+		}
+	}
+
 	// Use the gateway helper function from gateway package
 	gatewayConfig := gateway.GatewayConfig{
-		GRPCServerAddr: s.config.GRPCAddr,
-		HTTPAddr:       s.config.HTTPAddr,
-		CORSEnabled:    s.config.EnableCORS,
-		AllowedOrigins: s.config.AllowOrigins,
+		GRPCServerAddr:      s.config.GRPCAddr,
+		HTTPAddr:            s.config.HTTPAddr,
+		CORSEnabled:         s.config.EnableCORS,
+		AllowedOrigins:      s.config.AllowOrigins,
+		UseTLS:              gatewayUseTLS,
+		TLSInsecure:         gatewayInsecure,
+		ServerCertFile:      s.config.CACertFile, // Reuse CA cert for verification
+		EnableAPIDocs:       s.config.EnableAPIDocs,
+		APIDocsAllowOrigins: s.config.APIDocsAllowOrigins,
 	}
 
 	gatewayHandler, err := gateway.NewHTTPGateway(ctx, gatewayConfig, s.logger)
@@ -317,11 +345,9 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	// Add metrics endpoint
 	httpMux.Handle("/metrics", gateway.MetricsHandler())
 
-	// Add development endpoints
-	if s.config.IsDevelopment {
-		httpMux.Handle("/docs/", gateway.SwaggerUIHandler())
-		httpMux.Handle("/docs/swagger.json", gateway.SwaggerSpecHandler())
-	}
+	// Add API documentation endpoints (controlled by EnableAPIDocs config)
+	httpMux.Handle("/docs/", gateway.SwaggerUIHandler(gatewayConfig, s.logger))
+	httpMux.Handle("/docs/swagger.json", gateway.SwaggerSpecHandler(gatewayConfig, s.logger))
 
 	// Wrap with metrics middleware
 	var handler http.Handler = httpMux

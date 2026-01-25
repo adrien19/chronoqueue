@@ -84,6 +84,10 @@ case "$STORAGE_TYPE" in
             # POSTGRES_PASSWORD is read from environment variable by the binary (not passed via CLI for security)
             [ -n "$POSTGRES_DB" ] && CMD_ARGS="$CMD_ARGS --postgres-db $POSTGRES_DB"
             [ -n "$POSTGRES_SSLMODE" ] && CMD_ARGS="$CMD_ARGS --postgres-sslmode $POSTGRES_SSLMODE"
+            # PostgreSQL Client Certificate Configuration (for mTLS with database)
+            [ -n "$POSTGRES_CLIENT_CERT" ] && CMD_ARGS="$CMD_ARGS --postgres-client-cert $POSTGRES_CLIENT_CERT"
+            [ -n "$POSTGRES_CLIENT_KEY" ] && CMD_ARGS="$CMD_ARGS --postgres-client-key $POSTGRES_CLIENT_KEY"
+            [ -n "$POSTGRES_ROOT_CERT" ] && CMD_ARGS="$CMD_ARGS --postgres-root-cert $POSTGRES_ROOT_CERT"
         fi
         ;;
     sqlite)
@@ -96,6 +100,60 @@ esac
 [ -n "$LOG_LEVEL" ] && CMD_ARGS="$CMD_ARGS --log-level $LOG_LEVEL"
 [ -n "$GRPC_ADDR" ] && CMD_ARGS="$CMD_ARGS --grpc-addr $GRPC_ADDR"
 [ -n "$HTTP_ADDR" ] && CMD_ARGS="$CMD_ARGS --http-addr $HTTP_ADDR"
+
+# Add TLS configuration flags
+if [ "$ENABLE_TLS" = "true" ]; then
+    log_info "TLS enabled"
+    CMD_ARGS="$CMD_ARGS --enable-tls"
+
+    if [ -n "$CERT_FILE" ]; then
+        CMD_ARGS="$CMD_ARGS --cert-file $CERT_FILE"
+        log_info "TLS Certificate: $CERT_FILE"
+    fi
+
+    if [ -n "$KEY_FILE" ]; then
+        CMD_ARGS="$CMD_ARGS --key-file $KEY_FILE"
+        log_info "TLS Key: $KEY_FILE"
+    fi
+
+    if [ -n "$CA_CERT_FILE" ]; then
+        CMD_ARGS="$CMD_ARGS --ca-cert-file $CA_CERT_FILE"
+        log_info "CA Certificate: $CA_CERT_FILE (mTLS enabled)"
+    fi
+fi
+
+# Add gateway TLS configuration flags
+if [ "$GATEWAY_USE_TLS" = "true" ]; then
+    CMD_ARGS="$CMD_ARGS --gateway-use-tls"
+    log_info "Gateway TLS enabled"
+fi
+
+if [ "$GATEWAY_INSECURE" = "true" ]; then
+    CMD_ARGS="$CMD_ARGS --gateway-insecure"
+    log_info "Gateway TLS verification disabled"
+fi
+
+# Add CORS configuration flags
+if [ "$ENABLE_CORS" = "true" ]; then
+    CMD_ARGS="$CMD_ARGS --enable-cors"
+    log_info "CORS enabled"
+
+    if [ -n "$CORS_ORIGINS" ]; then
+        CMD_ARGS="$CMD_ARGS --cors-origins $CORS_ORIGINS"
+        log_info "CORS Origins: $CORS_ORIGINS"
+    fi
+fi
+
+# Add API documentation configuration flags
+if [ "$ENABLE_API_DOCS" = "true" ]; then
+    CMD_ARGS="$CMD_ARGS --enable-api-docs"
+    log_info "API documentation enabled"
+
+    if [ -n "$API_DOCS_CORS_ORIGINS" ]; then
+        CMD_ARGS="$CMD_ARGS --api-docs-cors-origins $API_DOCS_CORS_ORIGINS"
+        log_info "API Docs CORS Origins: $API_DOCS_CORS_ORIGINS"
+    fi
+fi
 
 log_info "Starting ChronoQueue server..."
 log_info "Command: /chronoqueue $CMD_ARGS"

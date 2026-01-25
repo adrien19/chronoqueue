@@ -2,6 +2,9 @@ package gateway
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	_ "embed"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,6 +12,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 
@@ -17,12 +21,24 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/metrics"
 )
 
+//go:embed chronoqueue.swagger.json
+var swaggerSpec []byte
+
 // GatewayConfig holds configuration for the HTTP gateway
 type GatewayConfig struct {
 	GRPCServerAddr string
 	HTTPAddr       string
 	CORSEnabled    bool
 	AllowedOrigins []string
+
+	// TLS Configuration for gateway→gRPC connection
+	UseTLS         bool   // Enable TLS for internal gateway→gRPC connection
+	TLSInsecure    bool   // Skip TLS verification (for localhost)
+	ServerCertFile string // Optional: CA cert to verify server certificate
+
+	// API Documentation Configuration
+	EnableAPIDocs       bool     // Enable API documentation endpoints (disabled by default in production)
+	APIDocsAllowOrigins []string // Allowed CORS origins for API docs (empty = use AllowedOrigins)
 }
 
 // NewHTTPGateway creates a new HTTP-to-gRPC gateway
@@ -37,8 +53,34 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 	// Set up gRPC client options
 	// Note: We don't use WithBlock() here because the connection is established lazily
 	// The first request will trigger the connection
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	var opts []grpc.DialOption
+
+	if config.UseTLS {
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: config.TLSInsecure,
+			MinVersion:         tls.VersionTLS12,
+		}
+
+		// Optionally load server CA cert for verification
+		if config.ServerCertFile != "" && !config.TLSInsecure {
+			caCert, err := os.ReadFile(config.ServerCertFile)
+			if err != nil {
+				logger.ErrorWithFields("Failed to read server CA cert for gateway", "error", err)
+				return nil, fmt.Errorf("read server CA cert: %w", err)
+			}
+
+			caCertPool := x509.NewCertPool()
+			if !caCertPool.AppendCertsFromPEM(caCert) {
+				return nil, fmt.Errorf("failed to parse server CA cert")
+			}
+			tlsConfig.RootCAs = caCertPool
+		}
+
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+		logger.Info("Gateway using TLS for internal gRPC connection")
+	} else {
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		logger.Warn("Gateway using INSECURE connection to gRPC server")
 	}
 
 	logger.InfoWithFields("Registering HTTP gateway handler", "grpc_addr", config.GRPCServerAddr)
@@ -177,8 +219,24 @@ func MetricsHandler() http.Handler {
 }
 
 // SwaggerUIHandler serves the Swagger UI for API documentation
-func SwaggerUIHandler() http.Handler {
+func SwaggerUIHandler(config GatewayConfig, logger *log.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Security: Check if API docs are enabled
+		if !config.EnableAPIDocs {
+			logger.WarnWithFields("API documentation access denied - disabled in configuration",
+				"remote_addr", r.RemoteAddr,
+				"path", r.URL.Path,
+			)
+			http.Error(w, "API documentation is disabled", http.StatusNotFound)
+			return
+		}
+
+		// Security: Restrict to GET and OPTIONS methods only
+		if r.Method != http.MethodGet && r.Method != http.MethodOptions {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
 		// Check if request is for the root docs path
 		if r.URL.Path == "/docs/" || r.URL.Path == "/docs" {
 			// Serve the Swagger UI HTML
@@ -242,21 +300,54 @@ func SwaggerUIHandler() http.Handler {
 }
 
 // SwaggerSpecHandler serves the OpenAPI specification JSON
-func SwaggerSpecHandler() http.Handler {
+func SwaggerSpecHandler(config GatewayConfig, logger *log.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Read the swagger.json file from the docs directory
-		specPath := "/workspaces/chronoqueue/docs/api/chronoqueue.swagger.json"
+		// Security: Check if API docs are enabled
+		if !config.EnableAPIDocs {
+			logger.WarnWithFields("API documentation access denied - disabled in configuration",
+				"remote_addr", r.RemoteAddr,
+				"path", r.URL.Path,
+			)
+			http.Error(w, "API documentation is disabled", http.StatusNotFound)
+			return
+		}
 
-		specContent, err := os.ReadFile(specPath)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to read OpenAPI spec: %v", err), http.StatusInternalServerError)
+		// Security: Restrict to GET and OPTIONS methods only
+		if r.Method != http.MethodGet && r.Method != http.MethodOptions {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		// Security: Use specific CORS origins instead of wildcard
+		allowedOrigins := config.APIDocsAllowOrigins
+		if len(allowedOrigins) == 0 {
+			// Fall back to main gateway CORS config
+			allowedOrigins = config.AllowedOrigins
+		}
+
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			// Check if origin is allowed
+			allowed := false
+			for _, allowedOrigin := range allowedOrigins {
+				if allowedOrigin == "*" || allowedOrigin == origin {
+					allowed = true
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					break
+				}
+			}
+
+			if !allowed {
+				logger.WarnWithFields("API documentation CORS origin denied",
+					"origin", origin,
+					"remote_addr", r.RemoteAddr,
+				)
+			}
+		}
 
 		// Handle CORS preflight
 		if r.Method == "OPTIONS" {
@@ -265,6 +356,24 @@ func SwaggerSpecHandler() http.Handler {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(specContent)
+		n, err := w.Write(swaggerSpec)
+		if err != nil {
+			logger.ErrorWithFields("Failed to write swagger spec",
+				"error", err,
+				"bytes_written", n,
+				"expected_bytes", len(swaggerSpec),
+				"remote_addr", r.RemoteAddr,
+				"path", r.URL.Path,
+			)
+			return
+		}
+		if n != len(swaggerSpec) {
+			logger.WarnWithFields("Short write when sending swagger spec",
+				"bytes_written", n,
+				"expected_bytes", len(swaggerSpec),
+				"remote_addr", r.RemoteAddr,
+				"path", r.URL.Path,
+			)
+		}
 	})
 }

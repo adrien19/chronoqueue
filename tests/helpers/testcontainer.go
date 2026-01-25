@@ -222,3 +222,146 @@ func (e *TestEnvironment) WaitForHealthy(t *testing.T, timeout time.Duration) {
 		}
 	}
 }
+
+// SetupTestEnvironmentWithTLS creates and starts a ChronoQueue server with TLS/mTLS enabled.
+// This is similar to SetupTestEnvironment but configures the server with TLS certificates.
+//
+// The certs parameter should be obtained from GenerateTestCertificates().
+//
+// Example:
+//
+//	func TestWithTLS(t *testing.T) {
+//	    certs := helpers.GenerateTestCertificates(t)
+//	    env := helpers.SetupTestEnvironmentWithTLS(t, certs)
+//
+//	    // Create TLS client
+//	    tlsConfig := certs.LoadClientTLSConfig(t)
+//	    // ... use tlsConfig with gRPC client
+//	}
+func SetupTestEnvironmentWithTLS(t *testing.T, certs *TestCertificates) *TestEnvironment {
+	// Validate certificates are provided to avoid nil dereference
+	require.NotNil(t, certs, "TestCertificates must be provided")
+
+	ctx := context.Background()
+
+	// Create a Docker network for container communication
+	net, err := network.New(ctx,
+		network.WithDriver("bridge"),
+	)
+	require.NoError(t, err, "Failed to create Docker network")
+
+	// Start Postgres container using the Postgres module
+	t.Log("Starting Postgres container...")
+	postgresContainer, err := postgres.Run(ctx,
+		"postgres:17-alpine",
+		postgres.WithDatabase("chronoqueue"),
+		postgres.WithUsername("chronoqueue"),
+		postgres.WithPassword("chronoqueue"),
+		network.WithNetwork([]string{"postgres"}, net),
+	)
+	require.NoError(t, err, "Failed to start Postgres container")
+
+	// Get connection string for host->Postgres connections (used by tests)
+	connectionString, err := postgresContainer.ConnectionString(ctx)
+	require.NoError(t, err)
+	t.Logf("Postgres container started with connection string: %s", connectionString)
+
+	// Brief delay to ensure full initialization
+	time.Sleep(2 * time.Second)
+
+	// For container→container connections, use network alias
+	postgresInternalHost := "postgres"
+	postgresInternalPort := "5432"
+
+	// Start ChronoQueue server container with TLS enabled
+	t.Log("Starting ChronoQueue server container with TLS...")
+	serverReq := testcontainers.ContainerRequest{
+		FromDockerfile: testcontainers.FromDockerfile{
+			Context:    "../..", // Adjust based on test location
+			Dockerfile: "images/Dockerfile",
+		},
+		ExposedPorts: []string{"9000/tcp", "8080/tcp"},
+		Networks:     []string{net.Name},
+		Entrypoint:   []string{"/chronoqueue"}, // Override entrypoint to skip entrypoint.sh
+		Cmd: []string{
+			"server",
+			"--dev",
+			"--storage-type", "postgres",
+			"--postgres-host", postgresInternalHost,
+			"--postgres-port", postgresInternalPort,
+			"--postgres-user", "chronoqueue",
+			"--postgres-db", "chronoqueue",
+			"--postgres-sslmode", "disable",
+			"--log-level", "debug",
+			// TLS configuration
+			"--enable-tls",
+			"--cert-file", "/certs/server.crt",
+			"--key-file", "/certs/server.key",
+			"--ca-cert-file", "/certs/ca.crt",
+			"--gateway-use-tls",
+			"--gateway-insecure",
+		},
+		Env: map[string]string{
+			"POSTGRES_PASSWORD": "chronoqueue", // Password must be passed via environment
+		},
+		Files: []testcontainers.ContainerFile{
+			{
+				HostFilePath:      certs.ServerCert,
+				ContainerFilePath: "/certs/server.crt",
+				FileMode:          0o644,
+			},
+			{
+				HostFilePath:      certs.ServerKey,
+				ContainerFilePath: "/certs/server.key",
+				FileMode:          0o600,
+			},
+			{
+				HostFilePath:      certs.CACert,
+				ContainerFilePath: "/certs/ca.crt",
+				FileMode:          0o644,
+			},
+		},
+		WaitingFor: wait.ForHTTP("/health").
+			WithPort("8080").
+			WithStartupTimeout(60 * time.Second).
+			WithAllowInsecure(true), // Allow insecure for TLS server
+	}
+
+	serverContainer, err := testcontainers.GenericContainer(ctx,
+		testcontainers.GenericContainerRequest{
+			ContainerRequest: serverReq,
+			Started:          true,
+		})
+	require.NoError(t, err, "Failed to start ChronoQueue server container")
+
+	serverHost, err := serverContainer.Host(ctx)
+	require.NoError(t, err)
+
+	grpcPort, err := serverContainer.MappedPort(ctx, "9000")
+	require.NoError(t, err)
+
+	httpPort, err := serverContainer.MappedPort(ctx, "8080")
+	require.NoError(t, err)
+
+	grpcAddr := fmt.Sprintf("%s:%s", serverHost, grpcPort.Port())
+	httpAddr := fmt.Sprintf("http://%s:%s", serverHost, httpPort.Port()) // Note: HTTP (TLS is on gRPC only)
+
+	t.Logf("ChronoQueue server with TLS started - gRPC: %s, HTTP: %s", grpcAddr, httpAddr)
+
+	env := &TestEnvironment{
+		PostgresContainer: postgresContainer,
+		ServerContainer:   serverContainer,
+		Network:           net,
+		PostgresConnStr:   connectionString,
+		GRPCAddr:          grpcAddr,
+		HTTPAddr:          httpAddr,
+		ctx:               ctx,
+	}
+
+	// Register cleanup
+	t.Cleanup(func() {
+		env.Cleanup()
+	})
+
+	return env
+}

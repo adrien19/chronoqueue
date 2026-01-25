@@ -2,7 +2,6 @@ package server
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 // AddServerFlags adds server configuration flags to a cobra command
@@ -18,6 +17,9 @@ func AddServerFlags(cmd *cobra.Command, config *Config) {
 	cmd.Flags().StringVar(&config.PostgresPassword, "postgres-password", config.PostgresPassword, "PostgreSQL password")
 	cmd.Flags().StringVar(&config.PostgresDBName, "postgres-db", config.PostgresDBName, "PostgreSQL database name")
 	cmd.Flags().StringVar(&config.PostgresSSLMode, "postgres-sslmode", config.PostgresSSLMode, "PostgreSQL sslmode (disable, require, verify-full, etc.)")
+	cmd.Flags().StringVar(&config.PostgresClientCertFile, "postgres-client-cert", config.PostgresClientCertFile, "PostgreSQL client certificate file (for mTLS)")
+	cmd.Flags().StringVar(&config.PostgresClientKeyFile, "postgres-client-key", config.PostgresClientKeyFile, "PostgreSQL client key file (for mTLS)")
+	cmd.Flags().StringVar(&config.PostgresRootCertFile, "postgres-root-cert", config.PostgresRootCertFile, "PostgreSQL root CA certificate file (for mTLS)")
 
 	// Convenience flags for SQLite (shortcuts)
 	cmd.Flags().StringP("database", "d", "", "SQLite database file path (shortcut for --storage-type sqlite --sqlite-db-path)")
@@ -29,31 +31,12 @@ func AddServerFlags(cmd *cobra.Command, config *Config) {
 	cmd.Flags().StringVar(&config.CertFile, "cert-file", config.CertFile, "TLS certificate file")
 	cmd.Flags().StringVar(&config.KeyFile, "key-file", config.KeyFile, "TLS key file")
 	cmd.Flags().StringVar(&config.CACertFile, "ca-cert-file", config.CACertFile, "CA certificate file for mutual TLS (optional)")
+	cmd.Flags().BoolVar(&config.GatewayUseTLS, "gateway-use-tls", config.GatewayUseTLS, "Enable TLS for gateway→gRPC internal connection (default: inherits from --enable-tls)")
+	cmd.Flags().BoolVar(&config.GatewayInsecure, "gateway-insecure", config.GatewayInsecure, "Skip TLS verification for gateway→gRPC connection (auto-enabled for localhost)")
 	cmd.Flags().BoolVar(&config.EnableCORS, "enable-cors", config.EnableCORS, "Enable CORS for HTTP gateway")
 	cmd.Flags().StringSliceVar(&config.AllowOrigins, "cors-origins", config.AllowOrigins, "Allowed CORS origins")
-}
-
-// AddServerFlagsLegacy adds server configuration flags using pflag (for backward compatibility)
-func AddServerFlagsLegacy(config *Config) {
-	pflag.StringVar(&config.GRPCAddr, "grpc-addr", config.GRPCAddr, "gRPC server address")
-	pflag.StringVar(&config.HTTPAddr, "http-addr", config.HTTPAddr, "HTTP gateway address")
-	pflag.StringVar(&config.StorageType, "storage-type", config.StorageType, "Storage backend type (sqlite, postgres)")
-	pflag.StringVar(&config.SQLiteDBPath, "sqlite-db-path", config.SQLiteDBPath, "Path to SQLite database file")
-	pflag.StringVar(&config.PostgresDSN, "postgres-dsn", config.PostgresDSN, "PostgreSQL DSN (overrides discrete flags)")
-	pflag.StringVar(&config.PostgresHost, "postgres-host", config.PostgresHost, "PostgreSQL host")
-	pflag.IntVar(&config.PostgresPort, "postgres-port", config.PostgresPort, "PostgreSQL port")
-	pflag.StringVar(&config.PostgresUser, "postgres-user", config.PostgresUser, "PostgreSQL user")
-	pflag.StringVar(&config.PostgresPassword, "postgres-password", config.PostgresPassword, "PostgreSQL password")
-	pflag.StringVar(&config.PostgresDBName, "postgres-db", config.PostgresDBName, "PostgreSQL database name")
-	pflag.StringVar(&config.PostgresSSLMode, "postgres-sslmode", config.PostgresSSLMode, "PostgreSQL sslmode (disable, require, verify-full, etc.)")
-	pflag.StringVar(&config.LogLevel, "log-level", config.LogLevel, "Log level (debug, info, warn, error)")
-	pflag.StringVar(&config.LogFormat, "log-format", config.LogFormat, "Log format (text, json)")
-	pflag.BoolVar(&config.EnableTLS, "enable-tls", config.EnableTLS, "Enable TLS")
-	pflag.StringVar(&config.CertFile, "cert-file", config.CertFile, "TLS certificate file")
-	pflag.StringVar(&config.KeyFile, "key-file", config.KeyFile, "TLS key file")
-	pflag.StringVar(&config.CACertFile, "ca-cert-file", config.CACertFile, "CA certificate file for mutual TLS (optional)")
-	pflag.BoolVar(&config.EnableCORS, "enable-cors", config.EnableCORS, "Enable CORS for HTTP gateway")
-	pflag.StringSliceVar(&config.AllowOrigins, "cors-origins", config.AllowOrigins, "Allowed CORS origins")
+	cmd.Flags().BoolVar(&config.EnableAPIDocs, "enable-api-docs", config.EnableAPIDocs, "Enable API documentation endpoints (disabled by default in production)")
+	cmd.Flags().StringSliceVar(&config.APIDocsAllowOrigins, "api-docs-cors-origins", config.APIDocsAllowOrigins, "Allowed CORS origins for API documentation (uses --cors-origins if not set)")
 }
 
 // ParseConfigFromFlags parses configuration from cobra command flags
@@ -130,6 +113,27 @@ func ParseConfigFromFlags(cmd *cobra.Command) (*Config, error) {
 	}
 	if cmd.Flags().Changed("cors-origins") {
 		config.AllowOrigins, _ = cmd.Flags().GetStringSlice("cors-origins")
+	}
+	if cmd.Flags().Changed("enable-api-docs") {
+		config.EnableAPIDocs, _ = cmd.Flags().GetBool("enable-api-docs")
+	}
+	if cmd.Flags().Changed("api-docs-cors-origins") {
+		config.APIDocsAllowOrigins, _ = cmd.Flags().GetStringSlice("api-docs-cors-origins")
+	}
+	if cmd.Flags().Changed("gateway-use-tls") {
+		config.GatewayUseTLS, _ = cmd.Flags().GetBool("gateway-use-tls")
+	}
+	if cmd.Flags().Changed("gateway-insecure") {
+		config.GatewayInsecure, _ = cmd.Flags().GetBool("gateway-insecure")
+	}
+	if cmd.Flags().Changed("postgres-client-cert") {
+		config.PostgresClientCertFile, _ = cmd.Flags().GetString("postgres-client-cert")
+	}
+	if cmd.Flags().Changed("postgres-client-key") {
+		config.PostgresClientKeyFile, _ = cmd.Flags().GetString("postgres-client-key")
+	}
+	if cmd.Flags().Changed("postgres-root-cert") {
+		config.PostgresRootCertFile, _ = cmd.Flags().GetString("postgres-root-cert")
 	}
 
 	return config, config.Validate()
