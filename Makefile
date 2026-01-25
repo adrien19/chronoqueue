@@ -139,11 +139,11 @@ build: $(CHRONOQUEUE_BINS)
 ################################################################################
 .PHONY: build-full
 build-full:
-	@echo "Building ChronoQueue with ALL storage backends (Redis + SQLite)..."
+	@echo "Building ChronoQueue with SQLite support..."
 	@mkdir -p $(CHRONOQUEUE_OUT_DIR)
 	CGO_ENABLED=1 go build $(GCFLAGS) -ldflags="$(LDFLAGS)" -tags=sqlite \
 	  -o $(CHRONOQUEUE_OUT_DIR)/chronoqueue$(BINARY_EXT) .
-	@echo "✓ Binary built with full feature set: Redis, SQLite, and Schema Registry"
+	@echo "✓ Binary built with SQLite and Schema Registry support"
 
 # Generate builds for chronoqueue binaries for the target
 # Params:
@@ -305,7 +305,7 @@ test-race:
 ################################################################################
 .PHONY: build-test-image
 build-test-image:
-	@echo "Building ChronoQueue test image with ALL storage backends (Postgres, Redis, SQLite)..."
+	@echo "Building ChronoQueue test image with Postgres and SQLite support..."
 	DOCKER_BUILDKIT=0 docker build -f images/Dockerfile.sqlite \
 		--build-arg VERSION=$(CHRONOQUEUE_VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
@@ -494,7 +494,7 @@ ui-dev: ui-build build
 # Target: server-dev (run ChronoQueue server in dev mode)                      #
 ################################################################################
 # Usage:
-#   make server-dev                              # Use Redis (default)
+#   make server-dev                              # Use SQLite (default)
 #   make server-dev DATABASE=chronoqueue.db      # Use SQLite
 #   make server-dev DB=./data/chronoqueue.db     # Use SQLite (short form)
 #   make server-dev STORAGE=postgres              # Use Postgres (override with POSTGRES_* vars)
@@ -521,8 +521,8 @@ else ifdef DB
 	@echo "Starting ChronoQueue in development mode with SQLite storage ($(DB))..."
 	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue server --dev --storage-type sqlite --sqlite-db-path $(DB) 2>&1 | tee logs/chronoqueue.log
 else
-	@echo "Starting ChronoQueue in development mode with Redis storage..."
-	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue server --dev --insecure --redis-password=$(REDIS_PASSWORD) 2>&1 | tee logs/chronoqueue.log
+	@echo "Starting ChronoQueue in development mode with SQLite storage (default)..."
+	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue server --dev --storage-type sqlite --sqlite-db-path chronoqueue.db 2>&1 | tee logs/chronoqueue.log
 endif
 
 
@@ -660,7 +660,6 @@ include docker/docker.mk
 # Usage:
 #   make deploy-up STORAGE=postgres   # PostgreSQL storage (default, instrumented)
 #   make deploy-up STORAGE=sqlite     # SQLite storage (instrumented)
-#   make deploy-up STORAGE=redis      # Redis storage (not instrumented)
 STORAGE ?= postgres
 
 # Select the appropriate docker-compose file based on storage backend
@@ -668,14 +667,12 @@ ifeq ($(STORAGE),postgres)
 	STORAGE_COMPOSE_FILE := docker-compose.postgres.yaml
 else ifeq ($(STORAGE),sqlite)
 	STORAGE_COMPOSE_FILE := docker-compose.sqlite.yaml
-else ifeq ($(STORAGE),redis)
-	STORAGE_COMPOSE_FILE := docker-compose.redis.yaml
 else
-	$(error Invalid STORAGE value: $(STORAGE). Valid values: postgres, sqlite, redis)
+	$(error Invalid STORAGE value: $(STORAGE). Valid values: postgres, sqlite)
 endif
 
 .PHONY: deploy-up
-deploy-up: ## Start ChronoQueue services with selected storage backend (STORAGE=postgres|sqlite|redis)
+deploy-up: ## Start ChronoQueue services with selected storage backend (STORAGE=postgres|sqlite)
 	@echo "Starting ChronoQueue with $(STORAGE) storage..."
 	cd deploy && docker-compose -f $(STORAGE_COMPOSE_FILE) up -d
 

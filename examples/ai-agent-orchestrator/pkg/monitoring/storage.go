@@ -6,14 +6,14 @@ import (
 	"github.com/adrien19/chronoqueue/client"
 )
 
-// RedisMonitor provides ChronoQueue API-based monitoring
-type RedisMonitor struct {
+// StorageMonitor provides ChronoQueue API-based monitoring
+type StorageMonitor struct {
 	chronoClient *client.ChronoQueueClient
 }
 
-// NewRedisMonitor creates a new monitor using ChronoQueue client
-func NewRedisMonitor(chronoClient *client.ChronoQueueClient) *RedisMonitor {
-	return &RedisMonitor{
+// NewStorageMonitor creates a new monitor using ChronoQueue client
+func NewStorageMonitor(chronoClient *client.ChronoQueueClient) *StorageMonitor {
+	return &StorageMonitor{
 		chronoClient: chronoClient,
 	}
 }
@@ -29,7 +29,7 @@ type QueueStateCounts struct {
 }
 
 // GetQueueState returns comprehensive queue state using ChronoQueue API
-func (rm *RedisMonitor) GetQueueState(ctx context.Context, queueName string) (*QueueStateCounts, error) {
+func (rm *StorageMonitor) GetQueueState(ctx context.Context, queueName string) (*QueueStateCounts, error) {
 	resp, err := rm.chronoClient.GetQueueState(ctx, queueName)
 	if err != nil {
 		return nil, err
@@ -46,7 +46,7 @@ func (rm *RedisMonitor) GetQueueState(ctx context.Context, queueName string) (*Q
 }
 
 // GetDLQSize returns the number of errored messages (using queue state)
-func (rm *RedisMonitor) GetDLQSize(ctx context.Context, queueName string) (int64, error) {
+func (rm *StorageMonitor) GetDLQSize(ctx context.Context, queueName string) (int64, error) {
 	state, err := rm.GetQueueState(ctx, queueName)
 	if err != nil {
 		return 0, err
@@ -55,7 +55,7 @@ func (rm *RedisMonitor) GetDLQSize(ctx context.Context, queueName string) (int64
 }
 
 // Close closes the ChronoQueue client connection
-func (rm *RedisMonitor) Close() error {
+func (rm *StorageMonitor) Close() error {
 	if rm.chronoClient != nil {
 		rm.chronoClient.Close()
 	}

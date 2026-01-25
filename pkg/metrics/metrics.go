@@ -95,23 +95,6 @@ var (
 		},
 		[]string{"queue_name", "reason"},
 	)
-
-	redisOperationsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "chronoqueue_redis_operations_total",
-			Help: "Total number of Redis operations",
-		},
-		[]string{"operation", "status"},
-	)
-
-	redisOperationDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "chronoqueue_redis_operation_duration_seconds",
-			Help:    "Duration of Redis operations in seconds",
-			Buckets: prometheus.DefBuckets,
-		},
-		[]string{"operation"},
-	)
 )
 
 // MetricsRegistry holds the Prometheus registry and provides methods for metrics
@@ -139,8 +122,6 @@ func NewMetricsRegistry() *MetricsRegistry {
 		messagesPending,
 		messagesValidatedTotal,
 		validationFailuresTotal,
-		redisOperationsTotal,
-		redisOperationDuration,
 	)
 
 	// Register message lifecycle metrics
@@ -240,17 +221,6 @@ func IncrementValidationFailures(queueName string, reason string) {
 // SetMessagesPending sets the pending message count for a queue
 func SetMessagesPending(queueName string, count float64) {
 	messagesPending.WithLabelValues(queueName).Set(count)
-}
-
-// RecordRedisOperation records a Redis operation with duration and status
-func RecordRedisOperation(operation string, duration time.Duration, err error) {
-	status := "success"
-	if err != nil {
-		status = "error"
-	}
-
-	redisOperationsTotal.WithLabelValues(operation, status).Inc()
-	redisOperationDuration.WithLabelValues(operation).Observe(duration.Seconds())
 }
 
 // HTTP Metrics Middleware

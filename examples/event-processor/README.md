@@ -316,7 +316,6 @@ Alternative monitoring using ChronoQueue API:
 ```bash
 # Check message counts by state
 curl -s http://localhost:8080/v1/queues/email-notifications/state | jq
-redis-cli XLEN stream:25:email-notifications  # low priority
 ```
 
 #### 4.4 JSON Format for Scheduled Events
@@ -774,9 +773,6 @@ curl -X POST https://api.example.com/webhooks/test
 ### Performance Issues
 
 ```bash
-# Check Redis connection
-redis-cli ping
-
 # Monitor ChronoQueue server
 chronoqueue server --log-level debug
 
@@ -787,7 +783,6 @@ chronoqueue server --log-level debug
 ## 📚 Learn More
 
 - [ChronoQueue Documentation](../../README.md)
-- [Redis Streams Architecture](../../docs/architecture/redis-streams.md)
 - [Message Priority Guide](../../docs/features/priority.md)
 - [DLQ Best Practices](../../docs/features/dlq.md)
 

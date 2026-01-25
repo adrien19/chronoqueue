@@ -29,7 +29,6 @@ type BackendType string
 const (
 	BackendSQLite   BackendType = "sqlite"
 	BackendPostgres BackendType = "postgres"
-	BackendRedis    BackendType = "redis"
 )
 
 // implementation is the concrete implementation of Storage interface

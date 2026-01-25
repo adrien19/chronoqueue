@@ -39,7 +39,7 @@ Flags:
       --production             Start in production mode (optimized for production use)
       --grpc-addr string       gRPC server address (default ":9000")
       --http-addr string       HTTP gateway address (default ":8080")
-      --storage string         Storage backend: postgres, sqlite, redis (default "postgres")
+      --storage string         Storage backend: postgres, sqlite (default "postgres")
       --postgres-host string   PostgreSQL host (default "localhost")
       --postgres-port int      PostgreSQL port (default 5432)
       --postgres-user string   PostgreSQL user

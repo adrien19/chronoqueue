@@ -4,7 +4,6 @@ The `entrypoint.sh` script provides a flexible way to start the ChronoQueue serv
 
 ## Features
 
-- **Storage Backend Support**: PostgreSQL (default), SQLite, or Redis (legacy)
 - **Environment-Based Configuration**: Configure server mode and settings via environment variables
 - **Startup Logging**: Clear logging of configuration and startup process
 - **Validation**: Validates storage configuration before starting
@@ -47,7 +46,7 @@ The `entrypoint.sh` script provides a flexible way to start the ChronoQueue serv
 
 | Variable | Description | Default | Values |
 |----------|-------------|---------|--------|
-| `STORAGE_TYPE` | Storage backend | `postgres` | `postgres`, `sqlite`, `redis` |
+| `STORAGE_TYPE` | Storage backend | `postgres` | `postgres`, `sqlite`|
 
 ### PostgreSQL Configuration
 
@@ -65,15 +64,6 @@ The `entrypoint.sh` script provides a flexible way to start the ChronoQueue serv
 | Variable | Description | Default |
 |----------|-------------|---------||
 | `SQLITE_DB_PATH` | SQLite database file path | `chronoqueue.db` |
-
-### Redis Configuration (Legacy)
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `REDIS_ADDR` | Redis server address | `localhost:6379` |
-| `REDIS_DB` | Redis database number | `0` |
-| `REDIS_PASSWORD` | Redis password (if required) | _(empty)_ |
-| `REDIS_USERNAME` | Redis username (Redis 6+ ACL) | _(empty)_ |
 
 ### Logging Configuration
 

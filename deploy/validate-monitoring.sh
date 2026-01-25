@@ -76,7 +76,7 @@ check_docker_containers() {
     echo "Docker Container Status:"
     echo "------------------------"
     
-    for container in chronoqueue-server chronoqueue-prometheus chronoqueue-grafana redis_container; do
+    for container in chronoqueue-server chronoqueue-prometheus chronoqueue-grafana; do
         if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
             status=$(docker ps --filter "name=^${container}$" --format '{{.Status}}')
             echo -e "${GREEN}✓${NC} $container: $status"
@@ -116,7 +116,6 @@ check_http_service "ChronoQueue HTTP API" "http://localhost:8080/health" 200 || 
 check_http_service "ChronoQueue Metrics" "http://localhost:8080/metrics" 200 || true
 check_http_service "Prometheus" "http://localhost:9090/-/healthy" 200 || true
 check_http_service "Grafana" "http://localhost:3000/api/health" 200 || true
-check_http_service "Redis Insight" "http://localhost:8001" 200 || true
 
 echo ""
 echo "Step 3: Checking Metrics Data"
@@ -136,7 +135,6 @@ echo "==================="
 echo "Grafana Dashboard:    http://localhost:3000 (admin/admin)"
 echo "Prometheus:           http://localhost:9090"
 echo "ChronoQueue Metrics:  http://localhost:8080/metrics"
-echo "Redis Insight:        http://localhost:8001"
 echo ""
 
 # Summary

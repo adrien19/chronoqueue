@@ -65,6 +65,38 @@ case "$SERVER_MODE" in
         ;;
 esac
 
+# Add storage-type flag
+CMD_ARGS="$CMD_ARGS --storage-type $STORAGE_TYPE"
+
+# Add storage-specific configuration
+case "$STORAGE_TYPE" in
+    postgres)
+        # Note: POSTGRES_PASSWORD and POSTGRES_DSN are NOT passed as CLI arguments
+        # for security reasons (visible in ps, /proc/<pid>/cmdline, logs).
+        # The chronoqueue binary reads them directly from environment variables.
+        if [ -n "$POSTGRES_DSN" ]; then
+            log_info "Using PostgreSQL DSN from environment variable (not shown for security)"
+            # DSN contains embedded credentials, so we don't pass it via CLI
+        else
+            [ -n "$POSTGRES_HOST" ] && CMD_ARGS="$CMD_ARGS --postgres-host $POSTGRES_HOST"
+            [ -n "$POSTGRES_PORT" ] && CMD_ARGS="$CMD_ARGS --postgres-port $POSTGRES_PORT"
+            [ -n "$POSTGRES_USER" ] && CMD_ARGS="$CMD_ARGS --postgres-user $POSTGRES_USER"
+            # POSTGRES_PASSWORD is read from environment variable by the binary (not passed via CLI for security)
+            [ -n "$POSTGRES_DB" ] && CMD_ARGS="$CMD_ARGS --postgres-db $POSTGRES_DB"
+            [ -n "$POSTGRES_SSLMODE" ] && CMD_ARGS="$CMD_ARGS --postgres-sslmode $POSTGRES_SSLMODE"
+        fi
+        ;;
+    sqlite)
+        SQLITE_DB_PATH="${SQLITE_DB_PATH:-chronoqueue.db}"
+        CMD_ARGS="$CMD_ARGS --sqlite-db-path $SQLITE_DB_PATH"
+        ;;
+esac
+
+# Add optional flags
+[ -n "$LOG_LEVEL" ] && CMD_ARGS="$CMD_ARGS --log-level $LOG_LEVEL"
+[ -n "$GRPC_ADDR" ] && CMD_ARGS="$CMD_ARGS --grpc-addr $GRPC_ADDR"
+[ -n "$HTTP_ADDR" ] && CMD_ARGS="$CMD_ARGS --http-addr $HTTP_ADDR"
+
 log_info "Starting ChronoQueue server..."
 log_info "Command: /chronoqueue $CMD_ARGS"
 log_info ""

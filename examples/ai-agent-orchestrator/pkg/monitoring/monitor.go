@@ -44,21 +44,21 @@ type SystemStats struct {
 
 // Monitor provides monitoring capabilities for the orchestrator
 type Monitor struct {
-	client       *client.ChronoQueueClient
-	redisMonitor *RedisMonitor
-	queueNames   []string
-	startTime    time.Time
-	refreshRate  time.Duration
+	client         *client.ChronoQueueClient
+	storageMonitor *StorageMonitor
+	queueNames     []string
+	startTime      time.Time
+	refreshRate    time.Duration
 }
 
 // NewMonitor creates a new monitoring instance
 func NewMonitor(c *client.ChronoQueueClient, refreshRate time.Duration) *Monitor {
 	// Initialize monitor using ChronoQueue API
-	redisMonitor := NewRedisMonitor(c)
+	storageMonitor := NewStorageMonitor(c)
 
 	return &Monitor{
-		client:       c,
-		redisMonitor: redisMonitor,
+		client:         c,
+		storageMonitor: storageMonitor,
 		queueNames: []string{
 			"agent-coordinator",
 			"agent-web-search",
@@ -143,7 +143,7 @@ func (m *Monitor) getQueueStats(ctx context.Context, queueName string) (*QueueSt
 	}
 
 	// Get queue state from ChronoQueue API
-	queueState, err := m.redisMonitor.GetQueueState(ctx, queueName)
+	queueState, err := m.storageMonitor.GetQueueState(ctx, queueName)
 	if err != nil {
 		// Queue may not exist yet, return zero stats
 		return stats, nil
@@ -164,8 +164,8 @@ func (m *Monitor) getQueueStats(ctx context.Context, queueName string) (*QueueSt
 
 // Close closes the monitor and its resources
 func (m *Monitor) Close() error {
-	if m.redisMonitor != nil {
-		return m.redisMonitor.Close()
+	if m.storageMonitor != nil {
+		return m.storageMonitor.Close()
 	}
 	return nil
 }
@@ -293,7 +293,7 @@ func (m *Monitor) WatchSystem(ctx context.Context, compact bool) error {
 			if compact {
 				m.DisplayCompactStats(stats)
 			} else {
-				// Clear screen and redisplay
+				// Clear screen
 				fmt.Print("\033[H\033[2J")
 				m.DisplaySystemStats(stats)
 			}

@@ -460,9 +460,9 @@ func checkTaskStatus(taskID string) error {
 	defer c.Close()
 
 	// Initialize monitor using ChronoQueue API
-	redisMonitor := monitoring.NewRedisMonitor(c)
+	storageMonitor := monitoring.NewStorageMonitor(c)
 	defer func() {
-		if err := redisMonitor.Close(); err != nil {
+		if err := storageMonitor.Close(); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to close monitor: %v\n", err)
 		}
 	}()
@@ -474,7 +474,7 @@ func checkTaskStatus(taskID string) error {
 	fmt.Println()
 
 	// Check coordinator queue state
-	coordinatorState, err := redisMonitor.GetQueueState(ctx, "agent-coordinator")
+	coordinatorState, err := storageMonitor.GetQueueState(ctx, "agent-coordinator")
 	if err == nil {
 		fmt.Printf("📋 Coordinator Queue:\n")
 		fmt.Printf("  Pending:   %d\n", coordinatorState.Pending)
@@ -497,7 +497,7 @@ func checkTaskStatus(taskID string) error {
 	}
 
 	for _, queueName := range subtaskQueues {
-		state, err := redisMonitor.GetQueueState(ctx, queueName)
+		state, err := storageMonitor.GetQueueState(ctx, queueName)
 		if err == nil {
 			total := state.Pending + state.Running
 			if total > 0 || state.Completed > 0 || state.Errored > 0 {
@@ -637,7 +637,7 @@ func viewResults(taskID, agentType string, exportJSON bool) error {
 		fmt.Printf("📋 For task '%s', check the logs above to see subtask results.\n", taskID)
 		fmt.Println()
 		fmt.Println("💡 Future Enhancement: Results will be persistently stored and queryable")
-		fmt.Println("   after implementing database backing or Redis-based result retrieval.")
+		fmt.Println("   after implementing database-based result retrieval.")
 	} else {
 		fmt.Println("💡 Specify a task ID to get targeted guidance:")
 		fmt.Println("   ./ai-orchestrator results --task <task-id>")

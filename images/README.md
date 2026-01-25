@@ -60,7 +60,6 @@ The docker-compose files automatically use the appropriate Dockerfile:
 
 ```yaml
 # deploy/docker-compose.postgres.yaml - uses Dockerfile (production)
-# deploy/docker-compose.redis.yaml - uses Dockerfile (production)
 # deploy/docker-compose.sqlite.yaml - uses Dockerfile.sqlite (dev/test)
 ```
 
