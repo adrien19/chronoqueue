@@ -536,16 +536,14 @@ func TestMessageLifecycle_AcknowledgeMessage(t *testing.T) {
 	require.NotNil(t, getResp.Message)
 	workerID := getResp.GetWorkerId()
 	attemptID := getResp.GetAttemptId()
-	streamEntryID := getResp.GetStreamEntryId()
 
 	// Act - Acknowledge message
 	ackResp, err := client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
-		QueueName:     queueName,
-		MessageId:     getResp.Message.MessageId,
-		State:         message_pb.Message_Metadata_COMPLETED,
-		AttemptId:     &attemptID,
-		WorkerId:      &workerID,
-		StreamEntryId: streamEntryID,
+		QueueName: queueName,
+		MessageId: getResp.Message.MessageId,
+		State:     message_pb.Message_Metadata_COMPLETED,
+		AttemptId: &attemptID,
+		WorkerId:  &workerID,
 	})
 
 	// Assert
@@ -700,7 +698,6 @@ func TestMessageLifecycle_SendHeartbeat(t *testing.T) {
 	require.NotNil(t, getResp.Message)
 	workerID := getResp.GetWorkerId()
 	attemptID := getResp.GetAttemptId()
-	streamEntryID := getResp.GetStreamEntryId()
 
 	// Act - Send heartbeat multiple times to verify lease extension
 	// Use shorter intervals for faster test execution
@@ -708,11 +705,10 @@ func TestMessageLifecycle_SendHeartbeat(t *testing.T) {
 		time.Sleep(1 * time.Second) // Wait 1 second between heartbeats (reduced from 5s)
 
 		heartbeatResp, err := client.SendMessageHeartBeat(ctx, &queueservice_pb.SendMessageHeartBeatRequest{
-			QueueName:     queueName,
-			MessageId:     getResp.Message.MessageId,
-			StreamEntryId: streamEntryID,
-			AttemptId:     &attemptID,
-			WorkerId:      &workerID,
+			QueueName: queueName,
+			MessageId: getResp.Message.MessageId,
+			AttemptId: &attemptID,
+			WorkerId:  &workerID,
 		})
 
 		// Assert

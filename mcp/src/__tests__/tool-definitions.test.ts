@@ -80,7 +80,6 @@ describe('Tool Definitions', () => {
             expect(tool?.inputSchema.required).toContain('queue_name');
             expect(tool?.inputSchema.required).toContain('message_id');
             expect(tool?.inputSchema.required).toContain('status');
-            expect(tool?.inputSchema.required).toContain('stream_entry_id');
         });
 
         it('create_schedule should have required fields', () => {

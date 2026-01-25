@@ -251,7 +251,6 @@ func startWorker(ctx context.Context, workerType string, numWorkers int, name st
 
 		msg := resp.Message
 		msgID := msg.MessageId
-		streamEntryID := resp.StreamEntryId
 
 		var event Event
 		if msg.Metadata != nil && msg.Metadata.Payload != nil && msg.Metadata.Payload.Data != nil {
@@ -264,11 +263,11 @@ func startWorker(ctx context.Context, workerType string, numWorkers int, name st
 
 		if err := processEvent(ctx, workerType, event); err != nil {
 			fmt.Printf("  ❌ [%s] Failed: %v\n", msgID, err)
-			c.AcknowledgeMessage(ctx, queueName, msgID, client.MESSAGE_ERRORED, streamEntryID)
+			c.AcknowledgeMessage(ctx, queueName, msgID, client.MESSAGE_ERRORED)
 			failedCount++
 		} else {
 			fmt.Printf("  ✓ [%s] Successfully processed\n", msgID)
-			c.AcknowledgeMessage(ctx, queueName, msgID, client.MESSAGE_COMPLETED, streamEntryID)
+			c.AcknowledgeMessage(ctx, queueName, msgID, client.MESSAGE_COMPLETED)
 			processedCount++
 		}
 	}

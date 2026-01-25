@@ -230,7 +230,6 @@ describe('ChronoQueueClient', () => {
                             priority: 5,
                         },
                     },
-                    stream_entry_id: 'entry-1',
                 });
             });
 

@@ -154,13 +154,12 @@ type ClientOptions struct {
 }
 
 type WorkItem struct {
-	ctx           context.Context
-	cancel        context.CancelFunc
-	queue         string
-	messageID     string
-	streamEntryID string // Redis Stream entry ID for XCLAIM-based heartbeats
-	attemptID     string
-	workerID      string
+	ctx       context.Context
+	cancel    context.CancelFunc
+	queue     string
+	messageID string
+	attemptID string
+	workerID  string
 }
 
 type attemptInfo struct {
@@ -316,7 +315,7 @@ func (client *ChronoQueueClient) SetAttemptInfo(messageID, attemptID, workerID s
 func (client *ChronoQueueClient) heartbeatWorker() {
 	for workItem := range client.workChan {
 		// Perform work here, e.g., manage heartbeats
-		client.manageHeartbeats(workItem.ctx, workItem.queue, workItem.messageID, workItem.streamEntryID, workItem.attemptID, workItem.workerID)
+		client.manageHeartbeats(workItem.ctx, workItem.queue, workItem.messageID, workItem.attemptID, workItem.workerID)
 	}
 }
 
@@ -537,7 +536,7 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 	return res, nil
 }
 
-func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName string, messageId string, streamEntryID string, attemptID string, workerID string) {
+func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName string, messageId string, attemptID string, workerID string) {
 	if attemptID != "" || workerID != "" {
 		client.recordAttemptInfo(messageId, attemptID, workerID)
 	}
@@ -564,7 +563,7 @@ func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName
 			// Use background context for RPC, not the heartbeat lifecycle context
 			rpcCtx, rpcCancel := context.WithTimeout(context.Background(), client.opts.DefaultRPCTimeout)
 
-			_, err := client.SendMessageHeartbeat(rpcCtx, queueName, messageId, streamEntryID)
+			_, err := client.SendMessageHeartbeat(rpcCtx, queueName, messageId)
 			rpcCancel() // Always cancel RPC context after use
 
 			if err != nil {
@@ -658,13 +657,12 @@ func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue strin
 		client.activeHeartbeats.Store(res.Message.MessageId, heartbeatCancel)
 
 		client.workChan <- WorkItem{
-			ctx:           heartbeatCtx,
-			cancel:        heartbeatCancel,
-			queue:         queue,
-			messageID:     res.Message.MessageId,
-			streamEntryID: res.StreamEntryId, // Capture stream entry ID for Redis Streams
-			attemptID:     attemptID,
-			workerID:      workerID,
+			ctx:       heartbeatCtx,
+			cancel:    heartbeatCancel,
+			queue:     queue,
+			messageID: res.Message.MessageId,
+			attemptID: attemptID,
+			workerID:  workerID,
 		}
 	}
 	return res, nil
@@ -729,8 +727,7 @@ func (client *ChronoQueueClient) RenewMessageLease(ctx context.Context, queue st
 
 // AcknowledgeMessage updates state of a message and empty response
 // Automatically stops heartbeat for the message if one is active.
-// The streamEntryID is the Redis Stream entry ID returned from GetNextMessage.
-func (client *ChronoQueueClient) AcknowledgeMessage(ctx context.Context, queue string, messageId string, state State, streamEntryID string) (*queueservice_pb.AcknowledgeMessageResponse, error) {
+func (client *ChronoQueueClient) AcknowledgeMessage(ctx context.Context, queue string, messageId string, state State) (*queueservice_pb.AcknowledgeMessageResponse, error) {
 	// Stop heartbeat before acknowledging (if active)
 	client.StopHeartbeat(messageId)
 
@@ -740,10 +737,9 @@ func (client *ChronoQueueClient) AcknowledgeMessage(ctx context.Context, queue s
 	}
 
 	req := &queueservice_pb.AcknowledgeMessageRequest{
-		QueueName:     queue,
-		MessageId:     messageId,
-		State:         message_pb.Message_Metadata_State(state),
-		StreamEntryId: streamEntryID,
+		QueueName: queue,
+		MessageId: messageId,
+		State:     message_pb.Message_Metadata_State(state),
 	}
 
 	info := client.getAttemptInfo(messageId)
@@ -769,8 +765,7 @@ func (client *ChronoQueueClient) AcknowledgeMessage(ctx context.Context, queue s
 }
 
 // SendMessageHeartbeat sends a heartbeat for an in-flight message.
-// The streamEntryID is the Redis Stream entry ID returned from GetNextMessage.
-func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queueName string, messageId string, streamEntryID string) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
+func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queueName string, messageId string) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
 	if client.opts.SendMessageHeartbeatFunc != nil {
 		return client.opts.SendMessageHeartbeatFunc(ctx, queueName, messageId)
 	}
@@ -789,9 +784,8 @@ func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queue
 	attemptID := info.attemptID
 
 	req := &queueservice_pb.SendMessageHeartBeatRequest{
-		QueueName:     queueName,
-		MessageId:     messageId,
-		StreamEntryId: streamEntryID,
+		QueueName: queueName,
+		MessageId: messageId,
 	}
 	if workerID != "" {
 		req.WorkerId = &workerID

@@ -1262,9 +1262,6 @@
         "state": {
           "$ref": "#/definitions/v1MessageMetadataState"
         },
-        "streamEntryId": {
-          "type": "string"
-        },
         "workerId": {
           "type": "string",
           "title": "Optional stable identifier to consistently represent the same consumer"
@@ -1330,9 +1327,6 @@
       "type": "object",
       "properties": {
         "messageId": {
-          "type": "string"
-        },
-        "streamEntryId": {
           "type": "string"
         },
         "workerId": {
@@ -1757,9 +1751,6 @@
       "properties": {
         "message": {
           "$ref": "#/definitions/v1Message"
-        },
-        "streamEntryId": {
-          "type": "string"
         },
         "workerId": {
           "type": "string",

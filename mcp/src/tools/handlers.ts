@@ -173,8 +173,7 @@ async function handlePostMessage(args: any, client: ChronoQueueClient): Promise<
 Queue: ${args.queue_name}
 Message ID: ${args.message_id}
 Priority: ${args.priority || 5}
-${args.schema_id ? `Schema: ${args.schema_id}${args.schema_version ? ` v${args.schema_version}` : ''}` : ''}
-Stream Entry ID: ${response.streamEntryId}`;
+${args.schema_id ? `Schema: ${args.schema_id}${args.schema_version ? ` v${args.schema_version}` : ''}` : ''}`;
 }
 
 async function handleGetNextMessage(args: any, client: ChronoQueueClient): Promise<string> {
@@ -191,14 +190,13 @@ Queue: ${args.queue_name}
 Message ID: ${message.messageId}
 Priority: ${message.priority}
 Attempts: ${message.attempts}/${message.maxAttempts}
-Stream Entry ID: ${response.streamEntryId}
 Leased Until: ${message.leasedUntil || 'N/A'}
 
 Payload:
 ${JSON.stringify(message.payload, null, 2)}
 
 ⚠️  Remember to acknowledge this message after processing using:
-   acknowledge_message with stream_entry_id: ${response.streamEntryId}`;
+   acknowledge_message with message_id: ${message.messageId}`;
 }
 
 async function handlePeekMessages(args: any, client: ChronoQueueClient): Promise<string> {
@@ -226,8 +224,7 @@ async function handleAcknowledgeMessage(args: any, client: ChronoQueueClient): P
     await client.acknowledgeMessage(
         args.queue_name,
         args.message_id,
-        args.status,
-        args.stream_entry_id
+        args.status
     );
 
     const statusEmoji = args.status === 'completed' ? '✅' : '❌';
@@ -248,7 +245,6 @@ async function handleRenewMessageLease(args: any, client: ChronoQueueClient): Pr
     const response = await client.renewMessageLease(
         args.queue_name,
         args.message_id,
-        args.stream_entry_id,
         leaseDurationSeconds
     );
 

@@ -84,15 +84,13 @@ func TestRetentionPolicy_DeleteImmediately(t *testing.T) {
 
 	workerID := getResp.GetWorkerId()
 	attemptID := getResp.GetAttemptId()
-	streamEntryID := getResp.GetStreamEntryId()
 
 	ackResp, err := client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
-		QueueName:     queueName,
-		MessageId:     msgID,
-		State:         message_pb.Message_Metadata_COMPLETED,
-		AttemptId:     &attemptID,
-		WorkerId:      &workerID,
-		StreamEntryId: streamEntryID,
+		QueueName: queueName,
+		MessageId: msgID,
+		State:     message_pb.Message_Metadata_COMPLETED,
+		AttemptId: &attemptID,
+		WorkerId:  &workerID,
 	})
 	require.NoError(t, err)
 	assert.True(t, ackResp.Success, "Acknowledgment should succeed")
@@ -174,15 +172,13 @@ func TestRetentionPolicy_RetainDuration(t *testing.T) {
 
 	workerID := getResp.GetWorkerId()
 	attemptID := getResp.GetAttemptId()
-	streamEntryID := getResp.GetStreamEntryId()
 
 	ackResp, err := client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
-		QueueName:     queueName,
-		MessageId:     msgID,
-		State:         message_pb.Message_Metadata_COMPLETED,
-		AttemptId:     &attemptID,
-		WorkerId:      &workerID,
-		StreamEntryId: streamEntryID,
+		QueueName: queueName,
+		MessageId: msgID,
+		State:     message_pb.Message_Metadata_COMPLETED,
+		AttemptId: &attemptID,
+		WorkerId:  &workerID,
 	})
 	require.NoError(t, err)
 	assert.True(t, ackResp.Success, "Acknowledgment should succeed")
@@ -271,15 +267,13 @@ func TestRetentionPolicy_RetainForever(t *testing.T) {
 
 	workerID := getResp.GetWorkerId()
 	attemptID := getResp.GetAttemptId()
-	streamEntryID := getResp.GetStreamEntryId()
 
 	ackResp, err := client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
-		QueueName:     queueName,
-		MessageId:     msgID,
-		State:         message_pb.Message_Metadata_COMPLETED,
-		AttemptId:     &attemptID,
-		WorkerId:      &workerID,
-		StreamEntryId: streamEntryID,
+		QueueName: queueName,
+		MessageId: msgID,
+		State:     message_pb.Message_Metadata_COMPLETED,
+		AttemptId: &attemptID,
+		WorkerId:  &workerID,
 	})
 	require.NoError(t, err)
 	assert.True(t, ackResp.Success, "Acknowledgment should succeed")
@@ -361,16 +355,14 @@ func TestRetentionPolicy_NackWithRetention(t *testing.T) {
 
 	workerID := getResp.GetWorkerId()
 	attemptID := getResp.GetAttemptId()
-	streamEntryID := getResp.GetStreamEntryId()
 
 	// NACK the message (this exhausts retries since MaxAttempts=1)
 	nackResp, err := client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
-		QueueName:     queueName,
-		MessageId:     msgID,
-		State:         message_pb.Message_Metadata_ERRORED,
-		AttemptId:     &attemptID,
-		WorkerId:      &workerID,
-		StreamEntryId: streamEntryID,
+		QueueName: queueName,
+		MessageId: msgID,
+		State:     message_pb.Message_Metadata_ERRORED,
+		AttemptId: &attemptID,
+		WorkerId:  &workerID,
 	})
 	require.NoError(t, err)
 	assert.True(t, nackResp.Success, "NACK should succeed")
@@ -455,15 +447,13 @@ func TestRetentionPolicy_MultipleMessages(t *testing.T) {
 
 		workerID := getResp.GetWorkerId()
 		attemptID := getResp.GetAttemptId()
-		streamEntryID := getResp.GetStreamEntryId()
 
 		_, err = client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
-			QueueName:     queueName,
-			MessageId:     getResp.Message.MessageId,
-			State:         message_pb.Message_Metadata_COMPLETED,
-			AttemptId:     &attemptID,
-			WorkerId:      &workerID,
-			StreamEntryId: streamEntryID,
+			QueueName: queueName,
+			MessageId: getResp.Message.MessageId,
+			State:     message_pb.Message_Metadata_COMPLETED,
+			AttemptId: &attemptID,
+			WorkerId:  &workerID,
 		})
 		require.NoError(t, err)
 	}
@@ -551,15 +541,13 @@ func TestRetentionPolicy_ExplicitDeleteImmediately(t *testing.T) {
 
 	workerID := getResp.GetWorkerId()
 	attemptID := getResp.GetAttemptId()
-	streamEntryID := getResp.GetStreamEntryId()
 
 	ackResp, err := client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
-		QueueName:     queueName,
-		MessageId:     msgID,
-		State:         message_pb.Message_Metadata_COMPLETED,
-		AttemptId:     &attemptID,
-		WorkerId:      &workerID,
-		StreamEntryId: streamEntryID,
+		QueueName: queueName,
+		MessageId: msgID,
+		State:     message_pb.Message_Metadata_COMPLETED,
+		AttemptId: &attemptID,
+		WorkerId:  &workerID,
 	})
 	require.NoError(t, err)
 	assert.True(t, ackResp.Success, "Acknowledgment should succeed")

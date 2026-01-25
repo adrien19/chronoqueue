@@ -214,7 +214,6 @@ func newMessageGetCommand() *cobra.Command {
 					return nil
 				}
 				outputs.PrintInfo(fmt.Sprintf("Message ID: %s", resp.GetMessage().GetMessageId()))
-				outputs.PrintInfo(fmt.Sprintf("Stream Entry ID: %s", resp.GetStreamEntryId()))
 				if workerID := resp.GetWorkerId(); workerID != "" {
 					outputs.PrintInfo(fmt.Sprintf("Worker ID: %s", workerID))
 				}
@@ -239,18 +238,14 @@ func newMessageGetCommand() *cobra.Command {
 // newMessageAckCommand creates the message acknowledge subcommand
 func newMessageAckCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "ack <queue-name> <message-id> <message-state> [stream-entry-id]",
+		Use:   "ack <queue-name> <message-id> <message-state>",
 		Short: "Acknowledge a message",
-		Long:  `Acknowledge that a message has been processed successfully. The stream-entry-id is optional but recommended for Redis Streams architecture.`,
-		Args:  cobra.RangeArgs(3, 4),
+		Long:  `Acknowledge that a message has been processed successfully.`,
+		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			queueName := args[0]
 			messageID := args[1]
 			stateStr := args[2]
-			streamEntryID := ""
-			if len(args) == 4 {
-				streamEntryID = args[3]
-			}
 
 			attemptID, err := cmd.Flags().GetString("attempt-id")
 			if err != nil {
@@ -270,7 +265,7 @@ func newMessageAckCommand() *cobra.Command {
 				if attemptID != "" || workerID != "" {
 					client.SetAttemptInfo(messageID, attemptID, workerID)
 				}
-				resp, err := client.AcknowledgeMessage(cmd.Context(), queueName, messageID, state, streamEntryID)
+				resp, err := client.AcknowledgeMessage(cmd.Context(), queueName, messageID, state)
 				if err != nil {
 					return err
 				}
@@ -364,20 +359,16 @@ func newMessageRenewCommand() *cobra.Command {
 // newMessageHeartbeatCommand creates the message heartbeat subcommand
 func newMessageHeartbeatCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "heartbeat <queue-name> <message-id> [stream-entry-id]",
+		Use:   "heartbeat <queue-name> <message-id>",
 		Short: "Send a heartbeat for a message",
-		Long:  `Send a heartbeat to indicate that a message is still being processed. The stream-entry-id is optional but recommended for Redis Streams architecture.`,
-		Args:  cobra.RangeArgs(2, 3),
+		Long:  `Send a heartbeat to indicate that a message is still being processed.`,
+		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			queueName := args[0]
 			messageID := args[1]
-			streamEntryID := ""
-			if len(args) == 3 {
-				streamEntryID = args[2]
-			}
 
 			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
-				resp, err := client.SendMessageHeartbeat(cmd.Context(), queueName, messageID, streamEntryID)
+				resp, err := client.SendMessageHeartbeat(cmd.Context(), queueName, messageID)
 				if err != nil {
 					return err
 				}

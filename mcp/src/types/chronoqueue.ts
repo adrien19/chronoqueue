@@ -77,18 +77,15 @@ export interface Message {
     maxAttempts: number;
     createdAt: string;
     leasedUntil?: string;
-    streamEntryId: string;
 }
 
 export interface PostMessageResponse {
     success: boolean;
     messageId: string;
-    streamEntryId: string;
 }
 
 export interface GetMessageResponse {
     message: Message;
-    streamEntryId: string;
 }
 
 export interface AcknowledgeMessageResponse {
