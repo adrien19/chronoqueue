@@ -61,332 +61,355 @@ import "proto/schema/v1/schema.proto";
 
 // Create queue
 message CreateQueueRequest {
-    string name = 1;
-    optional chronoqueue.api.queue.v1.QueueMetadata metadata = 2;
+  string                                          name     = 1;
+  optional chronoqueue.api.queue.v1.QueueMetadata metadata = 2;
 }
+
 message CreateQueueResponse {
-    bool success = 1;
+  bool success = 1;
 }
 
 // Delete queue by name
 message DeleteQueueRequest {
-    string name = 1;
+  string name = 1;
 }
+
 message DeleteQueueResponse {
-    bool success = 1;
+  bool success = 1;
 }
 
 // Post a message to the queue
 message PostMessageRequest{
-    string queue_name = 1;
-    chronoqueue.api.message.v1.Message message = 2;
+  string                             queue_name = 1;
+  chronoqueue.api.message.v1.Message message    = 2;
 }
+
 message PostMessageResponse{
-    bool success = 1;
+  bool success = 1;
 }
-
-
 
 // Get the next message on the queue
 message GetNextMessageRequest{
-    string queue_name = 1;
-    google.protobuf.Duration lease_duration = 2;
-    string exclusivity_key = 3;
+  string                   queue_name      = 1;
+  google.protobuf.Duration lease_duration  = 2;
+  string                   exclusivity_key = 3;
     // Optional stable identifier for the worker/consumer. If absent, server may generate one.
-    optional string worker_id = 4;
+  optional string worker_id = 4;
     // Attempt identifier to validate lease against current attempt
-    optional string attempt_id = 5;
+  optional string attempt_id = 5;
 }
+
 message GetNextMessageResponse{
-    chronoqueue.api.message.v1.Message message = 1;
-    string stream_entry_id = 2;
+  chronoqueue.api.message.v1.Message message = 1;
     // Echo or assign the worker_id used for this lease
-    optional string worker_id = 3;
+  optional string worker_id = 2;
     // Attempt identifier for this lease
-    optional string attempt_id = 4;
+  optional string attempt_id = 3;
 }
 
 // Acknowledge the message on the queue
 message AcknowledgeMessageRequest{
-    string queue_name = 1;
-    string message_id = 2;
-    chronoqueue.api.message.v1.Message.Metadata.State state = 3;
-    string stream_entry_id = 4;
+  string                                            queue_name = 1;
+  string                                            message_id = 2;
+  chronoqueue.api.message.v1.Message.Metadata.State state      = 3;
     // Optional stable identifier to consistently represent the same consumer
-    optional string worker_id = 5;
+  optional string worker_id = 4;
     // Attempt identifier to validate acknowledgment against current attempt
-    optional string attempt_id = 6;
+  optional string attempt_id = 5;
 }
+
 message AcknowledgeMessageResponse{
-    bool success = 1;
+  bool success = 1;
 }
 
 // Renew lease period of a message
 message RenewMessageLeaseRequest{
-    string queue_name = 1;
-    string message_id = 2;
-    google.protobuf.Duration lease_duration = 3;
+  string                   queue_name     = 1;
+  string                   message_id     = 2;
+  google.protobuf.Duration lease_duration = 3;
 }
+
 message RenewMessageLeaseResponse{
-    google.protobuf.Duration remaining_time = 1;
-    chronoqueue.api.message.v1.Message.Metadata.State state = 2;
+  google.protobuf.Duration                          remaining_time = 1;
+  chronoqueue.api.message.v1.Message.Metadata.State state          = 2;
 }
 
 // View pending messages on a queueu
 message PeekQueueMessagesRequest{
-    string queue_name = 1;
-    int64 limit = 2;
-    message PriorityRange {
-        int64 min = 1;
-        int64 max = 2;
-    }
-    optional PeekQueueMessagesRequest.PriorityRange priority_range = 3;
+  string queue_name = 1;
+  int64  limit      = 2;
+  message PriorityRange {
+    int64 min = 1;
+    int64 max = 2;
+  }
+  optional PeekQueueMessagesRequest.PriorityRange priority_range = 3;
 }
+
 message PeekQueueMessagesResponse{
-    repeated chronoqueue.api.message.v1.Message messages = 1;
+  repeated chronoqueue.api.message.v1.Message messages = 1;
 }
 
 // vew the state of a given queue
 message GetQueueStateRequest{
-    string queue_name = 1;
+  string queue_name = 1;
 }
+
 message GetQueueStateResponse{
-    map<string, int32> state_counts = 1;
-    google.protobuf.Timestamp earliest_deadline = 2;
+  map<string, int32>        state_counts      = 1;
+  google.protobuf.Timestamp earliest_deadline = 2;
 }
 
 // send a heartbeat to the queue
 message SendMessageHeartBeatRequest {
-    string queue_name = 1;
-    string message_id = 2;
-    string stream_entry_id = 3;
+  string queue_name = 1;
+  string message_id = 2;
     // Optional stable identifier to consistently represent the same consumer
-    optional string worker_id = 4;
+  optional string worker_id = 3;
     // Attempt identifier to validate heartbeat against current attempt
-    optional string attempt_id = 5;
+  optional string attempt_id = 4;
 }
+
 message SendMessageHeartBeatResponse {
-    google.protobuf.Duration remaining_time = 1;
-    chronoqueue.api.message.v1.Message.Metadata.State state = 2;
+  google.protobuf.Duration                          remaining_time = 1;
+  chronoqueue.api.message.v1.Message.Metadata.State state          = 2;
 }
 
 // List queues
 message ListQueuesRequest {
-    string prefix = 1;
+  string prefix = 1;
 }
+
 message ListQueuesResponse {
-    repeated chronoqueue.api.queue.v1.Queue queues = 1;
+  repeated chronoqueue.api.queue.v1.Queue queues = 1;
 }
 
 // Create a schedule
 message CreateScheduleRequest {
-    chronoqueue.api.schedule.v1.Schedule schedule = 1;
+  chronoqueue.api.schedule.v1.Schedule schedule = 1;
 }
+
 message CreateScheduleResponse {
-    bool success = 1;
+  bool success = 1;
 }
 
 // Delete a schedule
 message DeleteScheduleRequest {
-    string schedule_id = 1;
+  string schedule_id = 1;
 }
+
 message DeleteScheduleResponse {
-    bool success = 1;
+  bool success = 1;
 }
 
 // Pause a schedule
 message PauseScheduleRequest {
-    string schedule_id = 1;
+  string schedule_id = 1;
 }
+
 message PauseScheduleResponse {
-    bool success = 1;
+  bool success = 1;
 }
 
 // Resume a schedule
 message ResumeScheduleRequest {
-    string schedule_id = 1;
+  string schedule_id = 1;
 }
+
 message ResumeScheduleResponse {
-    bool success = 1;
+  bool success = 1;
 }
 
 // Get a schedule
 message GetScheduleRequest {
-    string schedule_id = 1;
+  string schedule_id = 1;
 }
+
 message GetScheduleResponse {
-    chronoqueue.api.schedule.v1.Schedule schedule = 1;
+  chronoqueue.api.schedule.v1.Schedule schedule = 1;
 }
 
 // List schedules
 message ListSchedulesRequest {
-    string prefix = 1;
+  string prefix = 1;
 }
+
 message ListSchedulesResponse {
-    repeated chronoqueue.api.schedule.v1.Schedule schedules = 1;
+  repeated chronoqueue.api.schedule.v1.Schedule schedules = 1;
 }
 
 // Get schedule history
 message GetScheduleHistoryRequest {
-    string schedule_id = 1;
-    int64 limit = 2;
+  string schedule_id = 1;
+  int64  limit       = 2;
 }
+
 message GetScheduleHistoryResponse {
-    chronoqueue.api.schedule.v1.ScheduleHistory schedule_history = 1;
+  chronoqueue.api.schedule.v1.ScheduleHistory schedule_history = 1;
 }
 
 // Dead Letter Queue Management Operations
 
 // Get messages from DLQ
 message GetDLQMessagesRequest {
-    string dlq_name = 1;
-    int32 limit = 2;
+  string dlq_name = 1;
+  int32  limit    = 2;
 }
+
 message GetDLQMessagesResponse {
-    repeated chronoqueue.api.message.v1.Message messages = 1;
+  repeated chronoqueue.api.message.v1.Message messages = 1;
 }
 
 // Requeue message from DLQ back to original queue
 message RequeueFromDLQRequest {
-    string dlq_name = 1;
-    string message_id = 2;
-    string target_queue = 3;
+  string dlq_name     = 1;
+  string message_id   = 2;
+  string target_queue = 3;
 }
+
 message RequeueFromDLQResponse {
-    bool success = 1;
+  bool success = 1;
 }
 
 // Delete message from DLQ
 message DeleteFromDLQRequest {
-    string dlq_name = 1;
-    string message_id = 2;
+  string dlq_name   = 1;
+  string message_id = 2;
 }
+
 message DeleteFromDLQResponse {
-    bool success = 1;
+  bool success = 1;
 }
 
 // Purge all messages from DLQ
 message PurgeDLQRequest {
-    string dlq_name = 1;
+  string dlq_name = 1;
 }
+
 message PurgeDLQResponse {
-    bool success = 1;
+  bool success = 1;
 }
 
 // Get DLQ statistics
 message GetDLQStatsRequest {
-    string dlq_name = 1;
+  string dlq_name = 1;
 }
+
 message GetDLQStatsResponse {
-    string name = 1;
-    int64 message_count = 2;
-    int64 created_at = 3;
-    int64 updated_at = 4;
+  string name          = 1;
+  int64  message_count = 2;
+  int64  created_at    = 3;
+  int64  updated_at    = 4;
 }
 
 // Calendar Schedule Operations
 
 // Validate a calendar schedule configuration
 message ValidateCalendarScheduleRequest {
-    chronoqueue.api.schedule.v1.CalendarSchedule calendar_schedule = 1;
+  chronoqueue.api.schedule.v1.CalendarSchedule calendar_schedule = 1;
 }
+
 message ValidateCalendarScheduleResponse {
-    bool valid = 1;
-    string error_message = 2;
-    repeated ValidationIssue validation_issues = 3;
+  bool                     valid             = 1;
+  string                   error_message     = 2;
+  repeated ValidationIssue validation_issues = 3;
 }
 
 // Preview upcoming execution times for a calendar schedule
 message PreviewCalendarScheduleRequest {
-    chronoqueue.api.schedule.v1.CalendarSchedule calendar_schedule = 1;
-    int32 count = 2; // Number of execution times to preview (default: 10, max: 100)
+  chronoqueue.api.schedule.v1.CalendarSchedule calendar_schedule = 1;
+  int32                                        count             = 2; // Number of execution times to preview (default: 10, max: 100)
 }
+
 message PreviewCalendarScheduleResponse {
-    repeated google.protobuf.Timestamp execution_times = 1;
-    string timezone = 2;
-    google.protobuf.Timestamp preview_start = 3;
-    int32 total_count = 4;
+  repeated google.protobuf.Timestamp execution_times = 1;
+  string                             timezone        = 2;
+  google.protobuf.Timestamp          preview_start   = 3;
+  int32                              total_count     = 4;
 }
 
 // Validation issue details
 message ValidationIssue {
-    string severity = 1; // "error", "warning", "info"
-    int32 rule_index = 2; // -1 for global issues
-    string field = 3;
-    string message = 4;
-    string suggestion = 5;
+  string severity   = 1; // "error", "warning", "info"
+  int32  rule_index = 2; // -1 for global issues
+  string field      = 3;
+  string message    = 4;
+  string suggestion = 5;
 }
 
 // Schema Management Operations
 
 // Register a new schema or schema version
 message RegisterSchemaRequest {
-    string schema_id = 1;           // Unique schema identifier
-    string name = 2;                // Human-readable schema name
-    string description = 3;         // Schema description
-    string content = 4;             // JSON Schema content
-    string content_type = 5;        // Schema type (default: "json-schema")
-    map<string, string> metadata = 6; // Additional metadata
+  string              schema_id    = 1; // Unique schema identifier
+  string              name         = 2; // Human-readable schema name
+  string              description  = 3; // Schema description
+  string              content      = 4; // JSON Schema content
+  string              content_type = 5; // Schema type (default: "json-schema")
+  map<string, string> metadata     = 6; // Additional metadata
 }
+
 message RegisterSchemaResponse {
-    string schema_id = 1;           // Schema identifier
-    int32 version = 2;              // Assigned schema version
-    int64 created_at = 3;           // Creation timestamp
+  string schema_id  = 1; // Schema identifier
+  int32  version    = 2; // Assigned schema version
+  int64  created_at = 3; // Creation timestamp
 }
 
 // Get a specific schema version
 message GetSchemaRequest {
-    string schema_id = 1;           // Schema identifier
-    int32 version = 2;              // Schema version (0 = latest)
+  string schema_id = 1; // Schema identifier
+  int32  version   = 2; // Schema version (0 = latest)
 }
+
 message GetSchemaResponse {
-    chronoqueue.api.schema.v1.Schema schema = 1; // Full schema object
+  chronoqueue.api.schema.v1.Schema schema = 1; // Full schema object
 }
 
 // List schemas with optional filtering
 message ListSchemasRequest {
-    string prefix = 1;              // Filter by schema_id prefix
-    int32 limit = 2;                // Maximum number of results (default: 100)
-    bool active_only = 3;           // Only return active schemas
+  string prefix      = 1; // Filter by schema_id prefix
+  int32  limit       = 2; // Maximum number of results (default: 100)
+  bool   active_only = 3; // Only return active schemas
 }
+
 message ListSchemasResponse {
-    repeated SchemaInfo schemas = 1;
-    int32 total_count = 2;
+  repeated SchemaInfo schemas     = 1;
+  int32               total_count = 2;
 }
 
 // Schema information for list responses
 // Note: This is a summary view with aggregated version info, different from schema.v1.Schema
 message SchemaInfo {
-    string schema_id = 1;
-    int32 latest_version = 2;       // Latest version number
-    string name = 3;
-    string description = 4;
-    int64 created_at = 5;
-    int64 updated_at = 6;
-    int32 version_count = 7;        // Total number of versions
-    bool is_active = 8;
+  string schema_id      = 1;
+  int32  latest_version = 2; // Latest version number
+  string name           = 3;
+  string description    = 4;
+  int64  created_at     = 5;
+  int64  updated_at     = 6;
+  int32  version_count  = 7; // Total number of versions
+  bool   is_active      = 8;
 }
 
 // Delete a schema or specific version
 message DeleteSchemaRequest {
-    string schema_id = 1;           // Schema identifier
-    int32 version = 2;              // Schema version (0 = delete all versions)
+  string schema_id = 1; // Schema identifier
+  int32  version   = 2; // Schema version (0 = delete all versions)
 }
+
 message DeleteSchemaResponse {
-    bool success = 1;
-    int32 versions_deleted = 2;     // Number of versions deleted
+  bool  success          = 1;
+  int32 versions_deleted = 2; // Number of versions deleted
 }
 
 // Validate a payload against a schema
 message ValidatePayloadRequest {
-    string schema_id = 1;           // Schema identifier
-    int32 version = 2;              // Schema version (0 = latest)
-    string payload = 3;             // JSON payload to validate
-}
-message ValidatePayloadResponse {
-    bool valid = 1;
-    repeated chronoqueue.api.schema.v1.ValidationError errors = 2; // Validation errors from schema.proto
-    string schema_id = 3;
-    int32 schema_version = 4;
+  string schema_id = 1; // Schema identifier
+  int32  version   = 2; // Schema version (0 = latest)
+  string payload   = 3; // JSON payload to validate
 }
 
+message ValidatePayloadResponse {
+  bool                                               valid          = 1;
+  repeated chronoqueue.api.schema.v1.ValidationError errors         = 2; // Validation errors from schema.proto
+  string                                             schema_id      = 3;
+  int32                                              schema_version = 4;
+}

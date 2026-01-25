@@ -730,12 +730,11 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 	}
 
 	type args struct {
-		ctx           context.Context
-		queueName     string
-		messageId     string
-		streamEntryID string
-		attemptID     string
-		workerID      string
+		ctx       context.Context
+		queueName string
+		messageId string
+		attemptID string
+		workerID  string
 	}
 	tests := []struct {
 		name     string
@@ -903,7 +902,7 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 			tt.setup(&tt.fields, client)
 
 			// Use a separate goroutine as manageHeartbeats is blocking
-			go client.manageHeartbeats(tt.args.ctx, tt.args.queueName, tt.args.messageId, tt.args.streamEntryID, tt.args.attemptID, tt.args.workerID)
+			go client.manageHeartbeats(tt.args.ctx, tt.args.queueName, tt.args.messageId, tt.args.attemptID, tt.args.workerID)
 
 			// Add a small sleep to allow for asynchronous operations to execute
 			// Note: This might need to be adjusted based on actual behavior
@@ -1285,7 +1284,7 @@ func TestChronoQueueClient_AcknowledgeMessage(t *testing.T) {
 			}
 			defer client.Close()
 
-			got, err := client.AcknowledgeMessage(tt.args.ctx, tt.args.queue, tt.args.messageId, tt.args.state, "")
+			got, err := client.AcknowledgeMessage(tt.args.ctx, tt.args.queue, tt.args.messageId, tt.args.state)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.AcknowledgeMessage() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -1327,7 +1326,7 @@ func TestChronoQueueClient_AcknowledgeMessage_WithAttemptInfo(t *testing.T) {
 	defer client.Close()
 
 	client.SetAttemptInfo("msg-1", "attempt-123", "worker-xyz")
-	_, err = client.AcknowledgeMessage(context.Background(), "q1", "msg-1", 3, "")
+	_, err = client.AcknowledgeMessage(context.Background(), "q1", "msg-1", 3)
 	if err != nil {
 		t.Fatalf("ack failed: %v", err)
 	}
@@ -1388,7 +1387,7 @@ func TestChronoQueueClient_SendMessageHeartbeat(t *testing.T) {
 			}
 			defer client.Close()
 
-			got, err := client.SendMessageHeartbeat(tt.args.ctx, tt.args.queueName, tt.args.messageId, "")
+			got, err := client.SendMessageHeartbeat(tt.args.ctx, tt.args.queueName, tt.args.messageId)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.SendMessageHeartbeat() error = %v, wantErr %v", err, tt.wantErr)
 				return

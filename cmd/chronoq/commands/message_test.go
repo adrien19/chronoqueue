@@ -28,10 +28,10 @@ func TestNewMessageCommand(t *testing.T) {
 	expectedCommands := []string{
 		"post <queue-name> [message-data]",
 		"get <queue-name>",
-		"ack <queue-name> <message-id> <message-state> [stream-entry-id]",
+		"ack <queue-name> <message-id> <message-state>",
 		"peek <queue-name>",
 		"renew <queue-name> <message-id> <lease-duration>",
-		"heartbeat <queue-name> <message-id> [stream-entry-id]",
+		"heartbeat <queue-name> <message-id>",
 	}
 
 	for _, expected := range expectedCommands {
@@ -86,7 +86,7 @@ func TestNewMessageAckCommand(t *testing.T) {
 	cmd := newMessageAckCommand()
 
 	assert.NotNil(t, cmd)
-	assert.Equal(t, "ack <queue-name> <message-id> <message-state> [stream-entry-id]", cmd.Use)
+	assert.Equal(t, "ack <queue-name> <message-id> <message-state>", cmd.Use)
 	assert.Equal(t, "Acknowledge a message", cmd.Short)
 	assert.Contains(t, cmd.Long, "Acknowledge that a message has been processed")
 	assert.NotNil(t, cmd.RunE)
@@ -133,7 +133,7 @@ func TestNewMessageHeartbeatCommand(t *testing.T) {
 	cmd := newMessageHeartbeatCommand()
 
 	assert.NotNil(t, cmd)
-	assert.Equal(t, "heartbeat <queue-name> <message-id> [stream-entry-id]", cmd.Use)
+	assert.Equal(t, "heartbeat <queue-name> <message-id>", cmd.Use)
 	assert.Equal(t, "Send a heartbeat for a message", cmd.Short)
 	assert.Contains(t, cmd.Long, "Send a heartbeat to indicate that a message is still being processed")
 	assert.NotNil(t, cmd.RunE)

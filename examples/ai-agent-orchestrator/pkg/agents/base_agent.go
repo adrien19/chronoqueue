@@ -153,7 +153,7 @@ func (agent *BaseAgent) processMessage(ctx context.Context, workerID int, resp *
 	subtask, err := agent.parseSubtask(msg)
 	if err != nil {
 		// Acknowledge with error
-		err := agent.acknowledgeMessage(ctx, resp.StreamEntryId, msg.MessageId, client.MESSAGE_ERRORED)
+		err := agent.acknowledgeMessage(ctx, msg.MessageId, client.MESSAGE_ERRORED)
 		if err != nil {
 			fmt.Printf("[%s Worker %d] Error acknowledging message %s: %v\n", agent.agentType, workerID, msg.MessageId, err)
 		}
@@ -165,7 +165,7 @@ func (agent *BaseAgent) processMessage(ctx context.Context, workerID int, resp *
 	result, err := processor(ctx, subtask)
 	if err != nil {
 		// Acknowledge with error
-		err := agent.acknowledgeMessage(ctx, resp.StreamEntryId, msg.MessageId, client.MESSAGE_ERRORED)
+		err := agent.acknowledgeMessage(ctx, msg.MessageId, client.MESSAGE_ERRORED)
 		if err != nil {
 			fmt.Printf("[%s Worker %d] Error acknowledging message %s: %v\n", agent.agentType, workerID, msg.MessageId, err)
 		}
@@ -186,7 +186,7 @@ func (agent *BaseAgent) processMessage(ctx context.Context, workerID int, resp *
 	}
 
 	// Acknowledge successful processing
-	if err := agent.acknowledgeMessage(ctx, resp.StreamEntryId, msg.MessageId, client.MESSAGE_COMPLETED); err != nil {
+	if err := agent.acknowledgeMessage(ctx, msg.MessageId, client.MESSAGE_COMPLETED); err != nil {
 		return fmt.Errorf("failed to acknowledge message: %w", err)
 	}
 
@@ -252,8 +252,8 @@ func (agent *BaseAgent) postResult(ctx context.Context, result *AgentResult) err
 }
 
 // acknowledgeMessage acknowledges message processing
-func (agent *BaseAgent) acknowledgeMessage(ctx context.Context, streamEntryID, messageID string, state client.State) error {
-	_, err := agent.client.AcknowledgeMessage(ctx, agent.queueName, messageID, state, streamEntryID)
+func (agent *BaseAgent) acknowledgeMessage(ctx context.Context, messageID string, state client.State) error {
+	_, err := agent.client.AcknowledgeMessage(ctx, agent.queueName, messageID, state)
 	return err
 }
 

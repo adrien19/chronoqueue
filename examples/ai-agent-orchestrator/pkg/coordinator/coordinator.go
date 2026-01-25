@@ -118,7 +118,6 @@ func (coord *Coordinator) worker(ctx context.Context, workerID int) {
 // processMessage handles a single task message
 func (coord *Coordinator) processMessage(ctx context.Context, workerID int, resp *queueservicev1.GetNextMessageResponse) error {
 	msg := resp.Message
-	streamEntryID := resp.StreamEntryId
 	msgID := msg.MessageId
 
 	if coord.verbose {
@@ -129,7 +128,7 @@ func (coord *Coordinator) processMessage(ctx context.Context, workerID int, resp
 	task, err := coord.parseTask(msg)
 	if err != nil {
 		// Acknowledge to remove from queue (invalid format)
-		if _, ackErr := coord.client.AcknowledgeMessage(ctx, coord.queueName, msgID, client.MESSAGE_ERRORED, streamEntryID); ackErr != nil {
+		if _, ackErr := coord.client.AcknowledgeMessage(ctx, coord.queueName, msgID, client.MESSAGE_ERRORED); ackErr != nil {
 			fmt.Printf("[Worker %d] Warning: failed to acknowledge message: %v\n", workerID, ackErr)
 		}
 		return fmt.Errorf("failed to parse task: %w", err)
@@ -139,7 +138,7 @@ func (coord *Coordinator) processMessage(ctx context.Context, workerID int, resp
 	decomposition, err := coord.llm.DecomposeTask(ctx, task)
 	if err != nil {
 		// Acknowledge to remove from queue (decomposition failed)
-		if _, ackErr := coord.client.AcknowledgeMessage(ctx, coord.queueName, msgID, client.MESSAGE_ERRORED, streamEntryID); ackErr != nil {
+		if _, ackErr := coord.client.AcknowledgeMessage(ctx, coord.queueName, msgID, client.MESSAGE_ERRORED); ackErr != nil {
 			fmt.Printf("[Worker %d] Warning: failed to acknowledge message: %v\n", workerID, ackErr)
 		}
 		return fmt.Errorf("failed to decompose task: %w", err)
@@ -151,14 +150,14 @@ func (coord *Coordinator) processMessage(ctx context.Context, workerID int, resp
 
 	// Route subtasks to appropriate agent queues
 	if err := coord.routeSubtasks(ctx, decomposition); err != nil {
-		if _, ackErr := coord.client.AcknowledgeMessage(ctx, coord.queueName, msgID, client.MESSAGE_ERRORED, streamEntryID); ackErr != nil {
+		if _, ackErr := coord.client.AcknowledgeMessage(ctx, coord.queueName, msgID, client.MESSAGE_ERRORED); ackErr != nil {
 			fmt.Printf("[Worker %d] Warning: failed to acknowledge message: %v\n", workerID, ackErr)
 		}
 		return fmt.Errorf("failed to route subtasks: %w", err)
 	}
 
 	// Acknowledge the original task message
-	_, err = coord.client.AcknowledgeMessage(ctx, coord.queueName, msgID, client.MESSAGE_COMPLETED, streamEntryID)
+	_, err = coord.client.AcknowledgeMessage(ctx, coord.queueName, msgID, client.MESSAGE_COMPLETED)
 	if err != nil {
 		return fmt.Errorf("failed to acknowledge message: %w", err)
 	}

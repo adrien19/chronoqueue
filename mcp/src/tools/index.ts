@@ -182,12 +182,8 @@ export const acknowledgeMessageTool: Tool = {
                 enum: ['completed', 'errored'],
                 description: 'Processing status',
             },
-            stream_entry_id: {
-                type: 'string',
-                description: 'Stream entry ID from get_next_message',
-            },
         },
-        required: ['queue_name', 'message_id', 'status', 'stream_entry_id'],
+        required: ['queue_name', 'message_id', 'status'],
     },
 };
 
@@ -205,16 +201,12 @@ export const renewMessageLeaseTool: Tool = {
                 type: 'string',
                 description: 'Message identifier',
             },
-            stream_entry_id: {
-                type: 'string',
-                description: 'Stream entry ID',
-            },
             lease_duration: {
                 type: 'string',
                 description: 'New lease duration (e.g., "5m")',
             },
         },
-        required: ['queue_name', 'message_id', 'stream_entry_id'],
+        required: ['queue_name', 'message_id'],
     },
 };
 

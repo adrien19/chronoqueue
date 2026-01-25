@@ -246,7 +246,7 @@ func (agent *AggregatorAgent) collectResults(ctx context.Context, parentID strin
 		// Parse the result from message payload
 		if msg.Metadata == nil || msg.Metadata.Payload == nil || msg.Metadata.Payload.Data == nil {
 			// Invalid message, ACK to remove it
-			if _, err := agent.client.AcknowledgeMessage(ctx, "agent-results", msg.MessageId, client.MESSAGE_COMPLETED, resp.StreamEntryId); err != nil && agent.verbose {
+			if _, err := agent.client.AcknowledgeMessage(ctx, "agent-results", msg.MessageId, client.MESSAGE_COMPLETED); err != nil && agent.verbose {
 				fmt.Printf("   ⚠️  Failed to ACK invalid message: %v\n", err)
 			}
 			continue
@@ -276,14 +276,14 @@ func (agent *AggregatorAgent) collectResults(ctx context.Context, parentID strin
 				}
 
 				// ACK the message to remove it from queue
-				if _, err := agent.client.AcknowledgeMessage(ctx, "agent-results", msg.MessageId, client.MESSAGE_COMPLETED, resp.StreamEntryId); err != nil {
+				if _, err := agent.client.AcknowledgeMessage(ctx, "agent-results", msg.MessageId, client.MESSAGE_COMPLETED); err != nil {
 					if agent.verbose {
 						fmt.Printf("   ⚠️  Failed to ACK message %s: %v\n", msg.MessageId, err)
 					}
 				}
 			} else {
 				// Already collected, just ACK to remove duplicate
-				if _, err := agent.client.AcknowledgeMessage(ctx, "agent-results", msg.MessageId, client.MESSAGE_COMPLETED, resp.StreamEntryId); err != nil {
+				if _, err := agent.client.AcknowledgeMessage(ctx, "agent-results", msg.MessageId, client.MESSAGE_COMPLETED); err != nil {
 					if agent.verbose {
 						fmt.Printf("   ⚠️  Failed to ACK duplicate message %s: %v\n", msg.MessageId, err)
 					}
@@ -291,7 +291,7 @@ func (agent *AggregatorAgent) collectResults(ctx context.Context, parentID strin
 			}
 		} else {
 			// Not our result, also ACK it (another aggregator task will collect its own results)
-			if _, err := agent.client.AcknowledgeMessage(ctx, "agent-results", msg.MessageId, client.MESSAGE_COMPLETED, resp.StreamEntryId); err != nil {
+			if _, err := agent.client.AcknowledgeMessage(ctx, "agent-results", msg.MessageId, client.MESSAGE_COMPLETED); err != nil {
 				if agent.verbose {
 					fmt.Printf("   ⚠️  Failed to ACK unrelated message %s: %v\n", msg.MessageId, err)
 				}

@@ -360,7 +360,6 @@ export class ChronoQueueClient {
         return {
             success: response.success,
             messageId: messageId,
-            streamEntryId: '', // Response doesn't include this
         };
     }
 
@@ -396,9 +395,7 @@ export class ChronoQueueClient {
                     maxAttempts: msgMetadata.max_attempts || 0,
                     createdAt: '',
                     leasedUntil: msgMetadata.lease_expiry || '',
-                    streamEntryId: response.stream_entry_id,
                 },
-                streamEntryId: response.stream_entry_id,
             };
         } catch (error: any) {
             if (error.code === grpc.status.NOT_FOUND) {
@@ -439,9 +436,7 @@ export class ChronoQueueClient {
                     maxAttempts: metadata.max_attempts || 0,
                     createdAt: '',
                     leasedUntil: metadata.lease_expiry || '',
-                    streamEntryId: '',
                 },
-                streamEntryId: '',
             };
         });
     }
@@ -452,8 +447,7 @@ export class ChronoQueueClient {
     async acknowledgeMessage(
         queueName: string,
         messageId: string,
-        status: 'completed' | 'errored',
-        streamEntryId: string
+        status: 'completed' | 'errored'
     ): Promise<AcknowledgeMessageResponse> {
         const ackMessageAsync = promisify(
             this.queueServiceClient.acknowledgeMessage.bind(this.queueServiceClient)
@@ -471,7 +465,6 @@ export class ChronoQueueClient {
             queue_name: queueName,
             message_id: messageId,
             state: stateMap[status],
-            stream_entry_id: streamEntryId,
         }, metadata, { deadline });
 
         return {
@@ -533,7 +526,6 @@ export class ChronoQueueClient {
     async renewMessageLease(
         queueName: string,
         messageId: string,
-        streamEntryId: string,
         leaseDuration?: number // Duration in seconds
     ): Promise<{ success: boolean; newLeaseExpiry: string }> {
         const renewLeaseAsync = promisify(
@@ -548,7 +540,6 @@ export class ChronoQueueClient {
         const response = await renewLeaseAsync({
             queue_name: queueName,
             message_id: messageId,
-            stream_entry_id: streamEntryId,
             lease_duration: leaseDurationProto,
         }, metadata, { deadline });
 

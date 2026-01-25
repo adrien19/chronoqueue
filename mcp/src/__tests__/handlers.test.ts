@@ -149,7 +149,6 @@ describe('Tool Handlers', () => {
             mockClient.postMessage.mockResolvedValue({
                 success: true,
                 messageId: 'msg-123',
-                streamEntryId: '1234-0',
             });
 
             const result = await handleToolCall('post_message', {
@@ -172,7 +171,6 @@ describe('Tool Handlers', () => {
             mockClient.postMessage.mockResolvedValue({
                 success: true,
                 messageId: 'msg-123',
-                streamEntryId: '1234-0',
             });
 
             const result = await handleToolCall('post_message', {
@@ -199,7 +197,6 @@ describe('Tool Handlers', () => {
             mockClient.postMessage.mockResolvedValue({
                 success: true,
                 messageId: 'msg-123',
-                streamEntryId: '1234-0',
             });
 
             const result = await handleToolCall('post_message', {
@@ -232,10 +229,8 @@ describe('Tool Handlers', () => {
                     priority: 5,
                     attempts: 0,
                     maxAttempts: 3,
-                    streamEntryId: '1234-0',
                     leasedUntil: '1234567890',
                 },
-                streamEntryId: '1234-0',
             });
 
             const result = await handleToolCall('get_next_message', {
@@ -298,7 +293,6 @@ describe('Tool Handlers', () => {
                 queue_name: 'test-queue',
                 message_id: 'msg-123',
                 status: 'completed',
-                stream_entry_id: '1234-0',
             }, mockClient);
 
             expect(mockClient.acknowledgeMessage).toHaveBeenCalledWith(
@@ -319,7 +313,6 @@ describe('Tool Handlers', () => {
             const result = await handleToolCall('renew_message_lease', {
                 queue_name: 'test-queue',
                 message_id: 'msg-123',
-                stream_entry_id: '1234-0',
                 lease_duration: '60s',
             }, mockClient);
 
