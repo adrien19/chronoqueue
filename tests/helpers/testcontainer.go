@@ -239,6 +239,9 @@ func (e *TestEnvironment) WaitForHealthy(t *testing.T, timeout time.Duration) {
 //	    // ... use tlsConfig with gRPC client
 //	}
 func SetupTestEnvironmentWithTLS(t *testing.T, certs *TestCertificates) *TestEnvironment {
+	// Validate certificates are provided to avoid nil dereference
+	require.NotNil(t, certs, "TestCertificates must be provided")
+
 	ctx := context.Background()
 
 	// Create a Docker network for container communication
