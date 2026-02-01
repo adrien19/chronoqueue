@@ -603,10 +603,10 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 			SET last_heartbeat_at = ?,
 				heartbeat_expiry = ?,
 				lease_expiry = ?,
-				updated_at = CURRENT_TIMESTAMP
+				updated_at = ?
 			WHERE message_id = ? AND current_attempt_id = ?
 		`
-		result, err := tx.ExecContext(ctx, update, nowMs, heartbeatExpiry, newLeaseExpiry, messageId, attemptId)
+		result, err := tx.ExecContext(ctx, update, nowMs, heartbeatExpiry, newLeaseExpiry, nowMs, messageId, attemptId)
 		if err != nil {
 			return fmt.Errorf("update heartbeat: %w", err)
 		}
@@ -620,10 +620,7 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 		}
 
 		// Calculate remaining lease time based on the extended lease
-		remainingTimeMs = newLeaseExpiry - nowMs
-		if remainingTimeMs < 0 {
-			remainingTimeMs = 0
-		}
+		remainingTimeMs = max(newLeaseExpiry-nowMs, 0)
 		currentState = state
 
 		return nil

@@ -606,7 +606,7 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
                 updated_at = ?
             WHERE message_id = ? AND current_attempt_id = ?
         `)
-		result, err := tx.ExecContext(ctx, update, nowMs, heartbeatExpiry, newLeaseExpiry, s.nowMs(), messageId, attemptId)
+		result, err := tx.ExecContext(ctx, update, nowMs, heartbeatExpiry, newLeaseExpiry, nowMs, messageId, attemptId)
 		if err != nil {
 			return fmt.Errorf("update heartbeat: %w", err)
 		}

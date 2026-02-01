@@ -180,6 +180,7 @@ func (r *ReclaimService) reclaimQueueMessages(ctx context.Context, queueName str
 		meta := msg.GetMetadata()
 		if meta == nil {
 			meta = &messagepb.Message_Metadata{}
+			msg.Metadata = meta
 		}
 
 		r.base.Logger.InfoWithFields("Reclaiming timed-out message",
@@ -188,6 +189,11 @@ func (r *ReclaimService) reclaimQueueMessages(ctx context.Context, queueName str
 			"attempts_left", meta.AttemptsLeft,
 			"max_attempts", meta.GetMaxAttempts(),
 		)
+
+		// Pre-compute expected state transition for metrics tracking
+		// Backend will decrement AttemptsLeft by 1, then check if <= 0
+		newAttemptsLeft := meta.GetAttemptsLeft() - 1
+		transitionsToErrored := newAttemptsLeft <= 0 && meta.GetMaxAttempts() != -1
 
 		// Use backend interface to reclaim the message
 		if err := r.backend.ReclaimExpiredMessage(ctx, queueName, msg); err != nil {
@@ -198,8 +204,8 @@ func (r *ReclaimService) reclaimQueueMessages(ctx context.Context, queueName str
 			continue
 		}
 
-		// Determine what happened for metrics
-		if meta.AttemptsLeft == 0 && meta.MaxAttempts != -1 {
+		// Determine what happened for metrics based on pre-computed state
+		if transitionsToErrored {
 			errored++
 			// Record metrics for DLQ ingestion
 			dlqName := queueName + "-dlq"
