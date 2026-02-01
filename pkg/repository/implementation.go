@@ -62,7 +62,7 @@ func NewSQLiteStorage(ctx context.Context, config *sqlite.Config) (Storage, erro
 	go schedulerService.Start(bgCtx)
 	config.Logger.Info("Starting SQLite scheduler service", "interval", "1s")
 
-	reclaimService := background.NewReclaimService(storage.BaseSQL, 5*time.Second)
+	reclaimService := background.NewReclaimService(storage, storage.BaseSQL, 5*time.Second)
 	go reclaimService.Start(bgCtx)
 	config.Logger.Info("Starting SQLite reclaim service", "interval", "5s")
 
@@ -112,7 +112,7 @@ func NewPostgresStorage(ctx context.Context, config *postgres.Config) (Storage, 
 	go schedulerService.Start(bgCtx)
 	config.Logger.Info("Starting Postgres scheduler service", "interval", "1s")
 
-	reclaimService := background.NewReclaimService(storage.BaseSQL, 5*time.Second)
+	reclaimService := background.NewReclaimService(storage, storage.BaseSQL, 5*time.Second)
 	go reclaimService.Start(bgCtx)
 	config.Logger.Info("Starting Postgres reclaim service", "interval", "5s")
 
