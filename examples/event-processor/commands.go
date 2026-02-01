@@ -309,7 +309,7 @@ func showStats(ctx context.Context) error {
 
 	queues := []string{EmailQueue, WebhookQueue, SMSQueue}
 
-	fmt.Println("📊 Event Processing Statistics\n")
+	fmt.Println("📊 Event Processing Statistics")
 	fmt.Println("═══════════════════════════════════════════════════════════════")
 
 	totalStats := make(map[string]int32)
@@ -376,7 +376,7 @@ func monitorSystem(ctx context.Context, interval string) error {
 
 	fmt.Println("🔍 Real-time Event Processing Monitor")
 	fmt.Printf("    Update interval: %s\n", interval)
-	fmt.Println("    Press Ctrl+C to stop\n")
+	fmt.Println("    Press Ctrl+C to stop")
 
 	queues := []string{EmailQueue, WebhookQueue, SMSQueue}
 
@@ -470,7 +470,7 @@ func listDLQ(ctx context.Context) error {
 
 	queues := []string{EmailQueue, WebhookQueue, SMSQueue}
 
-	fmt.Println("☠️  Dead Letter Queue Contents\n")
+	fmt.Println("☠️  Dead Letter Queue Contents")
 
 	totalFailed := 0
 

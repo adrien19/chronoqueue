@@ -302,8 +302,8 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 		nowMs := s.nowMs()
 
 		if shouldDelete {
-			query := `DELETE FROM cq_messages WHERE message_id = ? AND current_attempt_id = ?`
-			result, err := tx.ExecContext(ctx, query, messageId, attemptId)
+			// Hard delete - must match attempt_id for idempotency
+			result, err := tx.ExecContext(ctx, `DELETE FROM cq_messages WHERE message_id = ? AND current_attempt_id = ?`, messageId, attemptId)
 			if err != nil {
 				return fmt.Errorf("delete message: %w", err)
 			}
@@ -316,7 +316,8 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 				return fmt.Errorf("message not found or attempt mismatch")
 			}
 		} else {
-			query := `
+			// Soft delete - must match attempt_id for idempotency
+			result, err := tx.ExecContext(ctx, `
 				UPDATE cq_messages 
 				SET state = ?,
 					completed_at = ?,
@@ -326,16 +327,13 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 					lease_started_at = NULL,
 					lease_expiry = NULL,
 					updated_at = ?
-				WHERE message_id = ? AND current_attempt_id = ?
-			`
-			result, err := tx.ExecContext(ctx, query,
+				WHERE message_id = ? AND current_attempt_id = ?`,
 				messagepb.Message_Metadata_COMPLETED,
 				nowMs,
 				deletedAt,
 				nowMs,
 				messageId,
-				attemptId,
-			)
+				attemptId)
 			if err != nil {
 				return fmt.Errorf("soft delete message: %w", err)
 			}
@@ -553,12 +551,18 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
 }
 
 // HeartbeatMessage updates the heartbeat for a message
-func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string) error {
-	return s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+// Returns the current message state and remaining lease time in milliseconds.
+func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string) (messagepb.Message_Metadata_State, int64, error) {
+	var currentState messagepb.Message_Metadata_State
+	var remainingTimeMs int64
+
+	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		var messageBytes []byte
 		var currentAttempt sql.NullString
-		query := `SELECT metadata_pb, current_attempt_id FROM cq_messages WHERE message_id = ?`
-		err := tx.QueryRowContext(ctx, query, messageId).Scan(&messageBytes, &currentAttempt)
+		var leaseExpiry int64
+		var state messagepb.Message_Metadata_State
+		query := `SELECT metadata_pb, current_attempt_id, lease_expiry, state FROM cq_messages WHERE message_id = ?`
+		err := tx.QueryRowContext(ctx, query, messageId).Scan(&messageBytes, &currentAttempt, &leaseExpiry, &state)
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("message not found or attempt mismatch")
 		}
@@ -591,15 +595,18 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 
 		nowMs := s.Clock.NowMs()
 		heartbeatExpiry := nowMs + heartbeatTimeoutMs
+		// Extend the lease when heartbeat is received
+		newLeaseExpiry := nowMs + heartbeatTimeoutMs
 
 		update := `
 			UPDATE cq_messages
 			SET last_heartbeat_at = ?,
 				heartbeat_expiry = ?,
+				lease_expiry = ?,
 				updated_at = CURRENT_TIMESTAMP
 			WHERE message_id = ? AND current_attempt_id = ?
 		`
-		result, err := tx.ExecContext(ctx, update, nowMs, heartbeatExpiry, messageId, attemptId)
+		result, err := tx.ExecContext(ctx, update, nowMs, heartbeatExpiry, newLeaseExpiry, messageId, attemptId)
 		if err != nil {
 			return fmt.Errorf("update heartbeat: %w", err)
 		}
@@ -612,8 +619,17 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 			return fmt.Errorf("message not found or attempt mismatch")
 		}
 
+		// Calculate remaining lease time based on the extended lease
+		remainingTimeMs = newLeaseExpiry - nowMs
+		if remainingTimeMs < 0 {
+			remainingTimeMs = 0
+		}
+		currentState = state
+
 		return nil
 	})
+
+	return currentState, remainingTimeMs, err
 }
 
 // PeekMessages retrieves messages without claiming them

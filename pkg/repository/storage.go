@@ -32,7 +32,6 @@ type Storage interface {
 	CreateQueueMessage(ctx context.Context, request *queueservicepb.PostMessageRequest, validator validator.Validator) (*queueservicepb.PostMessageResponse, error)
 	GetQueueMessage(ctx context.Context, request *queueservicepb.GetNextMessageRequest) (*queueservicepb.GetNextMessageResponse, error)
 	AcknowledgeMessage(ctx context.Context, request *queueservicepb.AcknowledgeMessageRequest) (*queueservicepb.AcknowledgeMessageResponse, error)
-	DeleteQueueMessage(ctx context.Context, queueName string, messageID string) error
 	SendMessageHeartBeat(ctx context.Context, request *queueservicepb.SendMessageHeartBeatRequest) (*queueservicepb.SendMessageHeartBeatResponse, error)
 	RenewMessageLease(ctx context.Context, request *queueservicepb.RenewMessageLeaseRequest) (*queueservicepb.RenewMessageLeaseResponse, error)
 	PeekQueueMessages(ctx context.Context, request *queueservicepb.PeekQueueMessagesRequest) (*queueservicepb.PeekQueueMessagesResponse, error)
