@@ -27,7 +27,7 @@ type BackendStorage interface {
 	EnqueueMessage(ctx context.Context, queueName string, message *messagepb.Message) error
 	ClaimMessage(ctx context.Context, queueName string, workerId string, attemptId string) (*messagepb.Message, error)
 	AcknowledgeMessage(ctx context.Context, queueName string, messageId string, attemptId string) error
-	CancelMessage(ctx context.Context, queueName string, messageId string) error
+	CancelMessage(ctx context.Context, queueName string, messageId string, reason string) error
 	NackMessage(ctx context.Context, queueName string, messageId string, attemptId string) error
 	HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string) (messagepb.Message_Metadata_State, int64, error)
 	ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, extensionMs int64) error

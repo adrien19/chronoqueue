@@ -580,7 +580,15 @@ func (impl *implementation) AcknowledgeMessage(ctx context.Context, request *que
 //	    Reason: "User unsubscribed",
 //	})
 func (impl *implementation) CancelMessage(ctx context.Context, request *queueservicepb.CancelMessageRequest) (*queueservicepb.CancelMessageResponse, error) {
-	if err := impl.backend.CancelMessage(ctx, request.QueueName, request.MessageId); err != nil {
+	if request == nil || request.GetQueueName() == "" || request.GetMessageId() == "" {
+		return nil, fmt.Errorf("queue name and message id are required")
+	}
+	reason := ""
+	if request.Reason != nil {
+		reason = *request.Reason
+	}
+
+	if err := impl.backend.CancelMessage(ctx, request.GetQueueName(), request.GetMessageId(), reason); err != nil {
 		return nil, err
 	}
 

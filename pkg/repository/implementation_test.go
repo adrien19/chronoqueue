@@ -30,10 +30,18 @@ type enqueuedCall struct {
 	message *messagepb.Message
 }
 
+type cancelledCall struct {
+	queueName string
+	messageId string
+	reason    string
+}
+
 type stubBackend struct {
 	queueMetadata *queuepb.QueueMetadata
 	enqueued      []enqueuedCall
 	enqueueErr    error
+	cancelled     []cancelledCall
+	cancelErr     error
 }
 
 type stubEngine struct {
@@ -98,8 +106,9 @@ func (b *stubBackend) NackMessage(ctx context.Context, queueName string, message
 	return nil
 }
 
-func (b *stubBackend) CancelMessage(ctx context.Context, queueName string, messageId string) error {
-	return nil
+func (b *stubBackend) CancelMessage(ctx context.Context, queueName string, messageId string, reason string) error {
+	b.cancelled = append(b.cancelled, cancelledCall{queueName: queueName, messageId: messageId, reason: reason})
+	return b.cancelErr
 }
 
 func (b *stubBackend) HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string) (messagepb.Message_Metadata_State, int64, error) {
@@ -295,5 +304,112 @@ func TestGetCalendarSchedulePreview_EngineError(t *testing.T) {
 	_, err := impl.GetCalendarSchedulePreview(context.Background(), &schedulepb.CalendarSchedule{}, 1)
 	if err == nil || !strings.Contains(err.Error(), "preview failed") {
 		t.Fatalf("expected engine error, got %v", err)
+	}
+}
+
+func TestCancelMessage_Success(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend}
+
+	req := &queueservicepb.CancelMessageRequest{
+		QueueName: "queue-A",
+		MessageId: "msg-1",
+	}
+
+	resp, err := impl.CancelMessage(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !resp.Success {
+		t.Fatalf("expected success to be true")
+	}
+
+	if len(backend.cancelled) != 1 {
+		t.Fatalf("expected 1 cancelled message, got %d", len(backend.cancelled))
+	}
+
+	call := backend.cancelled[0]
+	if call.queueName != "queue-A" {
+		t.Fatalf("expected queue queue-A, got %s", call.queueName)
+	}
+	if call.messageId != "msg-1" {
+		t.Fatalf("expected message ID msg-1, got %s", call.messageId)
+	}
+	if call.reason != "" {
+		t.Fatalf("expected empty reason, got %s", call.reason)
+	}
+}
+
+func TestCancelMessage_WithReason(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend}
+
+	reason := "Order cancelled by customer"
+	req := &queueservicepb.CancelMessageRequest{
+		QueueName: "queue-B",
+		MessageId: "msg-2",
+		Reason:    &reason,
+	}
+
+	resp, err := impl.CancelMessage(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !resp.Success {
+		t.Fatalf("expected success to be true")
+	}
+
+	if len(backend.cancelled) != 1 {
+		t.Fatalf("expected 1 cancelled message, got %d", len(backend.cancelled))
+	}
+
+	call := backend.cancelled[0]
+	if call.queueName != "queue-B" {
+		t.Fatalf("expected queue queue-B, got %s", call.queueName)
+	}
+	if call.messageId != "msg-2" {
+		t.Fatalf("expected message ID msg-2, got %s", call.messageId)
+	}
+	if call.reason != reason {
+		t.Fatalf("expected reason %q, got %q", reason, call.reason)
+	}
+}
+
+func TestCancelMessage_BackendError(t *testing.T) {
+	backend := &stubBackend{cancelErr: fmt.Errorf("database connection failed")}
+	impl := &implementation{backend: backend}
+
+	req := &queueservicepb.CancelMessageRequest{
+		QueueName: "queue-C",
+		MessageId: "msg-3",
+	}
+
+	_, err := impl.CancelMessage(context.Background(), req)
+	if err == nil {
+		t.Fatalf("expected backend error, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "database connection failed") {
+		t.Fatalf("expected backend error message, got: %v", err)
+	}
+
+	if len(backend.cancelled) != 1 {
+		t.Fatalf("expected 1 cancel attempt, got %d", len(backend.cancelled))
+	}
+}
+
+func TestCancelMessage_NilRequest(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend}
+
+	_, err := impl.CancelMessage(context.Background(), nil)
+	if err == nil {
+		t.Fatalf("expected error for nil request, got nil")
+	}
+
+	if len(backend.cancelled) != 0 {
+		t.Fatalf("expected no cancel attempts for nil request, got %d", len(backend.cancelled))
 	}
 }

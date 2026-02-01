@@ -1062,6 +1062,10 @@ func TestMessageLifecycle_CancelWithReason(t *testing.T) {
 	require.NoError(t, err, "Cancelling message with reason should succeed")
 	assert.True(t, cancelResp.Success, "Response should indicate success")
 
+	// Note: The cancellation reason is persisted in the database (cancellation_reason column)
+	// but there's currently no InspectMessage API to verify it directly.
+	// The reason is available for audit queries directly against the storage layer.
+
 	// Verify message is not retrievable
 	getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
 		QueueName:     queueName,

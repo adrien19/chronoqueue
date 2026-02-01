@@ -476,8 +476,10 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 
 // CancelMessage cancels a pending message before it has been processed.
 // Only messages in INVISIBLE or PENDING state can be cancelled.
-func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId string) error {
+// The reason parameter is stored for audit trail purposes.
+func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId string, reason string) error {
 	var currentState messagepb.Message_Metadata_State
+	var shouldDelete bool
 
 	// Fetch queue metadata outside transaction to avoid connection pool contention
 	queueMeta, err := s.GetQueueMetadata(ctx, queueName)
@@ -503,7 +505,8 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 		}
 
 		// Calculate deletion behavior based on retention policy
-		shouldDelete, deletedAt := s.calculateDeletion(retentionPolicy)
+		var deletedAt *int64
+		shouldDelete, deletedAt = s.calculateDeletion(retentionPolicy)
 		nowMs := s.nowMs()
 
 		if shouldDelete {
@@ -523,11 +526,17 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 			}
 		} else {
 			// Soft delete - mark as CANCELED and set deleted_at, verify state hasn't changed
+			// Store cancellation reason for audit trail
+			var reasonPtr *string
+			if reason != "" {
+				reasonPtr = &reason
+			}
 			updateQuery := `
 				UPDATE cq_messages
 				SET state = ?,
 					completed_at = ?,
 					deleted_at = ?,
+					cancellation_reason = ?,
 					current_attempt_id = NULL,
 					current_worker_id = NULL,
 					lease_started_at = NULL,
@@ -541,6 +550,7 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 				messagepb.Message_Metadata_CANCELED,
 				nowMs,
 				deletedAt,
+				reasonPtr,
 				nowMs,
 				messageId,
 				messagepb.Message_Metadata_INVISIBLE,
@@ -564,6 +574,14 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 	})
 
 	if err == nil {
+		// Log cancellation for hard-deleted messages (audit trail)
+		if shouldDelete && reason != "" {
+			s.Logger.Info("Message cancelled and deleted",
+				"queue", queueName,
+				"message_id", messageId,
+				"state", currentState.String(),
+				"reason", reason)
+		}
 		// Record state transition metric
 		oldStateStr := currentState.String()
 		if oldStateStr == "" {
