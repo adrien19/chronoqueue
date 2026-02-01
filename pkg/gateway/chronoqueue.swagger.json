@@ -472,6 +472,54 @@
         ]
       }
     },
+    "/v1/queues/{queueName}/messages/{messageId}:cancel": {
+      "post": {
+        "summary": "CancelMessage cancels a pending message before it has been processed.",
+        "description": "Use when:\n- Business logic invalidates the need for a message (order cancelled, user unsubscribed)\n- Scheduled messages no longer needed (event rescheduled, task no longer relevant)\n- Cleanup operations (purge old scheduled notifications)\n\nProducer-side operation: Only messages in INVISIBLE or PENDING state can be cancelled.\nMessages already being processed (RUNNING) cannot be cancelled - use application-level\ncancellation logic instead.\n\nEffects:\n- Message moves to CANCELED state\n- Message removed from processing queue\n- Message retained based on retention policy (soft delete)\n- Queue stats updated\n\nExample - cancel scheduled reminder:\n  POST /v1/queues/notifications/messages/reminder-456:cancel\n\nExample - cancel all pending messages for a user:\n  foreach messageId in userMessages:\n      CancelMessage(queueName, messageId)\n\nReturns: Empty response\nErrors:\n  - NotFound: Message doesn't exist\n  - FailedPrecondition: Message is RUNNING, COMPLETED, ERRORED, or already CANCELED",
+        "operationId": "QueueService_CancelMessage",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CancelMessageResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServiceCancelMessageBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
     "/v1/queues/{queueName}/messages/{messageId}:renewLease": {
       "post": {
         "summary": "RenewMessageLease extends the processing time for a message.",
@@ -1273,6 +1321,16 @@
       },
       "title": "Acknowledge the message on the queue"
     },
+    "QueueServiceCancelMessageBody": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "title": "Optional reason for cancellation (for audit/logging purposes)"
+        }
+      },
+      "title": "Cancel a message"
+    },
     "QueueServiceGetNextMessageBody": {
       "type": "object",
       "properties": {
@@ -1560,6 +1618,14 @@
         }
       },
       "description": "CalendarSchedule defines rich business calendar-based scheduling.\n\nSupports complex scheduling patterns:\n- Business days only (skip weekends and holidays)\n- Relative dates (first Monday of month, last Friday)\n- Custom calendars per region/country\n- Exception handling (skip/reschedule specific dates)\n- Multiple execution times per day\n\nExample - Monthly reports on first business day at 8 AM and 5 PM:\n  calendar := \u0026schedule.CalendarSchedule{\n      Type: schedule.CalendarSchedule_BUSINESS_DAYS,\n      Rules: []*schedule.CalendarRule{{\n          BusinessDays: \u0026schedule.BusinessDaysRule{\n              BusinessCalendarId: \"us-holidays\",\n          },\n          ExecutionTimes: []*schedule.TimeOfDay{\n              {Hour: 8, Minute: 0},\n              {Hour: 17, Minute: 0},\n          },\n      }},\n      Timezone: \"America/New_York\",\n      BusinessCalendar: usHolidaysCalendar,\n  }\n\nExample - Quarterly board meeting (last Friday of Mar/Jun/Sep/Dec at 2 PM):\n  calendar := \u0026schedule.CalendarSchedule{\n      Type: schedule.CalendarSchedule_MONTHLY,\n      Rules: []*schedule.CalendarRule{{\n          Monthly: \u0026schedule.MonthlyRule{\n              DayType: schedule.MonthlyRule_LAST_WEEKDAY,\n              DayValue: 5,  // Friday\n              Months: []int32{3, 6, 9, 12},  // Q1, Q2, Q3, Q4\n          },\n          ExecutionTimes: []*schedule.TimeOfDay{{Hour: 14}},\n      }},\n      Timezone: \"America/Los_Angeles\",\n  }"
+    },
+    "v1CancelMessageResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
     },
     "v1CreateQueueRequest": {
       "type": "object",

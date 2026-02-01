@@ -8,7 +8,7 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/schema"
 )
 
-const latestVersion = uint(4)
+const latestVersion = uint(5)
 
 type SchemaManager struct {
 	baseManager *schema.BaseManager
@@ -100,6 +100,10 @@ func (m *SchemaManager) Migrate(ctx context.Context, db *sql.DB, targetVersion u
 			if err := m.migrateToV4_AddRetentionFields(ctx, db); err != nil {
 				return fmt.Errorf("migrate to version 4: %w", err)
 			}
+		case 5:
+			if err := m.migrateToV5_AddCancellationReason(ctx, db); err != nil {
+				return fmt.Errorf("migrate to version 5: %w", err)
+			}
 		default:
 			return fmt.Errorf("unsupported target version %d", v)
 		}
@@ -186,6 +190,30 @@ func (m *SchemaManager) migrateToV4_AddRetentionFields(ctx context.Context, db *
 	return tx.Commit()
 }
 
+func (m *SchemaManager) migrateToV5_AddCancellationReason(ctx context.Context, db *sql.DB) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin migration tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	statements := []string{
+		`ALTER TABLE cq_messages ADD COLUMN cancellation_reason TEXT`,
+	}
+
+	for _, stmt := range statements {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("execute migration statement: %w", err)
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES (?, ?)`, 5, "Add cancellation_reason field"); err != nil {
+		return fmt.Errorf("record schema version: %w", err)
+	}
+
+	return tx.Commit()
+}
+
 func (m *SchemaManager) Version(ctx context.Context, db *sql.DB) (uint, bool, error) {
 	return m.GetVersion(ctx, db)
 }
@@ -218,6 +246,7 @@ func (m *SchemaManager) createMessagesTable(ctx context.Context, tx *sql.Tx) err
 		updated_at INTEGER NOT NULL,
 		completed_at INTEGER,
 		deleted_at INTEGER,
+		cancellation_reason TEXT,
 		FOREIGN KEY (queue_name) REFERENCES cq_queues(name) ON DELETE CASCADE
 	)`)
 	if err != nil {

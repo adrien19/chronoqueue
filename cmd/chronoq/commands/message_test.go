@@ -17,7 +17,7 @@ func TestNewMessageCommand(t *testing.T) {
 
 	// Check that subcommands are properly added
 	subcommands := cmd.Commands()
-	assert.Len(t, subcommands, 6)
+	assert.Len(t, subcommands, 7)
 
 	// Check subcommand names
 	subcommandNames := make([]string, len(subcommands))
@@ -32,6 +32,7 @@ func TestNewMessageCommand(t *testing.T) {
 		"peek <queue-name>",
 		"renew <queue-name> <message-id> <lease-duration>",
 		"heartbeat <queue-name> <message-id>",
+		"cancel <queue-name> <message-id>",
 	}
 
 	for _, expected := range expectedCommands {
@@ -140,6 +141,23 @@ func TestNewMessageHeartbeatCommand(t *testing.T) {
 
 	// Check that command requires exactly two arguments
 	assert.NotNil(t, cmd.Args)
+}
+
+func TestNewMessageCancelCommand(t *testing.T) {
+	cmd := newMessageCancelCommand()
+
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "cancel <queue-name> <message-id>", cmd.Use)
+	assert.Equal(t, "Cancel a message", cmd.Short)
+	assert.Contains(t, cmd.Long, "Cancel a message that is in INVISIBLE or PENDING state")
+	assert.NotNil(t, cmd.RunE)
+
+	// Check that command requires exactly two arguments
+	assert.NotNil(t, cmd.Args)
+
+	// Check for reason flag
+	reasonFlag := cmd.Flags().Lookup("reason")
+	assert.NotNil(t, reasonFlag)
 }
 
 func TestMessagePostCommand_DefaultFlags(t *testing.T) {
@@ -261,6 +279,18 @@ func TestMessageCommands_ArgumentValidation(t *testing.T) {
 			cmd:         newMessageHeartbeatCommand(),
 			args:        []string{"test-queue", "msg-123"},
 			expectError: false,
+		},
+		{
+			name:        "cancel command with valid args",
+			cmd:         newMessageCancelCommand(),
+			args:        []string{"test-queue", "msg-123"},
+			expectError: false,
+		},
+		{
+			name:        "cancel command with no args",
+			cmd:         newMessageCancelCommand(),
+			args:        []string{},
+			expectError: true,
 		},
 	}
 

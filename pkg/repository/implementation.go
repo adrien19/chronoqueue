@@ -557,6 +557,46 @@ func (impl *implementation) AcknowledgeMessage(ctx context.Context, request *que
 	}, nil
 }
 
+// CancelMessage cancels a pending message before it has been processed.
+//
+// This is a producer-side operation for cancelling messages that haven't been processed yet.
+// Only messages in INVISIBLE or PENDING state can be cancelled.
+//
+// Use cases:
+// - Business logic invalidates the need for a message (order cancelled, user unsubscribed)
+// - Scheduled messages no longer needed (event rescheduled)
+// - Cleanup operations (purge old scheduled notifications)
+//
+// Effects:
+// - Message moves to CANCELED state
+// - Message removed from processing queue
+// - Message retained based on retention policy (soft delete)
+//
+// Example:
+//
+//	CancelMessage(ctx, &CancelMessageRequest{
+//	    QueueName: "notifications",
+//	    MessageId: "reminder-456",
+//	    Reason: "User unsubscribed",
+//	})
+func (impl *implementation) CancelMessage(ctx context.Context, request *queueservicepb.CancelMessageRequest) (*queueservicepb.CancelMessageResponse, error) {
+	if request == nil || request.GetQueueName() == "" || request.GetMessageId() == "" {
+		return nil, fmt.Errorf("queue name and message id are required")
+	}
+	reason := ""
+	if request.Reason != nil {
+		reason = *request.Reason
+	}
+
+	if err := impl.backend.CancelMessage(ctx, request.GetQueueName(), request.GetMessageId(), reason); err != nil {
+		return nil, err
+	}
+
+	return &queueservicepb.CancelMessageResponse{
+		Success: true,
+	}, nil
+}
+
 // SendMessageHeartBeat updates the heartbeat for a message
 func (impl *implementation) SendMessageHeartBeat(ctx context.Context, request *queueservicepb.SendMessageHeartBeatRequest) (*queueservicepb.SendMessageHeartBeatResponse, error) {
 	attemptId := ""

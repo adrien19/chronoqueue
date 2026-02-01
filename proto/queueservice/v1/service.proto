@@ -49,7 +49,7 @@ import "proto/queueservice/v1/request_response.proto";
 // - Error details in status.Details() for validation errors
 service QueueService {
     // ==================== Queue Management Operations ====================
-    
+
     // CreateQueue creates a new queue with specified configuration.
     //
     // Use to:
@@ -76,12 +76,12 @@ service QueueService {
     // Errors:
     //   - AlreadyExists: Queue with this name exists
     //   - InvalidArgument: Invalid configuration (negative lease_duration, etc.)
-    rpc CreateQueue(CreateQueueRequest) returns (CreateQueueResponse) {
-        option (google.api.http) = {
+        rpc CreateQueue(CreateQueueRequest) returns (CreateQueueResponse) {
+          option (google.api.http) = {
             post: "/v1/queues"
             body: "*"
-        };
-    }
+          };
+        }
 
     // DeleteQueue permanently deletes a queue and all its messages.
     //
@@ -100,11 +100,11 @@ service QueueService {
     // Returns: Empty response
     // Errors:
     //   - NotFound: Queue doesn't exist
-    rpc DeleteQueue(DeleteQueueRequest) returns (DeleteQueueResponse) {
-        option (google.api.http) = {
+        rpc DeleteQueue(DeleteQueueRequest) returns (DeleteQueueResponse) {
+          option (google.api.http) = {
             delete: "/v1/queues/{name=*}"
-        };
-    }
+          };
+        }
 
     // ListQueues returns all queues in your ChronoQueue instance.
     //
@@ -117,11 +117,11 @@ service QueueService {
     //   GET /v1/queues
     //
     // Returns: List of Queue objects with metadata
-    rpc ListQueues(ListQueuesRequest) returns (ListQueuesResponse) {
-        option (google.api.http) = {
+        rpc ListQueues(ListQueuesRequest) returns (ListQueuesResponse) {
+          option (google.api.http) = {
             get: "/v1/queues"
-        };
-    }
+          };
+        }
 
     // GetQueueState returns current queue statistics and health.
     //
@@ -147,14 +147,14 @@ service QueueService {
     //   }
     //
     // Returns: QueueState with counts and metrics
-    rpc GetQueueState(GetQueueStateRequest) returns (GetQueueStateResponse) {
-        option (google.api.http) = {
-            get: "/v1/queues/{queue_name=*}/state"
-        };
-    }
+          rpc GetQueueState(GetQueueStateRequest) returns (GetQueueStateResponse) {
+            option (google.api.http) = {
+              get: "/v1/queues/{queue_name=*}/state"
+            };
+          }
 
     // ==================== Message Operations ====================
-    
+
     // PostMessage adds a new message to a queue.
     //
     // Use for:
@@ -196,12 +196,12 @@ service QueueService {
     //   - NotFound: Queue doesn't exist
     //   - InvalidArgument: Schema validation failed, invalid scheduled_time
     //   - AlreadyExists: Duplicate idempotency_key (within dedup window)
-    rpc PostMessage(PostMessageRequest) returns (PostMessageResponse) {
-        option (google.api.http) = {
-            post: "/v1/queues/{queue_name=*}/messages"
-            body: "message"
-        };
-    }
+                      rpc PostMessage(PostMessageRequest) returns (PostMessageResponse) {
+                        option (google.api.http) = {
+                          post: "/v1/queues/{queue_name=*}/messages"
+                          body: "message"
+                        };
+                      }
 
     // GetNextMessage retrieves the next available message for processing.
     //
@@ -228,13 +228,13 @@ service QueueService {
     //           time.Sleep(1 * time.Second)  // No messages available
     //           continue
     //       }
-    //       
+    //
     //       err := processMessage(resp.Message)
     //       if err != nil {
     //           // Let lease expire → automatic retry
     //           continue
     //       }
-    //       
+    //
     //       client.AcknowledgeMessage(ctx, &AcknowledgeMessageRequest{
     //           QueueName: "order-processing",
     //           MessageId: resp.Message.MessageId,
@@ -244,12 +244,12 @@ service QueueService {
     // Returns: Message (or empty if no messages available)
     // Errors:
     //   - NotFound: Queue doesn't exist
-    rpc GetNextMessage(GetNextMessageRequest) returns (GetNextMessageResponse) {
-        option (google.api.http) = {
-            post: "/v1/queues/{queue_name=*}/messages:getNext"
-            body: "*"
-        };
-    }
+                                rpc GetNextMessage(GetNextMessageRequest) returns (GetNextMessageResponse) {
+                                  option (google.api.http) = {
+                                    post: "/v1/queues/{queue_name=*}/messages:getNext"
+                                    body: "*"
+                                  };
+                                }
 
     // AcknowledgeMessage marks a message as successfully processed.
     //
@@ -270,12 +270,47 @@ service QueueService {
     // Errors:
     //   - NotFound: Message doesn't exist or already acknowledged
     //   - DeadlineExceeded: Lease already expired
-    rpc AcknowledgeMessage(AcknowledgeMessageRequest) returns (AcknowledgeMessageResponse) {
-        option (google.api.http) = {
-            post: "/v1/queues/{queue_name=*}/messages/{message_id=*}:acknowledge"
-            body: "*"
-        };
-    }
+                                rpc AcknowledgeMessage(AcknowledgeMessageRequest) returns (AcknowledgeMessageResponse) {
+                                  option (google.api.http) = {
+                                    post: "/v1/queues/{queue_name=*}/messages/{message_id=*}:acknowledge"
+                                    body: "*"
+                                  };
+                                }
+
+    // CancelMessage cancels a pending message before it has been processed.
+    //
+    // Use when:
+    // - Business logic invalidates the need for a message (order cancelled, user unsubscribed)
+    // - Scheduled messages no longer needed (event rescheduled, task no longer relevant)
+    // - Cleanup operations (purge old scheduled notifications)
+    //
+    // Producer-side operation: Only messages in INVISIBLE or PENDING state can be cancelled.
+    // Messages already being processed (RUNNING) cannot be cancelled - use application-level
+    // cancellation logic instead.
+    //
+    // Effects:
+    // - Message moves to CANCELED state
+    // - Message removed from processing queue
+    // - Message retained based on retention policy (soft delete)
+    // - Queue stats updated
+    //
+    // Example - cancel scheduled reminder:
+    //   POST /v1/queues/notifications/messages/reminder-456:cancel
+    //
+    // Example - cancel all pending messages for a user:
+    //   foreach messageId in userMessages:
+    //       CancelMessage(queueName, messageId)
+    //
+    // Returns: Empty response
+    // Errors:
+    //   - NotFound: Message doesn't exist
+    //   - FailedPrecondition: Message is RUNNING, COMPLETED, ERRORED, or already CANCELED
+                                rpc CancelMessage(CancelMessageRequest) returns (CancelMessageResponse) {
+                                  option (google.api.http) = {
+                                    post: "/v1/queues/{queue_name=*}/messages/{message_id=*}:cancel"
+                                    body: "*"
+                                  };
+                                }
 
     // RenewMessageLease extends the processing time for a message.
     //
@@ -289,7 +324,7 @@ service QueueService {
     // Example pattern (heartbeat-style lease renewal):
     //   msg := getNextMessage()
     //   done := make(chan bool)
-    //   
+    //
     //   go func() {
     //       ticker := time.NewTicker(leaseDuration / 2)
     //       defer ticker.Stop()
@@ -302,7 +337,7 @@ service QueueService {
     //           }
     //       }
     //   }()
-    //   
+    //
     //   processMessage(msg)
     //   close(done)
     //   acknowledgeMessage(msg.MessageId)
@@ -311,12 +346,12 @@ service QueueService {
     // Errors:
     //   - NotFound: Message doesn't exist or already completed
     //   - FailedPrecondition: Message not in RUNNING state
-    rpc RenewMessageLease(RenewMessageLeaseRequest) returns (RenewMessageLeaseResponse) {
-        option (google.api.http) = {
-            post: "/v1/queues/{queue_name=*}/messages/{message_id=*}:renewLease"
-            body: "*"
-        };
-    }
+                                      rpc RenewMessageLease(RenewMessageLeaseRequest) returns (RenewMessageLeaseResponse) {
+                                        option (google.api.http) = {
+                                          post: "/v1/queues/{queue_name=*}/messages/{message_id=*}:renewLease"
+                                          body: "*"
+                                        };
+                                      }
 
     // PeekQueueMessages views messages without leasing them.
     //
@@ -334,11 +369,11 @@ service QueueService {
     //   GET /v1/queues/order-processing/messages:peek?count=10
     //
     // Returns: List of messages (up to requested count)
-    rpc PeekQueueMessages(PeekQueueMessagesRequest) returns (PeekQueueMessagesResponse) {
-        option (google.api.http) = {
-            get: "/v1/queues/{queue_name=*}/messages:peek"
-        };
-    }
+                                      rpc PeekQueueMessages(PeekQueueMessagesRequest) returns (PeekQueueMessagesResponse) {
+                                        option (google.api.http) = {
+                                          get: "/v1/queues/{queue_name=*}/messages:peek"
+                                        };
+                                      }
 
     // SendMessageHeartBeat indicates a worker is still processing a message.
     //
@@ -352,15 +387,15 @@ service QueueService {
     //   }
     //
     // Returns: Empty response
-    rpc SendMessageHeartBeat(SendMessageHeartBeatRequest) returns (SendMessageHeartBeatResponse) {
-        option (google.api.http) = {
-            post: "/v1/queues/{queue_name=*}/messages:heartbeat"
-            body: "*"
-        };
-    }
+                                        rpc SendMessageHeartBeat(SendMessageHeartBeatRequest) returns (SendMessageHeartBeatResponse) {
+                                          option (google.api.http) = {
+                                            post: "/v1/queues/{queue_name=*}/messages:heartbeat"
+                                            body: "*"
+                                          };
+                                        }
 
     // ==================== Schedule Management Operations ====================
-    
+
     // CreateSchedule creates a recurring message posting schedule.
     //
     // Use for:
@@ -393,12 +428,12 @@ service QueueService {
     // Errors:
     //   - AlreadyExists: schedule_id already in use
     //   - InvalidArgument: Invalid cron expression or calendar rule
-    rpc CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse) {
-        option (google.api.http) = {
-            post: "/v1/schedules"
-            body: "*"
-        };
-    }
+                                              rpc CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse) {
+                                                option (google.api.http) = {
+                                                  post: "/v1/schedules"
+                                                  body: "*"
+                                                };
+                                              }
 
     // DeleteSchedule permanently removes a schedule.
     //
@@ -413,11 +448,11 @@ service QueueService {
     // Returns: Empty response
     // Errors:
     //   - NotFound: Schedule doesn't exist
-    rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse) {
-        option (google.api.http) = {
-            delete: "/v1/schedules/{schedule_id=*}"
-        };
-    }
+                                              rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse) {
+                                                option (google.api.http) = {
+                                                  delete: "/v1/schedules/{schedule_id=*}"
+                                                };
+                                              }
 
     // GetSchedule retrieves schedule details and current state.
     //
@@ -434,11 +469,11 @@ service QueueService {
     // Returns: Schedule object
     // Errors:
     //   - NotFound: Schedule doesn't exist
-    rpc GetSchedule(GetScheduleRequest) returns (GetScheduleResponse) {
-        option (google.api.http) = {
-            get: "/v1/schedules/{schedule_id=*}"
-        };
-    }
+                                              rpc GetSchedule(GetScheduleRequest) returns (GetScheduleResponse) {
+                                                option (google.api.http) = {
+                                                  get: "/v1/schedules/{schedule_id=*}"
+                                                };
+                                              }
 
     // ListSchedules returns all schedules.
     //
@@ -451,11 +486,11 @@ service QueueService {
     //   GET /v1/schedules
     //
     // Returns: List of Schedule objects
-    rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse) {
-        option (google.api.http) = {
-            get: "/v1/schedules"
-        };
-    }
+                                              rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse) {
+                                                option (google.api.http) = {
+                                                  get: "/v1/schedules"
+                                                };
+                                              }
 
     // GetScheduleHistory returns execution history for a schedule.
     //
@@ -473,11 +508,11 @@ service QueueService {
     //   GET /v1/schedules/daily-sales-report/history
     //
     // Returns: ScheduleHistory with execution records
-    rpc GetScheduleHistory(GetScheduleHistoryRequest) returns (GetScheduleHistoryResponse) {
-        option (google.api.http) = {
-            get: "/v1/schedules/{schedule_id=*}/history"
-        };
-    }
+                                              rpc GetScheduleHistory(GetScheduleHistoryRequest) returns (GetScheduleHistoryResponse) {
+                                                option (google.api.http) = {
+                                                  get: "/v1/schedules/{schedule_id=*}/history"
+                                                };
+                                              }
 
     // PauseSchedule temporarily stops a schedule from creating messages.
     //
@@ -497,12 +532,12 @@ service QueueService {
     // Returns: Updated schedule
     // Errors:
     //   - NotFound: Schedule doesn't exist
-    rpc PauseSchedule(PauseScheduleRequest) returns (PauseScheduleResponse) {
-        option (google.api.http) = {
-            post: "/v1/schedules/{schedule_id=*}:pause"
-            body: "*"
-        };
-    }
+                                              rpc PauseSchedule(PauseScheduleRequest) returns (PauseScheduleResponse) {
+                                                option (google.api.http) = {
+                                                  post: "/v1/schedules/{schedule_id=*}:pause"
+                                                  body: "*"
+                                                };
+                                              }
 
     // ResumeSchedule reactivates a paused schedule.
     //
@@ -518,15 +553,15 @@ service QueueService {
     // Errors:
     //   - NotFound: Schedule doesn't exist
     //   - FailedPrecondition: Schedule not in PAUSED state
-    rpc ResumeSchedule(ResumeScheduleRequest) returns (ResumeScheduleResponse) {
-        option (google.api.http) = {
-            post: "/v1/schedules/{schedule_id=*}:resume"
-            body: "*"
-        };
-    }
+                                              rpc ResumeSchedule(ResumeScheduleRequest) returns (ResumeScheduleResponse) {
+                                                option (google.api.http) = {
+                                                  post: "/v1/schedules/{schedule_id=*}:resume"
+                                                  body: "*"
+                                                };
+                                              }
 
     // ==================== Dead Letter Queue Management ====================
-    
+
     // GetDLQMessages retrieves messages from a dead letter queue.
     //
     // Dead letter queues contain:
@@ -543,11 +578,11 @@ service QueueService {
     //   GET /v1/dlq/order-dlq/messages?limit=50
     //
     // Returns: List of failed messages with error details
-    rpc GetDLQMessages(GetDLQMessagesRequest) returns (GetDLQMessagesResponse) {
-        option (google.api.http) = {
-            get: "/v1/dlq/{dlq_name=*}/messages"
-        };
-    }
+                                              rpc GetDLQMessages(GetDLQMessagesRequest) returns (GetDLQMessagesResponse) {
+                                                option (google.api.http) = {
+                                                  get: "/v1/dlq/{dlq_name=*}/messages"
+                                                };
+                                              }
 
     // RequeueFromDLQ moves a message from DLQ back to its original queue.
     //
@@ -570,12 +605,12 @@ service QueueService {
     // Returns: Requeued message
     // Errors:
     //   - NotFound: Message not in DLQ
-    rpc RequeueFromDLQ(RequeueFromDLQRequest) returns (RequeueFromDLQResponse) {
-        option (google.api.http) = {
-            post: "/v1/dlq/{dlq_name=*}/messages/{message_id=*}:requeue"
-            body: "*"
-        };
-    }
+                                                rpc RequeueFromDLQ(RequeueFromDLQRequest) returns (RequeueFromDLQResponse) {
+                                                  option (google.api.http) = {
+                                                    post: "/v1/dlq/{dlq_name=*}/messages/{message_id=*}:requeue"
+                                                    body: "*"
+                                                  };
+                                                }
 
     // DeleteFromDLQ permanently removes a message from the DLQ.
     //
@@ -592,11 +627,11 @@ service QueueService {
     // Returns: Empty response
     // Errors:
     //   - NotFound: Message not in DLQ
-    rpc DeleteFromDLQ(DeleteFromDLQRequest) returns (DeleteFromDLQResponse) {
-        option (google.api.http) = {
-            delete: "/v1/dlq/{dlq_name=*}/messages/{message_id=*}"
-        };
-    }
+                                                rpc DeleteFromDLQ(DeleteFromDLQRequest) returns (DeleteFromDLQResponse) {
+                                                  option (google.api.http) = {
+                                                    delete: "/v1/dlq/{dlq_name=*}/messages/{message_id=*}"
+                                                  };
+                                                }
 
     // PurgeDLQ removes all messages from a dead letter queue.
     //
@@ -611,12 +646,12 @@ service QueueService {
     //   POST /v1/dlq/order-dlq:purge
     //
     // Returns: Count of deleted messages
-    rpc PurgeDLQ(PurgeDLQRequest) returns (PurgeDLQResponse) {
-        option (google.api.http) = {
-            post: "/v1/dlq/{dlq_name=*}:purge"
-            body: "*"
-        };
-    }
+                                                rpc PurgeDLQ(PurgeDLQRequest) returns (PurgeDLQResponse) {
+                                                  option (google.api.http) = {
+                                                    post: "/v1/dlq/{dlq_name=*}:purge"
+                                                    body: "*"
+                                                  };
+                                                }
 
     // GetDLQStats returns statistics about a dead letter queue.
     //
@@ -635,14 +670,14 @@ service QueueService {
     //   GET /v1/dlq/order-dlq/stats
     //
     // Returns: DLQ statistics
-    rpc GetDLQStats(GetDLQStatsRequest) returns (GetDLQStatsResponse) {
-        option (google.api.http) = {
-            get: "/v1/dlq/{dlq_name=*}/stats"
-        };
-    }
+                                                rpc GetDLQStats(GetDLQStatsRequest) returns (GetDLQStatsResponse) {
+                                                  option (google.api.http) = {
+                                                    get: "/v1/dlq/{dlq_name=*}/stats"
+                                                  };
+                                                }
 
     // ==================== Calendar Schedule Operations ====================
-    
+
     // ValidateCalendarSchedule checks if a calendar schedule is valid.
     //
     // Validates:
@@ -660,12 +695,12 @@ service QueueService {
     //   }
     //
     // Returns: Validation result with errors if invalid
-    rpc ValidateCalendarSchedule(ValidateCalendarScheduleRequest) returns (ValidateCalendarScheduleResponse) {
-        option (google.api.http) = {
-            post: "/v1/calendar-schedules:validate"
-            body: "*"
-        };
-    }
+                                                  rpc ValidateCalendarSchedule(ValidateCalendarScheduleRequest) returns (ValidateCalendarScheduleResponse) {
+                                                    option (google.api.http) = {
+                                                      post: "/v1/calendar-schedules:validate"
+                                                      body: "*"
+                                                    };
+                                                  }
 
     // PreviewCalendarSchedule shows next N execution times for a schedule.
     //
@@ -681,27 +716,27 @@ service QueueService {
     //     "calendar_schedule": {...},
     //     "count": 10  // Next 10 executions
     //   }
-    //   
+    //
     //   Response:
     //   {
-    //     "next_runs": [
-    //       "2024-01-02T09:00:00Z",
-    //       "2024-01-03T09:00:00Z",
-    //       "2024-01-04T09:00:00Z",
-    //       ...
-    //     ]
+                                                      //     "next_runs": [
+                                                        //       "2024-01-02T09:00:00Z",
+                                                        //       "2024-01-03T09:00:00Z",
+                                                        //       "2024-01-04T09:00:00Z",
+                                                        //       ...
+                                                        //     ]
     //   }
     //
     // Returns: List of upcoming execution timestamps
-    rpc PreviewCalendarSchedule(PreviewCalendarScheduleRequest) returns (PreviewCalendarScheduleResponse) {
-        option (google.api.http) = {
-            post: "/v1/calendar-schedules:preview"
-            body: "*"
-        };
-    }
+                                                      rpc PreviewCalendarSchedule(PreviewCalendarScheduleRequest) returns (PreviewCalendarScheduleResponse) {
+                                                        option (google.api.http) = {
+                                                          post: "/v1/calendar-schedules:preview"
+                                                          body: "*"
+                                                        };
+                                                      }
 
     // ==================== Schema Management Operations ====================
-    
+
     // RegisterSchema creates or updates a message validation schema.
     //
     // Use for:
@@ -730,12 +765,12 @@ service QueueService {
     // Errors:
     //   - AlreadyExists: schema_id + version already exists
     //   - InvalidArgument: Invalid schema syntax
-    rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse) {
-        option (google.api.http) = {
-            post: "/v1/schemas"
-            body: "*"
-        };
-    }
+                                                          rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse) {
+                                                            option (google.api.http) = {
+                                                              post: "/v1/schemas"
+                                                              body: "*"
+                                                            };
+                                                          }
 
     // GetSchema retrieves a specific schema version.
     //
@@ -745,11 +780,11 @@ service QueueService {
     // Returns: Schema details
     // Errors:
     //   - NotFound: Schema not found
-    rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse) {
-        option (google.api.http) = {
-            get: "/v1/schemas/{schema_id=*}/versions/{version=*}"
-        };
-    }
+                                                          rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse) {
+                                                            option (google.api.http) = {
+                                                              get: "/v1/schemas/{schema_id=*}/versions/{version=*}"
+                                                            };
+                                                          }
 
     // ListSchemas returns all registered schemas.
     //
@@ -762,11 +797,11 @@ service QueueService {
     //   GET /v1/schemas
     //
     // Returns: List of schemas (all versions)
-    rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse) {
-        option (google.api.http) = {
-            get: "/v1/schemas"
-        };
-    }
+                                                          rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse) {
+                                                            option (google.api.http) = {
+                                                              get: "/v1/schemas"
+                                                            };
+                                                          }
 
     // DeleteSchema removes a schema version.
     //
@@ -784,11 +819,11 @@ service QueueService {
     // Errors:
     //   - NotFound: Schema not found
     //   - FailedPrecondition: Schema in use by active queues
-    rpc DeleteSchema(DeleteSchemaRequest) returns (DeleteSchemaResponse) {
-        option (google.api.http) = {
-            delete: "/v1/schemas/{schema_id=*}/versions/{version=*}"
-        };
-    }
+                                                          rpc DeleteSchema(DeleteSchemaRequest) returns (DeleteSchemaResponse) {
+                                                            option (google.api.http) = {
+                                                              delete: "/v1/schemas/{schema_id=*}/versions/{version=*}"
+                                                            };
+                                                          }
 
     // ValidatePayload validates a payload against a schema without posting a message.
     //
@@ -807,10 +842,10 @@ service QueueService {
     //   }
     //
     // Returns: ValidationResult (valid=true or list of errors)
-    rpc ValidatePayload(ValidatePayloadRequest) returns (ValidatePayloadResponse) {
-        option (google.api.http) = {
-            post: "/v1/schemas/{schema_id=*}/versions/{version=*}:validate"
-            body: "*"
-        };
-    }
-}
+                                                              rpc ValidatePayload(ValidatePayloadRequest) returns (ValidatePayloadResponse) {
+                                                                option (google.api.http) = {
+                                                                  post: "/v1/schemas/{schema_id=*}/versions/{version=*}:validate"
+                                                                  body: "*"
+                                                                };
+                                                              }
+                                                            }

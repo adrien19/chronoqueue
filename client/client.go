@@ -764,6 +764,27 @@ func (client *ChronoQueueClient) AcknowledgeMessage(ctx context.Context, queue s
 	return res, nil
 }
 
+// CancelMessage cancels a message that is in INVISIBLE or PENDING state.
+// Messages in RUNNING, COMPLETED, ERRORED, or CANCELED states cannot be cancelled.
+// Optionally provide a reason for audit trail purposes.
+func (client *ChronoQueueClient) CancelMessage(ctx context.Context, queueName string, messageID string, reason string) (*queueservice_pb.CancelMessageResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	if cancel != nil {
+		defer cancel()
+	}
+
+	req := &queueservice_pb.CancelMessageRequest{
+		QueueName: queueName,
+		MessageId: messageID,
+	}
+
+	if reason != "" {
+		req.Reason = &reason
+	}
+
+	return client.service.CancelMessage(ctx, req)
+}
+
 // SendMessageHeartbeat sends a heartbeat for an in-flight message.
 func (client *ChronoQueueClient) SendMessageHeartbeat(ctx context.Context, queueName string, messageId string) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
 	if client.opts.SendMessageHeartbeatFunc != nil {

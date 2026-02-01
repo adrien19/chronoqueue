@@ -27,6 +27,7 @@ func NewMessageCommand() *cobra.Command {
 	cmd.AddCommand(newMessagePeekCommand())
 	cmd.AddCommand(newMessageRenewCommand())
 	cmd.AddCommand(newMessageHeartbeatCommand())
+	cmd.AddCommand(newMessageCancelCommand())
 
 	return cmd
 }
@@ -378,6 +379,48 @@ func newMessageHeartbeatCommand() *cobra.Command {
 			})
 		},
 	}
+
+	return cmd
+}
+
+// newMessageCancelCommand creates the message cancel subcommand
+func newMessageCancelCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cancel <queue-name> <message-id>",
+		Short: "Cancel a message",
+		Long: `Cancel a message that is in INVISIBLE or PENDING state.
+
+Only messages that have not started processing can be cancelled.
+Messages in RUNNING, COMPLETED, ERRORED, or CANCELED states cannot be cancelled.
+
+Example:
+  chronoq message cancel orders msg-123
+  chronoq message cancel orders msg-123 --reason "Order expired"`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			queueName := args[0]
+			messageID := args[1]
+
+			reason, err := cmd.Flags().GetString("reason")
+			if err != nil {
+				return err
+			}
+
+			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
+				resp, err := client.CancelMessage(cmd.Context(), queueName, messageID, reason)
+				if err != nil {
+					return err
+				}
+				outputs.PrintInfo(fmt.Sprintf("Success: %t", resp.GetSuccess()))
+				if reason != "" {
+					outputs.PrintInfo(fmt.Sprintf("Cancellation reason: %s", reason))
+				}
+				return nil
+			})
+		},
+	}
+
+	cmd.Flags().StringP("reason", "r", "", "Reason for cancelling the message (optional, for audit trail)")
 
 	return cmd
 }

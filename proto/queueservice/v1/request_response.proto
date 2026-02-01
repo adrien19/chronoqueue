@@ -122,6 +122,18 @@ message AcknowledgeMessageResponse{
   bool success = 1;
 }
 
+// Cancel a message
+message CancelMessageRequest{
+  string queue_name = 1;
+  string message_id = 2;
+  // Optional reason for cancellation (for audit/logging purposes)
+  optional string reason = 3;
+}
+
+message CancelMessageResponse{
+  bool success = 1;
+}
+
 // Renew lease period of a message
 message RenewMessageLeaseRequest{
   string                   queue_name     = 1;
