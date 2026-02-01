@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
@@ -746,4 +748,491 @@ func createStructFromString(t *testing.T, str string) *structpb.Struct {
 	require.NoError(t, err, "Failed to create protobuf Struct")
 
 	return s
+}
+
+// TestMessageLifecycle_CancelInvisibleMessage validates cancelling a message in INVISIBLE state
+//
+// Test Scenario: TC-M-016 - Cancel message before it becomes available for processing
+// Expected: Message successfully cancelled and not retrievable
+func TestMessageLifecycle_CancelInvisibleMessage(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	ctx := context.Background()
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer func() { _ = conn.Close() }()
+	client := queueservice_pb.NewQueueServiceClient(conn)
+
+	queueName := helpers.GenerateUniqueQueueName(t, "test-cancel-invisible")
+
+	// Create queue
+	_, err := client.CreateQueue(ctx, &queueservice_pb.CreateQueueRequest{
+		Name: queueName,
+		Metadata: &queue_pb.QueueMetadata{
+			Type:          queue_pb.QueueType_SIMPLE,
+			LeaseDuration: durationpb.New(30 * time.Second),
+		},
+	})
+	require.NoError(t, err)
+
+	// Post a message that will remain INVISIBLE due to scheduled time in the future
+	msgID := helpers.GenerateUniqueMessageID(t)
+	futureTime := time.Now().Add(10 * time.Minute)
+
+	payload := &common_pb.Payload{
+		Data:        createStructFromString(t, "Test cancel invisible"),
+		ContentType: "text/plain",
+	}
+
+	message := &message_pb.Message{
+		MessageId: msgID,
+		Metadata: &message_pb.Message_Metadata{
+			Payload:       payload,
+			Priority:      50,
+			MaxAttempts:   3,
+			ScheduledTime: timestamppb.New(futureTime),
+		},
+	}
+
+	_, err = client.PostMessage(ctx, &queueservice_pb.PostMessageRequest{
+		QueueName: queueName,
+		Message:   message,
+	})
+	require.NoError(t, err)
+
+	// Act - Cancel the message while it's still INVISIBLE
+	cancelResp, err := client.CancelMessage(ctx, &queueservice_pb.CancelMessageRequest{
+		QueueName: queueName,
+		MessageId: msgID,
+	})
+
+	// Assert
+	require.NoError(t, err, "Cancelling INVISIBLE message should succeed")
+	assert.True(t, cancelResp.Success, "Response should indicate success")
+
+	// Verify message is not retrievable
+	helpers.WaitForMessageTransition(t)
+	getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
+		QueueName:     queueName,
+		LeaseDuration: durationpb.New(5 * time.Second),
+	})
+	require.NoError(t, err)
+	assert.Nil(t, getResp.Message, "Cancelled message should not be retrievable")
+}
+
+// TestMessageLifecycle_CancelPendingMessage validates cancelling a message in PENDING state
+//
+// Test Scenario: TC-M-017 - Cancel message that is waiting to be claimed
+// Expected: Message successfully cancelled and removed from queue
+func TestMessageLifecycle_CancelPendingMessage(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	ctx := context.Background()
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer func() { _ = conn.Close() }()
+	client := queueservice_pb.NewQueueServiceClient(conn)
+
+	queueName := helpers.GenerateUniqueQueueName(t, "test-cancel-pending")
+
+	// Create queue
+	_, err := client.CreateQueue(ctx, &queueservice_pb.CreateQueueRequest{
+		Name: queueName,
+		Metadata: &queue_pb.QueueMetadata{
+			Type:          queue_pb.QueueType_SIMPLE,
+			LeaseDuration: durationpb.New(30 * time.Second),
+		},
+	})
+	require.NoError(t, err)
+
+	// Post a message
+	msgID := helpers.GenerateUniqueMessageID(t)
+	payload := &common_pb.Payload{
+		Data:        createStructFromString(t, "Test cancel pending"),
+		ContentType: "text/plain",
+	}
+
+	message := &message_pb.Message{
+		MessageId: msgID,
+		Metadata: &message_pb.Message_Metadata{
+			Payload:     payload,
+			Priority:    50,
+			MaxAttempts: 3,
+		},
+	}
+
+	_, err = client.PostMessage(ctx, &queueservice_pb.PostMessageRequest{
+		QueueName: queueName,
+		Message:   message,
+	})
+	require.NoError(t, err)
+
+	// Wait for message to transition to PENDING
+	helpers.WaitForMessageTransition(t)
+
+	// Act - Cancel the PENDING message
+	cancelResp, err := client.CancelMessage(ctx, &queueservice_pb.CancelMessageRequest{
+		QueueName: queueName,
+		MessageId: msgID,
+	})
+
+	// Assert
+	require.NoError(t, err, "Cancelling PENDING message should succeed")
+	assert.True(t, cancelResp.Success, "Response should indicate success")
+
+	// Verify message is not retrievable
+	getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
+		QueueName:     queueName,
+		LeaseDuration: durationpb.New(5 * time.Second),
+	})
+	require.NoError(t, err)
+	assert.Nil(t, getResp.Message, "Cancelled message should not be retrievable")
+}
+
+// TestMessageLifecycle_CancelRunningMessageFails validates that cancelling a RUNNING message fails
+//
+// Test Scenario: TC-M-018 - Attempt to cancel a message that is being processed
+// Expected: Cancel operation fails with appropriate error
+func TestMessageLifecycle_CancelRunningMessageFails(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	ctx := context.Background()
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer func() { _ = conn.Close() }()
+	client := queueservice_pb.NewQueueServiceClient(conn)
+
+	queueName := helpers.GenerateUniqueQueueName(t, "test-cancel-running")
+
+	// Create queue
+	_, err := client.CreateQueue(ctx, &queueservice_pb.CreateQueueRequest{
+		Name: queueName,
+		Metadata: &queue_pb.QueueMetadata{
+			Type:          queue_pb.QueueType_SIMPLE,
+			LeaseDuration: durationpb.New(30 * time.Second),
+		},
+	})
+	require.NoError(t, err)
+
+	// Post a message
+	msgID := helpers.GenerateUniqueMessageID(t)
+	payload := &common_pb.Payload{
+		Data:        createStructFromString(t, "Test cancel running"),
+		ContentType: "text/plain",
+	}
+
+	message := &message_pb.Message{
+		MessageId: msgID,
+		Metadata: &message_pb.Message_Metadata{
+			Payload:     payload,
+			Priority:    50,
+			MaxAttempts: 3,
+		},
+	}
+
+	_, err = client.PostMessage(ctx, &queueservice_pb.PostMessageRequest{
+		QueueName: queueName,
+		Message:   message,
+	})
+	require.NoError(t, err)
+
+	// Wait for message to transition to PENDING
+	helpers.WaitForMessageTransition(t)
+
+	// Claim the message (moves to RUNNING state)
+	getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
+		QueueName:     queueName,
+		LeaseDuration: durationpb.New(30 * time.Second),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, getResp.Message, "Message should be claimed")
+
+	// Act - Attempt to cancel the RUNNING message
+	_, err = client.CancelMessage(ctx, &queueservice_pb.CancelMessageRequest{
+		QueueName: queueName,
+		MessageId: msgID,
+	})
+
+	// Assert
+	require.Error(t, err, "Cancelling RUNNING message should fail")
+	assert.Contains(t, err.Error(), "RUNNING", "Error should mention RUNNING state")
+}
+
+// TestMessageLifecycle_CancelNonExistentMessage validates error handling for non-existent messages
+//
+// Test Scenario: TC-M-019 - Attempt to cancel a message that doesn't exist
+// Expected: Cancel operation fails with not found error
+func TestMessageLifecycle_CancelNonExistentMessage(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	ctx := context.Background()
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer func() { _ = conn.Close() }()
+	client := queueservice_pb.NewQueueServiceClient(conn)
+
+	queueName := helpers.GenerateUniqueQueueName(t, "test-cancel-nonexistent")
+
+	// Create queue
+	_, err := client.CreateQueue(ctx, &queueservice_pb.CreateQueueRequest{
+		Name: queueName,
+		Metadata: &queue_pb.QueueMetadata{
+			Type:          queue_pb.QueueType_SIMPLE,
+			LeaseDuration: durationpb.New(30 * time.Second),
+		},
+	})
+	require.NoError(t, err)
+
+	// Act - Attempt to cancel a non-existent message
+	nonExistentMsgID := "non-existent-message-id"
+	_, err = client.CancelMessage(ctx, &queueservice_pb.CancelMessageRequest{
+		QueueName: queueName,
+		MessageId: nonExistentMsgID,
+	})
+
+	// Assert
+	require.Error(t, err, "Cancelling non-existent message should fail")
+	assert.Contains(t, err.Error(), "not found", "Error should indicate message not found")
+}
+
+// TestMessageLifecycle_CancelWithReason validates cancellation with audit reason
+//
+// Test Scenario: TC-M-020 - Cancel message with a reason for auditing
+// Expected: Message cancelled successfully with reason logged
+func TestMessageLifecycle_CancelWithReason(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	ctx := context.Background()
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer func() { _ = conn.Close() }()
+	client := queueservice_pb.NewQueueServiceClient(conn)
+
+	queueName := helpers.GenerateUniqueQueueName(t, "test-cancel-with-reason")
+
+	// Create queue
+	_, err := client.CreateQueue(ctx, &queueservice_pb.CreateQueueRequest{
+		Name: queueName,
+		Metadata: &queue_pb.QueueMetadata{
+			Type:          queue_pb.QueueType_SIMPLE,
+			LeaseDuration: durationpb.New(30 * time.Second),
+		},
+	})
+	require.NoError(t, err)
+
+	// Post a message
+	msgID := helpers.GenerateUniqueMessageID(t)
+	payload := &common_pb.Payload{
+		Data:        createStructFromString(t, "Test cancel with reason"),
+		ContentType: "text/plain",
+	}
+
+	message := &message_pb.Message{
+		MessageId: msgID,
+		Metadata: &message_pb.Message_Metadata{
+			Payload:     payload,
+			Priority:    50,
+			MaxAttempts: 3,
+		},
+	}
+
+	_, err = client.PostMessage(ctx, &queueservice_pb.PostMessageRequest{
+		QueueName: queueName,
+		Message:   message,
+	})
+	require.NoError(t, err)
+
+	// Wait for message to transition to PENDING
+	helpers.WaitForMessageTransition(t)
+
+	// Act - Cancel with a specific reason
+	reason := "Order was cancelled by customer"
+	cancelResp, err := client.CancelMessage(ctx, &queueservice_pb.CancelMessageRequest{
+		QueueName: queueName,
+		MessageId: msgID,
+		Reason:    &reason,
+	})
+
+	// Assert
+	require.NoError(t, err, "Cancelling message with reason should succeed")
+	assert.True(t, cancelResp.Success, "Response should indicate success")
+
+	// Verify message is not retrievable
+	getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
+		QueueName:     queueName,
+		LeaseDuration: durationpb.New(5 * time.Second),
+	})
+	require.NoError(t, err)
+	assert.Nil(t, getResp.Message, "Cancelled message should not be retrievable")
+}
+
+// TestMessageLifecycle_CancelMultipleMessages validates bulk cancellation scenario
+//
+// Test Scenario: TC-M-021 - Cancel multiple messages in batch
+// Expected: All messages successfully cancelled
+func TestMessageLifecycle_CancelMultipleMessages(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	ctx := context.Background()
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer func() { _ = conn.Close() }()
+	client := queueservice_pb.NewQueueServiceClient(conn)
+
+	queueName := helpers.GenerateUniqueQueueName(t, "test-cancel-multiple")
+
+	// Create queue
+	_, err := client.CreateQueue(ctx, &queueservice_pb.CreateQueueRequest{
+		Name: queueName,
+		Metadata: &queue_pb.QueueMetadata{
+			Type:          queue_pb.QueueType_SIMPLE,
+			LeaseDuration: durationpb.New(30 * time.Second),
+		},
+	})
+	require.NoError(t, err)
+
+	// Post multiple messages
+	messageIDs := make([]string, 5)
+	for i := 0; i < 5; i++ {
+		msgID := helpers.GenerateUniqueMessageID(t)
+		messageIDs[i] = msgID
+
+		payload := &common_pb.Payload{
+			Data:        createStructFromString(t, fmt.Sprintf("Test message %d", i)),
+			ContentType: "text/plain",
+		}
+
+		message := &message_pb.Message{
+			MessageId: msgID,
+			Metadata: &message_pb.Message_Metadata{
+				Payload:     payload,
+				Priority:    50,
+				MaxAttempts: 3,
+			},
+		}
+
+		_, err = client.PostMessage(ctx, &queueservice_pb.PostMessageRequest{
+			QueueName: queueName,
+			Message:   message,
+		})
+		require.NoError(t, err)
+	}
+
+	// Wait for messages to transition to PENDING
+	helpers.WaitForMessageTransition(t)
+
+	// Act - Cancel all messages
+	for _, msgID := range messageIDs {
+		cancelResp, err := client.CancelMessage(ctx, &queueservice_pb.CancelMessageRequest{
+			QueueName: queueName,
+			MessageId: msgID,
+		})
+		require.NoError(t, err, "Cancelling message %s should succeed", msgID)
+		assert.True(t, cancelResp.Success)
+	}
+
+	// Assert - Verify no messages are retrievable
+	getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
+		QueueName:     queueName,
+		LeaseDuration: durationpb.New(5 * time.Second),
+	})
+	require.NoError(t, err)
+	assert.Nil(t, getResp.Message, "No cancelled messages should be retrievable")
+}
+
+// TestMessageLifecycle_CancelAfterAcknowledgeFails validates that completed messages cannot be cancelled
+//
+// Test Scenario: TC-M-022 - Attempt to cancel a message that was already acknowledged
+// Expected: Cancel operation fails
+func TestMessageLifecycle_CancelAfterAcknowledgeFails(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	ctx := context.Background()
+	env := helpers.SharedTestEnvironment(t)
+	conn := env.NewGRPCClientShared(t)
+	defer func() { _ = conn.Close() }()
+	client := queueservice_pb.NewQueueServiceClient(conn)
+
+	queueName := helpers.GenerateUniqueQueueName(t, "test-cancel-after-ack")
+
+	// Create queue
+	_, err := client.CreateQueue(ctx, &queueservice_pb.CreateQueueRequest{
+		Name: queueName,
+		Metadata: &queue_pb.QueueMetadata{
+			Type:          queue_pb.QueueType_SIMPLE,
+			LeaseDuration: durationpb.New(30 * time.Second),
+		},
+	})
+	require.NoError(t, err)
+
+	// Post a message
+	msgID := helpers.GenerateUniqueMessageID(t)
+	payload := &common_pb.Payload{
+		Data:        createStructFromString(t, "Test cancel after ack"),
+		ContentType: "text/plain",
+	}
+
+	message := &message_pb.Message{
+		MessageId: msgID,
+		Metadata: &message_pb.Message_Metadata{
+			Payload:     payload,
+			Priority:    50,
+			MaxAttempts: 3,
+		},
+	}
+
+	_, err = client.PostMessage(ctx, &queueservice_pb.PostMessageRequest{
+		QueueName: queueName,
+		Message:   message,
+	})
+	require.NoError(t, err)
+
+	// Wait for message to transition to PENDING
+	helpers.WaitForMessageTransition(t)
+
+	// Claim and acknowledge the message
+	getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
+		QueueName:     queueName,
+		LeaseDuration: durationpb.New(30 * time.Second),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, getResp.Message)
+
+	attemptID := getResp.GetAttemptId()
+	workerID := getResp.GetWorkerId()
+
+	_, err = client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
+		QueueName: queueName,
+		MessageId: msgID,
+		State:     message_pb.Message_Metadata_COMPLETED,
+		AttemptId: &attemptID,
+		WorkerId:  &workerID,
+	})
+	require.NoError(t, err)
+
+	// Act - Attempt to cancel the completed message
+	_, err = client.CancelMessage(ctx, &queueservice_pb.CancelMessageRequest{
+		QueueName: queueName,
+		MessageId: msgID,
+	})
+
+	// Assert
+	require.Error(t, err, "Cancelling completed message should fail")
+	// The message is either not found (deleted due to retention) or in wrong state
+	errMsg := err.Error()
+	validError := strings.Contains(errMsg, "not found") ||
+		strings.Contains(errMsg, "cannot cancel") ||
+		strings.Contains(errMsg, "COMPLETED") ||
+		strings.Contains(errMsg, "ERRORED") ||
+		strings.Contains(errMsg, "CANCELED") ||
+		strings.Contains(errMsg, "state changed")
+	assert.True(t, validError,
+		"Error should indicate message cannot be cancelled, got: %s", errMsg)
 }

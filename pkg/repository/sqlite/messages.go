@@ -474,6 +474,107 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 	return err
 }
 
+// CancelMessage cancels a pending message before it has been processed.
+// Only messages in INVISIBLE or PENDING state can be cancelled.
+func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId string) error {
+	var currentState messagepb.Message_Metadata_State
+
+	// Fetch queue metadata outside transaction to avoid connection pool contention
+	queueMeta, err := s.GetQueueMetadata(ctx, queueName)
+	if err != nil {
+		return fmt.Errorf("get queue metadata: %w", err)
+	}
+	retentionPolicy := queueMeta.GetMessageRetentionPolicy()
+
+	err = s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+		// Verify message exists and is in cancellable state
+		query := `SELECT state FROM cq_messages WHERE message_id = ? AND queue_name = ?`
+		err := tx.QueryRowContext(ctx, query, messageId, queueName).Scan(&currentState)
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("message not found: %s", messageId)
+		}
+		if err != nil {
+			return fmt.Errorf("query message: %w", err)
+		}
+
+		// Only allow cancellation of INVISIBLE or PENDING messages
+		if currentState != messagepb.Message_Metadata_INVISIBLE && currentState != messagepb.Message_Metadata_PENDING {
+			return fmt.Errorf("cannot cancel message in state %s (only INVISIBLE or PENDING messages can be cancelled)", currentState)
+		}
+
+		// Calculate deletion behavior based on retention policy
+		shouldDelete, deletedAt := s.calculateDeletion(retentionPolicy)
+		nowMs := s.nowMs()
+
+		if shouldDelete {
+			// Hard delete immediately - verify state hasn't changed
+			deleteQuery := `DELETE FROM cq_messages WHERE message_id = ? AND state IN (?, ?)`
+			result, err := tx.ExecContext(ctx, deleteQuery, messageId, messagepb.Message_Metadata_INVISIBLE, messagepb.Message_Metadata_PENDING)
+			if err != nil {
+				return fmt.Errorf("delete cancelled message: %w", err)
+			}
+
+			rows, err := result.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("get rows affected: %w", err)
+			}
+			if rows == 0 {
+				return fmt.Errorf("message not found or state changed")
+			}
+		} else {
+			// Soft delete - mark as CANCELED and set deleted_at, verify state hasn't changed
+			updateQuery := `
+				UPDATE cq_messages
+				SET state = ?,
+					completed_at = ?,
+					deleted_at = ?,
+					current_attempt_id = NULL,
+					current_worker_id = NULL,
+					lease_started_at = NULL,
+					lease_expiry = NULL,
+					last_heartbeat_at = NULL,
+					heartbeat_expiry = NULL,
+					updated_at = ?
+				WHERE message_id = ? AND state IN (?, ?)
+			`
+			result, err := tx.ExecContext(ctx, updateQuery,
+				messagepb.Message_Metadata_CANCELED,
+				nowMs,
+				deletedAt,
+				nowMs,
+				messageId,
+				messagepb.Message_Metadata_INVISIBLE,
+				messagepb.Message_Metadata_PENDING,
+			)
+			if err != nil {
+				return fmt.Errorf("soft delete cancelled message: %w", err)
+			}
+
+			rows, err := result.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("get rows affected: %w", err)
+			}
+			if rows == 0 {
+				return fmt.Errorf("message not found or state changed")
+			}
+		}
+
+		// Update state counters
+		return s.StateManager.UpdateCounters(ctx, tx, queueName, currentState, messagepb.Message_Metadata_CANCELED)
+	})
+
+	if err == nil {
+		// Record state transition metric
+		oldStateStr := currentState.String()
+		if oldStateStr == "" {
+			oldStateStr = "INVISIBLE"
+		}
+		metrics.RecordStateTransition(queueName, oldStateStr, "CANCELED")
+	}
+
+	return err
+}
+
 // ExtendMessageLease extends the lease on a message
 func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, extensionMs int64) error {
 	return s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {

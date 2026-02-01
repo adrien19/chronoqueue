@@ -134,6 +134,23 @@ func (s *ChronoQueueServer) AcknowledgeMessage(ctx context.Context, req *queuese
 	return resp, nil
 }
 
+func (s *ChronoQueueServer) CancelMessage(ctx context.Context, req *queueservice_pb.CancelMessageRequest) (*queueservice_pb.CancelMessageResponse, error) {
+	s.logger.InfoWithFields("CancelMessage called",
+		"queue_name", req.GetQueueName(),
+		"message_id", req.GetMessageId())
+
+	resp, err := s.storage.CancelMessage(ctx, req)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to cancel message",
+			"queue_name", req.GetQueueName(),
+			"message_id", req.GetMessageId(),
+			"error", err)
+		return nil, fmt.Errorf("failed to cancel message: %w", err)
+	}
+
+	return resp, nil
+}
+
 func (s *ChronoQueueServer) RenewMessageLease(ctx context.Context, req *queueservice_pb.RenewMessageLeaseRequest) (*queueservice_pb.RenewMessageLeaseResponse, error) {
 	s.logger.InfoWithFields("RenewMessageLease called",
 		"queue_name", req.GetQueueName(),

@@ -42,6 +42,7 @@ const (
 	QueueService_PostMessage_FullMethodName              = "/chronoqueue.api.queueservice.v1.QueueService/PostMessage"
 	QueueService_GetNextMessage_FullMethodName           = "/chronoqueue.api.queueservice.v1.QueueService/GetNextMessage"
 	QueueService_AcknowledgeMessage_FullMethodName       = "/chronoqueue.api.queueservice.v1.QueueService/AcknowledgeMessage"
+	QueueService_CancelMessage_FullMethodName            = "/chronoqueue.api.queueservice.v1.QueueService/CancelMessage"
 	QueueService_RenewMessageLease_FullMethodName        = "/chronoqueue.api.queueservice.v1.QueueService/RenewMessageLease"
 	QueueService_PeekQueueMessages_FullMethodName        = "/chronoqueue.api.queueservice.v1.QueueService/PeekQueueMessages"
 	QueueService_SendMessageHeartBeat_FullMethodName     = "/chronoqueue.api.queueservice.v1.QueueService/SendMessageHeartBeat"
@@ -289,6 +290,37 @@ type QueueServiceClient interface {
 	//   - NotFound: Message doesn't exist or already acknowledged
 	//   - DeadlineExceeded: Lease already expired
 	AcknowledgeMessage(ctx context.Context, in *AcknowledgeMessageRequest, opts ...grpc.CallOption) (*AcknowledgeMessageResponse, error)
+	// CancelMessage cancels a pending message before it has been processed.
+	//
+	// Use when:
+	// - Business logic invalidates the need for a message (order cancelled, user unsubscribed)
+	// - Scheduled messages no longer needed (event rescheduled, task no longer relevant)
+	// - Cleanup operations (purge old scheduled notifications)
+	//
+	// Producer-side operation: Only messages in INVISIBLE or PENDING state can be cancelled.
+	// Messages already being processed (RUNNING) cannot be cancelled - use application-level
+	// cancellation logic instead.
+	//
+	// Effects:
+	// - Message moves to CANCELED state
+	// - Message removed from processing queue
+	// - Message retained based on retention policy (soft delete)
+	// - Queue stats updated
+	//
+	// Example - cancel scheduled reminder:
+	//
+	//	POST /v1/queues/notifications/messages/reminder-456:cancel
+	//
+	// Example - cancel all pending messages for a user:
+	//
+	//	foreach messageId in userMessages:
+	//	    CancelMessage(queueName, messageId)
+	//
+	// Returns: Empty response
+	// Errors:
+	//   - NotFound: Message doesn't exist
+	//   - FailedPrecondition: Message is RUNNING, COMPLETED, ERRORED, or already CANCELED
+	CancelMessage(ctx context.Context, in *CancelMessageRequest, opts ...grpc.CallOption) (*CancelMessageResponse, error)
 	// RenewMessageLease extends the processing time for a message.
 	//
 	// Use when:
@@ -799,6 +831,16 @@ func (c *queueServiceClient) AcknowledgeMessage(ctx context.Context, in *Acknowl
 	return out, nil
 }
 
+func (c *queueServiceClient) CancelMessage(ctx context.Context, in *CancelMessageRequest, opts ...grpc.CallOption) (*CancelMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelMessageResponse)
+	err := c.cc.Invoke(ctx, QueueService_CancelMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *queueServiceClient) RenewMessageLease(ctx context.Context, in *RenewMessageLeaseRequest, opts ...grpc.CallOption) (*RenewMessageLeaseResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RenewMessageLeaseResponse)
@@ -1242,6 +1284,37 @@ type QueueServiceServer interface {
 	//   - NotFound: Message doesn't exist or already acknowledged
 	//   - DeadlineExceeded: Lease already expired
 	AcknowledgeMessage(context.Context, *AcknowledgeMessageRequest) (*AcknowledgeMessageResponse, error)
+	// CancelMessage cancels a pending message before it has been processed.
+	//
+	// Use when:
+	// - Business logic invalidates the need for a message (order cancelled, user unsubscribed)
+	// - Scheduled messages no longer needed (event rescheduled, task no longer relevant)
+	// - Cleanup operations (purge old scheduled notifications)
+	//
+	// Producer-side operation: Only messages in INVISIBLE or PENDING state can be cancelled.
+	// Messages already being processed (RUNNING) cannot be cancelled - use application-level
+	// cancellation logic instead.
+	//
+	// Effects:
+	// - Message moves to CANCELED state
+	// - Message removed from processing queue
+	// - Message retained based on retention policy (soft delete)
+	// - Queue stats updated
+	//
+	// Example - cancel scheduled reminder:
+	//
+	//	POST /v1/queues/notifications/messages/reminder-456:cancel
+	//
+	// Example - cancel all pending messages for a user:
+	//
+	//	foreach messageId in userMessages:
+	//	    CancelMessage(queueName, messageId)
+	//
+	// Returns: Empty response
+	// Errors:
+	//   - NotFound: Message doesn't exist
+	//   - FailedPrecondition: Message is RUNNING, COMPLETED, ERRORED, or already CANCELED
+	CancelMessage(context.Context, *CancelMessageRequest) (*CancelMessageResponse, error)
 	// RenewMessageLease extends the processing time for a message.
 	//
 	// Use when:
@@ -1702,6 +1775,9 @@ func (UnimplementedQueueServiceServer) GetNextMessage(context.Context, *GetNextM
 func (UnimplementedQueueServiceServer) AcknowledgeMessage(context.Context, *AcknowledgeMessageRequest) (*AcknowledgeMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AcknowledgeMessage not implemented")
 }
+func (UnimplementedQueueServiceServer) CancelMessage(context.Context, *CancelMessageRequest) (*CancelMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelMessage not implemented")
+}
 func (UnimplementedQueueServiceServer) RenewMessageLease(context.Context, *RenewMessageLeaseRequest) (*RenewMessageLeaseResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RenewMessageLease not implemented")
 }
@@ -1910,6 +1986,24 @@ func _QueueService_AcknowledgeMessage_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(QueueServiceServer).AcknowledgeMessage(ctx, req.(*AcknowledgeMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_CancelMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).CancelMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_CancelMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).CancelMessage(ctx, req.(*CancelMessageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2344,6 +2438,10 @@ var QueueService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AcknowledgeMessage",
 			Handler:    _QueueService_AcknowledgeMessage_Handler,
+		},
+		{
+			MethodName: "CancelMessage",
+			Handler:    _QueueService_CancelMessage_Handler,
 		},
 		{
 			MethodName: "RenewMessageLease",

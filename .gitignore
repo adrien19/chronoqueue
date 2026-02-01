@@ -190,3 +190,5 @@ logs/*
 *.jks
 *.pfx
 *_unit.json
+*test_report*.xml
+*test_report*.json

@@ -202,6 +202,16 @@ func (*mockChronoQueueServer) SendMessageHeartBeat(ctx context.Context, req *que
 	return &queueservice_pb.SendMessageHeartBeatResponse{}, nil
 }
 
+func (*mockChronoQueueServer) CancelMessage(ctx context.Context, req *queueservice_pb.CancelMessageRequest) (*queueservice_pb.CancelMessageResponse, error) {
+	if req.GetQueueName() == "" {
+		return &queueservice_pb.CancelMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "queue name is required")
+	}
+	if req.GetMessageId() == "" {
+		return &queueservice_pb.CancelMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "message ID is required")
+	}
+	return &queueservice_pb.CancelMessageResponse{Success: true}, nil
+}
+
 func (*mockChronoQueueServer) ListQueues(ctx context.Context, req *queueservice_pb.ListQueuesRequest) (*queueservice_pb.ListQueuesResponse, error) {
 	return &queueservice_pb.ListQueuesResponse{
 		Queues: []*queue_pb.Queue{
@@ -1587,4 +1597,65 @@ func TestChronoQueueClient_DLQMethods(t *testing.T) {
 			t.Errorf("Expected message count=5, got %d", resp.MessageCount)
 		}
 	})
+}
+
+func TestChronoQueueClient_CancelMessage(t *testing.T) {
+	dialer := dialer()
+	client, err := NewChronoQueueClient("bufnet", ClientOptions{
+		Connector: testConnector(dialer),
+	})
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	defer client.Close()
+
+	tests := []struct {
+		name      string
+		queueName string
+		messageID string
+		reason    string
+		wantErr   bool
+	}{
+		{
+			name:      "successful cancel without reason",
+			queueName: "test-queue",
+			messageID: "msg-123",
+			reason:    "",
+			wantErr:   false,
+		},
+		{
+			name:      "successful cancel with reason",
+			queueName: "test-queue",
+			messageID: "msg-456",
+			reason:    "Order cancelled by user",
+			wantErr:   false,
+		},
+		{
+			name:      "empty queue name",
+			queueName: "",
+			messageID: "msg-123",
+			reason:    "",
+			wantErr:   true,
+		},
+		{
+			name:      "empty message ID",
+			queueName: "test-queue",
+			messageID: "",
+			reason:    "",
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := client.CancelMessage(context.Background(), tt.queueName, tt.messageID, tt.reason)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CancelMessage() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && !resp.GetSuccess() {
+				t.Errorf("CancelMessage() expected success = true, got false")
+			}
+		})
+	}
 }
