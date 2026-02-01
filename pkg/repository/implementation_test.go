@@ -98,8 +98,8 @@ func (b *stubBackend) NackMessage(ctx context.Context, queueName string, message
 	return nil
 }
 
-func (b *stubBackend) HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string) error {
-	return nil
+func (b *stubBackend) HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string) (messagepb.Message_Metadata_State, int64, error) {
+	return messagepb.Message_Metadata_RUNNING, 30000, nil
 }
 
 func (b *stubBackend) ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, extensionMs int64) error {

@@ -496,25 +496,65 @@ func optionalString(val string) *string {
 	return &val
 }
 
-// AcknowledgeMessage marks a message as successfully processed
+// AcknowledgeMessage marks a message as processed (either successfully completed or errored)
+//
+// Design Note: This method routes to different backend operations based on the request.State:
+// - State = COMPLETED → backend.AcknowledgeMessage() (marks as successfully processed)
+// - State = ERRORED   → backend.NackMessage() (marks as failed, triggers retry or DLQ)
+//
+// Why not expose NackMessage separately in the Storage interface?
+//
+//  1. Public API Alignment: The gRPC service (service.proto) only exposes a single
+//     AcknowledgeMessage RPC. Both success and failure acknowledgments use the same endpoint
+//     with different state values, providing a unified acknowledgement API.
+//
+//  2. Semantic Correctness: Acknowledging a message means "I'm done processing it"
+//     regardless of whether processing succeeded or failed. The state parameter indicates
+//     the outcome, not the intent.
+//
+// 3. Backend Separation: NackMessage exists at the BackendStorage level because:
+//   - Background services (reclaim, cleanup) need direct access to mark failed messages
+//   - Allows different side-effect handling for each state transition
+//   - Keeps internal operations separate from public API operations
+//
+// Example client usage:
+//
+//	// Success case
+//	AcknowledgeMessage(ctx, &AcknowledgeMessageRequest{
+//	    QueueName: "orders",
+//	    MessageId: "msg-123",
+//	    State: COMPLETED,  // → routes to backend.AcknowledgeMessage()
+//	})
+//
+//	// Failure case
+//	AcknowledgeMessage(ctx, &AcknowledgeMessageRequest{
+//	    QueueName: "orders",
+//	    MessageId: "msg-123",
+//	    State: ERRORED,  // → routes to backend.NackMessage()
+//	})
 func (impl *implementation) AcknowledgeMessage(ctx context.Context, request *queueservicepb.AcknowledgeMessageRequest) (*queueservicepb.AcknowledgeMessageResponse, error) {
 	attemptId := ""
 	if request.AttemptId != nil {
 		attemptId = *request.AttemptId
 	}
 
-	if err := impl.backend.AcknowledgeMessage(ctx, request.QueueName, request.MessageId, attemptId); err != nil {
-		return nil, err
+	// Route to appropriate backend method based on requested state
+	switch request.State {
+	case messagepb.Message_Metadata_COMPLETED:
+		if err := impl.backend.AcknowledgeMessage(ctx, request.QueueName, request.MessageId, attemptId); err != nil {
+			return nil, err
+		}
+	case messagepb.Message_Metadata_ERRORED:
+		if err := impl.backend.NackMessage(ctx, request.QueueName, request.MessageId, attemptId); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("invalid acknowledgment state: %v (must be COMPLETED or ERRORED)", request.State)
 	}
 
 	return &queueservicepb.AcknowledgeMessageResponse{
 		Success: true,
 	}, nil
-}
-
-// DeleteQueueMessage deletes a message from a queue
-func (impl *implementation) DeleteQueueMessage(ctx context.Context, queueName string, messageID string) error {
-	return impl.backend.AcknowledgeMessage(ctx, queueName, messageID, "")
 }
 
 // SendMessageHeartBeat updates the heartbeat for a message
@@ -524,17 +564,17 @@ func (impl *implementation) SendMessageHeartBeat(ctx context.Context, request *q
 		attemptId = *request.AttemptId
 	}
 
-	if err := impl.backend.HeartbeatMessage(ctx, request.QueueName, request.MessageId, attemptId); err != nil {
+	state, remainingTimeMs, err := impl.backend.HeartbeatMessage(ctx, request.QueueName, request.MessageId, attemptId)
+	if err != nil {
 		return nil, err
 	}
 
-	// Return a default remaining time
-	// Since we don't have direct access to the message lease expiry,
-	// we return a reasonable default based on typical lease durations
-	remainingTime := durationpb.New(30 * time.Second)
+	// Convert milliseconds to duration
+	remainingDuration := time.Duration(remainingTimeMs) * time.Millisecond
 
 	return &queueservicepb.SendMessageHeartBeatResponse{
-		RemainingTime: remainingTime,
+		RemainingTime: durationpb.New(remainingDuration),
+		State:         state,
 	}, nil
 }
 

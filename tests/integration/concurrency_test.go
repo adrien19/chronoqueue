@@ -300,6 +300,7 @@ func TestConcurrency_Acknowledge_Idempotency(t *testing.T) {
 				QueueName: queueName,
 				MessageId: msgID,
 				AttemptId: &attemptPtr,
+				State:     message_pb.Message_Metadata_COMPLETED,
 			})
 			if err != nil {
 				errors <- err
