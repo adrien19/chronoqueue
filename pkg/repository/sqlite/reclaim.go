@@ -8,6 +8,14 @@ import (
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 )
 
+// This file implements the ReclaimableBackend interface from pkg/repository/sql/background.
+// These methods are INTERNAL operations used only by the background ReclaimService.
+// They are NOT part of the public BackendStorage interface.
+//
+// See pkg/repository/sql/background/reclaim.go for interface documentation.
+
+// FindExpiredMessages locates messages with expired leases or heartbeats.
+// Implements: ReclaimableBackend.FindExpiredMessages
 func (s *Storage) FindExpiredMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error) {
 	nowMs := s.Clock.NowMs()
 	query := `
@@ -42,7 +50,8 @@ func (s *Storage) FindExpiredMessages(ctx context.Context, queueName string, lim
 	return messages, rows.Err()
 }
 
-// ReclaimExpiredMessage moves an expired message back to pending or DLQ
+// ReclaimExpiredMessage moves an expired message back to pending or DLQ.
+// Implements: ReclaimableBackend.ReclaimExpiredMessage
 func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, message *messagepb.Message) error {
 	return s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		// Determine new state
