@@ -56,6 +56,11 @@ type (
 		Priority           int64              `json:"Priority,omitempty"`
 		LeasePolicy        LeasePolicyOptions `json:"leasePolicy,omitempty"`
 	}
+	// MessageWithID represents a message with its ID for bulk operations
+	MessageWithID struct {
+		MessageID string         `json:"messageId"`
+		Options   MessageOptions `json:"options"`
+	}
 	Payload struct {
 		Metadata      map[string]*structpb.Value `json:"metadata,omitempty"`
 		Data          *structpb.Struct           `json:"data,omitempty"`
@@ -533,6 +538,82 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 	if err != nil {
 		return res, err
 	}
+	return res, nil
+}
+
+// PostMessagesBulk posts multiple messages to a queue in a single operation.
+// Supports two transaction modes:
+//   - ALL_OR_NOTHING: All messages succeed or all fail (atomic)
+//   - BEST_EFFORT: Independent processing, partial success allowed
+//
+// Limits:
+//   - Max 1000 messages per request
+//   - Returns per-message results with error codes
+func (client *ChronoQueueClient) PostMessagesBulk(ctx context.Context, queue string, messages []MessageWithID, transactionMode queueservice_pb.PostMessagesBulkRequest_TransactionMode) (*queueservice_pb.PostMessagesBulkResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	if cancel != nil {
+		defer cancel()
+	}
+
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("no messages provided")
+	}
+
+	if len(messages) > 1000 {
+		return nil, fmt.Errorf("too many messages: %d (max 1000)", len(messages))
+	}
+
+	// Convert messages to proto format
+	protoMessages := make([]*message_pb.Message, len(messages))
+	for i, msg := range messages {
+		leaseDuration, err := parseDurationToProto(msg.Options.LeaseDuration)
+		if err != nil {
+			return nil, fmt.Errorf("invalid lease duration for message[%d]: %v", i, err)
+		}
+
+		leasePolicy, err := buildLeasePolicy(msg.Options.LeasePolicy)
+		if err != nil {
+			return nil, fmt.Errorf("invalid lease policy for message[%d]: %v", i, err)
+		}
+
+		metadata := &message_pb.Message_Metadata{
+			Payload: &common_pb.Payload{
+				Metadata:      msg.Options.Payload.Metadata,
+				Data:          msg.Options.Payload.Data,
+				ContentType:   msg.Options.Payload.ContentType,
+				SchemaId:      msg.Options.Payload.SchemaID,
+				SchemaVersion: msg.Options.Payload.SchemaVersion,
+			},
+			AttemptsLeft:  msg.Options.AttemptsLeft,
+			MaxAttempts:   msg.Options.MaxAttempts,
+			LeaseDuration: leaseDuration,
+			LeaseExpiry:   msg.Options.LeaseExpiry,
+			State:         message_pb.Message_Metadata_State(msg.Options.State),
+			Priority:      msg.Options.Priority,
+			LeasePolicy:   leasePolicy,
+		}
+
+		if msg.Options.ScheduledTime != nil {
+			metadata.ScheduledTime = timestamppb.New(*msg.Options.ScheduledTime)
+		}
+
+		protoMessages[i] = &message_pb.Message{
+			MessageId: msg.MessageID,
+			Metadata:  metadata,
+		}
+	}
+
+	req := &queueservice_pb.PostMessagesBulkRequest{
+		QueueName:       queue,
+		Messages:        protoMessages,
+		TransactionMode: transactionMode,
+	}
+
+	res, err := client.service.PostMessagesBulk(ctx, req)
+	if err != nil {
+		return res, err
+	}
+
 	return res, nil
 }
 

@@ -19,7 +19,7 @@
     "/v1/calendar-schedules:preview": {
       "post": {
         "summary": "PreviewCalendarSchedule shows next N execution times for a schedule.",
-        "description": "Use to:\n- Verify schedule behaves as expected\n- Test complex calendar rules\n- Confirm timezone handling\n- Preview holiday exceptions\n\nExample:\n  POST /v1/calendar-schedules:preview\n  {\n    \"calendar_schedule\": {...},\n    \"count\": 10  // Next 10 executions\n  }\n  \n  Response:\n  {\n    \"next_runs\": [\n      \"2024-01-02T09:00:00Z\",\n      \"2024-01-03T09:00:00Z\",\n      \"2024-01-04T09:00:00Z\",\n      ...\n    ]\n  }\n\nReturns: List of upcoming execution timestamps",
+        "description": "Use to:\n- Verify schedule behaves as expected\n- Test complex calendar rules\n- Confirm timezone handling\n- Preview holiday exceptions\n\nExample:\n  POST /v1/calendar-schedules:preview\n  {\n    \"calendar_schedule\": {...},\n    \"count\": 10  // Next 10 executions\n  }\n\n  Response:\n  {\n    \"next_runs\": [\n      \"2024-01-02T09:00:00Z\",\n      \"2024-01-03T09:00:00Z\",\n      \"2024-01-04T09:00:00Z\",\n      ...\n    ]\n  }\n\nReturns: List of upcoming execution timestamps",
         "operationId": "QueueService_PreviewCalendarSchedule",
         "responses": {
           "200": {
@@ -523,7 +523,7 @@
     "/v1/queues/{queueName}/messages/{messageId}:renewLease": {
       "post": {
         "summary": "RenewMessageLease extends the processing time for a message.",
-        "description": "Use when:\n- Processing takes longer than expected\n- Long-running batch operations\n- External API calls with unpredictable latency\n\nCall periodically during processing to prevent lease expiration.\n\nExample pattern (heartbeat-style lease renewal):\n  msg := getNextMessage()\n  done := make(chan bool)\n  \n  go func() {\n      ticker := time.NewTicker(leaseDuration / 2)\n      defer ticker.Stop()\n      for {\n          select {\n          case \u003c-ticker.C:\n              renewMessageLease(msg.MessageId)\n          case \u003c-done:\n              return\n          }\n      }\n  }()\n  \n  processMessage(msg)\n  close(done)\n  acknowledgeMessage(msg.MessageId)\n\nReturns: Updated message with new lease expiration\nErrors:\n  - NotFound: Message doesn't exist or already completed\n  - FailedPrecondition: Message not in RUNNING state",
+        "description": "Use when:\n- Processing takes longer than expected\n- Long-running batch operations\n- External API calls with unpredictable latency\n\nCall periodically during processing to prevent lease expiration.\n\nExample pattern (heartbeat-style lease renewal):\n  msg := getNextMessage()\n  done := make(chan bool)\n\n  go func() {\n      ticker := time.NewTicker(leaseDuration / 2)\n      defer ticker.Stop()\n      for {\n          select {\n          case \u003c-ticker.C:\n              renewMessageLease(msg.MessageId)\n          case \u003c-done:\n              return\n          }\n      }\n  }()\n\n  processMessage(msg)\n  close(done)\n  acknowledgeMessage(msg.MessageId)\n\nReturns: Updated message with new lease expiration\nErrors:\n  - NotFound: Message doesn't exist or already completed\n  - FailedPrecondition: Message not in RUNNING state",
         "operationId": "QueueService_RenewMessageLease",
         "responses": {
           "200": {
@@ -568,10 +568,51 @@
         ]
       }
     },
+    "/v1/queues/{queueName}/messages:bulk": {
+      "post": {
+        "summary": "PostMessagesBulk posts multiple messages to a queue in a single operation.",
+        "description": "Supports two transaction modes:\n  - ALL_OR_NOTHING: All messages succeed or all fail (atomic)\n  - BEST_EFFORT: Independent processing, partial success allowed\n\nLimits:\n  - Max 1000 messages per request\n  - Max 1MB total payload size\n\nErrors:\n  - NotFound: Queue doesn't exist\n  - InvalidArgument: Too many messages, payload too large, invalid mode\n  - FailedPrecondition: Partial failure in ALL_OR_NOTHING mode\n\nIndividual message errors are returned in the response with per-message error codes.",
+        "operationId": "QueueService_PostMessagesBulk",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PostMessagesBulkResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "queueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/QueueServicePostMessagesBulkBody"
+            }
+          }
+        ],
+        "tags": [
+          "QueueService"
+        ]
+      }
+    },
     "/v1/queues/{queueName}/messages:getNext": {
       "post": {
         "summary": "GetNextMessage retrieves the next available message for processing.",
-        "description": "This is the primary worker API. Call in a loop to continuously process messages.\n\nBehavior:\n- Returns highest priority PENDING message\n- Message moves to RUNNING state\n- Lease timer starts (worker has lease_duration to process)\n- If lease expires without ACK → message returns to PENDING for retry\n\nConcurrency:\n- Multiple workers can call simultaneously\n- Each worker gets a different message (no duplicates)\n- Use exclusivity_key for single-threaded processing of related messages\n\nExample worker loop:\n  for {\n      resp := client.GetNextMessage(ctx, \u0026GetNextMessageRequest{\n          QueueName: \"order-processing\",\n          LeaseDuration: durationpb.New(5 * time.Minute),\n      })\n      if resp.Message == nil {\n          time.Sleep(1 * time.Second)  // No messages available\n          continue\n      }\n      \n      err := processMessage(resp.Message)\n      if err != nil {\n          // Let lease expire → automatic retry\n          continue\n      }\n      \n      client.AcknowledgeMessage(ctx, \u0026AcknowledgeMessageRequest{\n          QueueName: \"order-processing\",\n          MessageId: resp.Message.MessageId,\n      })\n  }\n\nReturns: Message (or empty if no messages available)\nErrors:\n  - NotFound: Queue doesn't exist",
+        "description": "This is the primary worker API. Call in a loop to continuously process messages.\n\nBehavior:\n- Returns highest priority PENDING message\n- Message moves to RUNNING state\n- Lease timer starts (worker has lease_duration to process)\n- If lease expires without ACK → message returns to PENDING for retry\n\nConcurrency:\n- Multiple workers can call simultaneously\n- Each worker gets a different message (no duplicates)\n- Use exclusivity_key for single-threaded processing of related messages\n\nExample worker loop:\n  for {\n      resp := client.GetNextMessage(ctx, \u0026GetNextMessageRequest{\n          QueueName: \"order-processing\",\n          LeaseDuration: durationpb.New(5 * time.Minute),\n      })\n      if resp.Message == nil {\n          time.Sleep(1 * time.Second)  // No messages available\n          continue\n      }\n\n      err := processMessage(resp.Message)\n      if err != nil {\n          // Let lease expire → automatic retry\n          continue\n      }\n\n      client.AcknowledgeMessage(ctx, \u0026AcknowledgeMessageRequest{\n          QueueName: \"order-processing\",\n          MessageId: resp.Message.MessageId,\n      })\n  }\n\nReturns: Message (or empty if no messages available)\nErrors:\n  - NotFound: Queue doesn't exist",
         "operationId": "QueueService_GetNextMessage",
         "responses": {
           "200": {
@@ -1227,6 +1268,19 @@
       "default": "MONTHLY",
       "description": "ScheduleType categorizes the primary scheduling pattern.\nDetermines which rule types are applicable.\n\n - MONTHLY: Executes monthly (1st of month, last Friday, etc.)\n - WEEKLY: Executes weekly (every Monday, bi-weekly, etc.)\n - DAILY: Executes daily (every day, weekdays only, etc.)\n - YEARLY: Executes yearly (birthdays, anniversaries, annual reports)\n - BUSINESS_DAYS: Executes on business days (respects holidays/weekends)\n - CUSTOM: Custom logic via expression language"
     },
+    "MessagePostResultErrorCode": {
+      "type": "string",
+      "enum": [
+        "SUCCESS",
+        "VALIDATION_FAILED",
+        "DUPLICATE_MESSAGE_ID",
+        "SCHEMA_MISMATCH",
+        "INTERNAL_ERROR",
+        "QUEUE_NOT_FOUND"
+      ],
+      "default": "SUCCESS",
+      "title": "Error code for programmatic handling"
+    },
     "MessageRetentionPolicyMode": {
       "type": "string",
       "enum": [
@@ -1304,6 +1358,36 @@
         }
       }
     },
+    "PostMessagesBulkRequestTransactionMode": {
+      "type": "string",
+      "enum": [
+        "ALL_OR_NOTHING",
+        "BEST_EFFORT"
+      ],
+      "default": "ALL_OR_NOTHING",
+      "description": "- ALL_OR_NOTHING: All messages succeed or all fail (default)\nBatch processed in single database transaction\n - BEST_EFFORT: Process as many as possible, continue on failures\nMessages processed independently, partial success allowed",
+      "title": "Transaction mode for batch processing"
+    },
+    "PostMessagesBulkResponseMessagePostResult": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "title": "Message ID from the request"
+        },
+        "success": {
+          "type": "boolean",
+          "title": "Success status for this specific message"
+        },
+        "error": {
+          "type": "string",
+          "title": "Error message if failed (validation, duplicate, etc.)"
+        },
+        "errorCode": {
+          "$ref": "#/definitions/MessagePostResultErrorCode"
+        }
+      }
+    },
     "QueueServiceAcknowledgeMessageBody": {
       "type": "object",
       "properties": {
@@ -1354,6 +1438,23 @@
     "QueueServicePauseScheduleBody": {
       "type": "object",
       "title": "Pause a schedule"
+    },
+    "QueueServicePostMessagesBulkBody": {
+      "type": "object",
+      "properties": {
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Message"
+          },
+          "title": "Messages to post (recommended max: 1000 per request)"
+        },
+        "transactionMode": {
+          "$ref": "#/definitions/PostMessagesBulkRequestTransactionMode"
+        }
+      },
+      "title": "Post multiple messages to the queue in a single request"
     },
     "QueueServicePurgeDLQBody": {
       "type": "object",
@@ -2160,6 +2261,33 @@
       "properties": {
         "success": {
           "type": "boolean"
+        }
+      }
+    },
+    "v1PostMessagesBulkResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "title": "Overall success indicator (true if successful_count \u003e 0)"
+        },
+        "successfulCount": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Number of messages successfully posted"
+        },
+        "failedCount": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Number of messages that failed"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/PostMessagesBulkResponseMessagePostResult"
+          },
+          "title": "Detailed results for each message (same order as request.messages)"
         }
       }
     },

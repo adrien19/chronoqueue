@@ -105,6 +105,41 @@ func (s *ChronoQueueServer) PostMessage(ctx context.Context, req *queueservice_p
 	return resp, nil
 }
 
+func (s *ChronoQueueServer) PostMessagesBulk(ctx context.Context, req *queueservice_pb.PostMessagesBulkRequest) (*queueservice_pb.PostMessagesBulkResponse, error) {
+	s.logger.InfoWithFields("PostMessagesBulk called",
+		"queue_name", req.GetQueueName(),
+		"message_count", len(req.GetMessages()),
+		"transaction_mode", req.GetTransactionMode().String())
+
+	// Validate queue exists
+	queueMeta, err := s.storage.GetQueueMetadata(ctx, req.GetQueueName())
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to get queue metadata",
+			"queue_name", req.GetQueueName(), "error", err)
+		return nil, fmt.Errorf("failed to get queue metadata: %w", err)
+	}
+
+	// Create validator with schema registry
+	validator := validator.NewPayloadValidator(queueMeta, s.schemaRegistry)
+
+	// Process bulk message posting
+	resp, err := s.storage.CreateQueueMessagesBulk(ctx, req, validator)
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to post messages in bulk",
+			"queue_name", req.GetQueueName(),
+			"message_count", len(req.GetMessages()),
+			"error", err)
+		return nil, fmt.Errorf("failed to post messages in bulk: %w", err)
+	}
+
+	s.logger.InfoWithFields("Messages posted successfully",
+		"queue_name", req.GetQueueName(),
+		"successful", resp.SuccessfulCount,
+		"failed", resp.FailedCount)
+
+	return resp, nil
+}
+
 func (s *ChronoQueueServer) GetNextMessage(ctx context.Context, req *queueservice_pb.GetNextMessageRequest) (*queueservice_pb.GetNextMessageResponse, error) {
 	s.logger.InfoWithFields("GetNextMessage called", "queue_name", req.GetQueueName())
 

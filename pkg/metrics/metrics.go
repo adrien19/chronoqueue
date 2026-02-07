@@ -203,6 +203,14 @@ func IncrementMessagesEnqueued(queueName string) {
 	messagesEnqueued.WithLabelValues(queueName).Inc()
 }
 
+// IncrementMessagesBulkEnqueued increments enqueued message count for bulk operations
+func IncrementMessagesBulkEnqueued(queueName string, count int64) {
+	if count <= 0 {
+		return
+	}
+	messagesEnqueued.WithLabelValues(queueName).Add(float64(count))
+}
+
 // IncrementMessagesDequeued increments dequeued message count for a queue
 func IncrementMessagesDequeued(queueName string) {
 	messagesDequeued.WithLabelValues(queueName).Inc()

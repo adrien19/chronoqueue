@@ -1,0 +1,207 @@
+{
+    "events": [
+        {
+            "type": "email",
+            "priority": "medium",
+            "data": {
+                "to": "batch-user-001@example.com",
+                "subject": "Daily Summary Report",
+                "template": "daily-summary",
+                "report_date": "2026-02-07"
+            }
+        },
+        {
+            "type": "email",
+            "priority": "medium",
+            "data": {
+                "to": "batch-user-002@example.com",
+                "subject": "Daily Summary Report",
+                "template": "daily-summary",
+                "report_date": "2026-02-07"
+            }
+        },
+        {
+            "type": "email",
+            "priority": "medium",
+            "data": {
+                "to": "batch-user-003@example.com",
+                "subject": "Daily Summary Report",
+                "template": "daily-summary",
+                "report_date": "2026-02-07"
+            }
+        },
+        {
+            "type": "email",
+            "priority": "medium",
+            "data": {
+                "to": "batch-user-004@example.com",
+                "subject": "Daily Summary Report",
+                "template": "daily-summary",
+                "report_date": "2026-02-07"
+            }
+        },
+        {
+            "type": "email",
+            "priority": "medium",
+            "data": {
+                "to": "batch-user-005@example.com",
+                "subject": "Daily Summary Report",
+                "template": "daily-summary",
+                "report_date": "2026-02-07"
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "low",
+            "data": {
+                "url": "https://api.analytics.com/batch",
+                "method": "POST",
+                "event_type": "pageview",
+                "user_id": "user-001",
+                "page": "/products"
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "low",
+            "data": {
+                "url": "https://api.analytics.com/batch",
+                "method": "POST",
+                "event_type": "pageview",
+                "user_id": "user-002",
+                "page": "/checkout"
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "low",
+            "data": {
+                "url": "https://api.analytics.com/batch",
+                "method": "POST",
+                "event_type": "pageview",
+                "user_id": "user-003",
+                "page": "/home"
+            }
+        },
+        {
+            "type": "sms",
+            "priority": "high",
+            "data": {
+                "to": "+1234567801",
+                "message": "Flash sale! 50% off for the next hour!",
+                "campaign": "flash-sale"
+            }
+        },
+        {
+            "type": "sms",
+            "priority": "high",
+            "data": {
+                "to": "+1234567802",
+                "message": "Flash sale! 50% off for the next hour!",
+                "campaign": "flash-sale"
+            }
+        },
+        {
+            "type": "sms",
+            "priority": "high",
+            "data": {
+                "to": "+1234567803",
+                "message": "Flash sale! 50% off for the next hour!",
+                "campaign": "flash-sale"
+            }
+        },
+        {
+            "type": "email",
+            "priority": "high",
+            "data": {
+                "to": "vip-001@example.com",
+                "subject": "Exclusive VIP Offer",
+                "template": "vip-offer",
+                "discount_code": "VIP50"
+            }
+        },
+        {
+            "type": "email",
+            "priority": "high",
+            "data": {
+                "to": "vip-002@example.com",
+                "subject": "Exclusive VIP Offer",
+                "template": "vip-offer",
+                "discount_code": "VIP50"
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "critical",
+            "data": {
+                "url": "https://api.inventory.com/stock/update",
+                "method": "POST",
+                "event_type": "stock.depleted",
+                "product_id": "PROD-789",
+                "quantity": 0
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "critical",
+            "data": {
+                "url": "https://api.inventory.com/stock/update",
+                "method": "POST",
+                "event_type": "stock.low",
+                "product_id": "PROD-456",
+                "quantity": 5
+            }
+        },
+        {
+            "type": "email",
+            "priority": "low",
+            "data": {
+                "to": "inactive-001@example.com",
+                "subject": "We miss you!",
+                "template": "win-back",
+                "days_inactive": 30
+            }
+        },
+        {
+            "type": "email",
+            "priority": "low",
+            "data": {
+                "to": "inactive-002@example.com",
+                "subject": "We miss you!",
+                "template": "win-back",
+                "days_inactive": 45
+            }
+        },
+        {
+            "type": "sms",
+            "priority": "medium",
+            "data": {
+                "to": "+1234567804",
+                "message": "Your appointment reminder: Tomorrow at 2 PM",
+                "campaign": "appointment-reminder"
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "medium",
+            "data": {
+                "url": "https://api.partner.com/webhooks/order",
+                "method": "POST",
+                "event_type": "order.created",
+                "order_id": "ORD-2001",
+                "total": 299.99
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "medium",
+            "data": {
+                "url": "https://api.partner.com/webhooks/order",
+                "method": "POST",
+                "event_type": "order.created",
+                "order_id": "ORD-2002",
+                "total": 199.99
+            }
+        }
+    ]
+}

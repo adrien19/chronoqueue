@@ -1,0 +1,117 @@
+{
+    "events": [
+        {
+            "type": "email",
+            "priority": "high",
+            "data": {
+                "to": "user1@example.com",
+                "subject": "Order Confirmation #1001",
+                "template": "order-confirmation",
+                "order_id": "ORD-1001",
+                "amount": 149.99
+            }
+        },
+        {
+            "type": "email",
+            "priority": "high",
+            "data": {
+                "to": "user2@example.com",
+                "subject": "Order Confirmation #1002",
+                "template": "order-confirmation",
+                "order_id": "ORD-1002",
+                "amount": 79.99
+            }
+        },
+        {
+            "type": "email",
+            "priority": "medium",
+            "data": {
+                "to": "user3@example.com",
+                "subject": "Weekly Newsletter",
+                "template": "newsletter",
+                "edition": "Week 45"
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "critical",
+            "data": {
+                "url": "https://api.partner.com/webhooks/payment",
+                "method": "POST",
+                "event_type": "payment.completed",
+                "payment_id": "PAY-5678",
+                "amount": 149.99,
+                "status": "completed"
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "high",
+            "data": {
+                "url": "https://api.analytics.com/events",
+                "method": "POST",
+                "event_type": "user.signup",
+                "user_id": "user-789",
+                "timestamp": 1738876800
+            }
+        },
+        {
+            "type": "sms",
+            "priority": "critical",
+            "data": {
+                "to": "+1234567890",
+                "message": "Your verification code is: 123456",
+                "campaign": "auth"
+            }
+        },
+        {
+            "type": "sms",
+            "priority": "high",
+            "data": {
+                "to": "+1234567891",
+                "message": "Your order has shipped! Track: TRK-ABC123",
+                "campaign": "shipping-notification"
+            }
+        },
+        {
+            "type": "email",
+            "priority": "low",
+            "data": {
+                "to": "user4@example.com",
+                "subject": "You might also like...",
+                "template": "product-recommendations",
+                "products": [
+                    "prod-1",
+                    "prod-2",
+                    "prod-3"
+                ]
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "medium",
+            "data": {
+                "url": "https://api.crm.com/contacts/update",
+                "method": "PUT",
+                "event_type": "contact.updated",
+                "contact_id": "cnt-999",
+                "updated_fields": [
+                    "email",
+                    "phone"
+                ]
+            }
+        },
+        {
+            "type": "email",
+            "priority": "critical",
+            "data": {
+                "to": "admin@example.com",
+                "subject": "ALERT: System threshold exceeded",
+                "template": "system-alert",
+                "metric": "error_rate",
+                "threshold": 5,
+                "current": 12
+            }
+        }
+    ]
+}

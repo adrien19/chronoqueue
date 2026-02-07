@@ -25,6 +25,7 @@ type BackendStorage interface {
 
 	// Message Operations
 	EnqueueMessage(ctx context.Context, queueName string, message *messagepb.Message) error
+	EnqueueMessagesBulk(ctx context.Context, queueName string, messages []*messagepb.Message, transactionMode int32) ([]error, error)
 	ClaimMessage(ctx context.Context, queueName string, workerId string, attemptId string) (*messagepb.Message, error)
 	AcknowledgeMessage(ctx context.Context, queueName string, messageId string, attemptId string) error
 	CancelMessage(ctx context.Context, queueName string, messageId string, reason string) error

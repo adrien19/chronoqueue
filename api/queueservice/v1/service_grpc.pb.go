@@ -40,6 +40,7 @@ const (
 	QueueService_ListQueues_FullMethodName               = "/chronoqueue.api.queueservice.v1.QueueService/ListQueues"
 	QueueService_GetQueueState_FullMethodName            = "/chronoqueue.api.queueservice.v1.QueueService/GetQueueState"
 	QueueService_PostMessage_FullMethodName              = "/chronoqueue.api.queueservice.v1.QueueService/PostMessage"
+	QueueService_PostMessagesBulk_FullMethodName         = "/chronoqueue.api.queueservice.v1.QueueService/PostMessagesBulk"
 	QueueService_GetNextMessage_FullMethodName           = "/chronoqueue.api.queueservice.v1.QueueService/GetNextMessage"
 	QueueService_AcknowledgeMessage_FullMethodName       = "/chronoqueue.api.queueservice.v1.QueueService/AcknowledgeMessage"
 	QueueService_CancelMessage_FullMethodName            = "/chronoqueue.api.queueservice.v1.QueueService/CancelMessage"
@@ -226,6 +227,23 @@ type QueueServiceClient interface {
 	//   - InvalidArgument: Schema validation failed, invalid scheduled_time
 	//   - AlreadyExists: Duplicate idempotency_key (within dedup window)
 	PostMessage(ctx context.Context, in *PostMessageRequest, opts ...grpc.CallOption) (*PostMessageResponse, error)
+	// PostMessagesBulk posts multiple messages to a queue in a single operation.
+	//
+	// Supports two transaction modes:
+	//   - ALL_OR_NOTHING: All messages succeed or all fail (atomic)
+	//   - BEST_EFFORT: Independent processing, partial success allowed
+	//
+	// Limits:
+	//   - Max 1000 messages per request
+	//   - Max 1MB total payload size
+	//
+	// Errors:
+	//   - NotFound: Queue doesn't exist
+	//   - InvalidArgument: Too many messages, payload too large, invalid mode
+	//   - FailedPrecondition: Partial failure in ALL_OR_NOTHING mode
+	//
+	// Individual message errors are returned in the response with per-message error codes.
+	PostMessagesBulk(ctx context.Context, in *PostMessagesBulkRequest, opts ...grpc.CallOption) (*PostMessagesBulkResponse, error)
 	// GetNextMessage retrieves the next available message for processing.
 	//
 	// This is the primary worker API. Call in a loop to continuously process messages.
@@ -811,6 +829,16 @@ func (c *queueServiceClient) PostMessage(ctx context.Context, in *PostMessageReq
 	return out, nil
 }
 
+func (c *queueServiceClient) PostMessagesBulk(ctx context.Context, in *PostMessagesBulkRequest, opts ...grpc.CallOption) (*PostMessagesBulkResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PostMessagesBulkResponse)
+	err := c.cc.Invoke(ctx, QueueService_PostMessagesBulk_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *queueServiceClient) GetNextMessage(ctx context.Context, in *GetNextMessageRequest, opts ...grpc.CallOption) (*GetNextMessageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetNextMessageResponse)
@@ -1220,6 +1248,23 @@ type QueueServiceServer interface {
 	//   - InvalidArgument: Schema validation failed, invalid scheduled_time
 	//   - AlreadyExists: Duplicate idempotency_key (within dedup window)
 	PostMessage(context.Context, *PostMessageRequest) (*PostMessageResponse, error)
+	// PostMessagesBulk posts multiple messages to a queue in a single operation.
+	//
+	// Supports two transaction modes:
+	//   - ALL_OR_NOTHING: All messages succeed or all fail (atomic)
+	//   - BEST_EFFORT: Independent processing, partial success allowed
+	//
+	// Limits:
+	//   - Max 1000 messages per request
+	//   - Max 1MB total payload size
+	//
+	// Errors:
+	//   - NotFound: Queue doesn't exist
+	//   - InvalidArgument: Too many messages, payload too large, invalid mode
+	//   - FailedPrecondition: Partial failure in ALL_OR_NOTHING mode
+	//
+	// Individual message errors are returned in the response with per-message error codes.
+	PostMessagesBulk(context.Context, *PostMessagesBulkRequest) (*PostMessagesBulkResponse, error)
 	// GetNextMessage retrieves the next available message for processing.
 	//
 	// This is the primary worker API. Call in a loop to continuously process messages.
@@ -1769,6 +1814,9 @@ func (UnimplementedQueueServiceServer) GetQueueState(context.Context, *GetQueueS
 func (UnimplementedQueueServiceServer) PostMessage(context.Context, *PostMessageRequest) (*PostMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PostMessage not implemented")
 }
+func (UnimplementedQueueServiceServer) PostMessagesBulk(context.Context, *PostMessagesBulkRequest) (*PostMessagesBulkResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PostMessagesBulk not implemented")
+}
 func (UnimplementedQueueServiceServer) GetNextMessage(context.Context, *GetNextMessageRequest) (*GetNextMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetNextMessage not implemented")
 }
@@ -1950,6 +1998,24 @@ func _QueueService_PostMessage_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(QueueServiceServer).PostMessage(ctx, req.(*PostMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_PostMessagesBulk_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PostMessagesBulkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).PostMessagesBulk(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_PostMessagesBulk_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).PostMessagesBulk(ctx, req.(*PostMessagesBulkRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2430,6 +2496,10 @@ var QueueService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PostMessage",
 			Handler:    _QueueService_PostMessage_Handler,
+		},
+		{
+			MethodName: "PostMessagesBulk",
+			Handler:    _QueueService_PostMessagesBulk_Handler,
 		},
 		{
 			MethodName: "GetNextMessage",
