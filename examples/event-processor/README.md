@@ -102,7 +102,7 @@ Publish messages individually using the standard `publish` command:
 
 **Expected Output (ALL_OR_NOTHING mode):**
 
-```
+```text
 📦 Publishing 10 events in BULK mode from events/bulk-demo.json
    Transaction Mode: ALL-OR-NOTHING
 

@@ -109,7 +109,9 @@ message PostMessagesBulkRequest {
 }
 
 message PostMessagesBulkResponse {
-  // Overall success indicator (true if successful_count > 0)
+  // Overall success indicator.
+  // ALL_OR_NOTHING: true only if every message succeeded (failed_count == 0)
+  // BEST_EFFORT: true if at least one message succeeded (successful_count > 0)
   bool success = 1;
 
   // Number of messages successfully posted

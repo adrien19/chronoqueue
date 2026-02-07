@@ -5,6 +5,7 @@ import (
 
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
+	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
 )
 
@@ -25,7 +26,7 @@ type BackendStorage interface {
 
 	// Message Operations
 	EnqueueMessage(ctx context.Context, queueName string, message *messagepb.Message) error
-	EnqueueMessagesBulk(ctx context.Context, queueName string, messages []*messagepb.Message, transactionMode int32) ([]error, error)
+	EnqueueMessagesBulk(ctx context.Context, queueName string, messages []*messagepb.Message, transactionMode queueservicepb.PostMessagesBulkRequest_TransactionMode) ([]error, error)
 	ClaimMessage(ctx context.Context, queueName string, workerId string, attemptId string) (*messagepb.Message, error)
 	AcknowledgeMessage(ctx context.Context, queueName string, messageId string, attemptId string) error
 	CancelMessage(ctx context.Context, queueName string, messageId string, reason string) error

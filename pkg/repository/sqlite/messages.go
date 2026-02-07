@@ -10,6 +10,7 @@ import (
 
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
+	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
 	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/priority"
@@ -74,21 +75,16 @@ func (s *Storage) EnqueueMessage(ctx context.Context, queueName string, message 
 // Returns:
 //   - []error: Per-message errors (nil for success, error for failure)
 //   - error: Overall operation error (non-nil only for ALL_OR_NOTHING rollback)
-func (s *Storage) EnqueueMessagesBulk(ctx context.Context, queueName string, messages []*messagepb.Message, transactionMode int32) ([]error, error) {
+func (s *Storage) EnqueueMessagesBulk(ctx context.Context, queueName string, messages []*messagepb.Message, transactionMode queueservicepb.PostMessagesBulkRequest_TransactionMode) ([]error, error) {
 	start := time.Now()
 	defer func() {
 		metrics.ObserveDBTransaction("sqlite", "enqueue_messages_bulk", time.Since(start))
 	}()
 
-	const (
-		modeAllOrNothing = 0
-		modeBestEffort   = 1
-	)
-
 	messageErrors := make([]error, len(messages))
 
 	// ALL_OR_NOTHING: Single transaction, all succeed or all fail
-	if transactionMode == modeAllOrNothing {
+	if transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
 		var failedIdx int
 		txErr := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 			for i, message := range messages {

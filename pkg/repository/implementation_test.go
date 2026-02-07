@@ -94,7 +94,7 @@ func (b *stubBackend) EnqueueMessage(ctx context.Context, queueName string, mess
 	return b.enqueueErr
 }
 
-func (b *stubBackend) EnqueueMessagesBulk(ctx context.Context, queueName string, messages []*messagepb.Message, transactionMode int32) ([]error, error) {
+func (b *stubBackend) EnqueueMessagesBulk(ctx context.Context, queueName string, messages []*messagepb.Message, transactionMode queueservicepb.PostMessagesBulkRequest_TransactionMode) ([]error, error) {
 	errors := make([]error, len(messages))
 	for i, message := range messages {
 		b.enqueued = append(b.enqueued, enqueuedCall{queue: queueName, message: message})

@@ -222,7 +222,7 @@ Transaction Modes:
 
 Limits:
   - Maximum 1000 messages per request
-  - Maximum 1MB total payload size`,
+  - Maximum 1MB total payload size (server-enforced via gRPC max receive size)`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			queueName := args[0]

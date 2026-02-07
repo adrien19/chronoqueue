@@ -557,7 +557,7 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 	var messageErrors []error
 	var txErr error
 	if len(validMessages) > 0 {
-		messageErrors, txErr = impl.backend.EnqueueMessagesBulk(ctx, queueName, validMessages, int32(transactionMode))
+		messageErrors, txErr = impl.backend.EnqueueMessagesBulk(ctx, queueName, validMessages, transactionMode)
 	}
 
 	if messageErrors == nil {
@@ -607,10 +607,18 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 		results[origIdx] = result
 	}
 
+	failedCount := int32(len(messages)) - successCount
+	var overallSuccess bool
+	if transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
+		overallSuccess = failedCount == 0
+	} else {
+		overallSuccess = successCount > 0
+	}
+
 	response := &queueservicepb.PostMessagesBulkResponse{
-		Success:         successCount > 0,
+		Success:         overallSuccess,
 		SuccessfulCount: successCount,
-		FailedCount:     int32(len(messages)) - successCount,
+		FailedCount:     failedCount,
 		Results:         results,
 	}
 

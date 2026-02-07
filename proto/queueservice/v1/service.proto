@@ -216,7 +216,7 @@ service QueueService {
     // Errors:
     //   - NotFound: Queue doesn't exist
     //   - InvalidArgument: Too many messages, payload too large, invalid mode
-    //   - FailedPrecondition: Partial failure in ALL_OR_NOTHING mode
+    //   - FailedPrecondition: One or more messages failed in ALL_OR_NOTHING mode (entire batch rejected)
     //
     // Individual message errors are returned in the response with per-message error codes.
   rpc PostMessagesBulk(PostMessagesBulkRequest) returns (PostMessagesBulkResponse) {
@@ -742,12 +742,12 @@ service QueueService {
     //
     //   Response:
     //   {
-            //     "next_runs": [
-            //       "2024-01-02T09:00:00Z",
-            //       "2024-01-03T09:00:00Z",
-            //       "2024-01-04T09:00:00Z",
-            //       ...
-            //     ]
+    //     "next_runs": [
+    //       "2024-01-02T09:00:00Z",
+    //       "2024-01-03T09:00:00Z",
+    //       "2024-01-04T09:00:00Z",
+    //       ...
+    //     ]
     //   }
     //
     // Returns: List of upcoming execution timestamps

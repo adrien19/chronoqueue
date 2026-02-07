@@ -549,9 +549,14 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 // Limits:
 //   - Max 1000 messages per request
 //   - Returns per-message results with error codes
+//
+// If ctx has no deadline, a timeout is computed as DefaultRPCTimeout + 50ms per message,
+// which may exceed DefaultRPCTimeout for large batches.
 func (client *ChronoQueueClient) PostMessagesBulk(ctx context.Context, queue string, messages []MessageWithID, transactionMode queueservice_pb.PostMessagesBulkRequest_TransactionMode) (*queueservice_pb.PostMessagesBulkResponse, error) {
-	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	if cancel != nil {
+	if _, ok := ctx.Deadline(); !ok {
+		timeout := client.opts.DefaultRPCTimeout + time.Duration(len(messages))*50*time.Millisecond
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
 

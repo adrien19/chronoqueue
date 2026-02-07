@@ -129,7 +129,7 @@ func (s *ChronoQueueServer) PostMessagesBulk(ctx context.Context, req *queueserv
 			"queue_name", req.GetQueueName(),
 			"message_count", len(req.GetMessages()),
 			"error", err)
-		return nil, fmt.Errorf("failed to post messages in bulk: %w", err)
+		return resp, fmt.Errorf("failed to post messages in bulk: %w", err)
 	}
 
 	s.logger.InfoWithFields("Messages posted successfully",

@@ -571,7 +571,7 @@
     "/v1/queues/{queueName}/messages:bulk": {
       "post": {
         "summary": "PostMessagesBulk posts multiple messages to a queue in a single operation.",
-        "description": "Supports two transaction modes:\n  - ALL_OR_NOTHING: All messages succeed or all fail (atomic)\n  - BEST_EFFORT: Independent processing, partial success allowed\n\nLimits:\n  - Max 1000 messages per request\n  - Max 1MB total payload size\n\nErrors:\n  - NotFound: Queue doesn't exist\n  - InvalidArgument: Too many messages, payload too large, invalid mode\n  - FailedPrecondition: Partial failure in ALL_OR_NOTHING mode\n\nIndividual message errors are returned in the response with per-message error codes.",
+        "description": "Supports two transaction modes:\n  - ALL_OR_NOTHING: All messages succeed or all fail (atomic)\n  - BEST_EFFORT: Independent processing, partial success allowed\n\nLimits:\n  - Max 1000 messages per request\n  - Max 1MB total payload size\n\nErrors:\n  - NotFound: Queue doesn't exist\n  - InvalidArgument: Too many messages, payload too large, invalid mode\n  - FailedPrecondition: One or more messages failed in ALL_OR_NOTHING mode (entire batch rejected)\n\nIndividual message errors are returned in the response with per-message error codes.",
         "operationId": "QueueService_PostMessagesBulk",
         "responses": {
           "200": {
