@@ -769,8 +769,8 @@ func TestCreateQueueMessagesBulk_BestEffort_MixedValidation(t *testing.T) {
 		t.Fatalf("expected 1 failed message, got %d", resp.FailedCount)
 	}
 
-	if resp.Success {
-		t.Fatalf("expected success=false when failedCount > 0")
+	if !resp.Success {
+		t.Fatalf("expected success=true in BEST_EFFORT mode when successfulCount > 0")
 	}
 
 	if len(resp.Results) != 3 {

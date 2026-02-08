@@ -632,9 +632,17 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 	}
 
 	failedCount := int32(len(messages)) - successCount
-
+	var successStatus bool
+	switch transactionMode {
+	case queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING:
+		successStatus = failedCount == 0
+	case queueservicepb.PostMessagesBulkRequest_BEST_EFFORT:
+		successStatus = successCount > 0
+	default:
+		return nil, fmt.Errorf("invalid transaction mode: %v", transactionMode)
+	}
 	response := &queueservicepb.PostMessagesBulkResponse{
-		Success:         failedCount == 0,
+		Success:         successStatus,
 		SuccessfulCount: successCount,
 		FailedCount:     failedCount,
 		Results:         results,
