@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -541,6 +542,16 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 				metrics.IncrementMessagesValidated(queueName)
 			}
 		}
+	}
+
+	// Enforce max payload size after enrichment so inherited fields are accounted for
+	const maxPayloadBytes = 1_048_576
+	var totalSize int
+	for _, msg := range messages {
+		totalSize += proto.Size(msg)
+	}
+	if totalSize > maxPayloadBytes {
+		return nil, fmt.Errorf("total payload size %d bytes exceeds 1MB limit", totalSize)
 	}
 
 	// Filter out messages that failed validation

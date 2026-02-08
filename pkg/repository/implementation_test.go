@@ -7,6 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/types/known/structpb"
+
+	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
@@ -557,6 +560,43 @@ func TestCreateQueueMessagesBulk_TooManyMessages(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "too many messages") {
 		t.Fatalf("expected 'too many messages' error, got: %v", err)
+	}
+}
+
+func TestCreateQueueMessagesBulk_PayloadTooLarge(t *testing.T) {
+	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{}}
+	impl := &implementation{backend: backend}
+
+	// Create a single message with a payload exceeding 1MB
+	largeData, _ := structpb.NewStruct(map[string]interface{}{
+		"blob": strings.Repeat("x", 1_048_577),
+	})
+	messages := []*messagepb.Message{
+		{
+			MessageId: "msg-large",
+			Metadata: &messagepb.Message_Metadata{
+				Payload: &commonpb.Payload{Data: largeData},
+			},
+		},
+	}
+
+	req := &queueservicepb.PostMessagesBulkRequest{
+		QueueName:       "test-queue",
+		Messages:        messages,
+		TransactionMode: queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING,
+	}
+
+	_, err := impl.CreateQueueMessagesBulk(context.Background(), req, nil)
+	if err == nil {
+		t.Fatalf("expected error for payload exceeding 1MB, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "exceeds 1MB limit") {
+		t.Fatalf("expected '1MB limit' error, got: %v", err)
+	}
+
+	if len(backend.enqueued) != 0 {
+		t.Fatalf("expected 0 enqueued messages, got %d", len(backend.enqueued))
 	}
 }
 

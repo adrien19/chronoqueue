@@ -85,12 +85,10 @@ func (s *Storage) EnqueueMessagesBulk(ctx context.Context, queueName string, mes
 
 	// ALL_OR_NOTHING: Single transaction, all succeed or all fail
 	if transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
-		var failedIdx int
 		txErr := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 			for i, message := range messages {
 				if _, err := s.enqueueMessageInTx(ctx, tx, queueName, message); err != nil {
 					messageErrors[i] = err
-					failedIdx = i
 					return fmt.Errorf("message[%d] failed: %w", i, err)
 				}
 			}
@@ -98,9 +96,11 @@ func (s *Storage) EnqueueMessagesBulk(ctx context.Context, queueName string, mes
 		})
 
 		if txErr != nil {
-			// Transaction rolled back - mark all attempted messages as failed
-			for j := 0; j < failedIdx; j++ {
-				messageErrors[j] = fmt.Errorf("rolled back due to message[%d] failure", failedIdx)
+			// Transaction rolled back - mark all messages as failed
+			for j := range messages {
+				if messageErrors[j] == nil {
+					messageErrors[j] = fmt.Errorf("transaction failed: %w", txErr)
+				}
 			}
 			return messageErrors, txErr
 		}

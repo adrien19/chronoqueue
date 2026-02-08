@@ -1448,7 +1448,8 @@
             "type": "object",
             "$ref": "#/definitions/v1Message"
           },
-          "title": "Messages to post (recommended max: 1000 per request)"
+          "maxItems": 1000,
+          "title": "Messages to post (max: 1000 per request)"
         },
         "transactionMode": {
           "$ref": "#/definitions/PostMessagesBulkRequestTransactionMode"
