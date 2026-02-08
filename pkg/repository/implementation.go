@@ -594,8 +594,12 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 	// First, populate results for messages that failed validation
 	for i, message := range messages {
 		if validationErrors[i] != nil {
+			messageId := ""
+			if message != nil {
+				messageId = message.MessageId
+			}
 			results[i] = &queueservicepb.PostMessagesBulkResponse_MessagePostResult{
-				MessageId: message.MessageId,
+				MessageId: messageId,
 				Success:   false,
 				ErrorCode: queueservicepb.PostMessagesBulkResponse_MessagePostResult_VALIDATION_FAILED,
 				Error:     validationErrors[i].Error(),

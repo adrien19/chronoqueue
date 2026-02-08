@@ -971,3 +971,43 @@ func TestCreateQueueMessagesBulk_BestEffort_PartialTransactionFailure(t *testing
 		t.Fatalf("expected 2 entries in backend.enqueued, got %d", len(backend.enqueued))
 	}
 }
+
+func TestCreateQueueMessagesBulk_NilMessageInSlice_BestEffort(t *testing.T) {
+	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 3}}
+	impl := &implementation{backend: backend}
+
+	messages := []*messagepb.Message{
+		{MessageId: "msg-1"},
+		nil, // nil message should be treated as a validation error
+		{MessageId: "msg-3"},
+	}
+
+	req := &queueservicepb.PostMessagesBulkRequest{
+		QueueName:       "test-queue",
+		Messages:        messages,
+		TransactionMode: queueservicepb.PostMessagesBulkRequest_BEST_EFFORT,
+	}
+
+	resp, err := impl.CreateQueueMessagesBulk(context.Background(), req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error in BEST_EFFORT mode: %v", err)
+	}
+
+	if resp.SuccessfulCount != 2 {
+		t.Fatalf("expected 2 successful, got %d", resp.SuccessfulCount)
+	}
+	if resp.FailedCount != 1 {
+		t.Fatalf("expected 1 failed, got %d", resp.FailedCount)
+	}
+	if resp.Results[1].ErrorCode != queueservicepb.PostMessagesBulkResponse_MessagePostResult_VALIDATION_FAILED {
+		t.Fatalf("expected VALIDATION_FAILED for nil message, got %v", resp.Results[1].ErrorCode)
+	}
+	if resp.Results[1].MessageId != "" {
+		t.Fatalf("expected empty MessageId for nil message, got %s", resp.Results[1].MessageId)
+	}
+
+	// Verify only the 2 non-nil messages were enqueued
+	if len(backend.enqueued) != 2 {
+		t.Fatalf("expected 2 messages enqueued, got %d", len(backend.enqueued))
+	}
+}
