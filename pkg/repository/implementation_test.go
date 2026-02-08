@@ -592,9 +592,12 @@ func TestCreateQueueMessagesBulk_PayloadTooLarge(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	// Create a single message with a payload exceeding 1MB
-	largeData, _ := structpb.NewStruct(map[string]interface{}{
+	largeData, err := structpb.NewStruct(map[string]interface{}{
 		"blob": strings.Repeat("x", 1_048_577),
 	})
+	if err != nil {
+		t.Fatalf("build payload: %v", err)
+	}
 	messages := []*messagepb.Message{
 		{
 			MessageId: "msg-large",
@@ -610,7 +613,7 @@ func TestCreateQueueMessagesBulk_PayloadTooLarge(t *testing.T) {
 		TransactionMode: queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING,
 	}
 
-	_, err := impl.CreateQueueMessagesBulk(context.Background(), req, nil)
+	_, err = impl.CreateQueueMessagesBulk(context.Background(), req, nil)
 	if err == nil {
 		t.Fatalf("expected error for payload exceeding 1MB, got nil")
 	}

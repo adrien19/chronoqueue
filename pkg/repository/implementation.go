@@ -486,6 +486,14 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 	// Pre-process and validate all messages
 	validationErrors := make([]error, len(messages))
 	for i, message := range messages {
+		if message == nil {
+			err := fmt.Errorf("message[%d] is required", i)
+			if transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
+				return nil, err
+			}
+			validationErrors[i] = err
+			continue
+		}
 		// Ensure message has metadata
 		if message.Metadata == nil {
 			message.Metadata = &messagepb.Message_Metadata{}
