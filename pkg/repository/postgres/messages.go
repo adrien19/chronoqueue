@@ -107,7 +107,6 @@ func (s *Storage) EnqueueMessagesBulk(ctx context.Context, queueName string, mes
 
 		// Transaction committed, all messages succeeded - record metrics
 		for _, message := range messages {
-			metrics.IncrementMessagesEnqueued(queueName)
 			metrics.RecordStateTransition(queueName, "none", message.GetMetadata().GetState().String())
 		}
 		metrics.IncrementMessagesBulkEnqueued(queueName, int64(len(messages)))
@@ -126,7 +125,6 @@ func (s *Storage) EnqueueMessagesBulk(ctx context.Context, queueName string, mes
 
 		messageErrors[i] = err
 		if err == nil {
-			metrics.IncrementMessagesEnqueued(queueName)
 			metrics.RecordStateTransition(queueName, "none", stateStr)
 			successCount++
 		}

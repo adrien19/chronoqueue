@@ -15,16 +15,21 @@ import (
 	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/pkg/calendar"
+	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
 	"github.com/adrien19/chronoqueue/pkg/validator"
 )
 
 type stubValidator struct {
-	result *validator.ValidationResult
-	called bool
+	result       *validator.ValidationResult
+	called       bool
+	validateFunc func(context.Context, *messagepb.Message) *validator.ValidationResult
 }
 
 func (v *stubValidator) Validate(ctx context.Context, message *messagepb.Message) *validator.ValidationResult {
 	v.called = true
+	if v.validateFunc != nil {
+		return v.validateFunc(ctx, message)
+	}
 	return v.result
 }
 
@@ -43,6 +48,8 @@ type stubBackend struct {
 	queueMetadata *queuepb.QueueMetadata
 	enqueued      []enqueuedCall
 	enqueueErr    error
+	enqueueErrs   []error // per-message errors for bulk operations
+	enqueueTxErr  error   // transaction-level error for bulk operations
 	cancelled     []cancelledCall
 	cancelErr     error
 }
@@ -101,9 +108,26 @@ func (b *stubBackend) EnqueueMessagesBulk(ctx context.Context, queueName string,
 	errors := make([]error, len(messages))
 	for i, message := range messages {
 		b.enqueued = append(b.enqueued, enqueuedCall{queue: queueName, message: message})
-		errors[i] = b.enqueueErr
+		// Use per-message error if available, otherwise fall back to enqueueErr
+		if b.enqueueErrs != nil && i < len(b.enqueueErrs) {
+			errors[i] = b.enqueueErrs[i]
+		} else {
+			errors[i] = b.enqueueErr
+		}
 	}
-	return errors, b.enqueueErr
+
+	// Mimic real backend behavior: if txErr is set in ALL_OR_NOTHING mode,
+	// mark all messages as failed (like the real postgres/sqlite backends do)
+	if b.enqueueTxErr != nil && transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
+		for i := range errors {
+			if errors[i] == nil {
+				errors[i] = fmt.Errorf("transaction failed: %w", b.enqueueTxErr)
+			}
+		}
+	}
+
+	// Return transaction error (not per-message error)
+	return errors, b.enqueueTxErr
 }
 
 func (b *stubBackend) ClaimMessage(ctx context.Context, queueName string, workerId string, attemptId string) (*messagepb.Message, error) {
@@ -695,5 +719,252 @@ func TestCreateQueueMessagesBulk_NilRequest(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "request is required") {
 		t.Fatalf("expected 'request is required' error, got: %v", err)
+	}
+}
+
+func TestCreateQueueMessagesBulk_BestEffort_MixedValidation(t *testing.T) {
+	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 3}}
+	impl := &implementation{backend: backend}
+
+	// Validator that fails for msg-2
+	val := &stubValidator{
+		validateFunc: func(ctx context.Context, message *messagepb.Message) *validator.ValidationResult {
+			if message.MessageId == "msg-2" {
+				return &validator.ValidationResult{
+					Valid: false,
+					Errors: []*validator.ValidationError{
+						{Field: "payload.data", Message: "missing required field"},
+					},
+				}
+			}
+			return &validator.ValidationResult{Valid: true}
+		},
+	}
+
+	messages := []*messagepb.Message{
+		{MessageId: "msg-1"},
+		{MessageId: "msg-2"},
+		{MessageId: "msg-3"},
+	}
+
+	req := &queueservicepb.PostMessagesBulkRequest{
+		QueueName:       "test-queue",
+		Messages:        messages,
+		TransactionMode: queueservicepb.PostMessagesBulkRequest_BEST_EFFORT,
+	}
+
+	resp, err := impl.CreateQueueMessagesBulk(context.Background(), req, val)
+	if err != nil {
+		t.Fatalf("unexpected error in BEST_EFFORT mode: %v", err)
+	}
+
+	if resp.SuccessfulCount != 2 {
+		t.Fatalf("expected 2 successful messages, got %d", resp.SuccessfulCount)
+	}
+
+	if resp.FailedCount != 1 {
+		t.Fatalf("expected 1 failed message, got %d", resp.FailedCount)
+	}
+
+	if resp.Success {
+		t.Fatalf("expected success=false when failedCount > 0")
+	}
+
+	if len(resp.Results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(resp.Results))
+	}
+
+	// msg-1: success
+	if !resp.Results[0].Success {
+		t.Fatalf("expected msg-1 to succeed")
+	}
+	// msg-2: validation failed
+	if resp.Results[1].Success {
+		t.Fatalf("expected msg-2 to fail")
+	}
+	if resp.Results[1].ErrorCode != queueservicepb.PostMessagesBulkResponse_MessagePostResult_VALIDATION_FAILED {
+		t.Fatalf("expected VALIDATION_FAILED for msg-2, got %v", resp.Results[1].ErrorCode)
+	}
+	// msg-3: success
+	if !resp.Results[2].Success {
+		t.Fatalf("expected msg-3 to succeed")
+	}
+
+	// Only 2 messages should be enqueued (msg-1 and msg-3)
+	if len(backend.enqueued) != 2 {
+		t.Fatalf("expected 2 enqueued messages, got %d", len(backend.enqueued))
+	}
+}
+
+func TestCreateQueueMessagesBulk_BackendInternalError(t *testing.T) {
+	backend := &stubBackend{
+		queueMetadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 3},
+		enqueueErrs: []error{
+			nil,
+			fmt.Errorf("database connection lost"),
+			nil,
+		},
+	}
+	impl := &implementation{backend: backend}
+
+	messages := []*messagepb.Message{
+		{MessageId: "msg-1"},
+		{MessageId: "msg-2"},
+		{MessageId: "msg-3"},
+	}
+
+	req := &queueservicepb.PostMessagesBulkRequest{
+		QueueName:       "test-queue",
+		Messages:        messages,
+		TransactionMode: queueservicepb.PostMessagesBulkRequest_BEST_EFFORT,
+	}
+
+	resp, err := impl.CreateQueueMessagesBulk(context.Background(), req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error in BEST_EFFORT mode: %v", err)
+	}
+
+	if resp.SuccessfulCount != 2 {
+		t.Fatalf("expected 2 successful, got %d", resp.SuccessfulCount)
+	}
+
+	if resp.FailedCount != 1 {
+		t.Fatalf("expected 1 failed, got %d", resp.FailedCount)
+	}
+
+	if resp.Results[1].ErrorCode != queueservicepb.PostMessagesBulkResponse_MessagePostResult_INTERNAL_ERROR {
+		t.Fatalf("expected INTERNAL_ERROR for msg-2, got %v", resp.Results[1].ErrorCode)
+	}
+
+	if !strings.Contains(resp.Results[1].Error, "database connection lost") {
+		t.Fatalf("expected error message to contain backend error")
+	}
+}
+
+func TestCreateQueueMessagesBulk_DuplicateMessageID(t *testing.T) {
+	backend := &stubBackend{
+		queueMetadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 3},
+		enqueueErrs: []error{
+			nil,
+			repositorycommon.ErrDuplicateMessageID,
+			nil,
+		},
+	}
+	impl := &implementation{backend: backend}
+
+	messages := []*messagepb.Message{
+		{MessageId: "msg-1"},
+		{MessageId: "msg-2"},
+		{MessageId: "msg-3"},
+	}
+
+	req := &queueservicepb.PostMessagesBulkRequest{
+		QueueName:       "test-queue",
+		Messages:        messages,
+		TransactionMode: queueservicepb.PostMessagesBulkRequest_BEST_EFFORT,
+	}
+
+	resp, err := impl.CreateQueueMessagesBulk(context.Background(), req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error in BEST_EFFORT mode: %v", err)
+	}
+
+	if resp.SuccessfulCount != 2 {
+		t.Fatalf("expected 2 successful, got %d", resp.SuccessfulCount)
+	}
+
+	if resp.Results[1].ErrorCode != queueservicepb.PostMessagesBulkResponse_MessagePostResult_DUPLICATE_MESSAGE_ID {
+		t.Fatalf("expected DUPLICATE_MESSAGE_ID for msg-2, got %v", resp.Results[1].ErrorCode)
+	}
+}
+
+func TestCreateQueueMessagesBulk_AllOrNothing_TransactionFailure(t *testing.T) {
+	backend := &stubBackend{
+		queueMetadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 3},
+		enqueueTxErr:  fmt.Errorf("transaction commit failed"),
+	}
+	impl := &implementation{backend: backend}
+
+	messages := []*messagepb.Message{
+		{MessageId: "msg-1"},
+		{MessageId: "msg-2"},
+	}
+
+	req := &queueservicepb.PostMessagesBulkRequest{
+		QueueName:       "test-queue",
+		Messages:        messages,
+		TransactionMode: queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING,
+	}
+
+	resp, err := impl.CreateQueueMessagesBulk(context.Background(), req, nil)
+	if err == nil {
+		t.Fatalf("expected error for transaction failure in ALL_OR_NOTHING mode")
+	}
+
+	if !strings.Contains(err.Error(), "transaction failed") {
+		t.Fatalf("expected 'transaction failed' in error, got: %v", err)
+	}
+
+	// Response should still be returned with failure details
+	if resp == nil {
+		t.Fatalf("expected response even on transaction failure")
+	}
+
+	if resp.SuccessfulCount != 0 {
+		t.Fatalf("expected 0 successful on transaction failure, got %d", resp.SuccessfulCount)
+	}
+
+	if resp.Success {
+		t.Fatalf("expected success=false on transaction failure")
+	}
+}
+
+func TestCreateQueueMessagesBulk_BestEffort_PartialTransactionFailure(t *testing.T) {
+	backend := &stubBackend{
+		queueMetadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 3},
+		enqueueErrs: []error{
+			nil,
+			fmt.Errorf("write failed"),
+		},
+		enqueueTxErr: fmt.Errorf("partial transaction error"),
+	}
+	impl := &implementation{backend: backend}
+
+	messages := []*messagepb.Message{
+		{MessageId: "msg-1"},
+		{MessageId: "msg-2"},
+	}
+
+	req := &queueservicepb.PostMessagesBulkRequest{
+		QueueName:       "test-queue",
+		Messages:        messages,
+		TransactionMode: queueservicepb.PostMessagesBulkRequest_BEST_EFFORT,
+	}
+
+	resp, err := impl.CreateQueueMessagesBulk(context.Background(), req, nil)
+	if err == nil {
+		t.Fatalf("expected error for transaction failure in BEST_EFFORT mode")
+	}
+
+	if !strings.Contains(err.Error(), "partial bulk enqueue failure") {
+		t.Fatalf("expected 'partial bulk enqueue failure' in error, got: %v", err)
+	}
+
+	// Response should contain partial success details
+	if resp == nil {
+		t.Fatalf("expected response even with txErr")
+	}
+
+	if resp.SuccessfulCount != 1 {
+		t.Fatalf("expected 1 successful, got %d", resp.SuccessfulCount)
+	}
+
+	if resp.FailedCount != 1 {
+		t.Fatalf("expected 1 failed, got %d", resp.FailedCount)
+	}
+
+	// Both messages were "enqueued" (added to stub's list)
+	if len(backend.enqueued) != 2 {
+		t.Fatalf("expected 2 entries in backend.enqueued, got %d", len(backend.enqueued))
 	}
 }

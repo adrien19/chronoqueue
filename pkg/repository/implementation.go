@@ -544,7 +544,8 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 		}
 	}
 
-	// Enforce max payload size after enrichment so inherited fields are accounted for
+	// Enforce max payload size after enrichment (applied to all submitted messages,
+	// not just valid ones - this caps the raw request payload to prevent abuse)
 	const maxPayloadBytes = 1_048_576
 	var totalSize int
 	for _, msg := range messages {
@@ -619,15 +620,9 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 	}
 
 	failedCount := int32(len(messages)) - successCount
-	var overallSuccess bool
-	if transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
-		overallSuccess = failedCount == 0
-	} else {
-		overallSuccess = successCount > 0
-	}
 
 	response := &queueservicepb.PostMessagesBulkResponse{
-		Success:         overallSuccess,
+		Success:         failedCount == 0,
 		SuccessfulCount: successCount,
 		FailedCount:     failedCount,
 		Results:         results,
@@ -642,6 +637,7 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 			baseSQL.Logger.WarnWithFields("bulk enqueue partial failure in BEST_EFFORT mode",
 				"error", txErr.Error(), "queue", queueName)
 		}
+		return response, fmt.Errorf("partial bulk enqueue failure: %w", txErr)
 	}
 
 	return response, nil

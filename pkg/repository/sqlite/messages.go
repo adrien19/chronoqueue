@@ -17,10 +17,10 @@ import (
 )
 
 // generateID generates a random ID
-func generateID() string {
+func (s *Storage) generateID() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Sprintf("crypto/rand.Read failed: %v", err))
+		s.Logger.Fatal("crypto/rand.Read failed", "error", err)
 	}
 	return hex.EncodeToString(b)
 }
@@ -107,7 +107,6 @@ func (s *Storage) EnqueueMessagesBulk(ctx context.Context, queueName string, mes
 
 		// Transaction committed, all messages succeeded - record metrics
 		for _, message := range messages {
-			metrics.IncrementMessagesEnqueued(queueName)
 			metrics.RecordStateTransition(queueName, "none", message.GetMetadata().GetState().String())
 		}
 		metrics.IncrementMessagesBulkEnqueued(queueName, int64(len(messages)))
@@ -126,7 +125,6 @@ func (s *Storage) EnqueueMessagesBulk(ctx context.Context, queueName string, mes
 
 		messageErrors[i] = err
 		if err == nil {
-			metrics.IncrementMessagesEnqueued(queueName)
 			metrics.RecordStateTransition(queueName, "none", stateStr)
 			successCount++
 		}
@@ -221,10 +219,10 @@ func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId s
 
 	// Generate IDs if not provided
 	if attemptId == "" {
-		attemptId = generateID()
+		attemptId = s.generateID()
 	}
 	if workerId == "" {
-		workerId = "worker-" + generateID()[:8]
+		workerId = "worker-" + s.generateID()[:8]
 	}
 
 	priorityCfg := queueMeta.GetPriorityConfig()
