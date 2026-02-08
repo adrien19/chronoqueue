@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/client"
 	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
 )
@@ -22,6 +23,7 @@ func NewMessageCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(newMessagePostCommand())
+	cmd.AddCommand(newMessagePostBulkCommand())
 	cmd.AddCommand(newMessageGetCommand())
 	cmd.AddCommand(newMessageAckCommand())
 	cmd.AddCommand(newMessagePeekCommand())
@@ -183,6 +185,181 @@ The --file flag takes precedence if both inline and file are provided.`,
 	cmd.Flags().StringP("content-type", "t", "application/json", "Content type (MIME type)")
 	cmd.Flags().StringP("schema-id", "s", "", "Schema ID for validation")
 	cmd.Flags().Int32("schema-version", 0, "Schema version")
+
+	return cmd
+}
+
+// newMessagePostBulkCommand creates the message post-bulk subcommand
+func newMessagePostBulkCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "post-bulk <queue-name> <messages-file>",
+		Short: "Post multiple messages to a queue in bulk",
+		Long: `Post multiple messages to a queue in a single operation.
+
+The messages file should contain a JSON array of message objects. Each message object should have:
+  - id: Message ID (required)
+  - data: Message payload (required)
+  - priority: Message priority (optional, default: 5)
+  - maxAttempts: Maximum processing attempts (optional)
+
+Example messages file (messages.json):
+[
+  {
+    "id": "msg-001",
+    "data": {"order": "item-1", "quantity": 2},
+    "priority": 10
+  },
+  {
+    "id": "msg-002",
+    "data": {"order": "item-2", "quantity": 5},
+    "priority": 5
+  }
+]
+
+Transaction Modes:
+  - all-or-nothing: All messages succeed or all fail (default)
+  - best-effort: Process as many as possible, continue on failures
+
+Limits:
+  - Maximum 1000 messages per request
+  - Maximum 1MB total payload size (server-enforced via gRPC max receive size)`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			queueName := args[0]
+			messagesFile := args[1]
+
+			// Read messages from file
+			data, err := os.ReadFile(messagesFile)
+			if err != nil {
+				return fmt.Errorf("failed to read messages file %s: %w", messagesFile, err)
+			}
+
+			// Parse messages JSON
+			var messagesData []map[string]interface{}
+			if err := json.Unmarshal(data, &messagesData); err != nil {
+				return fmt.Errorf("failed to parse messages JSON: %w", err)
+			}
+
+			if len(messagesData) == 0 {
+				return fmt.Errorf("no messages found in file")
+			}
+
+			if len(messagesData) > 1000 {
+				return fmt.Errorf("too many messages: %d (max 1000)", len(messagesData))
+			}
+
+			// Get flags
+			transactionModeStr, err := cmd.Flags().GetString("mode")
+			if err != nil {
+				return err
+			}
+			leaseDuration, err := cmd.Flags().GetString("lease-duration")
+			if err != nil {
+				return err
+			}
+			contentType, err := cmd.Flags().GetString("content-type")
+			if err != nil {
+				return err
+			}
+
+			// Parse transaction mode
+			var transactionMode queueservice_pb.PostMessagesBulkRequest_TransactionMode
+			switch transactionModeStr {
+			case "all-or-nothing":
+				transactionMode = queueservice_pb.PostMessagesBulkRequest_ALL_OR_NOTHING
+			case "best-effort":
+				transactionMode = queueservice_pb.PostMessagesBulkRequest_BEST_EFFORT
+			default:
+				return fmt.Errorf("invalid transaction mode: %s (must be 'all-or-nothing' or 'best-effort')", transactionModeStr)
+			}
+
+			// Convert to client messages
+			messages := make([]client.MessageWithID, len(messagesData))
+			for i, msgData := range messagesData {
+				// Extract message ID
+				msgID, ok := msgData["id"].(string)
+				if !ok || msgID == "" {
+					return fmt.Errorf("message[%d] missing 'id' field", i)
+				}
+
+				// Extract message data
+				data, ok := msgData["data"]
+				if !ok {
+					return fmt.Errorf("message[%d] missing 'data' field", i)
+				}
+
+				// Convert data to structpb.Struct
+				dataStruct, err := structpb.NewStruct(map[string]interface{}{
+					"value": data,
+				})
+				if err != nil {
+					return fmt.Errorf("failed to create data struct for message[%d]: %w", i, err)
+				}
+
+				// Extract optional fields
+				priority := int64(5) // default
+				if p, ok := msgData["priority"].(float64); ok {
+					priority = int64(p)
+				}
+
+				maxAttempts := int32(-1) // use queue default
+				if ma, ok := msgData["maxAttempts"].(float64); ok {
+					maxAttempts = int32(ma)
+				}
+
+				messages[i] = client.MessageWithID{
+					MessageID: msgID,
+					Options: client.MessageOptions{
+						Payload: client.Payload{
+							Data:        dataStruct,
+							ContentType: contentType,
+						},
+						LeaseDuration: leaseDuration,
+						Priority:      priority,
+						MaxAttempts:   maxAttempts,
+					},
+				}
+			}
+
+			return WithClient(cmd, func(c *client.ChronoQueueClient) error {
+				resp, err := c.PostMessagesBulk(cmd.Context(), queueName, messages, transactionMode)
+				if err != nil {
+					return err
+				}
+
+				// Print results
+				formatter := outputs.NewOutputFormatter(GetOutputFormat(cmd))
+
+				outputs.PrintInfo(fmt.Sprintf("Transaction Mode: %s", transactionModeStr))
+				outputs.PrintInfo(fmt.Sprintf("Total Messages: %d", len(messages)))
+				outputs.PrintInfo(fmt.Sprintf("Successful: %d", resp.GetSuccessfulCount()))
+				outputs.PrintInfo(fmt.Sprintf("Failed: %d", resp.GetFailedCount()))
+
+				// Show detailed results if any failures
+				if resp.GetFailedCount() > 0 {
+					outputs.PrintWarning("\nFailed Messages:")
+					failedResults := make([]map[string]interface{}, 0)
+					for _, result := range resp.GetResults() {
+						if !result.GetSuccess() {
+							failedResults = append(failedResults, map[string]interface{}{
+								"message_id": result.GetMessageId(),
+								"error_code": result.GetErrorCode().String(),
+								"error":      result.GetError(),
+							})
+						}
+					}
+					return formatter.Print(failedResults)
+				}
+
+				outputs.PrintSuccess("All messages posted successfully")
+				return nil
+			})
+		},
+	}
+
+	cmd.Flags().StringP("mode", "m", "all-or-nothing", "Transaction mode: 'all-or-nothing' or 'best-effort'")
+	cmd.Flags().StringP("lease-duration", "l", "", "Default lease duration for all messages")
+	cmd.Flags().StringP("content-type", "t", "application/json", "Default content type for all messages")
 
 	return cmd
 }

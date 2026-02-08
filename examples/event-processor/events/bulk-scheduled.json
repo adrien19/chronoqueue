@@ -1,0 +1,117 @@
+{
+    "events": [
+        {
+            "type": "email",
+            "priority": "high",
+            "schedule_in_minutes": 5,
+            "data": {
+                "to": "subscriber-001@example.com",
+                "subject": "Your cart is waiting!",
+                "template": "cart-reminder",
+                "cart_id": "cart-101",
+                "items_count": 3
+            }
+        },
+        {
+            "type": "email",
+            "priority": "high",
+            "schedule_in_minutes": 5,
+            "data": {
+                "to": "subscriber-002@example.com",
+                "subject": "Your cart is waiting!",
+                "template": "cart-reminder",
+                "cart_id": "cart-102",
+                "items_count": 2
+            }
+        },
+        {
+            "type": "email",
+            "priority": "high",
+            "schedule_in_minutes": 5,
+            "data": {
+                "to": "subscriber-003@example.com",
+                "subject": "Your cart is waiting!",
+                "template": "cart-reminder",
+                "cart_id": "cart-103",
+                "items_count": 5
+            }
+        },
+        {
+            "type": "sms",
+            "priority": "critical",
+            "schedule_in_minutes": 10,
+            "data": {
+                "to": "+1234567890",
+                "message": "Delivery arriving in 30 minutes! Be ready.",
+                "campaign": "delivery-notification"
+            }
+        },
+        {
+            "type": "sms",
+            "priority": "critical",
+            "schedule_in_minutes": 10,
+            "data": {
+                "to": "+1234567891",
+                "message": "Delivery arriving in 30 minutes! Be ready.",
+                "campaign": "delivery-notification"
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "medium",
+            "schedule_in_minutes": 15,
+            "data": {
+                "url": "https://api.example.com/reports/daily",
+                "method": "POST",
+                "event_type": "report.generate",
+                "report_type": "sales",
+                "date": "2026-02-07"
+            }
+        },
+        {
+            "type": "webhook",
+            "priority": "medium",
+            "schedule_in_minutes": 15,
+            "data": {
+                "url": "https://api.example.com/reports/daily",
+                "method": "POST",
+                "event_type": "report.generate",
+                "report_type": "traffic",
+                "date": "2026-02-07"
+            }
+        },
+        {
+            "type": "email",
+            "priority": "medium",
+            "schedule_in_minutes": 30,
+            "data": {
+                "to": "trial-user-001@example.com",
+                "subject": "Your trial ends in 3 days",
+                "template": "trial-expiring",
+                "days_remaining": 3
+            }
+        },
+        {
+            "type": "email",
+            "priority": "medium",
+            "schedule_in_minutes": 30,
+            "data": {
+                "to": "trial-user-002@example.com",
+                "subject": "Your trial ends in 3 days",
+                "template": "trial-expiring",
+                "days_remaining": 3
+            }
+        },
+        {
+            "type": "email",
+            "priority": "medium",
+            "schedule_in_minutes": 30,
+            "data": {
+                "to": "trial-user-003@example.com",
+                "subject": "Your trial ends in 3 days",
+                "template": "trial-expiring",
+                "days_remaining": 3
+            }
+        }
+    ]
+}

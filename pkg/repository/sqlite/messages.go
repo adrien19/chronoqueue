@@ -10,15 +10,18 @@ import (
 
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
+	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
 	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/priority"
 )
 
 // generateID generates a random ID
-func generateID() string {
+func (s *Storage) generateID() string {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		s.Logger.Fatal("crypto/rand.Read failed", "error", err)
+	}
 	return hex.EncodeToString(b)
 }
 
@@ -51,61 +54,151 @@ func (s *Storage) EnqueueMessage(ctx context.Context, queueName string, message 
 		metrics.ObserveDBTransaction("sqlite", "enqueue_message", time.Since(start))
 	}()
 
+	var stateStr string
+	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+		var txErr error
+		stateStr, txErr = s.enqueueMessageInTx(ctx, tx, queueName, message)
+		return txErr
+	})
+	if err == nil {
+		metrics.IncrementMessagesEnqueued(queueName)
+		metrics.RecordStateTransition(queueName, "none", stateStr)
+	}
+	return err
+}
+
+// EnqueueMessagesBulk enqueues multiple messages in a single database operation.
+// transactionMode controls the behavior:
+//   - ALL_OR_NOTHING (0): All messages succeed or all fail (atomic transaction)
+//   - BEST_EFFORT (1): Each message processed independently, partial success allowed
+//
+// Returns:
+//   - []error: Per-message errors (nil for success, error for failure)
+//   - error: Overall operation error (non-nil only for ALL_OR_NOTHING rollback)
+func (s *Storage) EnqueueMessagesBulk(ctx context.Context, queueName string, messages []*messagepb.Message, transactionMode queueservicepb.PostMessagesBulkRequest_TransactionMode) ([]error, error) {
+	start := time.Now()
+	defer func() {
+		metrics.ObserveDBTransaction("sqlite", "enqueue_messages_bulk", time.Since(start))
+	}()
+
+	messageErrors := make([]error, len(messages))
+
+	// ALL_OR_NOTHING: Single transaction, all succeed or all fail
+	if transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
+		txErr := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+			for i, message := range messages {
+				if _, err := s.enqueueMessageInTx(ctx, tx, queueName, message); err != nil {
+					messageErrors[i] = err
+					return fmt.Errorf("message[%d] failed: %w", i, err)
+				}
+			}
+			return nil
+		})
+
+		if txErr != nil {
+			// Transaction rolled back - mark all messages as failed
+			for j := range messages {
+				if messageErrors[j] == nil {
+					messageErrors[j] = fmt.Errorf("transaction failed: %w", txErr)
+				}
+			}
+			return messageErrors, txErr
+		}
+
+		// Transaction committed, all messages succeeded - record metrics
+		for _, message := range messages {
+			metrics.RecordStateTransition(queueName, "none", message.GetMetadata().GetState().String())
+		}
+		metrics.IncrementMessagesBulkEnqueued(queueName, int64(len(messages)))
+		return messageErrors, nil
+	}
+
+	// BEST_EFFORT: Process each message independently
+	successCount := int64(0)
+	for i, message := range messages {
+		var stateStr string
+		err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+			var txErr error
+			stateStr, txErr = s.enqueueMessageInTx(ctx, tx, queueName, message)
+			return txErr
+		})
+
+		messageErrors[i] = err
+		if err == nil {
+			metrics.RecordStateTransition(queueName, "none", stateStr)
+			successCount++
+		}
+	}
+
+	if successCount > 0 {
+		metrics.IncrementMessagesBulkEnqueued(queueName, successCount)
+	}
+
+	return messageErrors, nil
+}
+
+// enqueueMessageInTx enqueues a single message within an existing transaction.
+// This is the internal implementation used by both EnqueueMessage and EnqueueMessagesBulk.
+// Returns the state string for deferred metrics recording.
+func (s *Storage) enqueueMessageInTx(ctx context.Context, tx *sql.Tx, queueName string, message *messagepb.Message) (string, error) {
 	if err := repositorycommon.EncryptMessagePayload(message, s.KeyManager); err != nil {
-		return fmt.Errorf("encrypt message payload: %w", err)
+		return "", fmt.Errorf("encrypt message payload: %w", err)
 	}
 
 	messageBytes, err := s.Serializer.MarshalMessage(message)
 	if err != nil {
-		return fmt.Errorf("marshal message: %w", err)
+		return "", fmt.Errorf("marshal message: %w", err)
 	}
 
 	metadata := message.GetMetadata()
 	if metadata == nil {
-		return fmt.Errorf("message metadata is nil")
+		return "", fmt.Errorf("message metadata is nil")
 	}
 
-	err = s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
-		query := `
-			INSERT INTO cq_messages (
-				message_id, queue_name, state, attempts_left, max_attempts,
-				priority, scheduled_at, metadata_pb, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-			ON CONFLICT(message_id) DO NOTHING
-		`
+	query := `
+		INSERT INTO cq_messages (
+			message_id, queue_name, state, attempts_left, max_attempts,
+			priority, scheduled_at, metadata_pb, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		ON CONFLICT(message_id) DO NOTHING
+	`
 
-		// Extract scheduled time in milliseconds if present
-		var scheduledTimeMs *int64
-		if metadata.ScheduledTime != nil {
-			ms := metadata.ScheduledTime.AsTime().UnixMilli()
-			scheduledTimeMs = &ms
-		}
-
-		_, err := tx.ExecContext(ctx, query,
-			message.MessageId,
-			queueName,
-			metadata.State,
-			metadata.AttemptsLeft,
-			metadata.MaxAttempts,
-			metadata.Priority,
-			scheduledTimeMs,
-			messageBytes,
-		)
-		if err != nil {
-			return fmt.Errorf("insert message: %w", err)
-		}
-
-		// Update queue state counts (increment from zero to new state)
-		return s.StateManager.UpdateCounters(ctx, tx, queueName, 0, metadata.State)
-	})
-
-	if err == nil {
-		// Record successful enqueue
-		metrics.IncrementMessagesEnqueued(queueName)
-		metrics.RecordStateTransition(queueName, "none", metadata.State.String())
+	// Extract scheduled time in milliseconds if present
+	var scheduledTimeMs *int64
+	if metadata.ScheduledTime != nil {
+		ms := metadata.ScheduledTime.AsTime().UnixMilli()
+		scheduledTimeMs = &ms
 	}
 
-	return err
+	result, err := tx.ExecContext(ctx, query,
+		message.MessageId,
+		queueName,
+		metadata.State,
+		metadata.AttemptsLeft,
+		metadata.MaxAttempts,
+		metadata.Priority,
+		scheduledTimeMs,
+		messageBytes,
+	)
+	if err != nil {
+		return "", fmt.Errorf("insert message: %w", err)
+	}
+
+	// Check if the row was actually inserted (not a duplicate)
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return "", fmt.Errorf("check rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return "", fmt.Errorf("%w: %s", repositorycommon.ErrDuplicateMessageID, message.MessageId)
+	}
+
+	if err := s.StateManager.UpdateCounters(ctx, tx, queueName, 0, metadata.State); err != nil {
+		return "", fmt.Errorf("update counters: %w", err)
+	}
+
+	return metadata.State.String(), nil
 }
 
 // ClaimMessage claims the next available message from a queue
@@ -126,10 +219,10 @@ func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId s
 
 	// Generate IDs if not provided
 	if attemptId == "" {
-		attemptId = generateID()
+		attemptId = s.generateID()
 	}
 	if workerId == "" {
-		workerId = "worker-" + generateID()[:8]
+		workerId = "worker-" + s.generateID()[:8]
 	}
 
 	priorityCfg := queueMeta.GetPriorityConfig()

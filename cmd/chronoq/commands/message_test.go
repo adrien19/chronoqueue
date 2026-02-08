@@ -17,7 +17,7 @@ func TestNewMessageCommand(t *testing.T) {
 
 	// Check that subcommands are properly added
 	subcommands := cmd.Commands()
-	assert.Len(t, subcommands, 7)
+	assert.Len(t, subcommands, 8)
 
 	// Check subcommand names
 	subcommandNames := make([]string, len(subcommands))
@@ -27,6 +27,7 @@ func TestNewMessageCommand(t *testing.T) {
 
 	expectedCommands := []string{
 		"post <queue-name> [message-data]",
+		"post-bulk <queue-name> <messages-file>",
 		"get <queue-name>",
 		"ack <queue-name> <message-id> <message-state>",
 		"peek <queue-name>",

@@ -28,6 +28,7 @@ func main() {
 	rootCmd.AddCommand(
 		newInitCommand(),
 		newPublishCommand(),
+		newPublishBulkCommand(),
 		newWorkerCommand(),
 		newStatsCommand(),
 		newMonitorCommand(),
@@ -56,13 +57,43 @@ func newInitCommand() *cobra.Command {
 func newPublishCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "publish <events-file.json>",
-		Short: "Publish events from JSON file",
+		Short: "Publish events from JSON file (one by one)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			return publishEvents(ctx, args[0])
 		},
 	}
+}
+
+func newPublishBulkCommand() *cobra.Command {
+	var mode string
+
+	cmd := &cobra.Command{
+		Use:   "publish-bulk <events-file.json>",
+		Short: "Publish events from JSON file in bulk",
+		Long: `Publish multiple events in a single bulk operation.
+
+Supports two transaction modes:
+  - all-or-nothing: All messages succeed or all fail (atomic)
+  - best-effort: Process as many as possible, continue on failures
+
+Examples:
+  # Post with all-or-nothing guarantee
+  event-processor publish-bulk events/bulk-demo.json
+
+  # Post with best-effort (partial success allowed)
+  event-processor publish-bulk events/bulk-demo.json --mode best-effort`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			return publishEventsBulk(ctx, args[0], mode)
+		},
+	}
+
+	cmd.Flags().StringVar(&mode, "mode", "all-or-nothing", "Transaction mode: all-or-nothing, best-effort")
+
+	return cmd
 }
 
 func newWorkerCommand() *cobra.Command {

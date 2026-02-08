@@ -5,6 +5,8 @@ A comprehensive demonstration of ChronoQueue's SQL-based architecture for high-t
 ## 🎯 What This Demo Demonstrates
 
 - ✅ **High-throughput message processing** - Process thousands of events efficiently
+- ✅ **Bulk message posting** - Post multiple messages in a single API call (up to 1000)
+- ✅ **Transaction modes** - ALL_OR_NOTHING (atomic) vs BEST_EFFORT (partial success)
 - ✅ **Priority routing** - Critical/normal/low priority event handling
 - ✅ **Scheduled/delayed messages** - Future message delivery using sorted sets
 - ✅ **Automatic heartbeats** - Processing acknowledgment with lease renewal
@@ -61,7 +63,11 @@ Expected output:
 
 ### Step 1: Publish Events
 
-#### 1.1 Publish a Single Critical Event
+ChronoQueue supports two ways to publish events: traditional one-by-one posting and high-performance bulk posting.
+
+#### 1.1 Traditional Publishing (One-by-One)
+
+Publish messages individually using the standard `publish` command:
 
 ```bash
 ./event-processor publish events/critical-webhook.json
@@ -82,7 +88,81 @@ Expected output:
   Low: 0
 ```
 
-#### 1.2 Publish Batch of Mixed Priority Events
+#### 1.2 Bulk Publishing (Recommended for Multiple Messages)
+
+**NEW!** Use bulk posting to send multiple messages in a single API call for significantly better performance:
+
+```bash
+# Post with ALL_OR_NOTHING mode (default - atomic)
+./event-processor publish-bulk events/bulk-demo.json
+
+# Post with BEST_EFFORT mode (partial success allowed)
+./event-processor publish-bulk events/bulk-demo.json --mode best-effort
+```
+
+**Expected Output (ALL_OR_NOTHING mode):**
+
+```text
+📦 Publishing 10 events in BULK mode from events/bulk-demo.json
+   Transaction Mode: ALL-OR-NOTHING
+
+📤 Posting 4 events to email-notifications...
+  ✓ Success: 4/4 messages posted
+
+📤 Posting 4 events to webhook-events...
+  ✓ Success: 4/4 messages posted
+
+📤 Posting 2 events to sms-alerts...
+  ✓ Success: 2/2 messages posted
+
+📊 Bulk Posting Summary:
+  • Total Events: 10
+  • Published: 10
+  • Failed: 0
+  • Duration: 234ms
+  • Transaction Mode: ALL-OR-NOTHING
+
+  By Queue:
+    • email-notifications: 4 events
+    • webhook-events: 4 events
+    • sms-alerts: 2 events
+
+  ⚡ Average: 23ms per message
+```
+
+**Benefits of Bulk Posting:**
+
+- 🚀 **10-100x faster** than individual posts for large batches
+- 🔒 **Atomic guarantees** with ALL_OR_NOTHING mode
+- 📊 **Detailed per-message results** showing which messages succeeded/failed
+- 💪 **Partial success handling** with BEST_EFFORT mode
+- ⚡ **Single network round-trip** reduces latency
+
+#### 1.3 Bulk Publishing with Scheduled Messages
+
+Combine bulk posting with scheduled delivery:
+
+```bash
+./event-processor publish-bulk events/bulk-scheduled.json
+```
+
+This posts 10 messages scheduled for future delivery (5, 10, 15, and 30 minutes from now).
+
+#### 1.4 Performance Comparison
+
+Compare traditional vs bulk posting with a large batch:
+
+```bash
+# Traditional: Posts 20 messages one-by-one
+time ./event-processor publish events/bulk-large-batch.json
+
+# Bulk: Posts 20 messages in a single operation
+time ./event-processor publish-bulk events/bulk-large-batch.json
+```
+
+You should see 5-10x performance improvement with bulk posting!
+
+#### 1.5 Publish Batch of Mixed Priority Events
 
 ```bash
 ./event-processor publish events/mixed-batch.json
@@ -569,13 +649,109 @@ Showing 5 of 12 pending events
 
 ## 📄 JSON Payload Examples
 
-The `events/` directory contains sample JSON files:
+The `events/` directory contains sample JSON files for different use cases:
+
+### Traditional Publishing Files
 
 ### events/critical-webhook.json
 
 ```json
 {
   "events": [
+    {
+      "type": "webhook",
+      "priority": "critical",
+      "data": {
+        "url": "https://api.example.com/webhooks/urgent",
+        "method": "POST",
+        "event_type": "system.alert",
+        "severity": "critical",
+        "message": "Database connection pool exhausted"
+      }
+    }
+  ]
+}
+```
+
+### events/mixed-batch.json
+
+```json
+{
+  "events": [
+    {
+      "type": "email",
+      "priority": "high",
+      "data": {
+        "to": "user@example.com",
+        "subject": "Important Update",
+        "template": "notification"
+      }
+    },
+    {
+      "type": "webhook",
+      "priority": "medium",
+      "data": {
+        "url": "https://api.example.com/webhooks/standard",
+        "event_type": "user.action"
+      }
+    }
+  ]
+}
+```
+
+### Bulk Publishing Files
+
+### events/bulk-demo.json
+
+10 events across all three queues (email, webhook, SMS) with mixed priorities. Perfect for demonstrating bulk posting basics.
+
+**Usage:**
+
+```bash
+./event-processor publish-bulk events/bulk-demo.json
+```
+
+### events/bulk-large-batch.json
+
+20 events demonstrating larger batch operations. Shows performance benefits of bulk posting.
+
+**Usage:**
+
+```bash
+# Compare performance
+time ./event-processor publish events/bulk-large-batch.json
+time ./event-processor publish-bulk events/bulk-large-batch.json
+```
+
+### events/bulk-scheduled.json
+
+10 scheduled events with different delivery times (5, 10, 15, 30 minutes). Demonstrates bulk posting combined with scheduled delivery.
+
+**Usage:**
+
+```bash
+./event-processor publish-bulk events/bulk-scheduled.json
+
+# Then monitor as they become available
+./event-processor monitor
+```
+
+**Event Structure:**
+
+```json
+{
+  "type": "email",
+  "priority": "high",
+  "schedule_in_minutes": 5,
+  "data": {
+    "to": "user@example.com",
+    "subject": "Cart Reminder"
+  }
+}
+```
+
+## 🧪 Testing Scenarios
+
     {
       "id": "evt-critical-001",
       "type": "webhook",
@@ -596,6 +772,7 @@ The `events/` directory contains sample JSON files:
     }
   ]
 }
+
 ```
 
 ### events/mixed-batch.json
@@ -641,6 +818,29 @@ The `events/` directory contains sample JSON files:
 ```
 
 ## 🧪 Testing Scenarios
+
+### Quick Demo: Bulk Posting
+
+Run the automated demo script to see bulk posting in action:
+
+```bash
+./demo-bulk-posting.sh
+```
+
+This script demonstrates:
+
+1. ✅ System initialization
+2. ✅ Traditional publishing (one-by-one) with timing
+3. ✅ Bulk publishing with ALL_OR_NOTHING mode
+4. ✅ Bulk publishing with BEST_EFFORT mode  
+5. ✅ Bulk publishing with scheduled messages
+6. ✅ Queue statistics after bulk operations
+
+**Expected Performance:**
+
+- Traditional: ~1-2 seconds for 10 messages
+- Bulk ALL_OR_NOTHING: ~200-300ms for 10 messages
+- Bulk BEST_EFFORT: ~200-300ms for 20 messages
 
 ### Scenario 1: High Throughput Test
 

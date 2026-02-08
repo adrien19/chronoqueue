@@ -15,6 +15,7 @@ import (
 
 	messagev1 "github.com/adrien19/chronoqueue/api/message/v1"
 	queuev1 "github.com/adrien19/chronoqueue/api/queue/v1"
+	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/client"
 )
 
@@ -183,6 +184,163 @@ func publishEvents(ctx context.Context, filename string) error {
 	fmt.Printf("\n  By Queue:\n")
 	for q, count := range published {
 		fmt.Printf("    • %s: %d events\n", q, count)
+	}
+
+	return nil
+}
+
+func publishEventsBulk(ctx context.Context, filename string, mode string) error {
+	c, err := connectToServer()
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	var batch EventBatch
+	if err := json.Unmarshal(data, &batch); err != nil {
+		return fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	// Parse transaction mode
+	var transactionMode queueservice_pb.PostMessagesBulkRequest_TransactionMode
+	switch strings.ToLower(mode) {
+	case "all-or-nothing":
+		transactionMode = queueservice_pb.PostMessagesBulkRequest_ALL_OR_NOTHING
+	case "best-effort":
+		transactionMode = queueservice_pb.PostMessagesBulkRequest_BEST_EFFORT
+	default:
+		return fmt.Errorf("invalid mode: %s (must be 'all-or-nothing' or 'best-effort')", mode)
+	}
+
+	fmt.Printf("📦 Publishing %d events in BULK mode from %s\n", len(batch.Events), filename)
+	fmt.Printf("   Transaction Mode: %s\n\n", strings.ToUpper(mode))
+
+	// Group events by queue
+	eventsByQueue := make(map[string][]struct {
+		event Event
+		index int
+	})
+
+	for i, event := range batch.Events {
+		queueName := getQueueForType(event.Type)
+		eventsByQueue[queueName] = append(eventsByQueue[queueName], struct {
+			event Event
+			index int
+		}{event, i})
+	}
+
+	start := time.Now()
+	totalPublished := 0
+	totalFailed := 0
+
+	// Bulk post to each queue
+	for queueName, events := range eventsByQueue {
+		fmt.Printf("📤 Posting %d events to %s...\n", len(events), queueName)
+
+		// Build messages for this queue
+		type messageEntry struct {
+			msg        client.MessageWithID
+			eventIndex int
+			event      Event
+		}
+		var messageEntries []messageEntry
+		for _, item := range events {
+			event := item.event
+			priority := parsePriority(event.Priority)
+
+			payloadData, err := structpb.NewStruct(event.Data)
+			if err != nil {
+				fmt.Printf("  ⚠️  Event %d: Failed to convert payload: %v\n", item.index+1, err)
+				continue
+			}
+
+			msgID := fmt.Sprintf("evt-%d-%d", time.Now().Unix(), item.index)
+			msgOpts := client.MessageOptions{
+				Payload: client.Payload{
+					Data:        payloadData,
+					ContentType: "application/json",
+				},
+				LeasePolicy: client.LeasePolicyOptions{
+					BaseLease:        "30s",
+					HeartbeatTimeout: "10s",
+				},
+				MaxAttempts: 3,
+				Priority:    int64(priority),
+			}
+
+			// Handle scheduled messages
+			if event.ScheduleInMinutes > 0 {
+				scheduledTime := time.Now().Add(time.Duration(event.ScheduleInMinutes) * time.Minute)
+				msgOpts.ScheduledTime = &scheduledTime
+			}
+
+			messageEntries = append(messageEntries, messageEntry{
+				msg: client.MessageWithID{
+					MessageID: msgID,
+					Options:   msgOpts,
+				},
+				eventIndex: item.index,
+				event:      event,
+			})
+		}
+
+		// Extract messages for API call
+		messages := make([]client.MessageWithID, len(messageEntries))
+		for i, entry := range messageEntries {
+			messages[i] = entry.msg
+		}
+
+		// Post messages in bulk
+		resp, err := c.PostMessagesBulk(ctx, queueName, messages, transactionMode)
+		if err != nil {
+			fmt.Printf("  ❌ Bulk post failed: %v\n", err)
+			totalFailed += len(messages)
+			continue
+		}
+
+		// Display results
+		fmt.Printf("  ✓ Success: %d/%d messages posted\n", resp.GetSuccessfulCount(), len(messages))
+
+		if resp.GetFailedCount() > 0 {
+			fmt.Printf("  ⚠️  Failed: %d messages\n", resp.GetFailedCount())
+			for i, result := range resp.GetResults() {
+				if !result.GetSuccess() {
+					entry := messageEntries[i]
+					fmt.Printf("    ❌ Event %d (%s): %s - %s\n",
+						entry.eventIndex+1,
+						entry.event.Type,
+						result.GetErrorCode().String(),
+						result.GetError())
+				}
+			}
+		}
+
+		totalPublished += int(resp.GetSuccessfulCount())
+		totalFailed += int(resp.GetFailedCount())
+		fmt.Println()
+	}
+
+	duration := time.Since(start)
+
+	fmt.Printf("📊 Bulk Posting Summary:\n")
+	fmt.Printf("  • Total Events: %d\n", len(batch.Events))
+	fmt.Printf("  • Published: %d\n", totalPublished)
+	fmt.Printf("  • Failed: %d\n", totalFailed)
+	fmt.Printf("  • Duration: %v\n", duration)
+	fmt.Printf("  • Transaction Mode: %s\n", strings.ToUpper(mode))
+	fmt.Printf("\n  By Queue:\n")
+	for queueName, events := range eventsByQueue {
+		fmt.Printf("    • %s: %d events\n", queueName, len(events))
+	}
+
+	if totalPublished > 0 {
+		avgTime := duration.Milliseconds() / int64(totalPublished)
+		fmt.Printf("\n  ⚡ Average: %dms per message\n", avgTime)
 	}
 
 	return nil

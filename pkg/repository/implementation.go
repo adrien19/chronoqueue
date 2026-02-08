@@ -3,9 +3,11 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -16,6 +18,7 @@ import (
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/pkg/calendar"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
+	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
 	"github.com/adrien19/chronoqueue/pkg/repository/postgres"
 	repositorysql "github.com/adrien19/chronoqueue/pkg/repository/sql"
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/background"
@@ -454,6 +457,210 @@ func (impl *implementation) CreateQueueMessage(ctx context.Context, request *que
 	return &queueservicepb.PostMessageResponse{
 		Success: true,
 	}, nil
+}
+
+// CreateQueueMessagesBulk posts multiple messages to a queue in a single operation
+func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request *queueservicepb.PostMessagesBulkRequest, v validator.Validator) (*queueservicepb.PostMessagesBulkResponse, error) {
+	if request == nil {
+		return nil, fmt.Errorf("request is required")
+	}
+
+	queueName := request.GetQueueName()
+	messages := request.GetMessages()
+	transactionMode := request.GetTransactionMode()
+
+	// Validate request limits
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("no messages provided")
+	}
+	if len(messages) > 1000 {
+		return nil, fmt.Errorf("too many messages: %d (max 1000)", len(messages))
+	}
+
+	// Get queue metadata to inherit defaults
+	queueMetadata, err := impl.backend.GetQueueMetadata(ctx, queueName)
+	if err != nil {
+		return nil, fmt.Errorf("get queue metadata: %w", err)
+	}
+
+	// Pre-process and validate all messages
+	validationErrors := make([]error, len(messages))
+	for i, message := range messages {
+		if message == nil {
+			err := fmt.Errorf("message[%d] is required", i)
+			if transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
+				return nil, err
+			}
+			validationErrors[i] = err
+			continue
+		}
+		// Ensure message has metadata
+		if message.Metadata == nil {
+			message.Metadata = &messagepb.Message_Metadata{}
+		}
+
+		// Set state
+		message.Metadata.State = messagepb.Message_Metadata_PENDING
+
+		// Inherit max_attempts from queue if not set on message
+		if message.Metadata.MaxAttempts == 0 {
+			if queueMetadata.DefaultMaxAttempts > 0 {
+				message.Metadata.MaxAttempts = queueMetadata.DefaultMaxAttempts
+			} else {
+				message.Metadata.MaxAttempts = 3 // default
+			}
+		}
+
+		// Set attempts_left based on max_attempts
+		if message.Metadata.AttemptsLeft == 0 {
+			message.Metadata.AttemptsLeft = message.Metadata.MaxAttempts
+		}
+
+		// Set default priority if not set
+		if message.Metadata.Priority == 0 {
+			message.Metadata.Priority = 5
+		}
+
+		// Inherit lease_policy from queue if not set on message
+		if message.Metadata.LeasePolicy == nil && queueMetadata.GetLeasePolicy() != nil {
+			message.Metadata.LeasePolicy = queueMetadata.GetLeasePolicy()
+		}
+
+		// Schema validation
+		if v != nil {
+			validationResult := v.Validate(ctx, message)
+			if !validationResult.Valid {
+				metrics.IncrementValidationFailures(queueName, "schema_mismatch")
+
+				// In ALL_OR_NOTHING mode, fail fast on first validation error
+				if transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
+					errorDetails := fmt.Sprintf("Message[%d] validation failed:", i)
+					for _, valErr := range validationResult.Errors {
+						errorDetails += fmt.Sprintf("\n  - %s: %s", valErr.Field, valErr.Message)
+					}
+					return nil, fmt.Errorf("%s", errorDetails)
+				}
+				// Record validation error for this message
+				errorDetails := "validation failed:"
+				for _, valErr := range validationResult.Errors {
+					errorDetails += fmt.Sprintf(" %s: %s;", valErr.Field, valErr.Message)
+				}
+				validationErrors[i] = fmt.Errorf("%s", errorDetails)
+			} else {
+				metrics.IncrementMessagesValidated(queueName)
+			}
+		}
+	}
+
+	// Enforce max payload size after enrichment (applied to all submitted messages,
+	// not just valid ones - this caps the raw request payload to prevent abuse)
+	const maxPayloadBytes = 1_048_576
+	var totalSize int
+	for _, msg := range messages {
+		totalSize += proto.Size(msg)
+	}
+	if totalSize > maxPayloadBytes {
+		return nil, fmt.Errorf("total payload size %d bytes exceeds 1MB limit", totalSize)
+	}
+
+	// Filter out messages that failed validation
+	validMessages := make([]*messagepb.Message, 0, len(messages))
+	validIndices := make([]int, 0, len(messages))
+	for i, msg := range messages {
+		if validationErrors[i] == nil {
+			validMessages = append(validMessages, msg)
+			validIndices = append(validIndices, i)
+		}
+	}
+
+	// Enqueue valid messages using the backend's bulk operation
+	var messageErrors []error
+	var txErr error
+	if len(validMessages) > 0 {
+		messageErrors, txErr = impl.backend.EnqueueMessagesBulk(ctx, queueName, validMessages, transactionMode)
+	}
+
+	if messageErrors == nil {
+		messageErrors = make([]error, len(validMessages))
+	}
+	if len(messageErrors) != len(validMessages) {
+		return nil, fmt.Errorf("internal error: message errors count mismatch")
+	}
+
+	// Build response with per-message results
+	results := make([]*queueservicepb.PostMessagesBulkResponse_MessagePostResult, len(messages))
+	successCount := int32(0)
+
+	// First, populate results for messages that failed validation
+	for i, message := range messages {
+		if validationErrors[i] != nil {
+			messageId := ""
+			if message != nil {
+				messageId = message.MessageId
+			}
+			results[i] = &queueservicepb.PostMessagesBulkResponse_MessagePostResult{
+				MessageId: messageId,
+				Success:   false,
+				ErrorCode: queueservicepb.PostMessagesBulkResponse_MessagePostResult_VALIDATION_FAILED,
+				Error:     validationErrors[i].Error(),
+			}
+		}
+	}
+
+	// Then, populate results for messages that were enqueued
+	for j, origIdx := range validIndices {
+		message := messages[origIdx]
+		result := &queueservicepb.PostMessagesBulkResponse_MessagePostResult{
+			MessageId: message.MessageId,
+		}
+
+		if messageErrors[j] != nil {
+			result.Success = false
+			result.ErrorCode = queueservicepb.PostMessagesBulkResponse_MessagePostResult_INTERNAL_ERROR
+			result.Error = messageErrors[j].Error()
+
+			if errors.Is(messageErrors[j], repositorycommon.ErrDuplicateMessageID) {
+				result.ErrorCode = queueservicepb.PostMessagesBulkResponse_MessagePostResult_DUPLICATE_MESSAGE_ID
+			}
+		} else {
+			result.Success = true
+			result.ErrorCode = queueservicepb.PostMessagesBulkResponse_MessagePostResult_SUCCESS
+			successCount++
+		}
+
+		results[origIdx] = result
+	}
+
+	failedCount := int32(len(messages)) - successCount
+	var successStatus bool
+	switch transactionMode {
+	case queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING:
+		successStatus = failedCount == 0
+	case queueservicepb.PostMessagesBulkRequest_BEST_EFFORT:
+		successStatus = successCount > 0
+	default:
+		return nil, fmt.Errorf("invalid transaction mode: %v", transactionMode)
+	}
+	response := &queueservicepb.PostMessagesBulkResponse{
+		Success:         successStatus,
+		SuccessfulCount: successCount,
+		FailedCount:     failedCount,
+		Results:         results,
+	}
+
+	// For ALL_OR_NOTHING mode, if transaction failed, indicate total failure
+	if txErr != nil && transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
+		return response, fmt.Errorf("transaction failed: %w", txErr)
+	}
+	if txErr != nil && transactionMode == queueservicepb.PostMessagesBulkRequest_BEST_EFFORT {
+		if baseSQL := impl.getSQLBackend(); baseSQL != nil {
+			baseSQL.Logger.WarnWithFields("bulk enqueue partial failure in BEST_EFFORT mode",
+				"error", txErr.Error(), "queue", queueName)
+		}
+		return response, fmt.Errorf("partial bulk enqueue failure: %w", txErr)
+	}
+
+	return response, nil
 }
 
 // GetQueueMessage retrieves the next available message from a queue

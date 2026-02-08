@@ -30,6 +30,7 @@ type Storage interface {
 
 	// Message Lifecycle
 	CreateQueueMessage(ctx context.Context, request *queueservicepb.PostMessageRequest, validator validator.Validator) (*queueservicepb.PostMessageResponse, error)
+	CreateQueueMessagesBulk(ctx context.Context, request *queueservicepb.PostMessagesBulkRequest, validator validator.Validator) (*queueservicepb.PostMessagesBulkResponse, error)
 	GetQueueMessage(ctx context.Context, request *queueservicepb.GetNextMessageRequest) (*queueservicepb.GetNextMessageResponse, error)
 	AcknowledgeMessage(ctx context.Context, request *queueservicepb.AcknowledgeMessageRequest) (*queueservicepb.AcknowledgeMessageResponse, error)
 	CancelMessage(ctx context.Context, request *queueservicepb.CancelMessageRequest) (*queueservicepb.CancelMessageResponse, error)

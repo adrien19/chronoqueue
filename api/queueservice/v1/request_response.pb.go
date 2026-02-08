@@ -74,6 +74,116 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Transaction mode for batch processing
+type PostMessagesBulkRequest_TransactionMode int32
+
+const (
+	// All messages succeed or all fail (default)
+	// Batch processed in single database transaction
+	PostMessagesBulkRequest_ALL_OR_NOTHING PostMessagesBulkRequest_TransactionMode = 0
+	// Process as many as possible, continue on failures
+	// Messages processed independently, partial success allowed
+	PostMessagesBulkRequest_BEST_EFFORT PostMessagesBulkRequest_TransactionMode = 1
+)
+
+// Enum value maps for PostMessagesBulkRequest_TransactionMode.
+var (
+	PostMessagesBulkRequest_TransactionMode_name = map[int32]string{
+		0: "ALL_OR_NOTHING",
+		1: "BEST_EFFORT",
+	}
+	PostMessagesBulkRequest_TransactionMode_value = map[string]int32{
+		"ALL_OR_NOTHING": 0,
+		"BEST_EFFORT":    1,
+	}
+)
+
+func (x PostMessagesBulkRequest_TransactionMode) Enum() *PostMessagesBulkRequest_TransactionMode {
+	p := new(PostMessagesBulkRequest_TransactionMode)
+	*p = x
+	return p
+}
+
+func (x PostMessagesBulkRequest_TransactionMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PostMessagesBulkRequest_TransactionMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_queueservice_v1_request_response_proto_enumTypes[0].Descriptor()
+}
+
+func (PostMessagesBulkRequest_TransactionMode) Type() protoreflect.EnumType {
+	return &file_proto_queueservice_v1_request_response_proto_enumTypes[0]
+}
+
+func (x PostMessagesBulkRequest_TransactionMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PostMessagesBulkRequest_TransactionMode.Descriptor instead.
+func (PostMessagesBulkRequest_TransactionMode) EnumDescriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{6, 0}
+}
+
+// Error code for programmatic handling
+type PostMessagesBulkResponse_MessagePostResult_ErrorCode int32
+
+const (
+	PostMessagesBulkResponse_MessagePostResult_SUCCESS              PostMessagesBulkResponse_MessagePostResult_ErrorCode = 0
+	PostMessagesBulkResponse_MessagePostResult_VALIDATION_FAILED    PostMessagesBulkResponse_MessagePostResult_ErrorCode = 1
+	PostMessagesBulkResponse_MessagePostResult_DUPLICATE_MESSAGE_ID PostMessagesBulkResponse_MessagePostResult_ErrorCode = 2
+	PostMessagesBulkResponse_MessagePostResult_SCHEMA_MISMATCH      PostMessagesBulkResponse_MessagePostResult_ErrorCode = 3
+	PostMessagesBulkResponse_MessagePostResult_INTERNAL_ERROR       PostMessagesBulkResponse_MessagePostResult_ErrorCode = 4
+	PostMessagesBulkResponse_MessagePostResult_QUEUE_NOT_FOUND      PostMessagesBulkResponse_MessagePostResult_ErrorCode = 5
+)
+
+// Enum value maps for PostMessagesBulkResponse_MessagePostResult_ErrorCode.
+var (
+	PostMessagesBulkResponse_MessagePostResult_ErrorCode_name = map[int32]string{
+		0: "SUCCESS",
+		1: "VALIDATION_FAILED",
+		2: "DUPLICATE_MESSAGE_ID",
+		3: "SCHEMA_MISMATCH",
+		4: "INTERNAL_ERROR",
+		5: "QUEUE_NOT_FOUND",
+	}
+	PostMessagesBulkResponse_MessagePostResult_ErrorCode_value = map[string]int32{
+		"SUCCESS":              0,
+		"VALIDATION_FAILED":    1,
+		"DUPLICATE_MESSAGE_ID": 2,
+		"SCHEMA_MISMATCH":      3,
+		"INTERNAL_ERROR":       4,
+		"QUEUE_NOT_FOUND":      5,
+	}
+)
+
+func (x PostMessagesBulkResponse_MessagePostResult_ErrorCode) Enum() *PostMessagesBulkResponse_MessagePostResult_ErrorCode {
+	p := new(PostMessagesBulkResponse_MessagePostResult_ErrorCode)
+	*p = x
+	return p
+}
+
+func (x PostMessagesBulkResponse_MessagePostResult_ErrorCode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PostMessagesBulkResponse_MessagePostResult_ErrorCode) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_queueservice_v1_request_response_proto_enumTypes[1].Descriptor()
+}
+
+func (PostMessagesBulkResponse_MessagePostResult_ErrorCode) Type() protoreflect.EnumType {
+	return &file_proto_queueservice_v1_request_response_proto_enumTypes[1]
+}
+
+func (x PostMessagesBulkResponse_MessagePostResult_ErrorCode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PostMessagesBulkResponse_MessagePostResult_ErrorCode.Descriptor instead.
+func (PostMessagesBulkResponse_MessagePostResult_ErrorCode) EnumDescriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{7, 0, 0}
+}
+
 // Create queue
 type CreateQueueRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -357,6 +467,140 @@ func (x *PostMessageResponse) GetSuccess() bool {
 	return false
 }
 
+// Post multiple messages to the queue in a single request
+type PostMessagesBulkRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	QueueName string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
+	// Messages to post (recommended max: 1000 per request)
+	Messages        []*v11.Message                          `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"`
+	TransactionMode PostMessagesBulkRequest_TransactionMode `protobuf:"varint,3,opt,name=transaction_mode,json=transactionMode,proto3,enum=chronoqueue.api.queueservice.v1.PostMessagesBulkRequest_TransactionMode" json:"transaction_mode,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *PostMessagesBulkRequest) Reset() {
+	*x = PostMessagesBulkRequest{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostMessagesBulkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostMessagesBulkRequest) ProtoMessage() {}
+
+func (x *PostMessagesBulkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostMessagesBulkRequest.ProtoReflect.Descriptor instead.
+func (*PostMessagesBulkRequest) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *PostMessagesBulkRequest) GetQueueName() string {
+	if x != nil {
+		return x.QueueName
+	}
+	return ""
+}
+
+func (x *PostMessagesBulkRequest) GetMessages() []*v11.Message {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+func (x *PostMessagesBulkRequest) GetTransactionMode() PostMessagesBulkRequest_TransactionMode {
+	if x != nil {
+		return x.TransactionMode
+	}
+	return PostMessagesBulkRequest_ALL_OR_NOTHING
+}
+
+type PostMessagesBulkResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Overall success indicator (true if successful_count > 0)
+	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	// Number of messages successfully posted
+	SuccessfulCount int32 `protobuf:"varint,2,opt,name=successful_count,json=successfulCount,proto3" json:"successful_count,omitempty"`
+	// Number of messages that failed
+	FailedCount int32 `protobuf:"varint,3,opt,name=failed_count,json=failedCount,proto3" json:"failed_count,omitempty"`
+	// Detailed results for each message (same order as request.messages)
+	Results       []*PostMessagesBulkResponse_MessagePostResult `protobuf:"bytes,4,rep,name=results,proto3" json:"results,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostMessagesBulkResponse) Reset() {
+	*x = PostMessagesBulkResponse{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostMessagesBulkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostMessagesBulkResponse) ProtoMessage() {}
+
+func (x *PostMessagesBulkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostMessagesBulkResponse.ProtoReflect.Descriptor instead.
+func (*PostMessagesBulkResponse) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *PostMessagesBulkResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *PostMessagesBulkResponse) GetSuccessfulCount() int32 {
+	if x != nil {
+		return x.SuccessfulCount
+	}
+	return 0
+}
+
+func (x *PostMessagesBulkResponse) GetFailedCount() int32 {
+	if x != nil {
+		return x.FailedCount
+	}
+	return 0
+}
+
+func (x *PostMessagesBulkResponse) GetResults() []*PostMessagesBulkResponse_MessagePostResult {
+	if x != nil {
+		return x.Results
+	}
+	return nil
+}
+
 // Get the next message on the queue
 type GetNextMessageRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -373,7 +617,7 @@ type GetNextMessageRequest struct {
 
 func (x *GetNextMessageRequest) Reset() {
 	*x = GetNextMessageRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[6]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -385,7 +629,7 @@ func (x *GetNextMessageRequest) String() string {
 func (*GetNextMessageRequest) ProtoMessage() {}
 
 func (x *GetNextMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[6]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -398,7 +642,7 @@ func (x *GetNextMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNextMessageRequest.ProtoReflect.Descriptor instead.
 func (*GetNextMessageRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{6}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetNextMessageRequest) GetQueueName() string {
@@ -449,7 +693,7 @@ type GetNextMessageResponse struct {
 
 func (x *GetNextMessageResponse) Reset() {
 	*x = GetNextMessageResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[7]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -461,7 +705,7 @@ func (x *GetNextMessageResponse) String() string {
 func (*GetNextMessageResponse) ProtoMessage() {}
 
 func (x *GetNextMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[7]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -474,7 +718,7 @@ func (x *GetNextMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNextMessageResponse.ProtoReflect.Descriptor instead.
 func (*GetNextMessageResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{7}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetNextMessageResponse) GetMessage() *v11.Message {
@@ -514,7 +758,7 @@ type AcknowledgeMessageRequest struct {
 
 func (x *AcknowledgeMessageRequest) Reset() {
 	*x = AcknowledgeMessageRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[8]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -526,7 +770,7 @@ func (x *AcknowledgeMessageRequest) String() string {
 func (*AcknowledgeMessageRequest) ProtoMessage() {}
 
 func (x *AcknowledgeMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[8]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -539,7 +783,7 @@ func (x *AcknowledgeMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcknowledgeMessageRequest.ProtoReflect.Descriptor instead.
 func (*AcknowledgeMessageRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{8}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *AcknowledgeMessageRequest) GetQueueName() string {
@@ -586,7 +830,7 @@ type AcknowledgeMessageResponse struct {
 
 func (x *AcknowledgeMessageResponse) Reset() {
 	*x = AcknowledgeMessageResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[9]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -598,7 +842,7 @@ func (x *AcknowledgeMessageResponse) String() string {
 func (*AcknowledgeMessageResponse) ProtoMessage() {}
 
 func (x *AcknowledgeMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[9]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -611,7 +855,7 @@ func (x *AcknowledgeMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcknowledgeMessageResponse.ProtoReflect.Descriptor instead.
 func (*AcknowledgeMessageResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{9}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *AcknowledgeMessageResponse) GetSuccess() bool {
@@ -634,7 +878,7 @@ type CancelMessageRequest struct {
 
 func (x *CancelMessageRequest) Reset() {
 	*x = CancelMessageRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[10]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -646,7 +890,7 @@ func (x *CancelMessageRequest) String() string {
 func (*CancelMessageRequest) ProtoMessage() {}
 
 func (x *CancelMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[10]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -659,7 +903,7 @@ func (x *CancelMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelMessageRequest.ProtoReflect.Descriptor instead.
 func (*CancelMessageRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{10}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CancelMessageRequest) GetQueueName() string {
@@ -692,7 +936,7 @@ type CancelMessageResponse struct {
 
 func (x *CancelMessageResponse) Reset() {
 	*x = CancelMessageResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[11]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -704,7 +948,7 @@ func (x *CancelMessageResponse) String() string {
 func (*CancelMessageResponse) ProtoMessage() {}
 
 func (x *CancelMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[11]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -717,7 +961,7 @@ func (x *CancelMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelMessageResponse.ProtoReflect.Descriptor instead.
 func (*CancelMessageResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{11}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CancelMessageResponse) GetSuccess() bool {
@@ -739,7 +983,7 @@ type RenewMessageLeaseRequest struct {
 
 func (x *RenewMessageLeaseRequest) Reset() {
 	*x = RenewMessageLeaseRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[12]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -751,7 +995,7 @@ func (x *RenewMessageLeaseRequest) String() string {
 func (*RenewMessageLeaseRequest) ProtoMessage() {}
 
 func (x *RenewMessageLeaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[12]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -764,7 +1008,7 @@ func (x *RenewMessageLeaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewMessageLeaseRequest.ProtoReflect.Descriptor instead.
 func (*RenewMessageLeaseRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{12}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *RenewMessageLeaseRequest) GetQueueName() string {
@@ -798,7 +1042,7 @@ type RenewMessageLeaseResponse struct {
 
 func (x *RenewMessageLeaseResponse) Reset() {
 	*x = RenewMessageLeaseResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[13]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -810,7 +1054,7 @@ func (x *RenewMessageLeaseResponse) String() string {
 func (*RenewMessageLeaseResponse) ProtoMessage() {}
 
 func (x *RenewMessageLeaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[13]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -823,7 +1067,7 @@ func (x *RenewMessageLeaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewMessageLeaseResponse.ProtoReflect.Descriptor instead.
 func (*RenewMessageLeaseResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{13}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RenewMessageLeaseResponse) GetRemainingTime() *durationpb.Duration {
@@ -852,7 +1096,7 @@ type PeekQueueMessagesRequest struct {
 
 func (x *PeekQueueMessagesRequest) Reset() {
 	*x = PeekQueueMessagesRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[14]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -864,7 +1108,7 @@ func (x *PeekQueueMessagesRequest) String() string {
 func (*PeekQueueMessagesRequest) ProtoMessage() {}
 
 func (x *PeekQueueMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[14]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -877,7 +1121,7 @@ func (x *PeekQueueMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeekQueueMessagesRequest.ProtoReflect.Descriptor instead.
 func (*PeekQueueMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{14}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *PeekQueueMessagesRequest) GetQueueName() string {
@@ -910,7 +1154,7 @@ type PeekQueueMessagesResponse struct {
 
 func (x *PeekQueueMessagesResponse) Reset() {
 	*x = PeekQueueMessagesResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[15]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -922,7 +1166,7 @@ func (x *PeekQueueMessagesResponse) String() string {
 func (*PeekQueueMessagesResponse) ProtoMessage() {}
 
 func (x *PeekQueueMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[15]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -935,7 +1179,7 @@ func (x *PeekQueueMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeekQueueMessagesResponse.ProtoReflect.Descriptor instead.
 func (*PeekQueueMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{15}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *PeekQueueMessagesResponse) GetMessages() []*v11.Message {
@@ -955,7 +1199,7 @@ type GetQueueStateRequest struct {
 
 func (x *GetQueueStateRequest) Reset() {
 	*x = GetQueueStateRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[16]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -967,7 +1211,7 @@ func (x *GetQueueStateRequest) String() string {
 func (*GetQueueStateRequest) ProtoMessage() {}
 
 func (x *GetQueueStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[16]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -980,7 +1224,7 @@ func (x *GetQueueStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetQueueStateRequest.ProtoReflect.Descriptor instead.
 func (*GetQueueStateRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{16}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetQueueStateRequest) GetQueueName() string {
@@ -1000,7 +1244,7 @@ type GetQueueStateResponse struct {
 
 func (x *GetQueueStateResponse) Reset() {
 	*x = GetQueueStateResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[17]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1012,7 +1256,7 @@ func (x *GetQueueStateResponse) String() string {
 func (*GetQueueStateResponse) ProtoMessage() {}
 
 func (x *GetQueueStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[17]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1025,7 +1269,7 @@ func (x *GetQueueStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetQueueStateResponse.ProtoReflect.Descriptor instead.
 func (*GetQueueStateResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{17}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetQueueStateResponse) GetStateCounts() map[string]int32 {
@@ -1057,7 +1301,7 @@ type SendMessageHeartBeatRequest struct {
 
 func (x *SendMessageHeartBeatRequest) Reset() {
 	*x = SendMessageHeartBeatRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[18]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1069,7 +1313,7 @@ func (x *SendMessageHeartBeatRequest) String() string {
 func (*SendMessageHeartBeatRequest) ProtoMessage() {}
 
 func (x *SendMessageHeartBeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[18]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1082,7 +1326,7 @@ func (x *SendMessageHeartBeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageHeartBeatRequest.ProtoReflect.Descriptor instead.
 func (*SendMessageHeartBeatRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{18}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SendMessageHeartBeatRequest) GetQueueName() string {
@@ -1123,7 +1367,7 @@ type SendMessageHeartBeatResponse struct {
 
 func (x *SendMessageHeartBeatResponse) Reset() {
 	*x = SendMessageHeartBeatResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[19]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1135,7 +1379,7 @@ func (x *SendMessageHeartBeatResponse) String() string {
 func (*SendMessageHeartBeatResponse) ProtoMessage() {}
 
 func (x *SendMessageHeartBeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[19]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1148,7 +1392,7 @@ func (x *SendMessageHeartBeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageHeartBeatResponse.ProtoReflect.Descriptor instead.
 func (*SendMessageHeartBeatResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{19}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SendMessageHeartBeatResponse) GetRemainingTime() *durationpb.Duration {
@@ -1175,7 +1419,7 @@ type ListQueuesRequest struct {
 
 func (x *ListQueuesRequest) Reset() {
 	*x = ListQueuesRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[20]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1187,7 +1431,7 @@ func (x *ListQueuesRequest) String() string {
 func (*ListQueuesRequest) ProtoMessage() {}
 
 func (x *ListQueuesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[20]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1200,7 +1444,7 @@ func (x *ListQueuesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListQueuesRequest.ProtoReflect.Descriptor instead.
 func (*ListQueuesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{20}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ListQueuesRequest) GetPrefix() string {
@@ -1219,7 +1463,7 @@ type ListQueuesResponse struct {
 
 func (x *ListQueuesResponse) Reset() {
 	*x = ListQueuesResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[21]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1231,7 +1475,7 @@ func (x *ListQueuesResponse) String() string {
 func (*ListQueuesResponse) ProtoMessage() {}
 
 func (x *ListQueuesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[21]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1244,7 +1488,7 @@ func (x *ListQueuesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListQueuesResponse.ProtoReflect.Descriptor instead.
 func (*ListQueuesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{21}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListQueuesResponse) GetQueues() []*v1.Queue {
@@ -1264,7 +1508,7 @@ type CreateScheduleRequest struct {
 
 func (x *CreateScheduleRequest) Reset() {
 	*x = CreateScheduleRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[22]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1276,7 +1520,7 @@ func (x *CreateScheduleRequest) String() string {
 func (*CreateScheduleRequest) ProtoMessage() {}
 
 func (x *CreateScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[22]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1289,7 +1533,7 @@ func (x *CreateScheduleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateScheduleRequest.ProtoReflect.Descriptor instead.
 func (*CreateScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{22}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CreateScheduleRequest) GetSchedule() *v12.Schedule {
@@ -1308,7 +1552,7 @@ type CreateScheduleResponse struct {
 
 func (x *CreateScheduleResponse) Reset() {
 	*x = CreateScheduleResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[23]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1320,7 +1564,7 @@ func (x *CreateScheduleResponse) String() string {
 func (*CreateScheduleResponse) ProtoMessage() {}
 
 func (x *CreateScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[23]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1333,7 +1577,7 @@ func (x *CreateScheduleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateScheduleResponse.ProtoReflect.Descriptor instead.
 func (*CreateScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{23}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CreateScheduleResponse) GetSuccess() bool {
@@ -1353,7 +1597,7 @@ type DeleteScheduleRequest struct {
 
 func (x *DeleteScheduleRequest) Reset() {
 	*x = DeleteScheduleRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[24]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1365,7 +1609,7 @@ func (x *DeleteScheduleRequest) String() string {
 func (*DeleteScheduleRequest) ProtoMessage() {}
 
 func (x *DeleteScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[24]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1378,7 +1622,7 @@ func (x *DeleteScheduleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteScheduleRequest.ProtoReflect.Descriptor instead.
 func (*DeleteScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{24}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *DeleteScheduleRequest) GetScheduleId() string {
@@ -1397,7 +1641,7 @@ type DeleteScheduleResponse struct {
 
 func (x *DeleteScheduleResponse) Reset() {
 	*x = DeleteScheduleResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[25]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1409,7 +1653,7 @@ func (x *DeleteScheduleResponse) String() string {
 func (*DeleteScheduleResponse) ProtoMessage() {}
 
 func (x *DeleteScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[25]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1422,7 +1666,7 @@ func (x *DeleteScheduleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteScheduleResponse.ProtoReflect.Descriptor instead.
 func (*DeleteScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{25}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *DeleteScheduleResponse) GetSuccess() bool {
@@ -1442,7 +1686,7 @@ type PauseScheduleRequest struct {
 
 func (x *PauseScheduleRequest) Reset() {
 	*x = PauseScheduleRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[26]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1454,7 +1698,7 @@ func (x *PauseScheduleRequest) String() string {
 func (*PauseScheduleRequest) ProtoMessage() {}
 
 func (x *PauseScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[26]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1467,7 +1711,7 @@ func (x *PauseScheduleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseScheduleRequest.ProtoReflect.Descriptor instead.
 func (*PauseScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{26}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *PauseScheduleRequest) GetScheduleId() string {
@@ -1486,7 +1730,7 @@ type PauseScheduleResponse struct {
 
 func (x *PauseScheduleResponse) Reset() {
 	*x = PauseScheduleResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[27]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1498,7 +1742,7 @@ func (x *PauseScheduleResponse) String() string {
 func (*PauseScheduleResponse) ProtoMessage() {}
 
 func (x *PauseScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[27]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1511,7 +1755,7 @@ func (x *PauseScheduleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseScheduleResponse.ProtoReflect.Descriptor instead.
 func (*PauseScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{27}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *PauseScheduleResponse) GetSuccess() bool {
@@ -1531,7 +1775,7 @@ type ResumeScheduleRequest struct {
 
 func (x *ResumeScheduleRequest) Reset() {
 	*x = ResumeScheduleRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[28]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1543,7 +1787,7 @@ func (x *ResumeScheduleRequest) String() string {
 func (*ResumeScheduleRequest) ProtoMessage() {}
 
 func (x *ResumeScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[28]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1556,7 +1800,7 @@ func (x *ResumeScheduleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeScheduleRequest.ProtoReflect.Descriptor instead.
 func (*ResumeScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{28}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ResumeScheduleRequest) GetScheduleId() string {
@@ -1575,7 +1819,7 @@ type ResumeScheduleResponse struct {
 
 func (x *ResumeScheduleResponse) Reset() {
 	*x = ResumeScheduleResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[29]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1587,7 +1831,7 @@ func (x *ResumeScheduleResponse) String() string {
 func (*ResumeScheduleResponse) ProtoMessage() {}
 
 func (x *ResumeScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[29]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1600,7 +1844,7 @@ func (x *ResumeScheduleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeScheduleResponse.ProtoReflect.Descriptor instead.
 func (*ResumeScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{29}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ResumeScheduleResponse) GetSuccess() bool {
@@ -1620,7 +1864,7 @@ type GetScheduleRequest struct {
 
 func (x *GetScheduleRequest) Reset() {
 	*x = GetScheduleRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[30]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1632,7 +1876,7 @@ func (x *GetScheduleRequest) String() string {
 func (*GetScheduleRequest) ProtoMessage() {}
 
 func (x *GetScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[30]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1645,7 +1889,7 @@ func (x *GetScheduleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetScheduleRequest.ProtoReflect.Descriptor instead.
 func (*GetScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{30}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetScheduleRequest) GetScheduleId() string {
@@ -1664,7 +1908,7 @@ type GetScheduleResponse struct {
 
 func (x *GetScheduleResponse) Reset() {
 	*x = GetScheduleResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[31]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1676,7 +1920,7 @@ func (x *GetScheduleResponse) String() string {
 func (*GetScheduleResponse) ProtoMessage() {}
 
 func (x *GetScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[31]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1689,7 +1933,7 @@ func (x *GetScheduleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetScheduleResponse.ProtoReflect.Descriptor instead.
 func (*GetScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{31}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GetScheduleResponse) GetSchedule() *v12.Schedule {
@@ -1709,7 +1953,7 @@ type ListSchedulesRequest struct {
 
 func (x *ListSchedulesRequest) Reset() {
 	*x = ListSchedulesRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[32]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1721,7 +1965,7 @@ func (x *ListSchedulesRequest) String() string {
 func (*ListSchedulesRequest) ProtoMessage() {}
 
 func (x *ListSchedulesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[32]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1734,7 +1978,7 @@ func (x *ListSchedulesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSchedulesRequest.ProtoReflect.Descriptor instead.
 func (*ListSchedulesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{32}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ListSchedulesRequest) GetPrefix() string {
@@ -1753,7 +1997,7 @@ type ListSchedulesResponse struct {
 
 func (x *ListSchedulesResponse) Reset() {
 	*x = ListSchedulesResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[33]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1765,7 +2009,7 @@ func (x *ListSchedulesResponse) String() string {
 func (*ListSchedulesResponse) ProtoMessage() {}
 
 func (x *ListSchedulesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[33]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1778,7 +2022,7 @@ func (x *ListSchedulesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSchedulesResponse.ProtoReflect.Descriptor instead.
 func (*ListSchedulesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{33}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ListSchedulesResponse) GetSchedules() []*v12.Schedule {
@@ -1799,7 +2043,7 @@ type GetScheduleHistoryRequest struct {
 
 func (x *GetScheduleHistoryRequest) Reset() {
 	*x = GetScheduleHistoryRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[34]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1811,7 +2055,7 @@ func (x *GetScheduleHistoryRequest) String() string {
 func (*GetScheduleHistoryRequest) ProtoMessage() {}
 
 func (x *GetScheduleHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[34]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1824,7 +2068,7 @@ func (x *GetScheduleHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetScheduleHistoryRequest.ProtoReflect.Descriptor instead.
 func (*GetScheduleHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{34}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *GetScheduleHistoryRequest) GetScheduleId() string {
@@ -1850,7 +2094,7 @@ type GetScheduleHistoryResponse struct {
 
 func (x *GetScheduleHistoryResponse) Reset() {
 	*x = GetScheduleHistoryResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[35]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1862,7 +2106,7 @@ func (x *GetScheduleHistoryResponse) String() string {
 func (*GetScheduleHistoryResponse) ProtoMessage() {}
 
 func (x *GetScheduleHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[35]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1875,7 +2119,7 @@ func (x *GetScheduleHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetScheduleHistoryResponse.ProtoReflect.Descriptor instead.
 func (*GetScheduleHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{35}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *GetScheduleHistoryResponse) GetScheduleHistory() *v12.ScheduleHistory {
@@ -1896,7 +2140,7 @@ type GetDLQMessagesRequest struct {
 
 func (x *GetDLQMessagesRequest) Reset() {
 	*x = GetDLQMessagesRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[36]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1908,7 +2152,7 @@ func (x *GetDLQMessagesRequest) String() string {
 func (*GetDLQMessagesRequest) ProtoMessage() {}
 
 func (x *GetDLQMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[36]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1921,7 +2165,7 @@ func (x *GetDLQMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDLQMessagesRequest.ProtoReflect.Descriptor instead.
 func (*GetDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{36}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *GetDLQMessagesRequest) GetDlqName() string {
@@ -1947,7 +2191,7 @@ type GetDLQMessagesResponse struct {
 
 func (x *GetDLQMessagesResponse) Reset() {
 	*x = GetDLQMessagesResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[37]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1959,7 +2203,7 @@ func (x *GetDLQMessagesResponse) String() string {
 func (*GetDLQMessagesResponse) ProtoMessage() {}
 
 func (x *GetDLQMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[37]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1972,7 +2216,7 @@ func (x *GetDLQMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDLQMessagesResponse.ProtoReflect.Descriptor instead.
 func (*GetDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{37}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *GetDLQMessagesResponse) GetMessages() []*v11.Message {
@@ -1994,7 +2238,7 @@ type RequeueFromDLQRequest struct {
 
 func (x *RequeueFromDLQRequest) Reset() {
 	*x = RequeueFromDLQRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[38]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2006,7 +2250,7 @@ func (x *RequeueFromDLQRequest) String() string {
 func (*RequeueFromDLQRequest) ProtoMessage() {}
 
 func (x *RequeueFromDLQRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[38]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2019,7 +2263,7 @@ func (x *RequeueFromDLQRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequeueFromDLQRequest.ProtoReflect.Descriptor instead.
 func (*RequeueFromDLQRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{38}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *RequeueFromDLQRequest) GetDlqName() string {
@@ -2052,7 +2296,7 @@ type RequeueFromDLQResponse struct {
 
 func (x *RequeueFromDLQResponse) Reset() {
 	*x = RequeueFromDLQResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[39]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2064,7 +2308,7 @@ func (x *RequeueFromDLQResponse) String() string {
 func (*RequeueFromDLQResponse) ProtoMessage() {}
 
 func (x *RequeueFromDLQResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[39]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2077,7 +2321,7 @@ func (x *RequeueFromDLQResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequeueFromDLQResponse.ProtoReflect.Descriptor instead.
 func (*RequeueFromDLQResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{39}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *RequeueFromDLQResponse) GetSuccess() bool {
@@ -2098,7 +2342,7 @@ type DeleteFromDLQRequest struct {
 
 func (x *DeleteFromDLQRequest) Reset() {
 	*x = DeleteFromDLQRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[40]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2110,7 +2354,7 @@ func (x *DeleteFromDLQRequest) String() string {
 func (*DeleteFromDLQRequest) ProtoMessage() {}
 
 func (x *DeleteFromDLQRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[40]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2123,7 +2367,7 @@ func (x *DeleteFromDLQRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFromDLQRequest.ProtoReflect.Descriptor instead.
 func (*DeleteFromDLQRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{40}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *DeleteFromDLQRequest) GetDlqName() string {
@@ -2149,7 +2393,7 @@ type DeleteFromDLQResponse struct {
 
 func (x *DeleteFromDLQResponse) Reset() {
 	*x = DeleteFromDLQResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[41]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2161,7 +2405,7 @@ func (x *DeleteFromDLQResponse) String() string {
 func (*DeleteFromDLQResponse) ProtoMessage() {}
 
 func (x *DeleteFromDLQResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[41]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2174,7 +2418,7 @@ func (x *DeleteFromDLQResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFromDLQResponse.ProtoReflect.Descriptor instead.
 func (*DeleteFromDLQResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{41}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *DeleteFromDLQResponse) GetSuccess() bool {
@@ -2194,7 +2438,7 @@ type PurgeDLQRequest struct {
 
 func (x *PurgeDLQRequest) Reset() {
 	*x = PurgeDLQRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[42]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2206,7 +2450,7 @@ func (x *PurgeDLQRequest) String() string {
 func (*PurgeDLQRequest) ProtoMessage() {}
 
 func (x *PurgeDLQRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[42]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2219,7 +2463,7 @@ func (x *PurgeDLQRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PurgeDLQRequest.ProtoReflect.Descriptor instead.
 func (*PurgeDLQRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{42}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *PurgeDLQRequest) GetDlqName() string {
@@ -2238,7 +2482,7 @@ type PurgeDLQResponse struct {
 
 func (x *PurgeDLQResponse) Reset() {
 	*x = PurgeDLQResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[43]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2250,7 +2494,7 @@ func (x *PurgeDLQResponse) String() string {
 func (*PurgeDLQResponse) ProtoMessage() {}
 
 func (x *PurgeDLQResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[43]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2263,7 +2507,7 @@ func (x *PurgeDLQResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PurgeDLQResponse.ProtoReflect.Descriptor instead.
 func (*PurgeDLQResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{43}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *PurgeDLQResponse) GetSuccess() bool {
@@ -2283,7 +2527,7 @@ type GetDLQStatsRequest struct {
 
 func (x *GetDLQStatsRequest) Reset() {
 	*x = GetDLQStatsRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[44]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2295,7 +2539,7 @@ func (x *GetDLQStatsRequest) String() string {
 func (*GetDLQStatsRequest) ProtoMessage() {}
 
 func (x *GetDLQStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[44]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2308,7 +2552,7 @@ func (x *GetDLQStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDLQStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetDLQStatsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{44}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *GetDLQStatsRequest) GetDlqName() string {
@@ -2330,7 +2574,7 @@ type GetDLQStatsResponse struct {
 
 func (x *GetDLQStatsResponse) Reset() {
 	*x = GetDLQStatsResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[45]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2342,7 +2586,7 @@ func (x *GetDLQStatsResponse) String() string {
 func (*GetDLQStatsResponse) ProtoMessage() {}
 
 func (x *GetDLQStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[45]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2355,7 +2599,7 @@ func (x *GetDLQStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDLQStatsResponse.ProtoReflect.Descriptor instead.
 func (*GetDLQStatsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{45}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *GetDLQStatsResponse) GetName() string {
@@ -2396,7 +2640,7 @@ type ValidateCalendarScheduleRequest struct {
 
 func (x *ValidateCalendarScheduleRequest) Reset() {
 	*x = ValidateCalendarScheduleRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[46]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2408,7 +2652,7 @@ func (x *ValidateCalendarScheduleRequest) String() string {
 func (*ValidateCalendarScheduleRequest) ProtoMessage() {}
 
 func (x *ValidateCalendarScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[46]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2421,7 +2665,7 @@ func (x *ValidateCalendarScheduleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateCalendarScheduleRequest.ProtoReflect.Descriptor instead.
 func (*ValidateCalendarScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{46}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ValidateCalendarScheduleRequest) GetCalendarSchedule() *v12.CalendarSchedule {
@@ -2442,7 +2686,7 @@ type ValidateCalendarScheduleResponse struct {
 
 func (x *ValidateCalendarScheduleResponse) Reset() {
 	*x = ValidateCalendarScheduleResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[47]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2454,7 +2698,7 @@ func (x *ValidateCalendarScheduleResponse) String() string {
 func (*ValidateCalendarScheduleResponse) ProtoMessage() {}
 
 func (x *ValidateCalendarScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[47]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2467,7 +2711,7 @@ func (x *ValidateCalendarScheduleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateCalendarScheduleResponse.ProtoReflect.Descriptor instead.
 func (*ValidateCalendarScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{47}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ValidateCalendarScheduleResponse) GetValid() bool {
@@ -2502,7 +2746,7 @@ type PreviewCalendarScheduleRequest struct {
 
 func (x *PreviewCalendarScheduleRequest) Reset() {
 	*x = PreviewCalendarScheduleRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[48]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2514,7 +2758,7 @@ func (x *PreviewCalendarScheduleRequest) String() string {
 func (*PreviewCalendarScheduleRequest) ProtoMessage() {}
 
 func (x *PreviewCalendarScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[48]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2527,7 +2771,7 @@ func (x *PreviewCalendarScheduleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewCalendarScheduleRequest.ProtoReflect.Descriptor instead.
 func (*PreviewCalendarScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{48}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *PreviewCalendarScheduleRequest) GetCalendarSchedule() *v12.CalendarSchedule {
@@ -2556,7 +2800,7 @@ type PreviewCalendarScheduleResponse struct {
 
 func (x *PreviewCalendarScheduleResponse) Reset() {
 	*x = PreviewCalendarScheduleResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[49]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2568,7 +2812,7 @@ func (x *PreviewCalendarScheduleResponse) String() string {
 func (*PreviewCalendarScheduleResponse) ProtoMessage() {}
 
 func (x *PreviewCalendarScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[49]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2581,7 +2825,7 @@ func (x *PreviewCalendarScheduleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewCalendarScheduleResponse.ProtoReflect.Descriptor instead.
 func (*PreviewCalendarScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{49}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *PreviewCalendarScheduleResponse) GetExecutionTimes() []*timestamppb.Timestamp {
@@ -2626,7 +2870,7 @@ type ValidationIssue struct {
 
 func (x *ValidationIssue) Reset() {
 	*x = ValidationIssue{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[50]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2638,7 +2882,7 @@ func (x *ValidationIssue) String() string {
 func (*ValidationIssue) ProtoMessage() {}
 
 func (x *ValidationIssue) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[50]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2651,7 +2895,7 @@ func (x *ValidationIssue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidationIssue.ProtoReflect.Descriptor instead.
 func (*ValidationIssue) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{50}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ValidationIssue) GetSeverity() string {
@@ -2704,7 +2948,7 @@ type RegisterSchemaRequest struct {
 
 func (x *RegisterSchemaRequest) Reset() {
 	*x = RegisterSchemaRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[51]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2716,7 +2960,7 @@ func (x *RegisterSchemaRequest) String() string {
 func (*RegisterSchemaRequest) ProtoMessage() {}
 
 func (x *RegisterSchemaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[51]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2729,7 +2973,7 @@ func (x *RegisterSchemaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterSchemaRequest.ProtoReflect.Descriptor instead.
 func (*RegisterSchemaRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{51}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *RegisterSchemaRequest) GetSchemaId() string {
@@ -2785,7 +3029,7 @@ type RegisterSchemaResponse struct {
 
 func (x *RegisterSchemaResponse) Reset() {
 	*x = RegisterSchemaResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[52]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2797,7 +3041,7 @@ func (x *RegisterSchemaResponse) String() string {
 func (*RegisterSchemaResponse) ProtoMessage() {}
 
 func (x *RegisterSchemaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[52]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2810,7 +3054,7 @@ func (x *RegisterSchemaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterSchemaResponse.ProtoReflect.Descriptor instead.
 func (*RegisterSchemaResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{52}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *RegisterSchemaResponse) GetSchemaId() string {
@@ -2845,7 +3089,7 @@ type GetSchemaRequest struct {
 
 func (x *GetSchemaRequest) Reset() {
 	*x = GetSchemaRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[53]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2857,7 +3101,7 @@ func (x *GetSchemaRequest) String() string {
 func (*GetSchemaRequest) ProtoMessage() {}
 
 func (x *GetSchemaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[53]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2870,7 +3114,7 @@ func (x *GetSchemaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSchemaRequest.ProtoReflect.Descriptor instead.
 func (*GetSchemaRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{53}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *GetSchemaRequest) GetSchemaId() string {
@@ -2896,7 +3140,7 @@ type GetSchemaResponse struct {
 
 func (x *GetSchemaResponse) Reset() {
 	*x = GetSchemaResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[54]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2908,7 +3152,7 @@ func (x *GetSchemaResponse) String() string {
 func (*GetSchemaResponse) ProtoMessage() {}
 
 func (x *GetSchemaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[54]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2921,7 +3165,7 @@ func (x *GetSchemaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSchemaResponse.ProtoReflect.Descriptor instead.
 func (*GetSchemaResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{54}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *GetSchemaResponse) GetSchema() *v13.Schema {
@@ -2943,7 +3187,7 @@ type ListSchemasRequest struct {
 
 func (x *ListSchemasRequest) Reset() {
 	*x = ListSchemasRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[55]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2955,7 +3199,7 @@ func (x *ListSchemasRequest) String() string {
 func (*ListSchemasRequest) ProtoMessage() {}
 
 func (x *ListSchemasRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[55]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2968,7 +3212,7 @@ func (x *ListSchemasRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSchemasRequest.ProtoReflect.Descriptor instead.
 func (*ListSchemasRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{55}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *ListSchemasRequest) GetPrefix() string {
@@ -3002,7 +3246,7 @@ type ListSchemasResponse struct {
 
 func (x *ListSchemasResponse) Reset() {
 	*x = ListSchemasResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[56]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3014,7 +3258,7 @@ func (x *ListSchemasResponse) String() string {
 func (*ListSchemasResponse) ProtoMessage() {}
 
 func (x *ListSchemasResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[56]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3027,7 +3271,7 @@ func (x *ListSchemasResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSchemasResponse.ProtoReflect.Descriptor instead.
 func (*ListSchemasResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{56}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ListSchemasResponse) GetSchemas() []*SchemaInfo {
@@ -3062,7 +3306,7 @@ type SchemaInfo struct {
 
 func (x *SchemaInfo) Reset() {
 	*x = SchemaInfo{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[57]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3074,7 +3318,7 @@ func (x *SchemaInfo) String() string {
 func (*SchemaInfo) ProtoMessage() {}
 
 func (x *SchemaInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[57]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3087,7 +3331,7 @@ func (x *SchemaInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaInfo.ProtoReflect.Descriptor instead.
 func (*SchemaInfo) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{57}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *SchemaInfo) GetSchemaId() string {
@@ -3157,7 +3401,7 @@ type DeleteSchemaRequest struct {
 
 func (x *DeleteSchemaRequest) Reset() {
 	*x = DeleteSchemaRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[58]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3169,7 +3413,7 @@ func (x *DeleteSchemaRequest) String() string {
 func (*DeleteSchemaRequest) ProtoMessage() {}
 
 func (x *DeleteSchemaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[58]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3182,7 +3426,7 @@ func (x *DeleteSchemaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSchemaRequest.ProtoReflect.Descriptor instead.
 func (*DeleteSchemaRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{58}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *DeleteSchemaRequest) GetSchemaId() string {
@@ -3209,7 +3453,7 @@ type DeleteSchemaResponse struct {
 
 func (x *DeleteSchemaResponse) Reset() {
 	*x = DeleteSchemaResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[59]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3221,7 +3465,7 @@ func (x *DeleteSchemaResponse) String() string {
 func (*DeleteSchemaResponse) ProtoMessage() {}
 
 func (x *DeleteSchemaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[59]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3234,7 +3478,7 @@ func (x *DeleteSchemaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSchemaResponse.ProtoReflect.Descriptor instead.
 func (*DeleteSchemaResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{59}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *DeleteSchemaResponse) GetSuccess() bool {
@@ -3263,7 +3507,7 @@ type ValidatePayloadRequest struct {
 
 func (x *ValidatePayloadRequest) Reset() {
 	*x = ValidatePayloadRequest{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[60]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3275,7 +3519,7 @@ func (x *ValidatePayloadRequest) String() string {
 func (*ValidatePayloadRequest) ProtoMessage() {}
 
 func (x *ValidatePayloadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[60]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3288,7 +3532,7 @@ func (x *ValidatePayloadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidatePayloadRequest.ProtoReflect.Descriptor instead.
 func (*ValidatePayloadRequest) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{60}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *ValidatePayloadRequest) GetSchemaId() string {
@@ -3324,7 +3568,7 @@ type ValidatePayloadResponse struct {
 
 func (x *ValidatePayloadResponse) Reset() {
 	*x = ValidatePayloadResponse{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[61]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3336,7 +3580,7 @@ func (x *ValidatePayloadResponse) String() string {
 func (*ValidatePayloadResponse) ProtoMessage() {}
 
 func (x *ValidatePayloadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[61]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3349,7 +3593,7 @@ func (x *ValidatePayloadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidatePayloadResponse.ProtoReflect.Descriptor instead.
 func (*ValidatePayloadResponse) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{61}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *ValidatePayloadResponse) GetValid() bool {
@@ -3380,6 +3624,77 @@ func (x *ValidatePayloadResponse) GetSchemaVersion() int32 {
 	return 0
 }
 
+type PostMessagesBulkResponse_MessagePostResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Message ID from the request
+	MessageId string `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	// Success status for this specific message
+	Success bool `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	// Error message if failed (validation, duplicate, etc.)
+	Error         string                                               `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	ErrorCode     PostMessagesBulkResponse_MessagePostResult_ErrorCode `protobuf:"varint,4,opt,name=error_code,json=errorCode,proto3,enum=chronoqueue.api.queueservice.v1.PostMessagesBulkResponse_MessagePostResult_ErrorCode" json:"error_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostMessagesBulkResponse_MessagePostResult) Reset() {
+	*x = PostMessagesBulkResponse_MessagePostResult{}
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[64]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostMessagesBulkResponse_MessagePostResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostMessagesBulkResponse_MessagePostResult) ProtoMessage() {}
+
+func (x *PostMessagesBulkResponse_MessagePostResult) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[64]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostMessagesBulkResponse_MessagePostResult.ProtoReflect.Descriptor instead.
+func (*PostMessagesBulkResponse_MessagePostResult) Descriptor() ([]byte, []int) {
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{7, 0}
+}
+
+func (x *PostMessagesBulkResponse_MessagePostResult) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+func (x *PostMessagesBulkResponse_MessagePostResult) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *PostMessagesBulkResponse_MessagePostResult) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *PostMessagesBulkResponse_MessagePostResult) GetErrorCode() PostMessagesBulkResponse_MessagePostResult_ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return PostMessagesBulkResponse_MessagePostResult_SUCCESS
+}
+
 type PeekQueueMessagesRequest_PriorityRange struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Min           int64                  `protobuf:"varint,1,opt,name=min,proto3" json:"min,omitempty"`
@@ -3390,7 +3705,7 @@ type PeekQueueMessagesRequest_PriorityRange struct {
 
 func (x *PeekQueueMessagesRequest_PriorityRange) Reset() {
 	*x = PeekQueueMessagesRequest_PriorityRange{}
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[62]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3402,7 +3717,7 @@ func (x *PeekQueueMessagesRequest_PriorityRange) String() string {
 func (*PeekQueueMessagesRequest_PriorityRange) ProtoMessage() {}
 
 func (x *PeekQueueMessagesRequest_PriorityRange) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[62]
+	mi := &file_proto_queueservice_v1_request_response_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3415,7 +3730,7 @@ func (x *PeekQueueMessagesRequest_PriorityRange) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use PeekQueueMessagesRequest_PriorityRange.ProtoReflect.Descriptor instead.
 func (*PeekQueueMessagesRequest_PriorityRange) Descriptor() ([]byte, []int) {
-	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{14, 0}
+	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{16, 0}
 }
 
 func (x *PeekQueueMessagesRequest_PriorityRange) GetMin() int64 {
@@ -3452,7 +3767,34 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12=\n" +
 	"\amessage\x18\x02 \x01(\v2#.chronoqueue.api.message.v1.MessageR\amessage\"/\n" +
 	"\x13PostMessageResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x84\x02\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xa6\x02\n" +
+	"\x17PostMessagesBulkRequest\x12\x1d\n" +
+	"\n" +
+	"queue_name\x18\x01 \x01(\tR\tqueueName\x12?\n" +
+	"\bmessages\x18\x02 \x03(\v2#.chronoqueue.api.message.v1.MessageR\bmessages\x12s\n" +
+	"\x10transaction_mode\x18\x03 \x01(\x0e2H.chronoqueue.api.queueservice.v1.PostMessagesBulkRequest.TransactionModeR\x0ftransactionMode\"6\n" +
+	"\x0fTransactionMode\x12\x12\n" +
+	"\x0eALL_OR_NOTHING\x10\x00\x12\x0f\n" +
+	"\vBEST_EFFORT\x10\x01\"\xce\x04\n" +
+	"\x18PostMessagesBulkResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12)\n" +
+	"\x10successful_count\x18\x02 \x01(\x05R\x0fsuccessfulCount\x12!\n" +
+	"\ffailed_count\x18\x03 \x01(\x05R\vfailedCount\x12e\n" +
+	"\aresults\x18\x04 \x03(\v2K.chronoqueue.api.queueservice.v1.PostMessagesBulkResponse.MessagePostResultR\aresults\x1a\xe2\x02\n" +
+	"\x11MessagePostResult\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x01 \x01(\tR\tmessageId\x12\x18\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\x12t\n" +
+	"\n" +
+	"error_code\x18\x04 \x01(\x0e2U.chronoqueue.api.queueservice.v1.PostMessagesBulkResponse.MessagePostResult.ErrorCodeR\terrorCode\"\x87\x01\n" +
+	"\tErrorCode\x12\v\n" +
+	"\aSUCCESS\x10\x00\x12\x15\n" +
+	"\x11VALIDATION_FAILED\x10\x01\x12\x18\n" +
+	"\x14DUPLICATE_MESSAGE_ID\x10\x02\x12\x13\n" +
+	"\x0fSCHEMA_MISMATCH\x10\x03\x12\x12\n" +
+	"\x0eINTERNAL_ERROR\x10\x04\x12\x13\n" +
+	"\x0fQUEUE_NOT_FOUND\x10\x05\"\x84\x02\n" +
 	"\x15GetNextMessageRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12@\n" +
@@ -3700,120 +4042,130 @@ func file_proto_queueservice_v1_request_response_proto_rawDescGZIP() []byte {
 	return file_proto_queueservice_v1_request_response_proto_rawDescData
 }
 
-var file_proto_queueservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 65)
+var file_proto_queueservice_v1_request_response_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_proto_queueservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 68)
 var file_proto_queueservice_v1_request_response_proto_goTypes = []any{
-	(*CreateQueueRequest)(nil),                     // 0: chronoqueue.api.queueservice.v1.CreateQueueRequest
-	(*CreateQueueResponse)(nil),                    // 1: chronoqueue.api.queueservice.v1.CreateQueueResponse
-	(*DeleteQueueRequest)(nil),                     // 2: chronoqueue.api.queueservice.v1.DeleteQueueRequest
-	(*DeleteQueueResponse)(nil),                    // 3: chronoqueue.api.queueservice.v1.DeleteQueueResponse
-	(*PostMessageRequest)(nil),                     // 4: chronoqueue.api.queueservice.v1.PostMessageRequest
-	(*PostMessageResponse)(nil),                    // 5: chronoqueue.api.queueservice.v1.PostMessageResponse
-	(*GetNextMessageRequest)(nil),                  // 6: chronoqueue.api.queueservice.v1.GetNextMessageRequest
-	(*GetNextMessageResponse)(nil),                 // 7: chronoqueue.api.queueservice.v1.GetNextMessageResponse
-	(*AcknowledgeMessageRequest)(nil),              // 8: chronoqueue.api.queueservice.v1.AcknowledgeMessageRequest
-	(*AcknowledgeMessageResponse)(nil),             // 9: chronoqueue.api.queueservice.v1.AcknowledgeMessageResponse
-	(*CancelMessageRequest)(nil),                   // 10: chronoqueue.api.queueservice.v1.CancelMessageRequest
-	(*CancelMessageResponse)(nil),                  // 11: chronoqueue.api.queueservice.v1.CancelMessageResponse
-	(*RenewMessageLeaseRequest)(nil),               // 12: chronoqueue.api.queueservice.v1.RenewMessageLeaseRequest
-	(*RenewMessageLeaseResponse)(nil),              // 13: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse
-	(*PeekQueueMessagesRequest)(nil),               // 14: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest
-	(*PeekQueueMessagesResponse)(nil),              // 15: chronoqueue.api.queueservice.v1.PeekQueueMessagesResponse
-	(*GetQueueStateRequest)(nil),                   // 16: chronoqueue.api.queueservice.v1.GetQueueStateRequest
-	(*GetQueueStateResponse)(nil),                  // 17: chronoqueue.api.queueservice.v1.GetQueueStateResponse
-	(*SendMessageHeartBeatRequest)(nil),            // 18: chronoqueue.api.queueservice.v1.SendMessageHeartBeatRequest
-	(*SendMessageHeartBeatResponse)(nil),           // 19: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse
-	(*ListQueuesRequest)(nil),                      // 20: chronoqueue.api.queueservice.v1.ListQueuesRequest
-	(*ListQueuesResponse)(nil),                     // 21: chronoqueue.api.queueservice.v1.ListQueuesResponse
-	(*CreateScheduleRequest)(nil),                  // 22: chronoqueue.api.queueservice.v1.CreateScheduleRequest
-	(*CreateScheduleResponse)(nil),                 // 23: chronoqueue.api.queueservice.v1.CreateScheduleResponse
-	(*DeleteScheduleRequest)(nil),                  // 24: chronoqueue.api.queueservice.v1.DeleteScheduleRequest
-	(*DeleteScheduleResponse)(nil),                 // 25: chronoqueue.api.queueservice.v1.DeleteScheduleResponse
-	(*PauseScheduleRequest)(nil),                   // 26: chronoqueue.api.queueservice.v1.PauseScheduleRequest
-	(*PauseScheduleResponse)(nil),                  // 27: chronoqueue.api.queueservice.v1.PauseScheduleResponse
-	(*ResumeScheduleRequest)(nil),                  // 28: chronoqueue.api.queueservice.v1.ResumeScheduleRequest
-	(*ResumeScheduleResponse)(nil),                 // 29: chronoqueue.api.queueservice.v1.ResumeScheduleResponse
-	(*GetScheduleRequest)(nil),                     // 30: chronoqueue.api.queueservice.v1.GetScheduleRequest
-	(*GetScheduleResponse)(nil),                    // 31: chronoqueue.api.queueservice.v1.GetScheduleResponse
-	(*ListSchedulesRequest)(nil),                   // 32: chronoqueue.api.queueservice.v1.ListSchedulesRequest
-	(*ListSchedulesResponse)(nil),                  // 33: chronoqueue.api.queueservice.v1.ListSchedulesResponse
-	(*GetScheduleHistoryRequest)(nil),              // 34: chronoqueue.api.queueservice.v1.GetScheduleHistoryRequest
-	(*GetScheduleHistoryResponse)(nil),             // 35: chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse
-	(*GetDLQMessagesRequest)(nil),                  // 36: chronoqueue.api.queueservice.v1.GetDLQMessagesRequest
-	(*GetDLQMessagesResponse)(nil),                 // 37: chronoqueue.api.queueservice.v1.GetDLQMessagesResponse
-	(*RequeueFromDLQRequest)(nil),                  // 38: chronoqueue.api.queueservice.v1.RequeueFromDLQRequest
-	(*RequeueFromDLQResponse)(nil),                 // 39: chronoqueue.api.queueservice.v1.RequeueFromDLQResponse
-	(*DeleteFromDLQRequest)(nil),                   // 40: chronoqueue.api.queueservice.v1.DeleteFromDLQRequest
-	(*DeleteFromDLQResponse)(nil),                  // 41: chronoqueue.api.queueservice.v1.DeleteFromDLQResponse
-	(*PurgeDLQRequest)(nil),                        // 42: chronoqueue.api.queueservice.v1.PurgeDLQRequest
-	(*PurgeDLQResponse)(nil),                       // 43: chronoqueue.api.queueservice.v1.PurgeDLQResponse
-	(*GetDLQStatsRequest)(nil),                     // 44: chronoqueue.api.queueservice.v1.GetDLQStatsRequest
-	(*GetDLQStatsResponse)(nil),                    // 45: chronoqueue.api.queueservice.v1.GetDLQStatsResponse
-	(*ValidateCalendarScheduleRequest)(nil),        // 46: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleRequest
-	(*ValidateCalendarScheduleResponse)(nil),       // 47: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleResponse
-	(*PreviewCalendarScheduleRequest)(nil),         // 48: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleRequest
-	(*PreviewCalendarScheduleResponse)(nil),        // 49: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse
-	(*ValidationIssue)(nil),                        // 50: chronoqueue.api.queueservice.v1.ValidationIssue
-	(*RegisterSchemaRequest)(nil),                  // 51: chronoqueue.api.queueservice.v1.RegisterSchemaRequest
-	(*RegisterSchemaResponse)(nil),                 // 52: chronoqueue.api.queueservice.v1.RegisterSchemaResponse
-	(*GetSchemaRequest)(nil),                       // 53: chronoqueue.api.queueservice.v1.GetSchemaRequest
-	(*GetSchemaResponse)(nil),                      // 54: chronoqueue.api.queueservice.v1.GetSchemaResponse
-	(*ListSchemasRequest)(nil),                     // 55: chronoqueue.api.queueservice.v1.ListSchemasRequest
-	(*ListSchemasResponse)(nil),                    // 56: chronoqueue.api.queueservice.v1.ListSchemasResponse
-	(*SchemaInfo)(nil),                             // 57: chronoqueue.api.queueservice.v1.SchemaInfo
-	(*DeleteSchemaRequest)(nil),                    // 58: chronoqueue.api.queueservice.v1.DeleteSchemaRequest
-	(*DeleteSchemaResponse)(nil),                   // 59: chronoqueue.api.queueservice.v1.DeleteSchemaResponse
-	(*ValidatePayloadRequest)(nil),                 // 60: chronoqueue.api.queueservice.v1.ValidatePayloadRequest
-	(*ValidatePayloadResponse)(nil),                // 61: chronoqueue.api.queueservice.v1.ValidatePayloadResponse
-	(*PeekQueueMessagesRequest_PriorityRange)(nil), // 62: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
-	nil,                             // 63: chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
-	nil,                             // 64: chronoqueue.api.queueservice.v1.RegisterSchemaRequest.MetadataEntry
-	(*v1.QueueMetadata)(nil),        // 65: chronoqueue.api.queue.v1.QueueMetadata
-	(*v11.Message)(nil),             // 66: chronoqueue.api.message.v1.Message
-	(*durationpb.Duration)(nil),     // 67: google.protobuf.Duration
-	(v11.Message_Metadata_State)(0), // 68: chronoqueue.api.message.v1.Message.Metadata.State
-	(*timestamppb.Timestamp)(nil),   // 69: google.protobuf.Timestamp
-	(*v1.Queue)(nil),                // 70: chronoqueue.api.queue.v1.Queue
-	(*v12.Schedule)(nil),            // 71: chronoqueue.api.schedule.v1.Schedule
-	(*v12.ScheduleHistory)(nil),     // 72: chronoqueue.api.schedule.v1.ScheduleHistory
-	(*v12.CalendarSchedule)(nil),    // 73: chronoqueue.api.schedule.v1.CalendarSchedule
-	(*v13.Schema)(nil),              // 74: chronoqueue.api.schema.v1.Schema
-	(*v13.ValidationError)(nil),     // 75: chronoqueue.api.schema.v1.ValidationError
+	(PostMessagesBulkRequest_TransactionMode)(0),              // 0: chronoqueue.api.queueservice.v1.PostMessagesBulkRequest.TransactionMode
+	(PostMessagesBulkResponse_MessagePostResult_ErrorCode)(0), // 1: chronoqueue.api.queueservice.v1.PostMessagesBulkResponse.MessagePostResult.ErrorCode
+	(*CreateQueueRequest)(nil),                                // 2: chronoqueue.api.queueservice.v1.CreateQueueRequest
+	(*CreateQueueResponse)(nil),                               // 3: chronoqueue.api.queueservice.v1.CreateQueueResponse
+	(*DeleteQueueRequest)(nil),                                // 4: chronoqueue.api.queueservice.v1.DeleteQueueRequest
+	(*DeleteQueueResponse)(nil),                               // 5: chronoqueue.api.queueservice.v1.DeleteQueueResponse
+	(*PostMessageRequest)(nil),                                // 6: chronoqueue.api.queueservice.v1.PostMessageRequest
+	(*PostMessageResponse)(nil),                               // 7: chronoqueue.api.queueservice.v1.PostMessageResponse
+	(*PostMessagesBulkRequest)(nil),                           // 8: chronoqueue.api.queueservice.v1.PostMessagesBulkRequest
+	(*PostMessagesBulkResponse)(nil),                          // 9: chronoqueue.api.queueservice.v1.PostMessagesBulkResponse
+	(*GetNextMessageRequest)(nil),                             // 10: chronoqueue.api.queueservice.v1.GetNextMessageRequest
+	(*GetNextMessageResponse)(nil),                            // 11: chronoqueue.api.queueservice.v1.GetNextMessageResponse
+	(*AcknowledgeMessageRequest)(nil),                         // 12: chronoqueue.api.queueservice.v1.AcknowledgeMessageRequest
+	(*AcknowledgeMessageResponse)(nil),                        // 13: chronoqueue.api.queueservice.v1.AcknowledgeMessageResponse
+	(*CancelMessageRequest)(nil),                              // 14: chronoqueue.api.queueservice.v1.CancelMessageRequest
+	(*CancelMessageResponse)(nil),                             // 15: chronoqueue.api.queueservice.v1.CancelMessageResponse
+	(*RenewMessageLeaseRequest)(nil),                          // 16: chronoqueue.api.queueservice.v1.RenewMessageLeaseRequest
+	(*RenewMessageLeaseResponse)(nil),                         // 17: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse
+	(*PeekQueueMessagesRequest)(nil),                          // 18: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest
+	(*PeekQueueMessagesResponse)(nil),                         // 19: chronoqueue.api.queueservice.v1.PeekQueueMessagesResponse
+	(*GetQueueStateRequest)(nil),                              // 20: chronoqueue.api.queueservice.v1.GetQueueStateRequest
+	(*GetQueueStateResponse)(nil),                             // 21: chronoqueue.api.queueservice.v1.GetQueueStateResponse
+	(*SendMessageHeartBeatRequest)(nil),                       // 22: chronoqueue.api.queueservice.v1.SendMessageHeartBeatRequest
+	(*SendMessageHeartBeatResponse)(nil),                      // 23: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse
+	(*ListQueuesRequest)(nil),                                 // 24: chronoqueue.api.queueservice.v1.ListQueuesRequest
+	(*ListQueuesResponse)(nil),                                // 25: chronoqueue.api.queueservice.v1.ListQueuesResponse
+	(*CreateScheduleRequest)(nil),                             // 26: chronoqueue.api.queueservice.v1.CreateScheduleRequest
+	(*CreateScheduleResponse)(nil),                            // 27: chronoqueue.api.queueservice.v1.CreateScheduleResponse
+	(*DeleteScheduleRequest)(nil),                             // 28: chronoqueue.api.queueservice.v1.DeleteScheduleRequest
+	(*DeleteScheduleResponse)(nil),                            // 29: chronoqueue.api.queueservice.v1.DeleteScheduleResponse
+	(*PauseScheduleRequest)(nil),                              // 30: chronoqueue.api.queueservice.v1.PauseScheduleRequest
+	(*PauseScheduleResponse)(nil),                             // 31: chronoqueue.api.queueservice.v1.PauseScheduleResponse
+	(*ResumeScheduleRequest)(nil),                             // 32: chronoqueue.api.queueservice.v1.ResumeScheduleRequest
+	(*ResumeScheduleResponse)(nil),                            // 33: chronoqueue.api.queueservice.v1.ResumeScheduleResponse
+	(*GetScheduleRequest)(nil),                                // 34: chronoqueue.api.queueservice.v1.GetScheduleRequest
+	(*GetScheduleResponse)(nil),                               // 35: chronoqueue.api.queueservice.v1.GetScheduleResponse
+	(*ListSchedulesRequest)(nil),                              // 36: chronoqueue.api.queueservice.v1.ListSchedulesRequest
+	(*ListSchedulesResponse)(nil),                             // 37: chronoqueue.api.queueservice.v1.ListSchedulesResponse
+	(*GetScheduleHistoryRequest)(nil),                         // 38: chronoqueue.api.queueservice.v1.GetScheduleHistoryRequest
+	(*GetScheduleHistoryResponse)(nil),                        // 39: chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse
+	(*GetDLQMessagesRequest)(nil),                             // 40: chronoqueue.api.queueservice.v1.GetDLQMessagesRequest
+	(*GetDLQMessagesResponse)(nil),                            // 41: chronoqueue.api.queueservice.v1.GetDLQMessagesResponse
+	(*RequeueFromDLQRequest)(nil),                             // 42: chronoqueue.api.queueservice.v1.RequeueFromDLQRequest
+	(*RequeueFromDLQResponse)(nil),                            // 43: chronoqueue.api.queueservice.v1.RequeueFromDLQResponse
+	(*DeleteFromDLQRequest)(nil),                              // 44: chronoqueue.api.queueservice.v1.DeleteFromDLQRequest
+	(*DeleteFromDLQResponse)(nil),                             // 45: chronoqueue.api.queueservice.v1.DeleteFromDLQResponse
+	(*PurgeDLQRequest)(nil),                                   // 46: chronoqueue.api.queueservice.v1.PurgeDLQRequest
+	(*PurgeDLQResponse)(nil),                                  // 47: chronoqueue.api.queueservice.v1.PurgeDLQResponse
+	(*GetDLQStatsRequest)(nil),                                // 48: chronoqueue.api.queueservice.v1.GetDLQStatsRequest
+	(*GetDLQStatsResponse)(nil),                               // 49: chronoqueue.api.queueservice.v1.GetDLQStatsResponse
+	(*ValidateCalendarScheduleRequest)(nil),                   // 50: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleRequest
+	(*ValidateCalendarScheduleResponse)(nil),                  // 51: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleResponse
+	(*PreviewCalendarScheduleRequest)(nil),                    // 52: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleRequest
+	(*PreviewCalendarScheduleResponse)(nil),                   // 53: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse
+	(*ValidationIssue)(nil),                                   // 54: chronoqueue.api.queueservice.v1.ValidationIssue
+	(*RegisterSchemaRequest)(nil),                             // 55: chronoqueue.api.queueservice.v1.RegisterSchemaRequest
+	(*RegisterSchemaResponse)(nil),                            // 56: chronoqueue.api.queueservice.v1.RegisterSchemaResponse
+	(*GetSchemaRequest)(nil),                                  // 57: chronoqueue.api.queueservice.v1.GetSchemaRequest
+	(*GetSchemaResponse)(nil),                                 // 58: chronoqueue.api.queueservice.v1.GetSchemaResponse
+	(*ListSchemasRequest)(nil),                                // 59: chronoqueue.api.queueservice.v1.ListSchemasRequest
+	(*ListSchemasResponse)(nil),                               // 60: chronoqueue.api.queueservice.v1.ListSchemasResponse
+	(*SchemaInfo)(nil),                                        // 61: chronoqueue.api.queueservice.v1.SchemaInfo
+	(*DeleteSchemaRequest)(nil),                               // 62: chronoqueue.api.queueservice.v1.DeleteSchemaRequest
+	(*DeleteSchemaResponse)(nil),                              // 63: chronoqueue.api.queueservice.v1.DeleteSchemaResponse
+	(*ValidatePayloadRequest)(nil),                            // 64: chronoqueue.api.queueservice.v1.ValidatePayloadRequest
+	(*ValidatePayloadResponse)(nil),                           // 65: chronoqueue.api.queueservice.v1.ValidatePayloadResponse
+	(*PostMessagesBulkResponse_MessagePostResult)(nil),        // 66: chronoqueue.api.queueservice.v1.PostMessagesBulkResponse.MessagePostResult
+	(*PeekQueueMessagesRequest_PriorityRange)(nil),            // 67: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
+	nil,                             // 68: chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
+	nil,                             // 69: chronoqueue.api.queueservice.v1.RegisterSchemaRequest.MetadataEntry
+	(*v1.QueueMetadata)(nil),        // 70: chronoqueue.api.queue.v1.QueueMetadata
+	(*v11.Message)(nil),             // 71: chronoqueue.api.message.v1.Message
+	(*durationpb.Duration)(nil),     // 72: google.protobuf.Duration
+	(v11.Message_Metadata_State)(0), // 73: chronoqueue.api.message.v1.Message.Metadata.State
+	(*timestamppb.Timestamp)(nil),   // 74: google.protobuf.Timestamp
+	(*v1.Queue)(nil),                // 75: chronoqueue.api.queue.v1.Queue
+	(*v12.Schedule)(nil),            // 76: chronoqueue.api.schedule.v1.Schedule
+	(*v12.ScheduleHistory)(nil),     // 77: chronoqueue.api.schedule.v1.ScheduleHistory
+	(*v12.CalendarSchedule)(nil),    // 78: chronoqueue.api.schedule.v1.CalendarSchedule
+	(*v13.Schema)(nil),              // 79: chronoqueue.api.schema.v1.Schema
+	(*v13.ValidationError)(nil),     // 80: chronoqueue.api.schema.v1.ValidationError
 }
 var file_proto_queueservice_v1_request_response_proto_depIdxs = []int32{
-	65, // 0: chronoqueue.api.queueservice.v1.CreateQueueRequest.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
-	66, // 1: chronoqueue.api.queueservice.v1.PostMessageRequest.message:type_name -> chronoqueue.api.message.v1.Message
-	67, // 2: chronoqueue.api.queueservice.v1.GetNextMessageRequest.lease_duration:type_name -> google.protobuf.Duration
-	66, // 3: chronoqueue.api.queueservice.v1.GetNextMessageResponse.message:type_name -> chronoqueue.api.message.v1.Message
-	68, // 4: chronoqueue.api.queueservice.v1.AcknowledgeMessageRequest.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	67, // 5: chronoqueue.api.queueservice.v1.RenewMessageLeaseRequest.lease_duration:type_name -> google.protobuf.Duration
-	67, // 6: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.remaining_time:type_name -> google.protobuf.Duration
-	68, // 7: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	62, // 8: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.priority_range:type_name -> chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
-	66, // 9: chronoqueue.api.queueservice.v1.PeekQueueMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
-	63, // 10: chronoqueue.api.queueservice.v1.GetQueueStateResponse.state_counts:type_name -> chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
-	69, // 11: chronoqueue.api.queueservice.v1.GetQueueStateResponse.earliest_deadline:type_name -> google.protobuf.Timestamp
-	67, // 12: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.remaining_time:type_name -> google.protobuf.Duration
-	68, // 13: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	70, // 14: chronoqueue.api.queueservice.v1.ListQueuesResponse.queues:type_name -> chronoqueue.api.queue.v1.Queue
-	71, // 15: chronoqueue.api.queueservice.v1.CreateScheduleRequest.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
-	71, // 16: chronoqueue.api.queueservice.v1.GetScheduleResponse.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
-	71, // 17: chronoqueue.api.queueservice.v1.ListSchedulesResponse.schedules:type_name -> chronoqueue.api.schedule.v1.Schedule
-	72, // 18: chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse.schedule_history:type_name -> chronoqueue.api.schedule.v1.ScheduleHistory
-	66, // 19: chronoqueue.api.queueservice.v1.GetDLQMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
-	73, // 20: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleRequest.calendar_schedule:type_name -> chronoqueue.api.schedule.v1.CalendarSchedule
-	50, // 21: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleResponse.validation_issues:type_name -> chronoqueue.api.queueservice.v1.ValidationIssue
-	73, // 22: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleRequest.calendar_schedule:type_name -> chronoqueue.api.schedule.v1.CalendarSchedule
-	69, // 23: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse.execution_times:type_name -> google.protobuf.Timestamp
-	69, // 24: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse.preview_start:type_name -> google.protobuf.Timestamp
-	64, // 25: chronoqueue.api.queueservice.v1.RegisterSchemaRequest.metadata:type_name -> chronoqueue.api.queueservice.v1.RegisterSchemaRequest.MetadataEntry
-	74, // 26: chronoqueue.api.queueservice.v1.GetSchemaResponse.schema:type_name -> chronoqueue.api.schema.v1.Schema
-	57, // 27: chronoqueue.api.queueservice.v1.ListSchemasResponse.schemas:type_name -> chronoqueue.api.queueservice.v1.SchemaInfo
-	75, // 28: chronoqueue.api.queueservice.v1.ValidatePayloadResponse.errors:type_name -> chronoqueue.api.schema.v1.ValidationError
-	29, // [29:29] is the sub-list for method output_type
-	29, // [29:29] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	70, // 0: chronoqueue.api.queueservice.v1.CreateQueueRequest.metadata:type_name -> chronoqueue.api.queue.v1.QueueMetadata
+	71, // 1: chronoqueue.api.queueservice.v1.PostMessageRequest.message:type_name -> chronoqueue.api.message.v1.Message
+	71, // 2: chronoqueue.api.queueservice.v1.PostMessagesBulkRequest.messages:type_name -> chronoqueue.api.message.v1.Message
+	0,  // 3: chronoqueue.api.queueservice.v1.PostMessagesBulkRequest.transaction_mode:type_name -> chronoqueue.api.queueservice.v1.PostMessagesBulkRequest.TransactionMode
+	66, // 4: chronoqueue.api.queueservice.v1.PostMessagesBulkResponse.results:type_name -> chronoqueue.api.queueservice.v1.PostMessagesBulkResponse.MessagePostResult
+	72, // 5: chronoqueue.api.queueservice.v1.GetNextMessageRequest.lease_duration:type_name -> google.protobuf.Duration
+	71, // 6: chronoqueue.api.queueservice.v1.GetNextMessageResponse.message:type_name -> chronoqueue.api.message.v1.Message
+	73, // 7: chronoqueue.api.queueservice.v1.AcknowledgeMessageRequest.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
+	72, // 8: chronoqueue.api.queueservice.v1.RenewMessageLeaseRequest.lease_duration:type_name -> google.protobuf.Duration
+	72, // 9: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.remaining_time:type_name -> google.protobuf.Duration
+	73, // 10: chronoqueue.api.queueservice.v1.RenewMessageLeaseResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
+	67, // 11: chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.priority_range:type_name -> chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRange
+	71, // 12: chronoqueue.api.queueservice.v1.PeekQueueMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
+	68, // 13: chronoqueue.api.queueservice.v1.GetQueueStateResponse.state_counts:type_name -> chronoqueue.api.queueservice.v1.GetQueueStateResponse.StateCountsEntry
+	74, // 14: chronoqueue.api.queueservice.v1.GetQueueStateResponse.earliest_deadline:type_name -> google.protobuf.Timestamp
+	72, // 15: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.remaining_time:type_name -> google.protobuf.Duration
+	73, // 16: chronoqueue.api.queueservice.v1.SendMessageHeartBeatResponse.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
+	75, // 17: chronoqueue.api.queueservice.v1.ListQueuesResponse.queues:type_name -> chronoqueue.api.queue.v1.Queue
+	76, // 18: chronoqueue.api.queueservice.v1.CreateScheduleRequest.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
+	76, // 19: chronoqueue.api.queueservice.v1.GetScheduleResponse.schedule:type_name -> chronoqueue.api.schedule.v1.Schedule
+	76, // 20: chronoqueue.api.queueservice.v1.ListSchedulesResponse.schedules:type_name -> chronoqueue.api.schedule.v1.Schedule
+	77, // 21: chronoqueue.api.queueservice.v1.GetScheduleHistoryResponse.schedule_history:type_name -> chronoqueue.api.schedule.v1.ScheduleHistory
+	71, // 22: chronoqueue.api.queueservice.v1.GetDLQMessagesResponse.messages:type_name -> chronoqueue.api.message.v1.Message
+	78, // 23: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleRequest.calendar_schedule:type_name -> chronoqueue.api.schedule.v1.CalendarSchedule
+	54, // 24: chronoqueue.api.queueservice.v1.ValidateCalendarScheduleResponse.validation_issues:type_name -> chronoqueue.api.queueservice.v1.ValidationIssue
+	78, // 25: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleRequest.calendar_schedule:type_name -> chronoqueue.api.schedule.v1.CalendarSchedule
+	74, // 26: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse.execution_times:type_name -> google.protobuf.Timestamp
+	74, // 27: chronoqueue.api.queueservice.v1.PreviewCalendarScheduleResponse.preview_start:type_name -> google.protobuf.Timestamp
+	69, // 28: chronoqueue.api.queueservice.v1.RegisterSchemaRequest.metadata:type_name -> chronoqueue.api.queueservice.v1.RegisterSchemaRequest.MetadataEntry
+	79, // 29: chronoqueue.api.queueservice.v1.GetSchemaResponse.schema:type_name -> chronoqueue.api.schema.v1.Schema
+	61, // 30: chronoqueue.api.queueservice.v1.ListSchemasResponse.schemas:type_name -> chronoqueue.api.queueservice.v1.SchemaInfo
+	80, // 31: chronoqueue.api.queueservice.v1.ValidatePayloadResponse.errors:type_name -> chronoqueue.api.schema.v1.ValidationError
+	1,  // 32: chronoqueue.api.queueservice.v1.PostMessagesBulkResponse.MessagePostResult.error_code:type_name -> chronoqueue.api.queueservice.v1.PostMessagesBulkResponse.MessagePostResult.ErrorCode
+	33, // [33:33] is the sub-list for method output_type
+	33, // [33:33] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_proto_queueservice_v1_request_response_proto_init() }
@@ -3822,24 +4174,25 @@ func file_proto_queueservice_v1_request_response_proto_init() {
 		return
 	}
 	file_proto_queueservice_v1_request_response_proto_msgTypes[0].OneofWrappers = []any{}
-	file_proto_queueservice_v1_request_response_proto_msgTypes[6].OneofWrappers = []any{}
-	file_proto_queueservice_v1_request_response_proto_msgTypes[7].OneofWrappers = []any{}
 	file_proto_queueservice_v1_request_response_proto_msgTypes[8].OneofWrappers = []any{}
+	file_proto_queueservice_v1_request_response_proto_msgTypes[9].OneofWrappers = []any{}
 	file_proto_queueservice_v1_request_response_proto_msgTypes[10].OneofWrappers = []any{}
-	file_proto_queueservice_v1_request_response_proto_msgTypes[14].OneofWrappers = []any{}
-	file_proto_queueservice_v1_request_response_proto_msgTypes[18].OneofWrappers = []any{}
+	file_proto_queueservice_v1_request_response_proto_msgTypes[12].OneofWrappers = []any{}
+	file_proto_queueservice_v1_request_response_proto_msgTypes[16].OneofWrappers = []any{}
+	file_proto_queueservice_v1_request_response_proto_msgTypes[20].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_queueservice_v1_request_response_proto_rawDesc), len(file_proto_queueservice_v1_request_response_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   65,
+			NumEnums:      2,
+			NumMessages:   68,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_proto_queueservice_v1_request_response_proto_goTypes,
 		DependencyIndexes: file_proto_queueservice_v1_request_response_proto_depIdxs,
+		EnumInfos:         file_proto_queueservice_v1_request_response_proto_enumTypes,
 		MessageInfos:      file_proto_queueservice_v1_request_response_proto_msgTypes,
 	}.Build()
 	File_proto_queueservice_v1_request_response_proto = out.File

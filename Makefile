@@ -728,3 +728,8 @@ deploy-status: ## Show status of deployed services
 	@echo ""
 	@echo "=== Monitoring Services ==="
 	@cd deploy && docker-compose -f docker-compose.monitoring.yaml ps 2>/dev/null || echo "Monitoring stack not running"
+
+.PHONY: pre-commit-validation
+pre-commit-validation: modtidy-all format ci-lint ci-test-all
+	@echo "Pre-commit validation passed! Your code is properly formatted, linted,\
+	 and all stable tests are passing. You can proceed with committing your changes."
