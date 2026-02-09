@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GO_VERSION: "1.25.6"
+  GO_VERSION: "1.25.7"
 
 permissions:
   contents: read
@@ -54,11 +54,14 @@ jobs:
       - name: Run govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          govulncheck -show verbose ./...
 
   report-failures:
     name: Report Failures
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     needs: [full-test-suite, dependency-audit]
     if: failure()
     steps:

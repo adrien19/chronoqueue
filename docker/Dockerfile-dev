@@ -2,7 +2,7 @@
 # and adapted for ChronoQueue development
 
 # [Choice] Go version: 1, 1.21, etc
-ARG GOVERSION=1.25.6
+ARG GOVERSION=1.25.7
 ARG LINUX_VARIANT=bookworm
 FROM golang:${GOVERSION}-${LINUX_VARIANT}
 
