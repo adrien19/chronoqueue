@@ -110,7 +110,7 @@ jobs:
           fi
 
       - name: Comment PR with validation results
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         if: always()
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
