@@ -268,7 +268,7 @@ jobs:
           upload-release-assets: false
 
       - name: Upload SBOM as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: sbom
           path: sbom-${{ needs.prepare-release.outputs.version }}.spdx.json
