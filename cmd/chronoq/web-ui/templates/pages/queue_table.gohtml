@@ -1,0 +1,34 @@
+{{ define "queue_table" }}
+<div class="overflow-x-auto">
+<table class="cq-table">
+  <thead>
+    <tr>
+      <th>Queue</th><th>Ready</th><th>Inflight</th><th>Delayed</th><th>Retries</th><th>DLQ</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{ range .Rows }}
+    <tr>
+      <td>
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <a href="{{ .Href }}" class="font-medium text-white hover:text-blue-300">{{ .Name }}</a>
+            {{ if .IsDLQ }}<div class="mt-1"><span class="cq-badge border-red-500/25 bg-red-500/10 text-red-300">DLQ</span></div>{{ end }}
+          </div>
+          <button class="cq-btn !px-2 !py-1 text-xs" data-copy="{{ .Name }}">Copy</button>
+        </div>
+      </td>
+      <td class="text-blue-300">{{ .Ready }}</td>
+      <td>{{ .InFlight }}</td>
+      <td>{{ .Delayed }}</td>
+      <td class="{{ if gt .RetriesInt 0 }}text-amber-300{{ end }}">{{ .Retries }}</td>
+      <td class="{{ if gt .DLQInt 0 }}text-red-300{{ end }}">{{ .DLQ }}</td>
+    </tr>
+    {{ end }}
+    {{ if not .Rows }}
+    <tr><td colspan="6" class="py-8 text-center text-zinc-500">No queues found.</td></tr>
+    {{ end }}
+  </tbody>
+</table>
+</div>
+{{ end }}

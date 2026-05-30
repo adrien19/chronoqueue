@@ -1,0 +1,27 @@
+{{ define "message_table" }}
+<div class="overflow-x-auto">
+<table class="cq-table">
+  <thead><tr><th>ID</th><th>State</th><th>Priority</th><th>Attempts</th><th>Created at</th></tr></thead>
+  <tbody>
+  {{ range .QueueMessages }}
+  <tr>
+    <td>
+      <button class="font-mono text-sm font-medium text-white hover:text-blue-300"
+        hx-get="/queues/{{ $.Queue.Name }}/messages?message_id={{ .Id }}"
+        hx-target="#message-modal"
+        hx-swap="innerHTML">{{ .ShortId }}</button>
+    </td>
+    <td><span class="{{ statusClass .State }}">{{ .State }}</span></td>
+    <td>{{ .Priority }}</td>
+    <td>{{ .AttemptCount }}</td>
+    <td>{{ formatTime .CreatedAt }}</td>
+  </tr>
+  {{ end }}
+  {{ if not .QueueMessages }}
+  <tr><td colspan="5" class="py-8 text-center text-zinc-500">No messages found.</td></tr>
+  {{ end }}
+  </tbody>
+</table>
+</div>
+<div id="message-modal"></div>
+{{ end }}

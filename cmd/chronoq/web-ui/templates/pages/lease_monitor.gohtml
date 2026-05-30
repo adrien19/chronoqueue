@@ -1,0 +1,51 @@
+{{ define "lease_monitor_table" }}
+<div id="lease-table" hx-get="/fragments/lease-table" hx-trigger="every 3s" hx-swap="outerHTML">
+  {{ if not .Inflight }}
+  <div class="cq-panel p-8 text-center text-zinc-500">No inflight messages found across queues.</div>
+  {{ else }}
+  {{ range .Inflight }}
+  <div class="cq-panel overflow-hidden mb-4">
+    <div class="flex items-center justify-between border-b border-line px-5 py-3">
+      <a href="/queues/{{ .Queue }}" class="font-semibold text-white hover:text-blue-300">{{ .Queue }}</a>
+      <span class="cq-badge cq-badge-warn">{{ .RunningCount }} running</span>
+    </div>
+    {{ if .Rows }}
+    <div class="overflow-x-auto">
+      <table class="cq-table">
+        <thead><tr><th>Message ID</th><th>State</th><th>Renewals</th><th>Duration</th><th>Expires in</th></tr></thead>
+        <tbody>
+          {{ range .Rows }}
+          <tr>
+            <td><span class="font-mono text-sm font-medium text-white">{{ .MessageID }}</span></td>
+            <td><span class="{{ statusClass .Status }}">{{ .Status }}</span></td>
+            <td>{{ .Renewals }}</td>
+            <td>{{ .Duration }}</td>
+            <td>{{ .ExpiresIn }}</td>
+          </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+    {{ else }}
+    <p class="px-5 py-3 text-sm text-zinc-500">{{ .RunningCount }} message(s) running — details unavailable for high-volume queues.</p>
+    {{ end }}
+  </div>
+  {{ end }}
+  {{ end }}
+</div>
+{{ end }}
+
+{{ define "lease_monitor_content" }}
+<section class="space-y-6">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h2 class="text-3xl font-semibold text-white">Lease monitor</h2>
+      <p class="mt-1 text-sm text-zinc-500">Messages currently in RUNNING state — refreshes every 3s.</p>
+    </div>
+    {{ if .TotalRunning }}
+    <span class="cq-badge cq-badge-warn">{{ .TotalRunning }} running</span>
+    {{ end }}
+  </div>
+  {{ template "lease_monitor_table" . }}
+</section>
+{{ end }}

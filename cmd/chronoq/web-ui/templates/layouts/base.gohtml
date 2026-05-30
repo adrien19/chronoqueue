@@ -1,0 +1,71 @@
+{{ define "base" }}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ .PageTitle }} • ChronoQueue</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/sse.js"></script>
+  </head>
+  <body class="cq-shell">
+    <div class="flex min-h-screen">
+      {{ if eq .Layout "settings" }}
+        {{ template "settings_sidebar" . }}
+      {{ else }}
+        {{ template "sidebar" . }}
+      {{ end }}
+      <main class="cq-content">
+        {{ template "topbar" . }}
+        {{ if eq .ContentTemplate "home_content" }}
+          {{ template "home_content" . }}
+        {{ else if eq .ContentTemplate "queues_content" }}
+          {{ template "queues_content" . }}
+        {{ else if eq .ContentTemplate "queue_detail_content" }}
+          {{ template "queue_detail_content" . }}
+        {{ else if eq .ContentTemplate "workers_content" }}
+          {{ template "workers_content" . }}
+        {{ else if eq .ContentTemplate "message_detail_content" }}
+          {{ template "message_detail_content" . }}
+        {{ else if eq .ContentTemplate "lease_monitor_content" }}
+          {{ template "lease_monitor_content" . }}
+        {{ else if eq .ContentTemplate "schedules_content" }}
+          {{ template "schedules_content" . }}
+        {{ else if eq .ContentTemplate "schedule_new_content" }}
+          {{ template "schedule_new_content" . }}
+        {{ else if eq .ContentTemplate "settings_clusters_content" }}
+          {{ template "settings_clusters_content" . }}
+        {{ else if eq .ContentTemplate "settings_cluster_new_content" }}
+          {{ template "settings_cluster_new_content" . }}
+        {{ else if eq .ContentTemplate "settings_cluster_detail_content" }}
+          {{ template "settings_cluster_detail_content" . }}
+        {{ else if eq .ContentTemplate "settings_members_content" }}
+          {{ template "settings_members_content" . }}
+        {{ else if eq .ContentTemplate "settings_member_detail_content" }}
+          {{ template "settings_member_detail_content" . }}
+        {{ else if eq .ContentTemplate "settings_groups_content" }}
+          {{ template "settings_groups_content" . }}
+        {{ else if eq .ContentTemplate "settings_group_detail_content" }}
+          {{ template "settings_group_detail_content" . }}
+        {{ else if eq .ContentTemplate "settings_sso_content" }}
+          {{ template "settings_sso_content" . }}
+        {{ else if eq .ContentTemplate "settings_audit_log_content" }}
+          {{ template "settings_audit_log_content" . }}
+        {{ else if eq .ContentTemplate "settings_integrations_content" }}
+          {{ template "settings_integrations_content" . }}
+        {{ else if eq .ContentTemplate "settings_api_keys_content" }}
+          {{ template "settings_api_keys_content" . }}
+        {{ else if eq .ContentTemplate "settings_profile_content" }}
+          {{ template "settings_profile_content" . }}
+        {{ else if eq .ContentTemplate "settings_placeholder_content" }}
+          {{ template "settings_placeholder_content" . }}
+        {{ else }}
+          <div class="cq-panel p-8 text-red-400">Unknown content template: {{ .ContentTemplate }}</div>
+        {{ end }}
+      </main>
+    </div>
+    <script src="/static/js/app.js"></script>
+  </body>
+</html>
+{{ end }}

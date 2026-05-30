@@ -1,0 +1,13 @@
+{
+    "name": "chronoqueue-web-ui",
+    "private": true,
+    "version": "1.0.0",
+    "description": "ChronoQueue HTMX web UI",
+    "scripts": {
+        "build:css": "NODE_PATH=$(npm root -g) node scripts/build-tailwind.mjs",
+        "watch:css": "NODE_PATH=$(npm root -g) node scripts/build-tailwind.mjs --watch"
+    },
+    "devDependencies": {
+        "tailwindcss": "^4.2.2"
+    }
+}
