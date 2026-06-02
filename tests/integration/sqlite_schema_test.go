@@ -50,7 +50,8 @@ func TestSQLiteSchemaIntegration(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Connect to gRPC server
-	conn, err := grpc.Dial("localhost:19001",
+	conn, err := grpc.Dial(
+		"localhost:19001",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err)

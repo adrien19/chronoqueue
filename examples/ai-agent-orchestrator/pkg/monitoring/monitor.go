@@ -200,7 +200,8 @@ func (m *Monitor) DisplaySystemStats(stats *SystemStats) {
 			status = "⚡"
 		}
 
-		fmt.Printf("  %s %-23s  %8d  %10d  %8d  %8d\n",
+		fmt.Printf(
+			"  %s %-23s  %8d  %10d  %8d  %8d\n",
 			status,
 			queue.Name,
 			queue.PendingMessages,
@@ -229,7 +230,8 @@ func (m *Monitor) DisplaySystemStats(stats *SystemStats) {
 			statusIcon = "✅"
 		}
 
-		fmt.Printf("  %-25s  %s %-8s  %8d  %9.1f%%  %11.2f/s\n",
+		fmt.Printf(
+			"  %-25s  %s %-8s  %8d  %9.1f%%  %11.2f/s\n",
 			agent.Name,
 			statusIcon,
 			agent.Status,
@@ -252,7 +254,8 @@ func (m *Monitor) DisplayCompactStats(stats *SystemStats) {
 		pendingTotal += queue.PendingMessages
 	}
 
-	fmt.Printf("[%s] Tasks: %d total, %d completed, %d failed | Pending: %d | Uptime: %s\n",
+	fmt.Printf(
+		"[%s] Tasks: %d total, %d completed, %d failed | Pending: %d | Uptime: %s\n",
 		time.Now().Format("15:04:05"),
 		stats.TotalTasks,
 		stats.CompletedTasks,

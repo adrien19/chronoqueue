@@ -161,7 +161,8 @@ func (e *BusinessDaysEvaluator) findNextExecution(ctx context.Context, from time
 				candidate := time.Date(
 					targetDate.Year(), targetDate.Month(), targetDate.Day(),
 					int(execTime.Hour), int(execTime.Minute), int(execTime.Second),
-					0, targetDate.Location())
+					0, targetDate.Location(),
+				)
 
 				if candidate.After(from) {
 					return &candidate, nil

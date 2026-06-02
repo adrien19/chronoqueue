@@ -144,7 +144,8 @@ func (e *YearlyEvaluator) findNextExecution(from time.Time, yearlyRule *schedule
 			candidate := time.Date(
 				currentYear, month, targetDay,
 				int(execTime.Hour), int(execTime.Minute), int(execTime.Second),
-				0, from.Location())
+				0, from.Location(),
+			)
 
 			if candidate.After(from) {
 				return &candidate, nil

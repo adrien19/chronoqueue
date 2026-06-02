@@ -67,14 +67,16 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 	ctx := context.Background()
 
 	// Create a Docker network for container communication
-	net, err := network.New(ctx,
+	net, err := network.New(
+		ctx,
 		network.WithDriver("bridge"),
 	)
 	require.NoError(t, err, "Failed to create Docker network")
 
 	// Start Postgres container using the Postgres module
 	t.Log("Starting Postgres container...")
-	postgresContainer, err := postgres.Run(ctx,
+	postgresContainer, err := postgres.Run(
+		ctx,
 		"postgres:17-alpine",
 		postgres.WithDatabase("chronoqueue"),
 		postgres.WithUsername("chronoqueue"),
@@ -188,7 +190,8 @@ func (e *TestEnvironment) Cleanup() {
 //	    // ... use client
 //	}
 func (e *TestEnvironment) NewGRPCClient(t *testing.T) *grpc.ClientConn {
-	conn, err := grpc.NewClient(e.GRPCAddr,
+	conn, err := grpc.NewClient(
+		e.GRPCAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err, "Failed to create gRPC client")
@@ -245,14 +248,16 @@ func SetupTestEnvironmentWithTLS(t *testing.T, certs *TestCertificates) *TestEnv
 	ctx := context.Background()
 
 	// Create a Docker network for container communication
-	net, err := network.New(ctx,
+	net, err := network.New(
+		ctx,
 		network.WithDriver("bridge"),
 	)
 	require.NoError(t, err, "Failed to create Docker network")
 
 	// Start Postgres container using the Postgres module
 	t.Log("Starting Postgres container...")
-	postgresContainer, err := postgres.Run(ctx,
+	postgresContainer, err := postgres.Run(
+		ctx,
 		"postgres:17-alpine",
 		postgres.WithDatabase("chronoqueue"),
 		postgres.WithUsername("chronoqueue"),

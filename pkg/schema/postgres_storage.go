@@ -92,7 +92,8 @@ func (r *PostgresRegistry) Register(ctx context.Context, schema *schema_pb.Schem
 		schema.ContentType = "json-schema"
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(
+		ctx, `
         INSERT INTO cq_schemas (
             schema_id, version, name, description, content,
             content_type, is_active, created_at, updated_at

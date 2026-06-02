@@ -31,7 +31,8 @@ func (d *Database) CreateEvaluation(eval *models.Evaluation) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(
+		query,
 		eval.ID,
 		eval.InterviewID,
 		eval.EvaluatorID,

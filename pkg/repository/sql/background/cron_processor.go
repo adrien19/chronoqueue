@@ -248,7 +248,8 @@ func (c *CronProcessorService) processSchedule(ctx context.Context, scheduleID s
 		}
 
 		nextRunMs := schedule.Metadata.GetNextRun().AsTime().UnixMilli()
-		updateQuery := fmt.Sprintf(`
+		updateQuery := fmt.Sprintf(
+			`
             UPDATE cq_schedules
             SET metadata_pb = %s,
                 state = %s,
@@ -421,7 +422,8 @@ func (c *CronProcessorService) createCronMessage(ctx context.Context, tx *sql.Tx
     `, strings.Join(placeholders, ", "))
 
 	nowMs := c.base.Clock.NowMs()
-	if _, err := tx.ExecContext(ctx, insertQuery,
+	if _, err := tx.ExecContext(
+		ctx, insertQuery,
 		message.MessageId,
 		queueName,
 		message.Metadata.State,

@@ -57,7 +57,8 @@ func (h *DefaultExceptionHandler) ApplyExceptions(ctx context.Context, times []t
 						rescheduledTime = time.Date(
 							rescheduledTime.Year(), rescheduledTime.Month(), rescheduledTime.Day(),
 							originalTime.Hour(), originalTime.Minute(), originalTime.Second(),
-							originalTime.Nanosecond(), timezone)
+							originalTime.Nanosecond(), timezone,
+						)
 					}
 
 					result = append(result, rescheduledTime)
@@ -73,7 +74,8 @@ func (h *DefaultExceptionHandler) ApplyExceptions(ctx context.Context, times []t
 					extraTime := time.Date(
 						execTimeLocal.Year(), execTimeLocal.Month(), execTimeLocal.Day(),
 						int(extraTimeOfDay.Hour), int(extraTimeOfDay.Minute), int(extraTimeOfDay.Second),
-						0, timezone)
+						0, timezone,
+					)
 					extraTimes = append(extraTimes, extraTime)
 				}
 

@@ -105,7 +105,8 @@ func (s *SQLiteRegistry) Register(ctx context.Context, schema *schema_pb.Schema)
 	}
 
 	// Insert schema
-	_, err = tx.ExecContext(ctx, `
+	_, err = tx.ExecContext(
+		ctx, `
 		INSERT INTO cq_schemas (
 			schema_id, version, name, description, content, 
 			content_type, is_active, created_at, updated_at

@@ -79,7 +79,8 @@ func (s *CleanupService) cleanupExpiredMessages(ctx context.Context) error {
 		metrics.IncrementBackgroundServiceIterations("cleanup", status)
 		metrics.ObserveBackgroundServiceIterationDuration("cleanup", time.Since(start).Seconds())
 		if deletedCount > 0 {
-			s.base.Logger.InfoWithFields("Cleanup completed",
+			s.base.Logger.InfoWithFields(
+				"Cleanup completed",
 				"deleted_messages", deletedCount,
 				"duration_ms", time.Since(start).Milliseconds(),
 			)

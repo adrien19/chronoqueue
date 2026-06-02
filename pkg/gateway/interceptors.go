@@ -29,7 +29,8 @@ func LoggingInterceptor(logger *log.Logger) grpc.UnaryServerInterceptor {
 			peerAddr = p.Addr.String()
 		}
 
-		logger.InfoWithFields("gRPC request started",
+		logger.InfoWithFields(
+			"gRPC request started",
 			"method", info.FullMethod,
 			"peer", peerAddr,
 		)
@@ -40,14 +41,16 @@ func LoggingInterceptor(logger *log.Logger) grpc.UnaryServerInterceptor {
 		// Log the result
 		duration := time.Since(start)
 		if err != nil {
-			logger.ErrorWithFields("gRPC request failed",
+			logger.ErrorWithFields(
+				"gRPC request failed",
 				"method", info.FullMethod,
 				"peer", peerAddr,
 				"duration", duration.String(),
 				"error", err,
 			)
 		} else {
-			logger.InfoWithFields("gRPC request completed",
+			logger.InfoWithFields(
+				"gRPC request completed",
 				"method", info.FullMethod,
 				"peer", peerAddr,
 				"duration", duration.String(),
@@ -87,7 +90,8 @@ func RecoveryInterceptor(logger *log.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				logger.ErrorWithFields("gRPC handler panicked",
+				logger.ErrorWithFields(
+					"gRPC handler panicked",
 					"method", info.FullMethod,
 					"panic", r,
 				)
@@ -121,7 +125,8 @@ func MetricsInterceptor(logger *log.Logger) grpc.UnaryServerInterceptor {
 			}
 		}
 
-		logger.InfoWithFields("gRPC metrics",
+		logger.InfoWithFields(
+			"gRPC metrics",
 			"method", info.FullMethod,
 			"duration_ms", duration.Milliseconds(),
 			"status_code", statusCode.String(),

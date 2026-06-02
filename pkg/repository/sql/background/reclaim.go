@@ -146,7 +146,8 @@ func (r *ReclaimService) reclaimExpiredMessages(ctx context.Context) error {
 
 	for _, queueName := range queues {
 		if err := r.reclaimQueueMessages(ctx, queueName, nowMs); err != nil {
-			r.base.Logger.ErrorWithFields("Failed to reclaim messages for queue",
+			r.base.Logger.ErrorWithFields(
+				"Failed to reclaim messages for queue",
 				"queue", queueName,
 				"error", err,
 			)
@@ -168,7 +169,8 @@ func (r *ReclaimService) reclaimQueueMessages(ctx context.Context, queueName str
 		return nil
 	}
 
-	r.base.Logger.DebugWithFields("Found expired messages",
+	r.base.Logger.DebugWithFields(
+		"Found expired messages",
 		"queue", queueName,
 		"count", len(expiredMessages),
 	)
@@ -183,7 +185,8 @@ func (r *ReclaimService) reclaimQueueMessages(ctx context.Context, queueName str
 			msg.Metadata = meta
 		}
 
-		r.base.Logger.InfoWithFields("Reclaiming timed-out message",
+		r.base.Logger.InfoWithFields(
+			"Reclaiming timed-out message",
 			"message_id", msg.GetMessageId(),
 			"queue", queueName,
 			"attempts_left", meta.AttemptsLeft,
@@ -197,7 +200,8 @@ func (r *ReclaimService) reclaimQueueMessages(ctx context.Context, queueName str
 
 		// Use backend interface to reclaim the message
 		if err := r.backend.ReclaimExpiredMessage(ctx, queueName, msg); err != nil {
-			r.base.Logger.ErrorWithFields("Failed to reclaim message",
+			r.base.Logger.ErrorWithFields(
+				"Failed to reclaim message",
 				"message_id", msg.GetMessageId(),
 				"error", err,
 			)
@@ -223,7 +227,8 @@ func (r *ReclaimService) reclaimQueueMessages(ctx context.Context, queueName str
 	}
 
 	if reclaimed > 0 || errored > 0 {
-		r.base.Logger.InfoWithFields("Reclaim cycle completed for queue",
+		r.base.Logger.InfoWithFields(
+			"Reclaim cycle completed for queue",
 			"queue", queueName,
 			"reclaimed", reclaimed,
 			"errored", errored,

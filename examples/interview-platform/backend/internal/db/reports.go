@@ -32,7 +32,8 @@ func (d *Database) CreateReport(report *models.Report) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(
+		query,
 		report.ID,
 		report.InterviewID,
 		report.CandidateName,
