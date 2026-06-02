@@ -60,6 +60,10 @@
           {{ template "settings_profile_content" . }}
         {{ else if eq .ContentTemplate "settings_placeholder_content" }}
           {{ template "settings_placeholder_content" . }}
+        {{ else if eq .ContentTemplate "queue_new_content" }}
+          {{ template "queue_new_content" . }}
+        {{ else if eq .ContentTemplate "queue_message_new_content" }}
+          {{ template "queue_message_new_content" . }}
         {{ else }}
           <div class="cq-panel p-8 text-red-400">Unknown content template: {{ .ContentTemplate }}</div>
         {{ end }}

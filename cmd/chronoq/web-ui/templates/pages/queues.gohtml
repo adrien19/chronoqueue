@@ -8,7 +8,10 @@
           <button class="cq-btn" type="submit">Search</button>
         </form>
       </div>
-      <div class="text-sm text-zinc-500">{{ len .Rows }} queue{{ if ne (len .Rows) 1 }}s{{ end }}</div>
+      <div class="flex items-center gap-3">
+        <div class="text-sm text-zinc-500">{{ len .Rows }} queue{{ if ne (len .Rows) 1 }}s{{ end }}</div>
+        <a href="/queues/new" class="cq-btn cq-btn-primary">New queue</a>
+      </div>
     </div>
   </div>
   <div id="queue-table" class="cq-panel overflow-hidden">{{ template "queue_table" . }}</div>

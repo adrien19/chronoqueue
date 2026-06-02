@@ -30,7 +30,10 @@
   <div class="cq-panel overflow-hidden">
     <div class="flex items-center justify-between border-b border-line px-5 py-4">
       <div class="text-lg font-semibold text-white">Messages</div>
-      <span class="text-sm text-zinc-500">showing up to 100</span>
+      <div class="flex items-center gap-3">
+        <span class="text-sm text-zinc-500">showing up to 100</span>
+        <a href="/queues/{{ .Queue.Name }}/messages/new" class="cq-btn cq-btn-primary">New message</a>
+      </div>
     </div>
     {{ template "message_table" . }}
   </div>

@@ -81,8 +81,10 @@ func (s *UIServer) Start(addr string) error {
 	// Console pages
 	mux.HandleFunc("GET /", dashboard.Index)
 	mux.HandleFunc("GET /queues", queues.List)
+	mux.HandleFunc("GET /queues/new", queues.New)
 	mux.HandleFunc("GET /queues/{name}", queues.Detail)
 	mux.HandleFunc("GET /queues/{name}/messages", queues.MessageDetail)
+	mux.HandleFunc("GET /queues/{name}/messages/new", queues.NewMessage)
 	mux.HandleFunc("POST /queues/{name}/requeue-all", queues.RequeueAll)
 	mux.HandleFunc("POST /queues/{name}/purge", queues.Purge)
 	mux.HandleFunc("GET /workers", workers.List)
@@ -91,6 +93,8 @@ func (s *UIServer) Start(addr string) error {
 	mux.HandleFunc("GET /schedules/new", schedules.New)
 
 	// HTMX / API endpoints
+	mux.HandleFunc("POST /api/queues/create", queues.Create)
+	mux.HandleFunc("POST /api/queues/{name}/messages", queues.PostMessage)
 	mux.HandleFunc("POST /api/schedules/create", schedules.Create)
 	mux.HandleFunc("POST /api/schedules/toggle", schedules.Toggle)
 	mux.HandleFunc("DELETE /api/schedules/{id}", schedules.Delete)
@@ -155,6 +159,12 @@ func templateFuncs() template.FuncMap {
 		"lower":       strings.ToLower,
 		"formatTime": func(t time.Time) string {
 			return t.Format("2006-01-02 15:04:05")
+		},
+		"derefTime": func(t *time.Time) time.Time {
+			if t == nil {
+				return time.Time{}
+			}
+			return *t
 		},
 		"formatDuration": func(d time.Duration) string {
 			if d < time.Minute {

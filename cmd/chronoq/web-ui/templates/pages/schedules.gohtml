@@ -19,7 +19,7 @@
     <table class="cq-table">
       <thead>
         <tr>
-          <th>Name</th><th>Type</th><th>Queue</th><th>Expression</th><th>Status</th><th class="text-right">Actions</th>
+          <th>Name</th><th>Type</th><th>Queue</th><th>Expression</th><th class="text-right">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -42,29 +42,24 @@
           <td class="font-mono text-sm text-zinc-400">
             {{ if .Metadata.GetCronSchedule }}{{ .Metadata.GetCronSchedule }}{{ else }}Calendar{{ end }}
           </td>
-          <td id="status-{{ .ScheduleId }}">
-            {{ if eq .Metadata.State.String "SCHEDULED" }}
-            <span class="cq-badge cq-badge-good">Active</span>
-            {{ else if eq .Metadata.State.String "PAUSED" }}
-            <span class="cq-badge cq-badge-warn">Paused</span>
-            {{ else }}
-            <span class="cq-badge cq-badge-muted">{{ .Metadata.State }}</span>
-            {{ end }}
-          </td>
           <td class="text-right">
-            <div class="flex items-center justify-end gap-2">
+            <div id="schedule-controls-{{ .ScheduleId }}" class="flex items-center justify-end gap-2">
               {{ if eq .Metadata.State.String "SCHEDULED" }}
+              <span class="cq-badge cq-badge-good">Active</span>
               <button class="cq-btn !px-2 !py-1 text-xs"
                 hx-post="/api/schedules/toggle"
                 hx-vals='{"schedule_id": "{{ .ScheduleId }}", "action": "pause"}'
-                hx-target="#status-{{ .ScheduleId }}"
-                hx-swap="innerHTML">Pause</button>
+                hx-target="#schedule-controls-{{ .ScheduleId }}"
+                hx-swap="outerHTML">Pause</button>
               {{ else if eq .Metadata.State.String "PAUSED" }}
+              <span class="cq-badge cq-badge-warn">Paused</span>
               <button class="cq-btn cq-btn-primary !px-2 !py-1 text-xs"
                 hx-post="/api/schedules/toggle"
                 hx-vals='{"schedule_id": "{{ .ScheduleId }}", "action": "resume"}'
-                hx-target="#status-{{ .ScheduleId }}"
-                hx-swap="innerHTML">Resume</button>
+                hx-target="#schedule-controls-{{ .ScheduleId }}"
+                hx-swap="outerHTML">Resume</button>
+              {{ else }}
+              <span class="cq-badge cq-badge-muted">{{ .Metadata.State }}</span>
               {{ end }}
               <button class="cq-btn !px-2 !py-1 text-xs text-red-300 border-red-500/20 hover:border-red-500/40"
                 hx-delete="/api/schedules/{{ .ScheduleId }}"
@@ -76,7 +71,7 @@
         </tr>
         {{ end }}
         {{ if not .Schedules }}
-        <tr><td colspan="6" class="py-8 text-center text-zinc-500">No schedules found. <a href="/schedules/new" class="text-blue-300">Create one →</a></td></tr>
+        <tr><td colspan="5" class="py-8 text-center text-zinc-500">No schedules found. <a href="/schedules/new" class="text-blue-300">Create one →</a></td></tr>
         {{ end }}
       </tbody>
     </table>

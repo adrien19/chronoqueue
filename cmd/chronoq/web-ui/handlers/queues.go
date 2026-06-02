@@ -7,8 +7,13 @@ import (
 	"html"
 	"html/template"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/adrien19/chronoqueue/client"
 	clusterstore "github.com/adrien19/chronoqueue/cmd/chronoq/web-ui/cluster"
@@ -28,6 +33,7 @@ type MessageDisplay struct {
 	Priority     int64
 	AttemptCount int32
 	CreatedAt    time.Time
+	DeliverAt    *time.Time // non-nil when the message has a future scheduled delivery time
 }
 
 // QueueDetail contains the view model for the queue detail page.
@@ -120,7 +126,109 @@ func (h *QueuesHandler) List(w http.ResponseWriter, r *http.Request) {
 		"Query":     query,
 		"Rows":      rows,
 	}
+
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := h.templates.ExecuteTemplate(w, "queue_table", data); err != nil {
+			h.logger.ErrorWithFields("Failed to render queue_table fragment", "error", err)
+		}
+		return
+	}
 	h.render(w, "queues_content", data)
+}
+
+// queueNamePattern validates queue names: letters, digits, hyphens, underscores, starting with a letter or digit.
+var queueNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
+
+// New renders the create queue form.
+func (h *QueuesHandler) New(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "queue_new_content", map[string]any{
+		"PageTitle": "New Queue",
+		"Active":    "queues",
+	})
+}
+
+// Create handles queue creation (HTMX POST).
+func (h *QueuesHandler) Create(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		h.logger.ErrorWithFields("Failed to parse form", "error", err)
+		h.writeFormError(w, "Invalid form data")
+		return
+	}
+
+	name := strings.TrimSpace(r.FormValue("name"))
+	queueType := r.FormValue("type")
+	exclusivityKey := strings.TrimSpace(r.FormValue("exclusivity_key"))
+	leaseDuration := strings.TrimSpace(r.FormValue("lease_duration"))
+	dlqName := strings.TrimSpace(r.FormValue("dlq_name"))
+	autoCreateDLQ := r.FormValue("auto_create_dlq") == "true"
+	maxAttemptsStr := r.FormValue("default_max_attempts")
+
+	if name == "" {
+		h.writeFormError(w, "Queue name is required")
+		return
+	}
+	if !queueNamePattern.MatchString(name) {
+		h.writeFormError(w, "Queue name may only contain letters, digits, hyphens, and underscores, and must start with a letter or digit")
+		return
+	}
+	if queueType == "exclusive" && exclusivityKey == "" {
+		h.writeFormError(w, "Exclusivity key is required for exclusive queues")
+		return
+	}
+	if leaseDuration == "" {
+		leaseDuration = "30s"
+	}
+	if _, err := time.ParseDuration(leaseDuration); err != nil {
+		h.writeFormError(w, fmt.Sprintf("Invalid lease duration %q — use Go duration syntax, e.g. 30s, 5m, 1h", leaseDuration))
+		return
+	}
+
+	maxAttempts := int32(3)
+	if maxAttemptsStr != "" {
+		v, err := strconv.ParseInt(maxAttemptsStr, 10, 32)
+		if err != nil || v < 1 {
+			h.writeFormError(w, "Max attempts must be a positive integer")
+			return
+		}
+		maxAttempts = int32(v)
+	}
+
+	if autoCreateDLQ && dlqName == "" {
+		dlqName = name + "-dlq"
+	}
+
+	opts := client.QueueOptions{
+		Type:                client.ParseQueueType(queueType),
+		DequeueAttempts:     maxAttempts,
+		LeaseDuration:       leaseDuration,
+		ExclusivityKey:      exclusivityKey,
+		DeadLetterQueueName: dlqName,
+		AutoCreateDLQ:       autoCreateDLQ,
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	if _, err := h.activeClient().CreateQueue(ctx, name, opts); err != nil {
+		h.logger.ErrorWithFields("Failed to create queue", "error", err, "queue", name)
+		h.writeFormError(w, fmt.Sprintf("Failed to create queue: %v", err))
+		return
+	}
+
+	w.Header().Set("HX-Redirect", "/queues")
+	w.WriteHeader(http.StatusCreated)
+	if _, err := w.Write([]byte("Queue created successfully")); err != nil {
+		h.logger.Error("Failed to write response", "error", err)
+	}
+}
+
+// writeFormError writes an inline error fragment into the HTMX form result target.
+func (h *QueuesHandler) writeFormError(w http.ResponseWriter, message string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusBadRequest)
+	escaped := html.EscapeString(message)
+	_, _ = fmt.Fprintf(w, `<div class="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">%s</div>`, escaped)
 }
 
 // Detail renders the queue detail page with message list.
@@ -158,8 +266,15 @@ func (h *QueuesHandler) Detail(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			createdAt := time.Now()
+			var deliverAt *time.Time
 			if ts := meta.GetScheduledTime(); ts != nil {
-				createdAt = ts.AsTime()
+				t := ts.AsTime()
+				if t.After(time.Now().UTC().Add(5 * time.Second)) {
+					// scheduled_time is meaningfully in the future → this is a delayed message
+					deliverAt = &t
+				} else {
+					createdAt = t
+				}
 			}
 			attemptCount := meta.GetMaxAttempts() - meta.GetAttemptsLeft()
 			if attemptCount < 0 {
@@ -172,6 +287,7 @@ func (h *QueuesHandler) Detail(w http.ResponseWriter, r *http.Request) {
 				Priority:     meta.GetPriority(),
 				AttemptCount: attemptCount,
 				CreatedAt:    createdAt,
+				DeliverAt:    deliverAt,
 			})
 		}
 	}
@@ -193,6 +309,137 @@ func (h *QueuesHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		"QueueMessages": messages,
 	}
 	h.render(w, "queue_detail_content", data)
+}
+
+// NewMessage renders the post-message form for a queue.
+func (h *QueuesHandler) NewMessage(w http.ResponseWriter, r *http.Request) {
+	queueName := r.PathValue("name")
+	if queueName == "" {
+		h.renderError(w, http.StatusBadRequest, "Queue name required")
+		return
+	}
+	h.render(w, "queue_message_new_content", map[string]any{
+		"PageTitle": "New Message — " + queueName,
+		"Active":    "queues",
+		"QueueName": queueName,
+	})
+}
+
+// PostMessage handles message creation for a queue (HTMX POST).
+func (h *QueuesHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
+	queueName := r.PathValue("name")
+	if queueName == "" {
+		h.writeFormError(w, "Queue name required")
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		h.logger.ErrorWithFields("Failed to parse form", "error", err)
+		h.writeFormError(w, "Invalid form data")
+		return
+	}
+
+	messageID := strings.TrimSpace(r.FormValue("message_id"))
+	if messageID == "" {
+		messageID = uuid.New().String()
+	}
+
+	payloadRaw := strings.TrimSpace(r.FormValue("payload_data"))
+	if payloadRaw == "" {
+		h.writeFormError(w, "Payload is required")
+		return
+	}
+	var payloadMap map[string]any
+	if err := json.Unmarshal([]byte(payloadRaw), &payloadMap); err != nil {
+		h.writeFormError(w, fmt.Sprintf("Invalid JSON payload: %v", err))
+		return
+	}
+	payloadStruct, err := structpb.NewStruct(payloadMap)
+	if err != nil {
+		h.writeFormError(w, fmt.Sprintf("Failed to build payload: %v", err))
+		return
+	}
+
+	var maxAttempts int32
+	if v := strings.TrimSpace(r.FormValue("max_attempts")); v != "" {
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err != nil || n < 1 {
+			h.writeFormError(w, "Max attempts must be a positive integer")
+			return
+		}
+		maxAttempts = int32(n)
+	}
+
+	var priority int64
+	if v := strings.TrimSpace(r.FormValue("priority")); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 0 {
+			h.writeFormError(w, "Priority must be a non-negative integer")
+			return
+		}
+		priority = n
+	}
+
+	leaseDuration := strings.TrimSpace(r.FormValue("lease_duration"))
+	if leaseDuration != "" {
+		if _, err := time.ParseDuration(leaseDuration); err != nil {
+			h.writeFormError(w, fmt.Sprintf("Invalid lease duration %q — use Go duration syntax, e.g. 30s, 5m", leaseDuration))
+			return
+		}
+	}
+
+	contentType := strings.TrimSpace(r.FormValue("content_type"))
+
+	var scheduledTime *time.Time
+	if v := strings.TrimSpace(r.FormValue("deliver_at")); v != "" {
+		// datetime-local values are submitted as local time and converted to UTC
+		// by the browser-side JS before sending. Parse with or without seconds.
+		var parsed time.Time
+		var err error
+		for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04"} {
+			parsed, err = time.Parse(layout, v)
+			if err == nil {
+				break
+			}
+		}
+		if err != nil {
+			h.writeFormError(w, fmt.Sprintf("Invalid deliver-at time %q — expected YYYY-MM-DDTHH:MM", v))
+			return
+		}
+		parsed = parsed.UTC()
+		if !parsed.After(time.Now().UTC()) {
+			h.writeFormError(w, "Deliver at must be a future time")
+			return
+		}
+		scheduledTime = &parsed
+	}
+
+	opts := client.MessageOptions{
+		Payload: client.Payload{
+			Data:        payloadStruct,
+			ContentType: contentType,
+		},
+		MaxAttempts:   maxAttempts,
+		AttemptsLeft:  maxAttempts,
+		Priority:      priority,
+		LeaseDuration: leaseDuration,
+		ScheduledTime: scheduledTime,
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	if _, err := h.activeClient().PostMessage(ctx, queueName, messageID, opts); err != nil {
+		h.logger.ErrorWithFields("Failed to post message", "error", err, "queue", queueName)
+		h.writeFormError(w, fmt.Sprintf("Failed to post message: %v", err))
+		return
+	}
+
+	w.Header().Set("HX-Redirect", "/queues/"+html.EscapeString(queueName))
+	w.WriteHeader(http.StatusCreated)
+	if _, err := w.Write([]byte("Message posted")); err != nil {
+		h.logger.Error("Failed to write response", "error", err)
+	}
 }
 
 // MessageDetail returns the modal HTML for a specific message (HTMX partial).

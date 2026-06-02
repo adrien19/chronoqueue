@@ -1,0 +1,82 @@
+{{ define "queue_message_new_content" }}
+<section class="space-y-5">
+  <div class="flex items-center gap-3">
+    <a href="/queues/{{ .QueueName }}" class="cq-btn !px-2">←</a>
+    <div>
+      <div class="text-sm text-zinc-500"><a href="/queues" class="hover:text-white">Queues</a> / <a href="/queues/{{ .QueueName }}" class="hover:text-white">{{ .QueueName }}</a></div>
+      <h2 class="text-2xl font-semibold text-white">New Message</h2>
+    </div>
+  </div>
+
+  <div class="cq-panel p-6">
+    <form id="message-form" hx-post="/api/queues/{{ .QueueName }}/messages" hx-target="#form-result" class="space-y-6">
+
+      <div>
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Message ID</label>
+        <input class="cq-input w-full font-mono" type="text" name="message_id" placeholder="Auto-generated if blank">
+        <p class="mt-1 text-xs text-zinc-500">Unique identifier for this message. Leave blank to auto-generate a UUID.</p>
+      </div>
+
+      <div>
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Payload (JSON) <span class="text-red-400">*</span></label>
+        <textarea class="cq-input w-full min-h-[160px] font-mono text-sm" name="payload_data" required
+          placeholder='{"key": "value"}'></textarea>
+        <p class="mt-1 text-xs text-zinc-500">JSON object to attach as the message payload.</p>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4">
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Priority</label>
+          <input class="cq-input w-full" type="number" name="priority" value="0" min="0">
+          <p class="mt-1 text-xs text-zinc-500">Higher value = higher priority.</p>
+        </div>
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Max Attempts</label>
+          <input class="cq-input w-full" type="number" name="max_attempts" placeholder="Queue default" min="1" max="100">
+          <p class="mt-1 text-xs text-zinc-500">Leave blank to use the queue default.</p>
+        </div>
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Lease Duration</label>
+          <input class="cq-input w-full" type="text" name="lease_duration" placeholder="Queue default (e.g. 30s)">
+          <p class="mt-1 text-xs text-zinc-500">Leave blank to use the queue default.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Content Type</label>
+          <input class="cq-input w-full" type="text" name="content_type" placeholder="application/json">
+          <p class="mt-1 text-xs text-zinc-500">MIME type of the payload (e.g. application/json).</p>
+        </div>
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Deliver at</label>
+          <input class="cq-input w-full" type="datetime-local" name="deliver_at" id="deliver_at">
+          <p class="mt-1 text-xs text-zinc-500">Leave blank to deliver immediately. Enter a future time in your local timezone — it will be sent as UTC.</p>
+        </div>
+      </div>
+
+      <div id="form-result"></div>
+
+      <div class="flex items-center gap-3 border-t border-line pt-4">
+        <button class="cq-btn cq-btn-primary" type="submit">Post Message</button>
+        <a href="/queues/{{ .QueueName }}" class="cq-btn">Cancel</a>
+      </div>
+    </form>
+  </div>
+</section>
+
+<script>
+(function () {
+  var form = document.getElementById('message-form');
+  if (!form) return;
+  form.addEventListener('htmx:configRequest', function (e) {
+    var raw = e.detail.parameters['deliver_at'];
+    if (!raw) return;
+    var d = new Date(raw);
+    if (isNaN(d.getTime())) return;
+    // Replace the local datetime string with its UTC equivalent before sending.
+    e.detail.parameters['deliver_at'] = d.toISOString().slice(0, 16);
+  });
+})();
+</script>
+{{ end }}

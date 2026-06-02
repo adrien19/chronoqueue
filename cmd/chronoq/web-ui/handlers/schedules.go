@@ -252,15 +252,46 @@ func (h *SchedulesHandler) Toggle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return a new badge reflecting the updated state
-	w.Header().Set("Content-Type", "text/html")
-	var badge string
+	// Return the updated controls div so both the badge and the toggle button reflect the new state.
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	sid := html.EscapeString(scheduleID)
+	var controlsHTML string
 	if action == "pause" {
-		badge = `<span class="cq-badge cq-badge-warn">Paused</span>`
+		controlsHTML = fmt.Sprintf(
+			`<div id="schedule-controls-%s" class="flex items-center justify-end gap-2">`+
+				`<span class="cq-badge cq-badge-warn">Paused</span>`+
+				`<button class="cq-btn cq-btn-primary !px-2 !py-1 text-xs"`+
+				` hx-post="/api/schedules/toggle"`+
+				` hx-vals="{&quot;schedule_id&quot;: &quot;%s&quot;, &quot;action&quot;: &quot;resume&quot;}"`+
+				` hx-target="#schedule-controls-%s"`+
+				` hx-swap="outerHTML">Resume</button>`+
+				`<button class="cq-btn !px-2 !py-1 text-xs text-red-300 border-red-500/20 hover:border-red-500/40"`+
+				` hx-delete="/api/schedules/%s"`+
+				` hx-confirm="Delete schedule &#39;%s&#39;?"`+
+				` hx-target="#schedule-row-%s"`+
+				` hx-swap="outerHTML">Delete</button>`+
+				`</div>`,
+			sid, sid, sid, sid, sid, sid,
+		)
 	} else {
-		badge = `<span class="cq-badge border-sky-500/25 bg-sky-500/10 text-sky-300">Active</span>`
+		controlsHTML = fmt.Sprintf(
+			`<div id="schedule-controls-%s" class="flex items-center justify-end gap-2">`+
+				`<span class="cq-badge cq-badge-good">Active</span>`+
+				`<button class="cq-btn !px-2 !py-1 text-xs"`+
+				` hx-post="/api/schedules/toggle"`+
+				` hx-vals="{&quot;schedule_id&quot;: &quot;%s&quot;, &quot;action&quot;: &quot;pause&quot;}"`+
+				` hx-target="#schedule-controls-%s"`+
+				` hx-swap="outerHTML">Pause</button>`+
+				`<button class="cq-btn !px-2 !py-1 text-xs text-red-300 border-red-500/20 hover:border-red-500/40"`+
+				` hx-delete="/api/schedules/%s"`+
+				` hx-confirm="Delete schedule &#39;%s&#39;?"`+
+				` hx-target="#schedule-row-%s"`+
+				` hx-swap="outerHTML">Delete</button>`+
+				`</div>`,
+			sid, sid, sid, sid, sid, sid,
+		)
 	}
-	if _, err := w.Write([]byte(badge)); err != nil {
+	if _, err := w.Write([]byte(controlsHTML)); err != nil {
 		h.logger.Error("Failed to write toggle response", "error", err)
 	}
 }

@@ -53,14 +53,14 @@
       </div>
     </div>
     <div class="grid gap-4">
-      <div class="cq-panel p-4">
+      <div class="cq-panel p-4 flex flex-col items-center justify-center">
         <div class="mb-3 text-lg font-semibold text-white">Total pending</div>
-        <div class="grid grid-cols-[120px_1fr] gap-3">
+        <div class="flex items-center gap-3">
           <div class="text-5xl font-semibold text-white">{{ .TotalPending }}</div>
           {{ if .RatePoints }}<canvas width="420" height="120" data-chart data-color="#84cc16" data-points='{{ json .RatePoints }}'></canvas>{{ end }}
         </div>
       </div>
-      <div class="cq-panel p-4">
+      <div class="cq-panel p-4 flex flex-col items-center justify-center">
         <div class="mb-3 text-lg font-semibold text-white">Completed</div>
         <div class="text-5xl font-semibold text-white">{{ .TotalCompleted }}</div>
       </div>
