@@ -1,0 +1,19 @@
+{{ define "queues_content" }}
+<section class="space-y-5">
+  <div class="cq-panel p-5">
+    <div class="flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <form hx-get="/queues" hx-target="#queue-table" hx-push-url="true" class="flex items-center gap-2">
+          <input class="cq-input w-80" type="search" name="q" value="{{ .Query }}" placeholder="Search queues">
+          <button class="cq-btn" type="submit">Search</button>
+        </form>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="text-sm text-zinc-500">{{ len .Rows }} queue{{ if ne (len .Rows) 1 }}s{{ end }}</div>
+        <a href="/queues/new" class="cq-btn cq-btn-primary">New queue</a>
+      </div>
+    </div>
+  </div>
+  <div id="queue-table" class="cq-panel overflow-hidden">{{ template "queue_table" . }}</div>
+</section>
+{{ end }}

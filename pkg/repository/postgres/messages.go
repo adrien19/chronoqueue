@@ -170,7 +170,8 @@ func (s *Storage) enqueueMessageInTx(ctx context.Context, tx *sql.Tx, queueName 
 	}
 
 	now := s.nowMs()
-	result, err := tx.ExecContext(ctx, query,
+	result, err := tx.ExecContext(
+		ctx, query,
 		message.MessageId,
 		queueName,
 		metadata.State,
@@ -330,7 +331,8 @@ func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId s
                 updated_at = ?
             WHERE id = ?
         `)
-		_, err = tx.ExecContext(ctx, updateQuery,
+		_, err = tx.ExecContext(
+			ctx, updateQuery,
 			messagepb.Message_Metadata_RUNNING,
 			attemptId,
 			workerId,
@@ -513,7 +515,8 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 						updated_at = ?
 					WHERE message_id = ?
 				`)
-				_, err = tx.ExecContext(ctx, updateQuery,
+				_, err = tx.ExecContext(
+					ctx, updateQuery,
 					newState,
 					newAttemptsLeft,
 					nowMs,
@@ -643,7 +646,8 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 					updated_at = ?
 				WHERE message_id = ? AND state IN (?, ?)
 			`)
-			result, err := tx.ExecContext(ctx, updateQuery,
+			result, err := tx.ExecContext(
+				ctx, updateQuery,
 				messagepb.Message_Metadata_CANCELED,
 				nowMs,
 				deletedAt,
@@ -743,7 +747,8 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
                 updated_at = ?
             WHERE message_id = ? AND current_attempt_id = ?
         `)
-		_, err = tx.ExecContext(ctx, updateQuery,
+		_, err = tx.ExecContext(
+			ctx, updateQuery,
 			newLeaseRuntime.LeaseExpiry,
 			newLeaseRuntime.LeaseExtensionUsed,
 			s.nowMs(),

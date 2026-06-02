@@ -32,7 +32,8 @@ func TestPostgreSQLClientCertificates(t *testing.T) {
 
 	t.Run("ConnectionWithoutCertificates", func(t *testing.T) {
 		// Start a standard PostgreSQL container without TLS
-		container, err := postgres.Run(ctx,
+		container, err := postgres.Run(
+			ctx,
 			"postgres:17-alpine",
 			postgres.WithDatabase("testdb"),
 			postgres.WithUsername("testuser"),

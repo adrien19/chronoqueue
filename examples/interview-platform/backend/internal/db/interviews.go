@@ -27,7 +27,8 @@ func (d *Database) CreateInterview(interview *models.Interview) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(
+		query,
 		interview.ID,
 		interview.CandidateName,
 		interview.CandidateEmail,

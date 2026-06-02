@@ -34,7 +34,8 @@ func (s *Server) initializePostgresStorage(ctx context.Context) error {
 	}
 
 	s.database = storage
-	s.logger.InfoWithFields("Postgres repository initialized",
+	s.logger.InfoWithFields(
+		"Postgres repository initialized",
 		"host", s.config.PostgresHost,
 		"port", s.config.PostgresPort,
 		"database", s.config.PostgresDBName,

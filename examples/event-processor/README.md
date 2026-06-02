@@ -852,8 +852,8 @@ This script demonstrates:
 ./event-processor publish events/load-test.json
 
 # Start multiple workers
-./event-processor worker --type email --workers 5 &
-./event-processor worker --type webhook --workers 10 &
+./event-processor worker --type email --workers 5 & \
+./event-processor worker --type webhook --workers 10 & \
 ./event-processor worker --type sms --workers 3 &
 
 # Monitor throughput

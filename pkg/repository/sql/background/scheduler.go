@@ -117,7 +117,8 @@ func (s *SchedulerService) processScheduledMessages(ctx context.Context) error {
 
 		// Update state in transaction
 		if err := s.activateMessage(ctx, msg.id, msg.queueName, msg.messageID, msg.message, oldState); err != nil {
-			s.base.Logger.ErrorWithFields("Failed to activate scheduled message",
+			s.base.Logger.ErrorWithFields(
+				"Failed to activate scheduled message",
 				"message_id", msg.messageID,
 				"error", err,
 			)
@@ -138,14 +139,16 @@ func (s *SchedulerService) processScheduledMessages(ctx context.Context) error {
 			metrics.SetScheduleLag(msg.queueName, lag)
 		}
 
-		s.base.Logger.DebugWithFields("Activated scheduled message",
+		s.base.Logger.DebugWithFields(
+			"Activated scheduled message",
 			"message_id", msg.messageID,
 			"queue", msg.queueName,
 		)
 	}
 
 	if activated > 0 {
-		s.base.Logger.InfoWithFields("Scheduler cycle completed",
+		s.base.Logger.InfoWithFields(
+			"Scheduler cycle completed",
 			"activated", activated,
 		)
 	}
@@ -165,7 +168,8 @@ func (s *SchedulerService) collectScheduledMessages(ctx context.Context, nowMs i
 	`, s.base.Dialect.Placeholder(1),
 		s.base.Dialect.Placeholder(2))
 
-	rows, err := s.base.DB.QueryContext(ctx, query,
+	rows, err := s.base.DB.QueryContext(
+		ctx, query,
 		int(messagepb.Message_Metadata_INVISIBLE),
 		nowMs,
 	)
@@ -229,7 +233,8 @@ func (s *SchedulerService) activateMessage(
 			s.base.Dialect.Placeholder(3),
 			s.base.Dialect.Placeholder(4))
 
-		_, err = tx.ExecContext(ctx, updateQuery,
+		_, err = tx.ExecContext(
+			ctx, updateQuery,
 			int(message.GetMetadata().GetState()),
 			metadataBytes,
 			s.base.Clock.NowMs(),

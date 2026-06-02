@@ -1,0 +1,110 @@
+{{ define "schedule_new_content" }}
+<section class="space-y-5">
+  <div class="flex items-center gap-3">
+    <a href="/schedules" class="cq-btn !px-2">←</a>
+    <h2 class="text-2xl font-semibold text-white">Create Schedule</h2>
+  </div>
+
+  <div class="cq-panel p-6">
+    <form hx-post="/api/schedules/create" hx-target="#form-result" class="space-y-6">
+
+      <div>
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Schedule ID <span class="text-red-400">*</span></label>
+        <input class="cq-input w-full" type="text" name="schedule_id" required placeholder="daily-report-generator">
+        <p class="mt-1 text-xs text-zinc-500">Unique identifier for this schedule</p>
+      </div>
+
+      <div>
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Schedule Type <span class="text-red-400">*</span></label>
+        <select class="cq-input w-full" name="schedule_type" id="schedule_type" required onchange="toggleScheduleType()">
+          <option value="cron">Cron Expression</option>
+          <option value="calendar">Calendar Schedule</option>
+        </select>
+      </div>
+
+      <div id="cron_section">
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Cron Expression <span class="text-red-400">*</span></label>
+        <input class="cq-input w-full font-mono" type="text" name="cron_expression" id="cron_expression" required placeholder="0 9 * * MON-FRI">
+        <p class="mt-1 text-xs text-zinc-500">Format: minute hour day month weekday (e.g., "0 9 * * *" for daily at 9 AM)</p>
+      </div>
+
+      <div id="calendar_section" class="hidden space-y-4 rounded-xl border border-line bg-zinc-950/40 p-5">
+        <p class="text-sm italic text-zinc-400">Calendar schedules provide precise control over execution timing with timezone and recurrence support.</p>
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Timezone</label>
+          <input class="cq-input w-full" type="text" name="timezone" id="timezone" placeholder="America/New_York">
+          <p class="mt-1 text-xs text-zinc-500">IANA timezone (e.g., "America/New_York", "Europe/London", "Asia/Tokyo")</p>
+        </div>
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Recurrence</label>
+          <select class="cq-input w-full" name="calendar_type" id="calendar_type">
+            <option value="MONTHLY">Monthly</option>
+            <option value="WEEKLY">Weekly</option>
+            <option value="DAILY">Daily</option>
+            <option value="BUSINESS_DAYS">Business Days</option>
+          </select>
+        </div>
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Days of Week</label>
+          <div class="flex flex-wrap gap-4">
+            {{ range $d := .DaysOfWeek }}
+            <label class="flex items-center gap-2 text-sm text-zinc-300">
+              <input type="checkbox" class="rounded border-line bg-zinc-900 text-blue-500" name="days_of_week" value="{{ $d.Value }}">
+              {{ $d.Label }}
+            </label>
+            {{ end }}
+          </div>
+          <p class="mt-1 text-xs text-zinc-500">For WEEKLY schedules (ISO 8601: 1=Monday, 7=Sunday)</p>
+        </div>
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Execution Times</label>
+          <input class="cq-input w-full font-mono" type="text" name="execution_times" placeholder="09:00, 17:00">
+          <p class="mt-1 text-xs text-zinc-500">HH:MM, comma-separated for multiple times</p>
+        </div>
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Day of Month</label>
+          <input class="cq-input w-32" type="number" name="day_of_month" min="1" max="31" placeholder="1">
+          <p class="mt-1 text-xs text-zinc-500">For MONTHLY schedules (1-31)</p>
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Target Queue <span class="text-red-400">*</span></label>
+        <input class="cq-input w-full" type="text" name="queue_name" required placeholder="my-queue">
+        <p class="mt-1 text-xs text-zinc-500">Queue where messages will be posted. Created automatically if it doesn't exist.</p>
+      </div>
+
+      <div>
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Message Payload (JSON)</label>
+        <textarea class="cq-input w-full min-h-[120px] font-mono text-sm" name="payload_data" placeholder='{"type": "report", "format": "pdf"}'></textarea>
+        <p class="mt-1 text-xs text-zinc-500">JSON data to include in each scheduled message</p>
+      </div>
+
+      <div id="form-result"></div>
+
+      <div class="flex justify-end gap-3">
+        <a href="/schedules" class="cq-btn">Cancel</a>
+        <button type="submit" class="cq-btn cq-btn-primary">Create Schedule</button>
+      </div>
+    </form>
+  </div>
+</section>
+<script>
+function toggleScheduleType() {
+  const t = document.getElementById('schedule_type').value;
+  const cs = document.getElementById('cron_section');
+  const cal = document.getElementById('calendar_section');
+  const ce = document.getElementById('cron_expression');
+  const tz = document.getElementById('timezone');
+  if (t === 'cron') {
+    cs.classList.remove('hidden');
+    cal.classList.add('hidden');
+    ce.required = true; tz.required = false;
+  } else {
+    cs.classList.add('hidden');
+    cal.classList.remove('hidden');
+    ce.required = false; tz.required = true;
+  }
+}
+</script>
+{{ end }}

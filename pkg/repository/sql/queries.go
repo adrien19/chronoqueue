@@ -66,7 +66,8 @@ func (qb *QueryBuilder) BuildClaimMessageQuery() string {
 // BuildOldestMessageAgeQuery returns the minimum created_at for pending messages in a priority range.
 // Used for aging-based priority weighting.
 func (qb *QueryBuilder) BuildOldestMessageAgeQuery(_ string) string {
-	return fmt.Sprintf(`
+	return fmt.Sprintf(
+		`
 		SELECT MIN(created_at)
 		FROM cq_messages
 		WHERE queue_name = %s

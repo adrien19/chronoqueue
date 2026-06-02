@@ -1,0 +1,70 @@
+{{ define "home_content" }}
+<section class="space-y-5">
+  {{ template "dashboard_stats" . }}
+
+  <div class="cq-panel overflow-hidden">
+    <div class="border-b border-line p-4">
+      <div class="mb-4 flex items-center justify-between">
+        <div class="text-lg font-semibold text-white">Live surfaces</div>
+        <span class="text-xs text-zinc-500">SSE</span>
+      </div>
+      <div hx-ext="sse" sse-connect="/fragments/live-overview" sse-swap="overview">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="cq-panel-soft p-4"><div class="text-sm text-zinc-400">Connecting…</div></div>
+          <div class="cq-panel-soft p-4"><div class="text-sm text-zinc-400">Waiting for stream…</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="flex items-center justify-between px-5 py-4">
+      <div class="text-lg font-semibold text-white">Queues</div>
+      <a href="/queues" class="text-sm text-blue-300">View all →</a>
+    </div>
+    {{ template "queue_table" . }}
+  </div>
+</section>
+{{ end }}
+
+{{ define "dashboard_stats" }}
+<div id="dashboard-stats" hx-get="/fragments/dashboard-stats" hx-trigger="every 5s" hx-swap="outerHTML">
+  <div class="grid grid-cols-[1.2fr_1.6fr] gap-4">
+    <div class="cq-panel overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-4">
+        <div class="text-lg font-semibold text-white">Broker state</div>
+        <a href="/lease-monitor" class="text-sm text-blue-300">Lease monitor →</a>
+      </div>
+      <div class="px-5 pb-5">
+        <div class="mb-6 flex items-center gap-3">
+          {{ if eq .BrokerStatus "Healthy" }}
+          <span class="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300">✓</span>
+          {{ else }}
+          <span class="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/15 text-red-400">✕</span>
+          {{ end }}
+          <span class="text-3xl font-semibold {{ if eq .BrokerStatus "Healthy" }}text-white{{ else }}text-red-400{{ end }}">{{ .BrokerStatus }}</span>
+        </div>
+        <div class="grid grid-cols-3 gap-3 border-t border-line pt-4">
+          <div><div class="cq-label">Ready</div><div class="mt-2 text-2xl font-semibold text-blue-300">{{ .TotalReady }}</div></div>
+          <div><div class="cq-label">Inflight</div><div class="mt-2 text-2xl font-semibold text-white">{{ .TotalRunning }}</div></div>
+          <div><div class="cq-label">DLQ total</div><div class="mt-2 text-2xl font-semibold text-amber-300">{{ .TotalDLQ }}</div></div>
+        </div>
+      </div>
+      <div class="flex items-center justify-between border-t border-line px-5 py-3 text-sm text-zinc-500">
+        <span class="truncate">{{ .BrokerAddress }}</span>
+        <button class="cq-btn !px-2 !py-1 text-xs" data-copy="{{ .BrokerAddress }}">Copy</button>
+      </div>
+    </div>
+    <div class="grid gap-4">
+      <div class="cq-panel p-4 flex flex-col items-center justify-center">
+        <div class="mb-3 text-lg font-semibold text-white">Total pending</div>
+        <div class="flex items-center gap-3">
+          <div class="text-5xl font-semibold text-white">{{ .TotalPending }}</div>
+          {{ if .RatePoints }}<canvas width="420" height="120" data-chart data-color="#84cc16" data-points='{{ json .RatePoints }}'></canvas>{{ end }}
+        </div>
+      </div>
+      <div class="cq-panel p-4 flex flex-col items-center justify-center">
+        <div class="mb-3 text-lg font-semibold text-white">Completed</div>
+        <div class="text-5xl font-semibold text-white">{{ .TotalCompleted }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+{{ end }}

@@ -1,0 +1,41 @@
+{{ define "queue_detail_content" }}
+<section class="space-y-5">
+  <div class="cq-panel p-6">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <div class="mb-1 text-sm text-zinc-500"><a href="/queues" class="hover:text-white">Queues</a> / <span class="text-zinc-300">{{ .Queue.Name }}</span></div>
+        <div class="text-3xl font-semibold text-white">{{ .Queue.Name }}</div>
+        {{ if .Queue.IsDLQ }}<div class="mt-2"><span class="cq-badge border-red-500/25 bg-red-500/10 text-red-300">DLQ</span></div>{{ end }}
+      </div>
+      <div class="flex gap-2">
+        {{ if .Queue.IsDLQ }}
+        <form method="POST" action="/queues/{{ .Queue.Name }}/requeue-all" onsubmit="return confirm('Requeue all messages from DLQ?')">
+          <button class="cq-btn cq-btn-primary" type="submit">Requeue all</button>
+        </form>
+        {{ end }}
+        <form method="POST" action="/queues/{{ .Queue.Name }}/purge" onsubmit="return confirm('Purge ALL messages from this queue? This cannot be undone.')">
+          <button class="cq-btn" type="submit">Purge</button>
+        </form>
+      </div>
+    </div>
+    <div class="mt-6 grid grid-cols-5 gap-3">
+      <div class="cq-panel-soft p-4"><div class="cq-label">Ready</div><div class="mt-2 text-2xl font-semibold text-blue-300">{{ .Queue.Ready }}</div></div>
+      <div class="cq-panel-soft p-4"><div class="cq-label">Inflight</div><div class="mt-2 text-2xl font-semibold text-white">{{ .Queue.InFlight }}</div></div>
+      <div class="cq-panel-soft p-4"><div class="cq-label">Retries</div><div class="mt-2 text-2xl font-semibold text-amber-300">{{ .Queue.Retries }}</div></div>
+      <div class="cq-panel-soft p-4"><div class="cq-label">DLQ</div><div class="mt-2 text-2xl font-semibold text-red-300">{{ .Queue.DLQ }}</div></div>
+      <div class="cq-panel-soft p-4"><div class="cq-label">Completed</div><div class="mt-2 text-2xl font-semibold text-white">{{ .Queue.Completed }}</div></div>
+    </div>
+  </div>
+
+  <div class="cq-panel overflow-hidden">
+    <div class="flex items-center justify-between border-b border-line px-5 py-4">
+      <div class="text-lg font-semibold text-white">Messages</div>
+      <div class="flex items-center gap-3">
+        <span class="text-sm text-zinc-500">showing up to 100</span>
+        <a href="/queues/{{ .Queue.Name }}/messages/new" class="cq-btn cq-btn-primary">New message</a>
+      </div>
+    </div>
+    {{ template "message_table" . }}
+  </div>
+</section>
+{{ end }}

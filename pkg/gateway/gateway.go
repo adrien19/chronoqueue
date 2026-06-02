@@ -113,12 +113,14 @@ func customErrorHandler(logger *log.Logger) runtime.ErrorHandlerFunc {
 		// Check if this is a NotFound error - common for unimplemented endpoints
 		// Log at DEBUG level instead of ERROR to reduce noise
 		if err != nil && strings.Contains(err.Error(), "NotFound") {
-			logger.DebugWithFields("Gateway endpoint not found",
+			logger.DebugWithFields(
+				"Gateway endpoint not found",
 				"method", r.Method,
 				"path", r.URL.Path,
 			)
 		} else {
-			logger.ErrorWithFields("Gateway error",
+			logger.ErrorWithFields(
+				"Gateway error",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"error", err,
@@ -223,7 +225,8 @@ func SwaggerUIHandler(config GatewayConfig, logger *log.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Security: Check if API docs are enabled
 		if !config.EnableAPIDocs {
-			logger.WarnWithFields("API documentation access denied - disabled in configuration",
+			logger.WarnWithFields(
+				"API documentation access denied - disabled in configuration",
 				"remote_addr", r.RemoteAddr,
 				"path", r.URL.Path,
 			)
@@ -304,7 +307,8 @@ func SwaggerSpecHandler(config GatewayConfig, logger *log.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Security: Check if API docs are enabled
 		if !config.EnableAPIDocs {
-			logger.WarnWithFields("API documentation access denied - disabled in configuration",
+			logger.WarnWithFields(
+				"API documentation access denied - disabled in configuration",
 				"remote_addr", r.RemoteAddr,
 				"path", r.URL.Path,
 			)
@@ -342,7 +346,8 @@ func SwaggerSpecHandler(config GatewayConfig, logger *log.Logger) http.Handler {
 			}
 
 			if !allowed {
-				logger.WarnWithFields("API documentation CORS origin denied",
+				logger.WarnWithFields(
+					"API documentation CORS origin denied",
 					"origin", origin,
 					"remote_addr", r.RemoteAddr,
 				)
@@ -358,7 +363,8 @@ func SwaggerSpecHandler(config GatewayConfig, logger *log.Logger) http.Handler {
 		w.WriteHeader(http.StatusOK)
 		n, err := w.Write(swaggerSpec)
 		if err != nil {
-			logger.ErrorWithFields("Failed to write swagger spec",
+			logger.ErrorWithFields(
+				"Failed to write swagger spec",
 				"error", err,
 				"bytes_written", n,
 				"expected_bytes", len(swaggerSpec),
@@ -368,7 +374,8 @@ func SwaggerSpecHandler(config GatewayConfig, logger *log.Logger) http.Handler {
 			return
 		}
 		if n != len(swaggerSpec) {
-			logger.WarnWithFields("Short write when sending swagger spec",
+			logger.WarnWithFields(
+				"Short write when sending swagger spec",
 				"bytes_written", n,
 				"expected_bytes", len(swaggerSpec),
 				"remote_addr", r.RemoteAddr,

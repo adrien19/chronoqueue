@@ -77,7 +77,8 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 	ctx := context.Background()
 
 	// Create a Docker network for container communication
-	net, err := network.New(ctx,
+	net, err := network.New(
+		ctx,
 		network.WithDriver("bridge"),
 	)
 	if err != nil {
@@ -85,7 +86,8 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 	}
 
 	// Start Postgres container using the Postgres module
-	postgresContainer, err := postgres.Run(ctx,
+	postgresContainer, err := postgres.Run(
+		ctx,
 		"postgres:17-alpine",
 		postgres.WithDatabase("chronoqueue"),
 		postgres.WithUsername("chronoqueue"),
@@ -199,7 +201,8 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 //	    // ... use client
 //	}
 func (e *TestEnvironment) NewGRPCClientShared(t *testing.T) *grpc.ClientConn {
-	conn, err := grpc.NewClient(e.GRPCAddr,
+	conn, err := grpc.NewClient(
+		e.GRPCAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err, "Failed to create gRPC client")

@@ -1,0 +1,88 @@
+{{ define "queue_new_content" }}
+<section class="space-y-5">
+  <div class="flex items-center gap-3">
+    <a href="/queues" class="cq-btn !px-2">←</a>
+    <h2 class="text-2xl font-semibold text-white">Create Queue</h2>
+  </div>
+
+  <div class="cq-panel p-6">
+    <form hx-post="/api/queues/create" hx-target="#form-result" class="space-y-6">
+
+      <div>
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Queue Name <span class="text-red-400">*</span></label>
+        <input class="cq-input w-full" type="text" name="name" required
+          pattern="[a-zA-Z0-9][a-zA-Z0-9_\-]*"
+          title="Must start with a letter or digit. Only letters, digits, hyphens, and underscores allowed."
+          placeholder="my-queue">
+        <p class="mt-1 text-xs text-zinc-500">Unique identifier. Letters, digits, hyphens, and underscores only — must start with a letter or digit.</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Queue Type <span class="text-red-400">*</span></label>
+          <select class="cq-input w-full" name="type" id="queue_type" onchange="toggleExclusivityKey()">
+            <option value="simple">Simple</option>
+            <option value="exclusive">Exclusive</option>
+          </select>
+          <p class="mt-1 text-xs text-zinc-500">Simple: standard FIFO. Exclusive: single active consumer per exclusivity key.</p>
+        </div>
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Max Attempts</label>
+          <input class="cq-input w-full" type="number" name="default_max_attempts" value="3" min="1" max="100">
+          <p class="mt-1 text-xs text-zinc-500">Delivery attempts before a message is moved to the DLQ.</p>
+        </div>
+      </div>
+
+      <div id="exclusivity_key_section" class="hidden">
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Exclusivity Key <span class="text-red-400">*</span></label>
+        <input class="cq-input w-full" type="text" name="exclusivity_key" id="exclusivity_key" placeholder="worker-1">
+        <p class="mt-1 text-xs text-zinc-500">Only one consumer holds a lease for the same exclusivity key at a time.</p>
+      </div>
+
+      <div>
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Lease Duration</label>
+        <input class="cq-input w-48" type="text" name="lease_duration" value="30s" placeholder="30s">
+        <p class="mt-1 text-xs text-zinc-500">How long a consumer holds a message lease (e.g. 30s, 5m, 1h).</p>
+      </div>
+
+      <div class="space-y-4 rounded-xl border border-line bg-zinc-950/40 p-5">
+        <p class="text-sm font-medium text-zinc-300">Dead Letter Queue</p>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="mb-2 block text-sm font-medium text-zinc-200">DLQ Name</label>
+            <input class="cq-input w-full" type="text" name="dlq_name" placeholder="my-queue-dlq">
+            <p class="mt-1 text-xs text-zinc-500">Leave blank to auto-generate as &lt;name&gt;-dlq when auto-create is enabled.</p>
+          </div>
+          <div class="flex items-center gap-3 pt-6">
+            <input type="checkbox" class="rounded border-line bg-zinc-900 text-blue-500" name="auto_create_dlq" id="auto_create_dlq" value="true">
+            <label for="auto_create_dlq" class="text-sm text-zinc-300">Auto-create DLQ</label>
+          </div>
+        </div>
+      </div>
+
+      <div id="form-result"></div>
+
+      <div class="flex items-center gap-3 border-t border-line pt-4">
+        <button class="cq-btn cq-btn-primary" type="submit">Create Queue</button>
+        <a href="/queues" class="cq-btn">Cancel</a>
+      </div>
+    </form>
+  </div>
+</section>
+
+<script>
+function toggleExclusivityKey() {
+  var type = document.getElementById('queue_type').value;
+  var section = document.getElementById('exclusivity_key_section');
+  var input = document.getElementById('exclusivity_key');
+  if (type === 'exclusive') {
+    section.classList.remove('hidden');
+    input.required = true;
+  } else {
+    section.classList.add('hidden');
+    input.required = false;
+    input.value = '';
+  }
+}
+</script>
+{{ end }}

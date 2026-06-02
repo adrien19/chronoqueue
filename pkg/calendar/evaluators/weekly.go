@@ -163,7 +163,8 @@ func (e *WeeklyEvaluator) findNextExecution(from time.Time, daysOfWeek []int32, 
 						candidate := time.Date(
 							currentDate.Year(), currentDate.Month(), currentDate.Day(),
 							int(execTime.Hour), int(execTime.Minute), int(execTime.Second),
-							0, currentDate.Location())
+							0, currentDate.Location(),
+						)
 
 						if candidate.After(from) {
 							return &candidate, nil

@@ -369,7 +369,8 @@ func (c *CalendarService) createScheduledMessage(ctx context.Context, tx *sql.Tx
 	`, strings.Join(placeholders, ", "))
 
 	now := c.base.Clock.NowMs()
-	if _, err := tx.ExecContext(ctx, insertQuery,
+	if _, err := tx.ExecContext(
+		ctx, insertQuery,
 		message.MessageId,
 		queueName,
 		message.Metadata.State,

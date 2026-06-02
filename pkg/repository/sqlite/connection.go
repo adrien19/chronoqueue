@@ -41,7 +41,8 @@ func OpenConnection(ctx context.Context, config *ConnectionConfig) (*sql.DB, err
 	// _journal_mode=WAL: Write-Ahead Logging for better concurrency
 	// _busy_timeout: Wait time in milliseconds when database is locked
 	// _foreign_keys=1: Enable foreign key constraints
-	dsn := fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=%d&_foreign_keys=1",
+	dsn := fmt.Sprintf(
+		"%s?_journal_mode=WAL&_busy_timeout=%d&_foreign_keys=1",
 		config.Path,
 		config.BusyTimeout.Milliseconds(),
 	)

@@ -1,0 +1,133 @@
+@import "tailwindcss";
+
+@theme {
+    --color-bg: #080c12;
+    --color-panel: #0c1118;
+    --color-panel-2: #0d1219;
+    --color-line: #1e2d3d;
+    --color-line-soft: #162336;
+    --color-brand: #3b82f6;
+    --color-brand-soft: #0f1f38;
+    --color-good: #10b981;
+    --color-warn: #f59e0b;
+    --color-danger: #ef4444;
+}
+
+@layer base {
+    html {
+        color-scheme: dark;
+    }
+
+    body {
+        @apply bg-bg text-zinc-100 antialiased;
+    }
+}
+
+@layer components {
+    .cq-shell {
+        min-height: 100vh;
+        background-image: radial-gradient(circle at top, rgba(59, 130, 246, 0.07), transparent 35%), linear-gradient(180deg, #060a10, #080c12 36%, #090d14);
+    }
+
+    .cq-sidebar {
+        @apply relative w-64 shrink-0 border-r border-line bg-black/55 backdrop-blur;
+    }
+
+    .cq-content {
+        @apply flex-1 px-7 py-5;
+    }
+
+    .cq-panel {
+        @apply rounded-xl border border-line bg-panel/95;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 16px 48px rgba(0, 0, 0, 0.28);
+    }
+
+    .cq-panel-soft {
+        @apply rounded-xl border border-line-soft bg-panel-2/95;
+    }
+
+    .cq-stat {
+        @apply rounded-lg border-l border-line px-5 py-2;
+    }
+
+    .cq-badge {
+        @apply inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium;
+    }
+
+    .cq-badge-good {
+        @apply border-emerald-500/25 bg-emerald-500/10 text-emerald-300;
+    }
+
+    .cq-badge-warn {
+        @apply border-amber-500/25 bg-amber-500/10 text-amber-300;
+    }
+
+    .cq-badge-muted {
+        @apply border-zinc-700 bg-zinc-800/80 text-zinc-300;
+    }
+
+    .cq-btn {
+        @apply inline-flex items-center gap-2 rounded-md border border-line bg-zinc-900/80 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800;
+    }
+
+    .cq-btn-primary {
+        @apply border-blue-500/35 bg-blue-500/8 text-blue-300 hover:bg-blue-500/14;
+    }
+
+    .cq-input {
+        @apply h-10 rounded-md border border-line bg-zinc-950/70 px-3 text-sm text-zinc-100 outline-none ring-0 placeholder:text-zinc-500 focus:border-blue-500/35;
+    }
+
+    .cq-nav-link {
+        @apply flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-zinc-300 transition hover:bg-zinc-900/70 hover:text-white;
+    }
+
+    .cq-nav-link-active {
+        @apply bg-zinc-800 text-white;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+    }
+
+    .cq-kpi {
+        @apply text-3xl font-semibold tracking-tight text-white;
+    }
+
+    .cq-label {
+        @apply text-[11px] uppercase tracking-[0.22em] text-zinc-500;
+    }
+
+    .cq-table {
+        @apply min-w-full divide-y divide-line text-sm;
+    }
+
+    .cq-table th {
+        @apply bg-zinc-950/20 px-4 py-3 text-left text-[11px] uppercase tracking-[0.18em] text-zinc-500;
+    }
+
+    .cq-table td {
+        @apply px-4 py-3 text-zinc-200;
+    }
+
+    .cq-table tbody tr {
+        @apply border-t border-line-soft hover:bg-zinc-900/35;
+    }
+
+    .cq-select-card {
+        @apply flex items-center gap-3 rounded-xl border border-line bg-zinc-950/40 px-4 py-5 text-sm text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-900/70;
+    }
+
+    .cq-select-card-active {
+        @apply border-blue-500/30 bg-blue-500/10 text-white;
+    }
+
+    .cq-tabs {
+        @apply inline-flex rounded-lg border border-line bg-zinc-950/50 p-1;
+    }
+
+    .cq-tab {
+        @apply rounded-md px-4 py-1.5 text-sm text-zinc-400;
+    }
+
+    .cq-tab-active {
+        @apply bg-zinc-800 text-white;
+    }
+}

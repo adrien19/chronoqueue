@@ -361,7 +361,8 @@ func (impl *implementation) findEarliestDeadline(ctx context.Context, baseSQL *r
 		earliestMs = leaseExpiry.Int64
 	}
 
-	scheduledQuery := fmt.Sprintf(`
+	scheduledQuery := fmt.Sprintf(
+		`
 		SELECT MIN(scheduled_at)
 		FROM cq_messages
 		WHERE queue_name = %s
@@ -410,8 +411,13 @@ func (impl *implementation) CreateQueueMessage(ctx context.Context, request *que
 		message.Metadata = &messagepb.Message_Metadata{}
 	}
 
-	// Set state
-	message.Metadata.State = messagepb.Message_Metadata_PENDING
+	// Messages with a future scheduled_time enter INVISIBLE and are promoted to PENDING
+	// by the background SchedulerService when their delivery time arrives.
+	if st := message.Metadata.GetScheduledTime(); st != nil && st.AsTime().After(time.Now()) {
+		message.Metadata.State = messagepb.Message_Metadata_INVISIBLE
+	} else {
+		message.Metadata.State = messagepb.Message_Metadata_PENDING
+	}
 
 	// Inherit max_attempts from queue if not set on message
 	if message.Metadata.MaxAttempts == 0 {
@@ -499,8 +505,13 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 			message.Metadata = &messagepb.Message_Metadata{}
 		}
 
-		// Set state
-		message.Metadata.State = messagepb.Message_Metadata_PENDING
+		// Messages with a future scheduled_time enter INVISIBLE; the background
+		// SchedulerService promotes them to PENDING when their delivery time arrives.
+		if st := message.Metadata.GetScheduledTime(); st != nil && st.AsTime().After(time.Now()) {
+			message.Metadata.State = messagepb.Message_Metadata_INVISIBLE
+		} else {
+			message.Metadata.State = messagepb.Message_Metadata_PENDING
+		}
 
 		// Inherit max_attempts from queue if not set on message
 		if message.Metadata.MaxAttempts == 0 {

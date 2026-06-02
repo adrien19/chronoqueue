@@ -491,6 +491,49 @@ ui-dev: ui-build build
 
 
 ################################################################################
+# Target: web-ui-deps (install web-ui dependencies)                            #
+################################################################################
+.PHONY: web-ui-deps
+web-ui-deps:
+	@echo "Installing web-ui dependencies..."
+	@cd cmd/chronoq/web-ui && npm install
+
+################################################################################
+# Target: web-ui-build (build web-ui CSS and binary)                           #
+################################################################################
+.PHONY: web-ui-build
+web-ui-build: web-ui-deps
+	@echo "Building web-ui CSS..."
+	@cd cmd/chronoq/web-ui && npm run build:css
+	@echo "Building web-ui binary..."
+	@go build -ldflags "$(LDFLAGS)" -o $(CHRONOQUEUE_OUT_DIR)/chronoqueue .
+
+################################################################################
+# Target: web-ui-watch (watch and rebuild web-ui CSS)                          #
+################################################################################
+.PHONY: web-ui-watch
+web-ui-watch: web-ui-deps
+	@echo "Watching web-ui CSS for changes..."
+	@cd cmd/chronoq/web-ui && npm run watch:css
+
+################################################################################
+# Target: web-ui-dev (run chronoqueue with the new web-ui in dev mode)         #
+################################################################################
+# Usage:
+#   make web-ui-dev                              # default gRPC localhost:9000, UI :8081
+#   make web-ui-dev WEB_UI_GRPC_ADDR=:9090       # custom gRPC address
+#   make web-ui_dev WEB_UI_PORT=9000             # custom UI listen port
+################################################################################
+WEB_UI_GRPC_ADDR?=localhost:9000
+WEB_UI_PORT?=8081
+
+.PHONY: web-ui-dev
+web-ui-dev: web-ui-build
+	@echo "Starting ChronoQueue with web-ui on :$(WEB_UI_PORT) (gRPC: $(WEB_UI_GRPC_ADDR))..."
+	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue web-ui start --port $(WEB_UI_PORT) --grpc-address $(WEB_UI_GRPC_ADDR) --skip-ssl
+
+
+################################################################################
 # Target: server-dev (run ChronoQueue server in dev mode)                      #
 ################################################################################
 # Usage:

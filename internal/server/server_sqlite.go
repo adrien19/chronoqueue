@@ -26,7 +26,8 @@ func (s *Server) initializeSQLiteStorage(ctx context.Context) error {
 		return fmt.Errorf("failed to create SQLite repository: %w", err)
 	}
 
-	s.logger.InfoWithFields("SQLite repository initialized",
+	s.logger.InfoWithFields(
+		"SQLite repository initialized",
 		"path", s.config.SQLiteDBPath,
 	)
 

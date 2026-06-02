@@ -1,0 +1,18 @@
+{{ define "live_overview" }}
+<div class="grid grid-cols-2 gap-3">
+  <div class="cq-panel-soft p-4">
+    <div class="mb-2 text-sm font-medium text-white">Queue summary</div>
+    <div class="space-y-2">
+      {{ range .QueueSummary }}<div class="flex items-center justify-between text-sm"><span class="text-zinc-300">{{ .Name }}</span><span class="text-zinc-400">{{ .Ready }} ready</span></div>{{ end }}
+      {{ if not .QueueSummary }}<div class="text-sm text-zinc-500">No active queues</div>{{ end }}
+    </div>
+  </div>
+  <div class="cq-panel-soft p-4">
+    <div class="mb-2 text-sm font-medium text-white">Inflight messages</div>
+    <div class="space-y-2">
+      {{ range .InflightSummary }}<div class="flex items-center justify-between text-sm"><span class="text-zinc-300">{{ .Queue }}</span><span class="text-zinc-400">expires {{ .ExpiresIn }}</span></div>{{ end }}
+      {{ if not .InflightSummary }}<div class="text-sm text-zinc-500">No inflight messages</div>{{ end }}
+    </div>
+  </div>
+</div>
+{{ end }}

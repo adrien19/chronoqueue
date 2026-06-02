@@ -107,7 +107,8 @@ func (s *Server) printStartupInfo() {
 		mode = "development"
 	}
 
-	s.logger.InfoWithFields("Server configuration",
+	s.logger.InfoWithFields(
+		"Server configuration",
 		"mode", mode,
 		"grpc_addr", s.config.GRPCAddr,
 		"http_addr", s.config.HTTPAddr,
@@ -129,7 +130,8 @@ func (s *Server) printStartupInfo() {
 		if s.config.PostgresDSN != "" {
 			fmt.Printf("ℹ Postgres DSN: %s\n", s.config.PostgresDSN)
 		} else {
-			fmt.Printf("ℹ Postgres connection: %s:%d db=%s user=%s sslmode=%s\n",
+			fmt.Printf(
+				"ℹ Postgres connection: %s:%d db=%s user=%s sslmode=%s\n",
 				s.config.PostgresHost,
 				s.config.PostgresPort,
 				s.config.PostgresDBName,
