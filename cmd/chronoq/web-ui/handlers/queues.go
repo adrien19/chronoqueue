@@ -541,24 +541,33 @@ func (h *QueuesHandler) RequeueAll(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	peekResp, err := h.activeClient().PeekQueueMessages(ctx, queueName, 100, client.TimeRangeOption{})
-	if err != nil {
-		h.logger.ErrorWithFields("Failed to peek DLQ messages", "error", err, "queue", queueName)
-		http.Error(w, "Failed to load DLQ messages", http.StatusInternalServerError)
-		return
-	}
-
 	sourceQueue := strings.TrimSuffix(strings.TrimSuffix(queueName, "-dlq"), "_dlq")
+	const pageSize = int32(100)
 	requeued := 0
-	for _, msg := range peekResp.GetMessages() {
-		if msg == nil {
-			continue
+	for {
+		peekResp, err := h.activeClient().PeekQueueMessages(ctx, queueName, pageSize, client.TimeRangeOption{})
+		if err != nil {
+			h.logger.ErrorWithFields("Failed to peek DLQ messages", "error", err, "queue", queueName)
+			http.Error(w, "Failed to load DLQ messages", http.StatusInternalServerError)
+			return
 		}
-		if _, err := h.activeClient().RequeueFromDLQ(ctx, queueName, msg.GetMessageId(), sourceQueue); err != nil {
-			h.logger.ErrorWithFields("Failed to requeue message", "error", err, "queue", queueName, "message", msg.GetMessageId())
-			continue
+		msgs := peekResp.GetMessages()
+		if len(msgs) == 0 {
+			break
 		}
-		requeued++
+		for _, msg := range msgs {
+			if msg == nil {
+				continue
+			}
+			if _, err := h.activeClient().RequeueFromDLQ(ctx, queueName, msg.GetMessageId(), sourceQueue); err != nil {
+				h.logger.ErrorWithFields("Failed to requeue message", "error", err, "queue", queueName, "message", msg.GetMessageId())
+				continue
+			}
+			requeued++
+		}
+		if len(msgs) < int(pageSize) {
+			break
+		}
 	}
 
 	h.logger.InfoWithFields("Requeued messages from DLQ", "queue", queueName, "count", requeued)

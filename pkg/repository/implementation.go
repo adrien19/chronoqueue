@@ -505,8 +505,13 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 			message.Metadata = &messagepb.Message_Metadata{}
 		}
 
-		// Set state
-		message.Metadata.State = messagepb.Message_Metadata_PENDING
+		// Messages with a future scheduled_time enter INVISIBLE; the background
+		// SchedulerService promotes them to PENDING when their delivery time arrives.
+		if st := message.Metadata.GetScheduledTime(); st != nil && st.AsTime().After(time.Now()) {
+			message.Metadata.State = messagepb.Message_Metadata_INVISIBLE
+		} else {
+			message.Metadata.State = messagepb.Message_Metadata_PENDING
+		}
 
 		// Inherit max_attempts from queue if not set on message
 		if message.Metadata.MaxAttempts == 0 {

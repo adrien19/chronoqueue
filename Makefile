@@ -530,7 +530,7 @@ WEB_UI_PORT?=8081
 .PHONY: web-ui-dev
 web-ui-dev: web-ui-build
 	@echo "Starting ChronoQueue with web-ui on :$(WEB_UI_PORT) (gRPC: $(WEB_UI_GRPC_ADDR))..."
-	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue web-ui start --port $(WEB_UI_PORT) --grpc-address $(WEB_UI_GRPC_ADDR)
+	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue web-ui start --port $(WEB_UI_PORT) --grpc-address $(WEB_UI_GRPC_ADDR) --skip-ssl
 
 
 ################################################################################

@@ -108,13 +108,18 @@ func (h *SchedulesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scheduleID := r.FormValue("schedule_id")
+	scheduleID := strings.TrimSpace(r.FormValue("schedule_id"))
 	scheduleType := r.FormValue("schedule_type")
 	queueName := r.FormValue("queue_name")
 	payloadData := r.FormValue("payload_data")
 
 	if scheduleID == "" || queueName == "" {
 		http.Error(w, "Schedule ID and Queue Name are required", http.StatusBadRequest)
+		return
+	}
+
+	if !isValidScheduleID(scheduleID) {
+		http.Error(w, "Schedule ID must not contain spaces, '/', '?', or '#'", http.StatusBadRequest)
 		return
 	}
 
@@ -224,11 +229,16 @@ func (h *SchedulesHandler) renderQueueWarningDialog(w http.ResponseWriter, queue
 
 // Toggle handles pause/resume (HTMX POST).
 func (h *SchedulesHandler) Toggle(w http.ResponseWriter, r *http.Request) {
-	scheduleID := r.FormValue("schedule_id")
+	scheduleID := strings.TrimSpace(r.FormValue("schedule_id"))
 	action := r.FormValue("action")
 
 	if scheduleID == "" || action == "" {
 		http.Error(w, "Schedule ID and action are required", http.StatusBadRequest)
+		return
+	}
+
+	if !isValidScheduleID(scheduleID) {
+		http.Error(w, "Schedule ID contains invalid characters", http.StatusBadRequest)
 		return
 	}
 
@@ -427,19 +437,27 @@ func (h *SchedulesHandler) buildCalendarRule(r *http.Request, calendarType strin
 		}, nil
 
 	case "WEEKLY":
+		daysOfWeek, err := h.parseDaysOfWeek(r.Form["days_of_week"])
+		if err != nil {
+			return nil, err
+		}
 		return &schedule_pb.CalendarRule{
 			Rule: &schedule_pb.CalendarRule_Weekly{Weekly: &schedule_pb.WeeklyRule{
-				DaysOfWeek:   h.parseDaysOfWeek(r.Form["days_of_week"]),
+				DaysOfWeek:   daysOfWeek,
 				WeekInterval: 1,
 			}},
 			ExecutionTimes: executionTimes,
 		}, nil
 
 	case "MONTHLY":
+		dayOfMonth, err := h.parseDayOfMonth(r.FormValue("day_of_month"))
+		if err != nil {
+			return nil, err
+		}
 		return &schedule_pb.CalendarRule{
 			Rule: &schedule_pb.CalendarRule_Monthly{Monthly: &schedule_pb.MonthlyRule{
 				DayType:  schedule_pb.MonthlyRule_DAY_OF_MONTH,
-				DayValue: h.parseDayOfMonth(r.FormValue("day_of_month")),
+				DayValue: dayOfMonth,
 			}},
 			ExecutionTimes: executionTimes,
 		}, nil
@@ -455,26 +473,36 @@ func (h *SchedulesHandler) buildCalendarRule(r *http.Request, calendarType strin
 	}
 }
 
-func (h *SchedulesHandler) parseDaysOfWeek(strs []string) []int32 {
+func (h *SchedulesHandler) parseDaysOfWeek(strs []string) ([]int32, error) {
+	if len(strs) == 0 {
+		return []int32{1, 2, 3, 4, 5}, nil
+	}
 	var days []int32
 	for _, s := range strs {
-		if d, err := strconv.Atoi(s); err == nil && d >= 1 && d <= 7 {
-			days = append(days, int32(d))
+		d, err := strconv.Atoi(s)
+		if err != nil || d < 1 || d > 7 {
+			return nil, fmt.Errorf("invalid day of week %q: must be an integer 1–7", s)
 		}
+		days = append(days, int32(d))
 	}
-	if len(days) == 0 {
-		days = []int32{1, 2, 3, 4, 5}
-	}
-	return days
+	return days, nil
 }
 
-func (h *SchedulesHandler) parseDayOfMonth(s string) int32 {
-	if s != "" {
-		if d, err := strconv.Atoi(s); err == nil && d >= 1 && d <= 31 {
-			return int32(d)
-		}
+func (h *SchedulesHandler) parseDayOfMonth(s string) (int32, error) {
+	if s == "" {
+		return 1, nil
 	}
-	return 1
+	d, err := strconv.Atoi(s)
+	if err != nil || d < 1 || d > 31 {
+		return 0, fmt.Errorf("invalid day of month %q: must be an integer 1–31", s)
+	}
+	return int32(d), nil
+}
+
+// isValidScheduleID returns false when the ID contains characters that break
+// URL routing, gRPC path construction, or DOM selectors.
+func isValidScheduleID(id string) bool {
+	return !strings.ContainsAny(id, "/?# \t\n\r")
 }
 
 func (h *SchedulesHandler) mapCalendarTypeToEnum(t string) schedule_pb.CalendarSchedule_ScheduleType {

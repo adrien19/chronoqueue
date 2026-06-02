@@ -7,7 +7,7 @@
   <tr>
     <td>
       <button class="font-mono text-sm font-medium text-white hover:text-blue-300"
-        hx-get="/queues/{{ $.Queue.Name }}/messages?message_id={{ .Id }}"
+        hx-get="/queues/{{ $.Queue.Name }}/messages?message_id={{ urlquery .Id }}"
         hx-target="#message-modal"
         hx-swap="innerHTML">{{ .ShortId }}</button>
     </td>

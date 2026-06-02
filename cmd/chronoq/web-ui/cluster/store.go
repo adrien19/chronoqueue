@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	"google.golang.org/grpc/credentials"
+
 	"github.com/adrien19/chronoqueue/client"
 )
 
@@ -59,13 +61,18 @@ func (s *Store) Load() error {
 	if err != nil {
 		return fmt.Errorf("read cluster store: %w", err)
 	}
+	var tmp []*Cluster
+	if err := json.Unmarshal(data, &tmp); err != nil {
+		return fmt.Errorf("parse cluster store: %w", err)
+	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return json.Unmarshal(data, &s.clusters)
+	s.clusters = tmp
+	s.mu.Unlock()
+	return nil
 }
 
 // Seed adds a bootstrap cluster when the store is empty (e.g. first run).
-func (s *Store) Seed(name, brokerAddr string) {
+func (s *Store) Seed(name, brokerAddr string, skipSSL bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.clusters) == 0 {
@@ -74,6 +81,7 @@ func (s *Store) Seed(name, brokerAddr string) {
 			Name:          name,
 			Description:   "Default ChronoQueue server",
 			BrokerAddress: brokerAddr,
+			SkipSSLCheck:  skipSSL,
 			IsActive:      true,
 		})
 	}
@@ -143,7 +151,7 @@ func (s *Store) Update(slug string, updated Cluster) error {
 		if c.Slug != slug {
 			continue
 		}
-		if c.BrokerAddress != updated.BrokerAddress {
+		if c.BrokerAddress != updated.BrokerAddress || c.SkipSSLCheck != updated.SkipSSLCheck {
 			if cl, ok := s.clients[slug]; ok {
 				cl.Close()
 				delete(s.clients, slug)
@@ -227,9 +235,13 @@ func (s *Store) ActiveClient() *client.ChronoQueueClient {
 	if cl, ok := s.clients[active.Slug]; ok {
 		return cl
 	}
-	cl, err := client.NewChronoQueueClient(active.BrokerAddress, client.ClientOptions{
+	opts := client.ClientOptions{
 		MaxRetries: 3,
-	})
+	}
+	if !active.SkipSSLCheck {
+		opts.TLSCredentials = credentials.NewClientTLSFromCert(nil, "")
+	}
+	cl, err := client.NewChronoQueueClient(active.BrokerAddress, opts)
 	if err != nil {
 		return nil
 	}
@@ -247,17 +259,41 @@ func (s *Store) CloseAll() {
 	s.clients = make(map[string]*client.ChronoQueueClient)
 }
 
-// save persists the cluster list to disk (caller must hold mu).
+// save persists the cluster list to disk atomically (caller must hold mu).
 func (s *Store) save() error {
 	if s.filePath == "" {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(s.filePath), 0o700); err != nil {
+	dir := filepath.Dir(s.filePath)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(s.clusters, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.filePath, data, 0o600)
+	tmp, err := os.CreateTemp(dir, "clusters-*.json")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return os.Rename(tmpPath, s.filePath)
 }

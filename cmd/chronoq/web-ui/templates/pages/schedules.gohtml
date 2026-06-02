@@ -24,7 +24,7 @@
       </thead>
       <tbody>
         {{ range .Schedules }}
-        <tr id="schedule-row-{{ .ScheduleId }}">
+        <tr id="schedule-row-{{ domID .ScheduleId }}">
           <td class="font-medium text-white">{{ .ScheduleId }}</td>
           <td>
             {{ if .Metadata.GetCronSchedule }}
@@ -43,20 +43,20 @@
             {{ if .Metadata.GetCronSchedule }}{{ .Metadata.GetCronSchedule }}{{ else }}Calendar{{ end }}
           </td>
           <td class="text-right">
-            <div id="schedule-controls-{{ .ScheduleId }}" class="flex items-center justify-end gap-2">
+            <div id="schedule-controls-{{ domID .ScheduleId }}" class="flex items-center justify-end gap-2">
               {{ if eq .Metadata.State.String "SCHEDULED" }}
               <span class="cq-badge cq-badge-good">Active</span>
               <button class="cq-btn !px-2 !py-1 text-xs"
                 hx-post="/api/schedules/toggle"
                 hx-vals='{"schedule_id": "{{ .ScheduleId }}", "action": "pause"}'
-                hx-target="#schedule-controls-{{ .ScheduleId }}"
+                hx-target="#schedule-controls-{{ domID .ScheduleId }}"
                 hx-swap="outerHTML">Pause</button>
               {{ else if eq .Metadata.State.String "PAUSED" }}
               <span class="cq-badge cq-badge-warn">Paused</span>
               <button class="cq-btn cq-btn-primary !px-2 !py-1 text-xs"
                 hx-post="/api/schedules/toggle"
                 hx-vals='{"schedule_id": "{{ .ScheduleId }}", "action": "resume"}'
-                hx-target="#schedule-controls-{{ .ScheduleId }}"
+                hx-target="#schedule-controls-{{ domID .ScheduleId }}"
                 hx-swap="outerHTML">Resume</button>
               {{ else }}
               <span class="cq-badge cq-badge-muted">{{ .Metadata.State }}</span>
@@ -64,7 +64,7 @@
               <button class="cq-btn !px-2 !py-1 text-xs text-red-300 border-red-500/20 hover:border-red-500/40"
                 hx-delete="/api/schedules/{{ .ScheduleId }}"
                 hx-confirm="Delete schedule '{{ .ScheduleId }}'?"
-                hx-target="#schedule-row-{{ .ScheduleId }}"
+                hx-target="#schedule-row-{{ domID .ScheduleId }}"
                 hx-swap="outerHTML">Delete</button>
             </div>
           </td>

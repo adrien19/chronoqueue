@@ -83,14 +83,22 @@ if (watch) {
     const watchDirs = [
         path.join(root, 'templates'),
         path.join(root, 'static', 'js'),
-        path.join(root, 'static', 'css'),
     ];
+    const cssDir = path.join(root, 'static', 'css');
     for (const dir of watchDirs) {
         if (fs.existsSync(dir)) {
             fs.watch(dir, { recursive: true }, async () => {
                 try { await build(); } catch (err) { console.error(err); }
             });
         }
+    }
+    // Watch the CSS source directory but ignore writes to the output file
+    // to avoid a self-triggering rebuild loop.
+    if (fs.existsSync(cssDir)) {
+        fs.watch(cssDir, { recursive: true }, async (_, filename) => {
+            if (filename === 'app.css') return;
+            try { await build(); } catch (err) { console.error(err); }
+        });
     }
     console.log('watching for changes...');
 }

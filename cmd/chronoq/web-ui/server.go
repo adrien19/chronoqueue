@@ -29,7 +29,7 @@ type UIServer struct {
 }
 
 // NewUIServer creates a new UIServer, parses templates, and seeds the cluster store.
-func NewUIServer(grpcAddr string, logger *log.Logger) (*UIServer, error) {
+func NewUIServer(grpcAddr string, skipSSL bool, logger *log.Logger) (*UIServer, error) {
 	tmpl := template.New("").Funcs(templateFuncs())
 
 	tmpl, err := tmpl.ParseFS(
@@ -50,7 +50,7 @@ func NewUIServer(grpcAddr string, logger *log.Logger) (*UIServer, error) {
 	if err := store.Load(); err != nil {
 		logger.WarnWithFields("Failed to load cluster store, starting fresh", "error", err)
 	}
-	store.Seed("Local", grpcAddr)
+	store.Seed("Local", grpcAddr, skipSSL)
 
 	return &UIServer{
 		templates: tmpl,
@@ -142,10 +142,12 @@ func (s *UIServer) Start(addr string) error {
 
 // Stop gracefully shuts down the server and closes all cluster clients.
 func (s *UIServer) Stop(ctx context.Context) error {
-	s.store.CloseAll()
 	if s.server != nil {
-		return s.server.Shutdown(ctx)
+		if err := s.server.Shutdown(ctx); err != nil {
+			return err
+		}
 	}
+	s.store.CloseAll()
 	return nil
 }
 
@@ -177,5 +179,18 @@ func templateFuncs() template.FuncMap {
 		},
 		"add": func(a, b int) int { return a + b },
 		"sub": func(a, b int) int { return a - b },
+		// domID sanitizes a string for safe use in HTML id attributes and CSS selectors
+		// by replacing any character that is not alphanumeric or a hyphen with a hyphen.
+		"domID": func(s string) string {
+			var b strings.Builder
+			for _, r := range s {
+				if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' {
+					b.WriteRune(r)
+				} else {
+					b.WriteRune('-')
+				}
+			}
+			return b.String()
+		},
 	}
 }

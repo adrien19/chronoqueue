@@ -31,6 +31,7 @@ func newWebUIStartCommand() *cobra.Command {
 	var (
 		port     string
 		grpcAddr string
+		skipSSL  bool
 	)
 
 	cmd := &cobra.Command{
@@ -42,20 +43,21 @@ schedules, and viewing dead letter queues. Uses the dark cq-* design system.
 Example:
   chronoq web-ui start --port 8081 --grpc-address localhost:9000`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runWebUIStart(port, grpcAddr)
+			return runWebUIStart(port, grpcAddr, skipSSL)
 		},
 	}
 
 	cmd.Flags().StringVar(&port, "port", "8081", "Port for the web UI")
 	cmd.Flags().StringVar(&grpcAddr, "grpc-address", "localhost:9000", "Address of the ChronoQueue gRPC server")
+	cmd.Flags().BoolVar(&skipSSL, "skip-ssl", false, "Disable TLS verification for the gRPC connection (for local/dev use)")
 
 	return cmd
 }
 
-func runWebUIStart(port, grpcAddr string) error {
+func runWebUIStart(port, grpcAddr string, skipSSL bool) error {
 	logger := log.NewLogger()
 
-	server, err := webui.NewUIServer(grpcAddr, logger)
+	server, err := webui.NewUIServer(grpcAddr, skipSSL, logger)
 	if err != nil {
 		return fmt.Errorf("failed to create web-UI server: %w", err)
 	}
