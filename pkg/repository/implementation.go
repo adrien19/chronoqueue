@@ -433,10 +433,7 @@ func (impl *implementation) CreateQueueMessage(ctx context.Context, request *que
 		message.Metadata.AttemptsLeft = message.Metadata.MaxAttempts
 	}
 
-	// Set default priority if not set
-	if message.Metadata.Priority == 0 {
-		message.Metadata.Priority = 5
-	}
+	// Priority 0 is valid (lowest priority), no defaulting needed
 
 	// Inherit lease_policy from queue if not set on message
 	if message.Metadata.LeasePolicy == nil && queueMetadata.GetLeasePolicy() != nil {
@@ -527,10 +524,7 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 			message.Metadata.AttemptsLeft = message.Metadata.MaxAttempts
 		}
 
-		// Set default priority if not set
-		if message.Metadata.Priority == 0 {
-			message.Metadata.Priority = 5
-		}
+		// Priority 0 is valid (lowest priority), no defaulting needed
 
 		// Inherit lease_policy from queue if not set on message
 		if message.Metadata.LeasePolicy == nil && queueMetadata.GetLeasePolicy() != nil {

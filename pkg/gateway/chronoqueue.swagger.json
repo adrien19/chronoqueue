@@ -1604,7 +1604,7 @@
           "description": "day_offset: Offset from business day.\n0 = on business day\n-1 = day before business day (useful for overnight prep jobs)\n1 = day after business day\nNote: Offset day might land on non-business day; schedule skips those."
         }
       },
-      "description": "BusinessDaysRule schedules execution on business days (non-holidays, non-weekends).\n\nExamples:\n  Every business day:\n    {business_calendar_id: \"us-holidays\"}\n  \n  Day before each business day (for overnight processing):\n    {business_calendar_id: \"us-holidays\", day_offset: -1}\n  \n  Day after each business day:\n    {business_calendar_id: \"us-holidays\", day_offset: 1}"
+      "description": "BusinessDaysRule schedules execution on business days (non-holidays, non-weekends).\n\nExamples:\n  Every business day:\n    {business_calendar_id: \"us-holidays\"}\n\n  Day before each business day (for overnight processing):\n    {business_calendar_id: \"us-holidays\", day_offset: -1}\n\n  Day after each business day:\n    {business_calendar_id: \"us-holidays\", day_offset: 1}"
     },
     "v1CalendarException": {
       "type": "object",
@@ -1636,7 +1636,7 @@
           "title": "reason: Optional explanation for this exception.\nUseful for documentation and auditing.\nExample: \"System maintenance\", \"Holiday adjustment\", \"Special event\""
         }
       },
-      "description": "CalendarException modifies schedule behavior for a specific date.\nUse for one-off changes without modifying the core schedule.\n\nExamples:\n  Skip execution during maintenance:\n    {date: \"2024-06-15\", type: SKIP, reason: \"System maintenance\"}\n  \n  Reschedule monthly report when month-end is holiday:\n    {date: \"2024-12-31\", type: RESCHEDULE, reschedule_to: \"2024-12-30\", reason: \"New Year's Eve\"}\n  \n  Add extra execution for special event:\n    {date: \"2024-11-29\", type: EXTRA, extra_times: [{hour: 14}], reason: \"Black Friday promotions\"}"
+      "description": "CalendarException modifies schedule behavior for a specific date.\nUse for one-off changes without modifying the core schedule.\n\nExamples:\n  Skip execution during maintenance:\n    {date: \"2024-06-15\", type: SKIP, reason: \"System maintenance\"}\n\n  Reschedule monthly report when month-end is holiday:\n    {date: \"2024-12-31\", type: RESCHEDULE, reschedule_to: \"2024-12-30\", reason: \"New Year's Eve\"}\n\n  Add extra execution for special event:\n    {date: \"2024-11-29\", type: EXTRA, extra_times: [{hour: 14}], reason: \"Black Friday promotions\"}"
     },
     "v1CalendarRule": {
       "type": "object",
@@ -1804,7 +1804,7 @@
           "description": "start_date: Reference date for day_interval calculation.\nDay interval counts from this date.\nIf not set, uses schedule creation date."
         }
       },
-      "description": "DailyRule schedules execution every N days.\n\nExamples:\n  Every day:\n    {day_interval: 1}\n  \n  Every other day:\n    {day_interval: 2}\n  \n  Weekdays only:\n    {day_interval: 1, weekdays_only: true}\n  \n  Every 3 days starting from specific date:\n    {day_interval: 3, start_date: \"2024-01-01\"}"
+      "description": "DailyRule schedules execution every N days.\n\nExamples:\n  Every day:\n    {day_interval: 1}\n\n  Every other day:\n    {day_interval: 2}\n\n  Weekdays only:\n    {day_interval: 1, weekdays_only: true}\n\n  Every 3 days starting from specific date:\n    {day_interval: 3, start_date: \"2024-01-01\"}"
     },
     "v1DeleteFromDLQResponse": {
       "type": "object",
@@ -1991,7 +1991,7 @@
           "description": "rule: Logic for calculating holiday date.\nRequired if recurring_yearly = true."
         }
       },
-      "description": "Holiday represents a non-working day in a BusinessCalendar.\n\nExamples:\n  Fixed date holiday (Christmas):\n    {\n      name: \"Christmas\",\n      recurring_yearly: true,\n      rule: {fixed: {month: 12, day: 25}}\n    }\n  \n  Relative date holiday (US Thanksgiving - 4th Thursday of November):\n    {\n      name: \"Thanksgiving\",\n      recurring_yearly: true,\n      rule: {relative: {month: 11, weekday: 4, occurrence: 4}}\n    }\n  \n  Easter-based holiday (Good Friday - 2 days before Easter):\n    {\n      name: \"Good Friday\",\n      recurring_yearly: true,\n      rule: {easter_offset: {days_offset: -2}}\n    }"
+      "description": "Holiday represents a non-working day in a BusinessCalendar.\n\nExamples:\n  Fixed date holiday (Christmas):\n    {\n      name: \"Christmas\",\n      recurring_yearly: true,\n      rule: {fixed: {month: 12, day: 25}}\n    }\n\n  Relative date holiday (US Thanksgiving - 4th Thursday of November):\n    {\n      name: \"Thanksgiving\",\n      recurring_yearly: true,\n      rule: {relative: {month: 11, weekday: 4, occurrence: 4}}\n    }\n\n  Easter-based holiday (Good Friday - 2 days before Easter):\n    {\n      name: \"Good Friday\",\n      recurring_yearly: true,\n      rule: {easter_offset: {days_offset: -2}}\n    }"
     },
     "v1HolidayRule": {
       "type": "object",
@@ -2206,7 +2206,7 @@
           "title": "months: Which months to apply this rule (1=January, 12=December).\nEmpty = all months.\nCommon patterns:\n  [3,6,9,12] = quarterly\n  [1,4,7,10] = quarterly (different quarters)\n  [1,7] = semi-annual"
         }
       },
-      "description": "MonthlyRule schedules execution on specific days of the month.\n\nExamples:\n  15th of every month:\n    {day_type: DAY_OF_MONTH, day_value: 15}\n  \n  First Monday of every month:\n    {day_type: WEEKDAY_OF_MONTH, day_value: 1, occurrence: 1}\n  \n  Last Friday of every month:\n    {day_type: LAST_WEEKDAY, day_value: 5}\n  \n  Last day of every month:\n    {day_type: LAST_DAY}\n  \n  15th of March, June, September, December:\n    {day_type: DAY_OF_MONTH, day_value: 15, months: [3,6,9,12]}"
+      "description": "MonthlyRule schedules execution on specific days of the month.\n\nExamples:\n  15th of every month:\n    {day_type: DAY_OF_MONTH, day_value: 15}\n\n  First Monday of every month:\n    {day_type: WEEKDAY_OF_MONTH, day_value: 1, occurrence: 1}\n\n  Last Friday of every month:\n    {day_type: LAST_WEEKDAY, day_value: 5}\n\n  Last day of every month:\n    {day_type: LAST_DAY}\n\n  15th of March, June, September, December:\n    {day_type: DAY_OF_MONTH, day_value: 15, months: [3,6,9,12]}"
     },
     "v1PauseScheduleResponse": {
       "type": "object",
@@ -2520,7 +2520,7 @@
           "title": "occurrence: Which occurrence in the month.\n1 = first, 2 = second, 3 = third, 4 = fourth\n-1 = last (useful when week count varies by month)"
         }
       },
-      "description": "RelativeDate represents a holiday defined by weekday occurrence in a month.\n\nExamples:\n  Memorial Day (US): Last Monday of May\n    {month: 5, weekday: 1, occurrence: -1}\n  \n  Thanksgiving (US): 4th Thursday of November\n    {month: 11, weekday: 4, occurrence: 4}\n  \n  Labor Day (US): First Monday of September\n    {month: 9, weekday: 1, occurrence: 1}"
+      "description": "RelativeDate represents a holiday defined by weekday occurrence in a month.\n\nExamples:\n  Memorial Day (US): Last Monday of May\n    {month: 5, weekday: 1, occurrence: -1}\n\n  Thanksgiving (US): 4th Thursday of November\n    {month: 11, weekday: 4, occurrence: 4}\n\n  Labor Day (US): First Monday of September\n    {month: 9, weekday: 1, occurrence: 1}"
     },
     "v1RenewMessageLeaseResponse": {
       "type": "object",
@@ -2661,7 +2661,7 @@
         "priority": {
           "type": "string",
           "format": "int64",
-          "description": "priority: Priority for messages created by this schedule.\nInherited by posted messages unless message specifies otherwise.\nCommon values: 4 (high), 2 (normal), 0 (low)."
+          "description": "priority: Priority for messages created by this schedule.\nInherited by posted messages unless message specifies otherwise.\nCommon values: 5 (high), 2 (normal), 0 (low)."
         },
         "hasMaxMessages": {
           "type": "boolean",
@@ -2943,7 +2943,7 @@
           "description": "start_week: Reference date for week_interval calculation.\nWeek interval counts from this date's week.\nExample: bi-weekly schedule starting Jan 1, 2024 executes on weeks of Jan 1, Jan 15, Jan 29, etc.\nIf not set, uses schedule creation date."
         }
       },
-      "description": "WeeklyRule schedules execution on specific days of the week.\n\nExamples:\n  Every Monday and Friday:\n    {days_of_week: [1, 5]}\n  \n  Every weekday (Mon-Fri):\n    {days_of_week: [1, 2, 3, 4, 5]}\n  \n  Every other week on Wednesday:\n    {days_of_week: [3], week_interval: 2, start_week: \"2024-01-03\"}"
+      "description": "WeeklyRule schedules execution on specific days of the week.\n\nExamples:\n  Every Monday and Friday:\n    {days_of_week: [1, 5]}\n\n  Every weekday (Mon-Fri):\n    {days_of_week: [1, 2, 3, 4, 5]}\n\n  Every other week on Wednesday:\n    {days_of_week: [3], week_interval: 2, start_week: \"2024-01-03\"}"
     },
     "v1YearlyRule": {
       "type": "object",
@@ -2963,7 +2963,7 @@
           "title": "adjust_for_leap_year: How to handle Feb 29 on non-leap years.\nIf true: executes on Feb 28 on non-leap years\nIf false: skips execution on non-leap years"
         }
       },
-      "description": "YearlyRule schedules execution once per year on a specific date.\n\nExamples:\n  January 1st (New Year's Day):\n    {month: 1, day: 1}\n  \n  December 25th (Christmas):\n    {month: 12, day: 25}\n  \n  February 29th (handles non-leap years):\n    {month: 2, day: 29, adjust_for_leap_year: true}"
+      "description": "YearlyRule schedules execution once per year on a specific date.\n\nExamples:\n  January 1st (New Year's Day):\n    {month: 1, day: 1}\n\n  December 25th (Christmas):\n    {month: 12, day: 25}\n\n  February 29th (handles non-leap years):\n    {month: 2, day: 29, adjust_for_leap_year: true}"
     }
   }
 }

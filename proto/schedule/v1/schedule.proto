@@ -133,7 +133,7 @@ message Schedule {
 
         // priority: Priority for messages created by this schedule.
         // Inherited by posted messages unless message specifies otherwise.
-        // Common values: 100 (high), 50 (normal), 10 (low).
+        // Common values: 5 (high), 2 (normal), 0 (low).
     int64 priority = 12;
 
         // has_max_messages: If true, enforces max_messages limit.

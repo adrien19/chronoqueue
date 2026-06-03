@@ -245,7 +245,7 @@ func TestMessageLifecycle_PostWithPriority(t *testing.T) {
 	}
 
 	// Assert - Messages should be in priority order (high to low: 4, 2, 0)
-	expectedPriorities := []int64{95, 50, 10}
+	expectedPriorities := []int64{4, 2, 0}
 	helpers.AssertMessagePriority(t, retrievedMessages, expectedPriorities)
 }
 

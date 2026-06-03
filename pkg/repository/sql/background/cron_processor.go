@@ -364,9 +364,7 @@ func (c *CronProcessorService) createCronMessage(ctx context.Context, tx *sql.Tx
 
 	meta := schedule.GetMetadata()
 	priority := meta.GetPriority()
-	if priority == 0 {
-		priority = 5
-	}
+	// Priority 0 is valid (lowest priority), no defaulting needed
 
 	maxAttempts := queueMeta.GetDefaultMaxAttempts()
 	if maxAttempts == 0 {
