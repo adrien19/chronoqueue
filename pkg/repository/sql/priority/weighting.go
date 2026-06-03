@@ -149,9 +149,9 @@ func (p *PriorityWeightCalculator) SelectPriorityLevel(weights map[string]int32)
 // PriorityIntToLevel converts a numeric priority into a logical level.
 func PriorityIntToLevel(priority int32) string {
 	switch {
-	case priority >= 70:
+	case priority >= 3:
 		return "high"
-	case priority >= 30:
+	case priority >= 2:
 		return "medium"
 	case priority >= 0:
 		return "low"
@@ -164,11 +164,11 @@ func PriorityIntToLevel(priority int32) string {
 func PriorityLevelToRange(level string) (int32, int32) {
 	switch level {
 	case "high":
-		return 70, maxPriorityValue
+		return 3, maxPriorityValue
 	case "medium":
-		return 30, 69
+		return 2, 2
 	case "low":
-		return 0, 29
+		return 0, 1
 	default:
 		return 0, 0
 	}
@@ -229,11 +229,11 @@ func configuredWeight(level string, weights map[int32]int32) int32 {
 
 	switch level {
 	case "high":
-		return weights[100]
+		return weights[4]
 	case "medium":
-		return weights[50]
+		return weights[2]
 	case "low":
-		return weights[10]
+		return weights[0]
 	default:
 		return 0
 	}

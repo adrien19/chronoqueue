@@ -333,7 +333,7 @@ chronoqueue queue create work-queue --type simple --insecure --server 0.0.0.0:90
 
 # 3. Post some messages
 chronoqueue message post work-queue "Task 1" --insecure --server 0.0.0.0:9000
-chronoqueue message post work-queue "Task 2" --priority 5 --insecure --server 0.0.0.0:9000
+chronoqueue message post work-queue "Task 2" --priority 1 --insecure --server 0.0.0.0:9000
 
 # 4. Check queue state
 chronoqueue queue state work-queue --insecure --server 0.0.0.0:9000

@@ -321,7 +321,7 @@ func TestMessagePostCommand_FlagSettings(t *testing.T) {
 		{"lease-duration", "60s"},
 		{"max-attempts", "5"},
 		{"invisibility-duration", "10s"},
-		{"priority", "100"},
+		{"priority", "4"},
 		{"metadata", `{"key": "value"}`},
 	}
 

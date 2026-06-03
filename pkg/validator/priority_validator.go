@@ -12,9 +12,9 @@ const (
 	// DefaultMinPriority is the minimum allowed priority
 	DefaultMinPriority = 0
 	// DefaultMaxPriority is the maximum allowed priority
-	DefaultMaxPriority = 100
+	DefaultMaxPriority = 4
 	// DefaultPriority is used when no priority is specified
-	DefaultPriority = 50
+	DefaultPriority = 0
 )
 
 // PriorityValidator validates message priority

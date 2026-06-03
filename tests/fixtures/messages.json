@@ -19,7 +19,7 @@
             "timestamp": "2025-10-20T10:00:00Z"
         },
         "content_type": "application/json",
-        "priority": 50
+        "priority": 2
     },
     "high_priority_alert": {
         "content": {
@@ -34,7 +34,7 @@
             }
         },
         "content_type": "application/json",
-        "priority": 95
+        "priority": 4
     },
     "medium_priority_event": {
         "content": {
@@ -44,12 +44,12 @@
             "timestamp": "2025-10-20T09:30:00Z"
         },
         "content_type": "application/json",
-        "priority": 50
+        "priority": 2
     },
     "low_priority_log": {
         "content": "INFO: Background cleanup job started at 2025-10-20T08:00:00Z",
         "content_type": "text/plain",
-        "priority": 10
+        "priority": 0
     },
     "notification": {
         "content": {
@@ -61,7 +61,7 @@
             "timestamp": "2025-10-20T11:00:00Z"
         },
         "content_type": "application/json",
-        "priority": 30
+        "priority": 1
     },
     "large_payload": {
         "content": {
@@ -75,7 +75,7 @@
             "items": []
         },
         "content_type": "application/json",
-        "priority": 50,
+        "priority": 2,
         "note": "items array would be filled with many entries for large payload test"
     },
     "empty_payload": {
@@ -94,12 +94,12 @@
     "xml_content": {
         "content": "<?xml version=\"1.0\"?><root><item>Test</item></root>",
         "content_type": "application/xml",
-        "priority": 30
+        "priority": 1
     },
     "binary_content": {
         "content": "SGVsbG8gV29ybGQh",
         "content_type": "application/octet-stream",
-        "priority": 25,
+        "priority": 1,
         "note": "Base64 encoded binary content"
     }
 }

@@ -273,7 +273,7 @@ func (CalendarException_ExceptionType) EnumDescriptor() ([]byte, []int) {
 //	            }},
 //	            Timezone: "America/New_York",
 //	        },
-//	        Priority: 100,
+//	        Priority: 4,
 //	        MaxMessages: 1000,  // Safety limit
 //	    },
 //	}

@@ -28,7 +28,7 @@ func TestEncryptDecryptMessagePayload_RoundTrip(t *testing.T) {
 			State:        messagepb.Message_Metadata_PENDING,
 			AttemptsLeft: 1,
 			MaxAttempts:  1,
-			Priority:     10,
+			Priority:     0,
 			LeasePolicy: &commonpb.LeasePolicy{
 				BaseLease: durationpb.New(30 * time.Second),
 			},

@@ -487,9 +487,9 @@ func (x *MessageRetentionPolicy) GetRetentionSeconds() int64 {
 //	config := &queue.PriorityConfig{
 //	    Policy: queue.FairnessPolicy_HYBRID,
 //	    PriorityWeights: map[int32]int32{
-//	        100: 70,  // High priority: 70% of processing capacity
-//	        50:  20,  // Medium priority: 20%
-//	        10:  10,  // Low priority: 10%
+//	        4: 70,  // High priority: 70% of processing capacity
+//	        2: 20,  // Medium priority: 20%
+//	        0: 10,  // Low priority: 10%
 //	    },
 //	    AgeBoostThreshold: durationpb.New(30*time.Minute),  // Boost after 30min wait
 //	    AgeBoostMultiplier: 2,  // Double the priority every 30min
@@ -500,7 +500,7 @@ type PriorityConfig struct {
 	// See FairnessPolicy enum for detailed descriptions.
 	Policy FairnessPolicy `protobuf:"varint,1,opt,name=policy,proto3,enum=chronoqueue.api.queue.v1.FairnessPolicy" json:"policy,omitempty"`
 	// priority_weights: For WEIGHTED/HYBRID policies, maps priority levels to weights.
-	// Key: priority level (e.g., 100, 50, 10)
+	// Key: priority level (e.g., 4, 2, 0)
 	// Value: relative weight (e.g., 70, 20, 10 = 70% high, 20% medium, 10% low)
 	// Weights are relative - they're normalized to percentages.
 	PriorityWeights map[int32]int32 `protobuf:"bytes,2,rep,name=priority_weights,json=priorityWeights,proto3" json:"priority_weights,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`

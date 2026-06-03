@@ -205,7 +205,7 @@ type QueueServiceClient interface {
 	//	  "message": {
 	//	    "metadata": {
 	//	      "payload": {"data": "..."},
-	//	      "priority": 100
+	//	      "priority": 4
 	//	    }
 	//	  }
 	//	}
@@ -240,7 +240,7 @@ type QueueServiceClient interface {
 	// Errors:
 	//   - NotFound: Queue doesn't exist
 	//   - InvalidArgument: Too many messages, payload too large, invalid mode
-	//   - FailedPrecondition: Partial failure in ALL_OR_NOTHING mode
+	//   - FailedPrecondition: One or more messages failed in ALL_OR_NOTHING mode (entire batch rejected)
 	//
 	// Individual message errors are returned in the response with per-message error codes.
 	PostMessagesBulk(ctx context.Context, in *PostMessagesBulkRequest, opts ...grpc.CallOption) (*PostMessagesBulkResponse, error)
@@ -1226,7 +1226,7 @@ type QueueServiceServer interface {
 	//	  "message": {
 	//	    "metadata": {
 	//	      "payload": {"data": "..."},
-	//	      "priority": 100
+	//	      "priority": 4
 	//	    }
 	//	  }
 	//	}
@@ -1261,7 +1261,7 @@ type QueueServiceServer interface {
 	// Errors:
 	//   - NotFound: Queue doesn't exist
 	//   - InvalidArgument: Too many messages, payload too large, invalid mode
-	//   - FailedPrecondition: Partial failure in ALL_OR_NOTHING mode
+	//   - FailedPrecondition: One or more messages failed in ALL_OR_NOTHING mode (entire batch rejected)
 	//
 	// Individual message errors are returned in the response with per-message error codes.
 	PostMessagesBulk(context.Context, *PostMessagesBulkRequest) (*PostMessagesBulkResponse, error)

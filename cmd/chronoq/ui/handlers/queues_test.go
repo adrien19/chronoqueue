@@ -60,7 +60,7 @@ func TestMessageDisplay_Structure(t *testing.T) {
 		Id:           "full-message-id-123456789",
 		ShortId:      shortenID("full-message-id-123456789"),
 		State:        "PENDING",
-		Priority:     100,
+		Priority:     4,
 		AttemptCount: 2,
 		CreatedAt:    now,
 	}
@@ -68,7 +68,7 @@ func TestMessageDisplay_Structure(t *testing.T) {
 	assert.Equal(t, "full-message-id-123456789", md.Id)
 	assert.Equal(t, "full-message", md.ShortId)
 	assert.Equal(t, "PENDING", md.State)
-	assert.Equal(t, int64(100), md.Priority)
+	assert.Equal(t, int64(4), md.Priority)
 	assert.Equal(t, int32(2), md.AttemptCount)
 	assert.Equal(t, now, md.CreatedAt)
 }

@@ -8,7 +8,7 @@
                 "task": "heartbeat"
             },
             "content_type": "application/json",
-            "priority": 50
+            "priority": 2
         },
         "description": "Executes every minute"
     },
@@ -21,7 +21,7 @@
                 "task": "hourly_report"
             },
             "content_type": "application/json",
-            "priority": 60
+            "priority": 2
         },
         "description": "Executes at the top of every hour"
     },
@@ -34,7 +34,7 @@
                 "task": "daily_backup"
             },
             "content_type": "application/json",
-            "priority": 70
+            "priority": 3
         },
         "description": "Executes daily at midnight UTC"
     },
@@ -47,7 +47,7 @@
                 "task": "morning_report"
             },
             "content_type": "application/json",
-            "priority": 80
+            "priority": 3
         },
         "description": "Executes Monday-Friday at 9 AM"
     },
@@ -59,7 +59,7 @@
                 "task": "business_day_task"
             },
             "content_type": "application/json",
-            "priority": 50
+            "priority": 2
         },
         "calendar_rules": {
             "timezone": "America/New_York",
@@ -87,7 +87,7 @@
                 "task": "monthly_report"
             },
             "content_type": "application/json",
-            "priority": 90
+            "priority": 4
         },
         "calendar_rules": {
             "timezone": "UTC",
@@ -111,7 +111,7 @@
                 "task": "month_end_processing"
             },
             "content_type": "application/json",
-            "priority": 95
+            "priority": 4
         },
         "calendar_rules": {
             "timezone": "UTC",
@@ -135,7 +135,7 @@
                 "task": "first_monday_meeting"
             },
             "content_type": "application/json",
-            "priority": 70
+            "priority": 3
         },
         "calendar_rules": {
             "timezone": "America/New_York",
@@ -158,7 +158,7 @@
                 "task": "business_day_no_holidays"
             },
             "content_type": "application/json",
-            "priority": 60
+            "priority": 2
         },
         "calendar_rules": {
             "timezone": "America/New_York",

@@ -377,6 +377,10 @@ func (h *QueuesHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 			h.writeFormError(w, "Priority must be a non-negative integer")
 			return
 		}
+		if n > 4 {
+			h.writeFormError(w, "Priority must be between 0 and 4")
+			return
+		}
 		priority = n
 	}
 

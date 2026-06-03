@@ -62,7 +62,7 @@ func TestRetentionPolicy_DeleteImmediately(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 1,
 		},
 	}
@@ -150,7 +150,7 @@ func TestRetentionPolicy_RetainDuration(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 1,
 		},
 	}
@@ -245,7 +245,7 @@ func TestRetentionPolicy_RetainForever(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 1,
 		},
 	}
@@ -333,7 +333,7 @@ func TestRetentionPolicy_NackWithRetention(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 1,
 		},
 	}
@@ -423,7 +423,7 @@ func TestRetentionPolicy_MultipleMessages(t *testing.T) {
 			MessageId: msgID,
 			Metadata: &message_pb.Message_Metadata{
 				Payload:     payload,
-				Priority:    50,
+				Priority:    2,
 				MaxAttempts: 1,
 			},
 		}
@@ -519,7 +519,7 @@ func TestRetentionPolicy_ExplicitDeleteImmediately(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 1,
 		},
 	}

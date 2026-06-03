@@ -80,7 +80,7 @@ func TestCalendarServiceProcessesDueSchedule(t *testing.T) {
 			State:          schedulepb.Schedule_Metadata_SCHEDULED,
 			QueueName:      "q1",
 			NextRun:        timestamppb.New(now),
-			Priority:       10,
+			Priority:       0,
 			Payload:        &commonpb.Payload{Data: payloadData},
 			ScheduleConfig: &schedulepb.Schedule_Metadata_CalendarSchedule{CalendarSchedule: &schedulepb.CalendarSchedule{}},
 			Timezone:       "UTC",

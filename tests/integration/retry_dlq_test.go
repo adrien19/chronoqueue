@@ -72,7 +72,7 @@ func TestRetrySystem_ExponentialBackoff(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 3, // Server requires >= 1
 		},
 	}
@@ -162,7 +162,7 @@ func TestRetrySystem_MaxRetriesReached(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 3,
 		},
 	}
@@ -300,7 +300,7 @@ func TestDLQ_RequeueMessage(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 1,
 		},
 	}

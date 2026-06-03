@@ -125,7 +125,7 @@ func (Message_Metadata_State) EnumDescriptor() ([]byte, []int) {
 //	    MessageId: "task-123",
 //	    Metadata: &message.Message_Metadata{
 //	        Payload: yourPayload,
-//	        Priority: 100,                        // Higher = processed first
+//	        Priority: 4,                          // Higher = processed first (0-4 range)
 //	        MaxAttempts: 3,                       // Retry up to 3 times
 //	        LeaseDuration: durationpb.New(30*time.Second), // 30s to process
 //	        ScheduledTime: timestamppb.New(executeAt),     // When to execute
@@ -217,10 +217,10 @@ type Message_Metadata struct {
 	// Useful for detecting stuck/zombie workers that keep renewing without completing.
 	// Consider implementing a max renewal limit in your worker logic.
 	LeaseRenewalCount int32 `protobuf:"varint,7,opt,name=lease_renewal_count,json=leaseRenewalCount,proto3" json:"lease_renewal_count,omitempty"`
-	// priority: Message priority score (0-2147483647, higher = processed first).
-	// ChronoQueue uses priority streams (high: ≥70, medium: ≥30, low: <30).
+	// priority: Message priority score (0-4, higher = processed first).
+	// ChronoQueue uses priority streams (high: ≥3, medium: 2, low: ≤1).
 	// Messages with the same priority are processed FIFO.
-	// Use for: urgent tasks (100), normal (50), background (10).
+	// Use for: urgent tasks (4), normal (2), background (0).
 	Priority int64 `protobuf:"varint,9,opt,name=priority,proto3" json:"priority,omitempty"`
 	// max_attempts: Maximum number of processing attempts before moving to DLQ.
 	// If omitted, uses queue's default_max_attempts.

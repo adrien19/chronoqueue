@@ -14,21 +14,21 @@ import (
 )
 
 func TestPriorityLevelMappings(t *testing.T) {
-	require.Equal(t, "high", PriorityIntToLevel(120))
-	require.Equal(t, "medium", PriorityIntToLevel(40))
-	require.Equal(t, "low", PriorityIntToLevel(5))
+	require.Equal(t, "high", PriorityIntToLevel(4))
+	require.Equal(t, "medium", PriorityIntToLevel(2))
+	require.Equal(t, "low", PriorityIntToLevel(1))
 
 	highMin, highMax := PriorityLevelToRange("high")
-	require.Equal(t, int32(70), highMin)
+	require.Equal(t, int32(3), highMin)
 	require.GreaterOrEqual(t, highMax, highMin)
 
 	mediumMin, mediumMax := PriorityLevelToRange("medium")
-	require.Equal(t, int32(30), mediumMin)
-	require.Equal(t, int32(69), mediumMax)
+	require.Equal(t, int32(2), mediumMin)
+	require.Equal(t, int32(2), mediumMax)
 
 	lowMin, lowMax := PriorityLevelToRange("low")
 	require.Equal(t, int32(0), lowMin)
-	require.Equal(t, int32(29), lowMax)
+	require.Equal(t, int32(1), lowMax)
 }
 
 func TestCalculateWeightsWithAgeBoost(t *testing.T) {
@@ -52,7 +52,7 @@ func TestCalculateWeightsWithAgeBoost(t *testing.T) {
 	meta := &queuepb.QueueMetadata{
 		PriorityConfig: &queuepb.PriorityConfig{
 			Policy:             queuepb.FairnessPolicy_WEIGHTED,
-			PriorityWeights:    map[int32]int32{100: 10, 50: 5, 10: 1},
+			PriorityWeights:    map[int32]int32{4: 10, 2: 5, 0: 1},
 			AgeBoostThreshold:  durationpb.New(15 * time.Minute),
 			AgeBoostMultiplier: 3,
 		},

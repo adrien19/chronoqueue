@@ -386,7 +386,7 @@
     "/v1/queues/{queueName}/messages": {
       "post": {
         "summary": "PostMessage adds a new message to a queue.",
-        "description": "Use for:\n- Asynchronous task execution\n- Event-driven workflows\n- Job scheduling\n- Load leveling\n\nFeatures:\n- Delayed execution (scheduled_time)\n- Priority ordering\n- Schema validation\n- Deduplication (idempotency_key)\n- Exclusive processing (exclusivity_key)\n\nExample - immediate execution:\n  POST /v1/queues/order-processing/messages\n  {\n    \"message\": {\n      \"metadata\": {\n        \"payload\": {\"data\": \"...\"},\n        \"priority\": 100\n      }\n    }\n  }\n\nExample - delayed execution (send email in 1 hour):\n  {\n    \"message\": {\n      \"metadata\": {\n        \"payload\": {\"data\": \"...\"},\n        \"scheduled_time\": \"2024-12-01T15:00:00Z\"\n      }\n    }\n  }\n\nReturns: Message with assigned message_id\nErrors:\n  - NotFound: Queue doesn't exist\n  - InvalidArgument: Schema validation failed, invalid scheduled_time\n  - AlreadyExists: Duplicate idempotency_key (within dedup window)",
+        "description": "Use for:\n- Asynchronous task execution\n- Event-driven workflows\n- Job scheduling\n- Load leveling\n\nFeatures:\n- Delayed execution (scheduled_time)\n- Priority ordering\n- Schema validation\n- Deduplication (idempotency_key)\n- Exclusive processing (exclusivity_key)\n\nExample - immediate execution:\n  POST /v1/queues/order-processing/messages\n  {\n    \"message\": {\n      \"metadata\": {\n        \"payload\": {\"data\": \"...\"},\n        \"priority\": 4\n      }\n    }\n  }\n\nExample - delayed execution (send email in 1 hour):\n  {\n    \"message\": {\n      \"metadata\": {\n        \"payload\": {\"data\": \"...\"},\n        \"scheduled_time\": \"2024-12-01T15:00:00Z\"\n      }\n    }\n  }\n\nReturns: Message with assigned message_id\nErrors:\n  - NotFound: Queue doesn't exist\n  - InvalidArgument: Schema validation failed, invalid scheduled_time\n  - AlreadyExists: Duplicate idempotency_key (within dedup window)",
         "operationId": "QueueService_PostMessage",
         "responses": {
           "200": {
@@ -1448,8 +1448,7 @@
             "type": "object",
             "$ref": "#/definitions/v1Message"
           },
-          "maxItems": 1000,
-          "title": "Messages to post (max: 1000 per request)"
+          "title": "Messages to post (recommended max: 1000 per request)"
         },
         "transactionMode": {
           "$ref": "#/definitions/PostMessagesBulkRequestTransactionMode"
@@ -2091,7 +2090,7 @@
           "description": "metadata: All message execution and lifecycle information."
         }
       },
-      "description": "Message represents a unit of work in ChronoQueue.\n\nA message encapsulates:\n- Your business data (payload)\n- Execution metadata (state, priority, retries)\n- Scheduling information (when to execute)\n- Processing guarantees (leases, acknowledgments)\n\nLifecycle:\n  1. INVISIBLE: Message is scheduled for future execution or waiting to become visible\n  2. PENDING: Message is ready to be consumed by a worker\n  3. RUNNING: Message is actively being processed (worker has acquired a lease)\n  4. COMPLETED: Message was successfully processed and acknowledged\n  5. ERRORED: Message failed all retry attempts and moved to DLQ\n  6. CANCELED: Message was manually canceled before processing\n\nExample usage:\n  // Post a message\n  msg := \u0026message.Message{\n      MessageId: \"task-123\",\n      Metadata: \u0026message.Message_Metadata{\n          Payload: yourPayload,\n          Priority: 100,                        // Higher = processed first\n          MaxAttempts: 3,                       // Retry up to 3 times\n          LeaseDuration: durationpb.New(30*time.Second), // 30s to process\n          ScheduledTime: timestamppb.New(executeAt),     // When to execute\n      },\n  }\n\n  // Process a message\n  msg, err := client.GetNextMessage(ctx, queueName)\n  // ... do work ...\n  client.AcknowledgeMessage(ctx, queueName, msg.MessageId, streamEntryID)"
+      "description": "Message represents a unit of work in ChronoQueue.\n\nA message encapsulates:\n- Your business data (payload)\n- Execution metadata (state, priority, retries)\n- Scheduling information (when to execute)\n- Processing guarantees (leases, acknowledgments)\n\nLifecycle:\n  1. INVISIBLE: Message is scheduled for future execution or waiting to become visible\n  2. PENDING: Message is ready to be consumed by a worker\n  3. RUNNING: Message is actively being processed (worker has acquired a lease)\n  4. COMPLETED: Message was successfully processed and acknowledged\n  5. ERRORED: Message failed all retry attempts and moved to DLQ\n  6. CANCELED: Message was manually canceled before processing\n\nExample usage:\n  // Post a message\n  msg := \u0026message.Message{\n      MessageId: \"task-123\",\n      Metadata: \u0026message.Message_Metadata{\n          Payload: yourPayload,\n          Priority: 4,                          // Higher = processed first (0-4 range)\n          MaxAttempts: 3,                       // Retry up to 3 times\n          LeaseDuration: durationpb.New(30*time.Second), // 30s to process\n          ScheduledTime: timestamppb.New(executeAt),     // When to execute\n      },\n  }\n\n  // Process a message\n  msg, err := client.GetNextMessage(ctx, queueName)\n  // ... do work ...\n  client.AcknowledgeMessage(ctx, queueName, msg.MessageId, streamEntryID)"
     },
     "v1MessageMetadata": {
       "type": "object",
@@ -2125,7 +2124,7 @@
         "priority": {
           "type": "string",
           "format": "int64",
-          "description": "priority: Message priority score (0-2147483647, higher = processed first).\nChronoQueue uses priority streams (high: ≥70, medium: ≥30, low: \u003c30).\nMessages with the same priority are processed FIFO.\nUse for: urgent tasks (100), normal (50), background (10)."
+          "description": "priority: Message priority score (0-4, higher = processed first).\nChronoQueue uses priority streams (high: ≥3, medium: 2, low: ≤1).\nMessages with the same priority are processed FIFO.\nUse for: urgent tasks (4), normal (2), background (0)."
         },
         "maxAttempts": {
           "type": "integer",
@@ -2270,8 +2269,7 @@
       "properties": {
         "success": {
           "type": "boolean",
-          "title": "Overall success indicator (true if and only if failedCount == 0)",
-          "description": "For partial successes check failedCount, successfulCount, and the results array for per-message status"
+          "title": "Overall success indicator.\nALL_OR_NOTHING: true only if every message succeeded (failed_count == 0)\nBEST_EFFORT: true if at least one message succeeded (successful_count \u003e 0)"
         },
         "successfulCount": {
           "type": "integer",
@@ -2343,7 +2341,7 @@
             "type": "integer",
             "format": "int32"
           },
-          "description": "priority_weights: For WEIGHTED/HYBRID policies, maps priority levels to weights.\nKey: priority level (e.g., 100, 50, 10)\nValue: relative weight (e.g., 70, 20, 10 = 70% high, 20% medium, 10% low)\nWeights are relative - they're normalized to percentages."
+          "description": "priority_weights: For WEIGHTED/HYBRID policies, maps priority levels to weights.\nKey: priority level (e.g., 4, 2, 0)\nValue: relative weight (e.g., 70, 20, 10 = 70% high, 20% medium, 10% low)\nWeights are relative - they're normalized to percentages."
         },
         "ageBoostThreshold": {
           "type": "string",
@@ -2355,7 +2353,7 @@
           "description": "age_boost_multiplier: For AGING/HYBRID policies, how much to boost priority.\nPriority multiplied by this factor every age_boost_threshold period.\nExample: multiplier=2, threshold=30m means priority doubles every 30 minutes.\nTypical values: 1.5 (gentle), 2 (standard), 3 (aggressive)."
         }
       },
-      "description": "PriorityConfig provides fine-grained control over priority-based processing.\n\nExample - Weighted fairness with aging:\n  config := \u0026queue.PriorityConfig{\n      Policy: queue.FairnessPolicy_HYBRID,\n      PriorityWeights: map[int32]int32{\n          100: 70,  // High priority: 70% of processing capacity\n          50:  20,  // Medium priority: 20%\n          10:  10,  // Low priority: 10%\n      },\n      AgeBoostThreshold: durationpb.New(30*time.Minute),  // Boost after 30min wait\n      AgeBoostMultiplier: 2,  // Double the priority every 30min\n  }"
+      "description": "PriorityConfig provides fine-grained control over priority-based processing.\n\nExample - Weighted fairness with aging:\n  config := \u0026queue.PriorityConfig{\n      Policy: queue.FairnessPolicy_HYBRID,\n      PriorityWeights: map[int32]int32{\n          4: 70,  // High priority: 70% of processing capacity\n          2: 20,  // Medium priority: 20%\n          0: 10,  // Low priority: 10%\n      },\n      AgeBoostThreshold: durationpb.New(30*time.Minute),  // Boost after 30min wait\n      AgeBoostMultiplier: 2,  // Double the priority every 30min\n  }"
     },
     "v1PurgeDLQResponse": {
       "type": "object",
@@ -2563,7 +2561,7 @@
           "description": "metadata: Schedule configuration and execution state."
         }
       },
-      "description": "Schedule represents a recurring message posting pattern.\n\nUse schedules to:\n- Execute tasks at regular intervals (every hour, daily, weekly)\n- Implement business calendar logic (weekdays, holidays, month-end)\n- Create complex scheduling rules (first Monday of month, quarterly reports)\n- Automate maintenance tasks, reports, notifications, batch jobs\n\nTwo scheduling modes:\n1. Cron-based (legacy): Traditional Unix cron expressions\n2. Calendar-based (recommended): Rich business calendar support\n\nExample - Daily report at 9 AM weekdays:\n  schedule := \u0026schedule.Schedule{\n      ScheduleId: \"daily-sales-report\",\n      Metadata: \u0026schedule.Schedule_Metadata{\n          Payload: reportPayload,\n          QueueName: \"report-generator\",\n          CalendarSchedule: \u0026schedule.CalendarSchedule{\n              Type: schedule.CalendarSchedule_BUSINESS_DAYS,\n              Rules: []*schedule.CalendarRule{{\n                  BusinessDays: \u0026schedule.BusinessDaysRule{...},\n                  ExecutionTimes: []*schedule.TimeOfDay{{Hour: 9}},\n              }},\n              Timezone: \"America/New_York\",\n          },\n          Priority: 100,\n          MaxMessages: 1000,  // Safety limit\n      },\n  }\n\nLifecycle:\n- SCHEDULED: Active, posting messages according to schedule\n- PAUSED: Temporarily disabled (can resume later)\n- CANCELED: Permanently stopped\n- ERRORED: Failed to execute (check state_message for details)"
+      "description": "Schedule represents a recurring message posting pattern.\n\nUse schedules to:\n- Execute tasks at regular intervals (every hour, daily, weekly)\n- Implement business calendar logic (weekdays, holidays, month-end)\n- Create complex scheduling rules (first Monday of month, quarterly reports)\n- Automate maintenance tasks, reports, notifications, batch jobs\n\nTwo scheduling modes:\n1. Cron-based (legacy): Traditional Unix cron expressions\n2. Calendar-based (recommended): Rich business calendar support\n\nExample - Daily report at 9 AM weekdays:\n  schedule := \u0026schedule.Schedule{\n      ScheduleId: \"daily-sales-report\",\n      Metadata: \u0026schedule.Schedule_Metadata{\n          Payload: reportPayload,\n          QueueName: \"report-generator\",\n          CalendarSchedule: \u0026schedule.CalendarSchedule{\n              Type: schedule.CalendarSchedule_BUSINESS_DAYS,\n              Rules: []*schedule.CalendarRule{{\n                  BusinessDays: \u0026schedule.BusinessDaysRule{...},\n                  ExecutionTimes: []*schedule.TimeOfDay{{Hour: 9}},\n              }},\n              Timezone: \"America/New_York\",\n          },\n          Priority: 4,\n          MaxMessages: 1000,  // Safety limit\n      },\n  }\n\nLifecycle:\n- SCHEDULED: Active, posting messages according to schedule\n- PAUSED: Temporarily disabled (can resume later)\n- CANCELED: Permanently stopped\n- ERRORED: Failed to execute (check state_message for details)"
     },
     "v1ScheduleHistory": {
       "type": "object",
@@ -2663,7 +2661,7 @@
         "priority": {
           "type": "string",
           "format": "int64",
-          "description": "priority: Priority for messages created by this schedule.\nInherited by posted messages unless message specifies otherwise.\nCommon values: 100 (high), 50 (normal), 10 (low)."
+          "description": "priority: Priority for messages created by this schedule.\nInherited by posted messages unless message specifies otherwise.\nCommon values: 4 (high), 2 (normal), 0 (low)."
         },
         "hasMaxMessages": {
           "type": "boolean",

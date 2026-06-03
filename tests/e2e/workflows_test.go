@@ -248,9 +248,9 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 // Test Scenario: E2E-003 from TESTING_GUIDE.md
 // Workflow:
 // 1. Create priority queue
-// 2. Post 100 low-priority logs (priority=10)
-// 3. Post 10 medium-priority events (priority=50)
-// 4. Post 5 critical alerts (priority=95)
+// 2. Post 100 low-priority logs (priority=0)
+// 3. Post 10 medium-priority events (priority=2)
+// 4. Post 5 critical alerts (priority=4)
 // 5. Consume messages and verify order
 // Expected: Critical alerts processed first, then events, then logs
 func TestE2E_HighPriorityAlertSystem(t *testing.T) {
@@ -292,7 +292,7 @@ func TestE2E_HighPriorityAlertSystem(t *testing.T) {
 			MessageId: fmt.Sprintf("log-%d", i),
 			Metadata: &message_pb.Message_Metadata{
 				Payload:     payload,
-				Priority:    10,
+				Priority:    0,
 				MaxAttempts: 1, // Set max attempts to 1 for simplicity
 			},
 		}
@@ -316,7 +316,7 @@ func TestE2E_HighPriorityAlertSystem(t *testing.T) {
 			MessageId: fmt.Sprintf("event-%d", i),
 			Metadata: &message_pb.Message_Metadata{
 				Payload:     payload,
-				Priority:    50,
+				Priority:    2,
 				MaxAttempts: 1, // Set max attempts to 1 for simplicity
 			},
 		}
@@ -340,7 +340,7 @@ func TestE2E_HighPriorityAlertSystem(t *testing.T) {
 			MessageId: fmt.Sprintf("alert-%d", i),
 			Metadata: &message_pb.Message_Metadata{
 				Payload:     payload,
-				Priority:    95,
+				Priority:    4,
 				MaxAttempts: 1, // Set max attempts to 1 for simplicity
 			},
 		}
@@ -396,9 +396,9 @@ func TestE2E_HighPriorityAlertSystem(t *testing.T) {
 
 	// Assert
 	t.Logf("\n=== Priority Distribution (first %d messages) ===", totalHighPriorityMessages)
-	t.Logf("Alerts (priority 95): %d", alertCount)
-	t.Logf("Events (priority 50): %d", eventCount)
-	t.Logf("Logs (priority 10): %d", logCount)
+	t.Logf("Alerts (priority 4): %d", alertCount)
+	t.Logf("Events (priority 2): %d", eventCount)
+	t.Logf("Logs (priority 0): %d", logCount)
 	t.Logf("==================================\n")
 
 	assert.Equal(t, 3, alertCount, "All 3 alerts should be processed first")
@@ -470,7 +470,7 @@ func TestE2E_MultiTenantIsolation(t *testing.T) {
 				MessageId: fmt.Sprintf("%s-msg-%d", queueName, i),
 				Metadata: &message_pb.Message_Metadata{
 					Payload:     payload,
-					Priority:    50,
+					Priority:    2,
 					MaxAttempts: 1, // Set max attempts to 1 for simplicity
 				},
 			}
