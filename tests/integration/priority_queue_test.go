@@ -333,7 +333,7 @@ func TestPriorityQueue_PeekWithPriorityRange(t *testing.T) {
 	// Should return messages with priority 2, 3, and 4 (within range 2-4)
 	// However, peek might return all messages if range filtering is not implemented
 	// Just verify that any returned messages have the correct priority if filter is working
-	if len(peekResp.Messages) <= 6 {
+	if len(peekResp.Messages) <= 3 {
 		// Range filtering is working
 		for _, msg := range peekResp.Messages {
 			priority := msg.Metadata.Priority
@@ -370,9 +370,8 @@ func TestPriorityQueue_BoundaryValues(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Post messages with boundary priorities
-	// Note: Priority 0 is treated as "not set" and defaults to 5, so we use 1 as the minimum
-	boundaryPriorities := []int64{1, 2, 99, 100}
+	// Post messages with boundary priorities (0-4 range)
+	boundaryPriorities := []int64{0, 1, 3, 4}
 	for i, priority := range boundaryPriorities {
 		payload := &common_pb.Payload{
 			Data:        createStruct(t, map[string]interface{}{"priority": priority}),
@@ -412,9 +411,9 @@ func TestPriorityQueue_BoundaryValues(t *testing.T) {
 
 	// Assert - Should be retrieved in strict priority order (Postgres implementation)
 	// Postgres orders by priority DESC (highest first)
-	// Posted order: [1, 2, 99, 100]
-	// Expected retrieval: [100, 99, 2, 1]
-	expectedOrder := []int64{100, 99, 2, 1}
+	// Posted order: [0, 1, 3, 4]
+	// Expected retrieval: [4, 3, 1, 0]
+	expectedOrder := []int64{4, 3, 1, 0}
 	assert.Equal(t, expectedOrder, retrievedPriorities, "Boundary priorities should be ordered by priority (highest to lowest)")
 }
 
