@@ -47,6 +47,7 @@ services:
       - "8081"
       - --grpc-address
       - chronoqueue-server:9000
+      - --skip-ssl
     depends_on:
       - chronoqueuesvc
     networks:

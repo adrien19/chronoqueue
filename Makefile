@@ -473,6 +473,7 @@ ui-build: ui-deps
 	@echo "Building UI CSS..."
 	@cd cmd/chronoq/web-ui && npm run build:css
 	@echo "Building UI binary..."
+	@mkdir -p $(CHRONOQUEUE_OUT_DIR)
 	@go build -ldflags "$(LDFLAGS)" -o $(CHRONOQUEUE_OUT_DIR)/chronoqueue .
 
 ################################################################################

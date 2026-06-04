@@ -128,7 +128,7 @@ ChronoQueue includes a built-in web interface for monitoring and managing your q
 3. Start the UI server:
 
     ```bash
-    ./chronoqueue web-ui start --port 8081 --grpc-address localhost:9000
+    ./chronoqueue web-ui start --port 8081 --grpc-address localhost:9000 --skip-ssl
     ```
 
 4. Open your browser to `http://localhost:8081`
@@ -161,7 +161,7 @@ make ui-watch
 go run main.go server --dev --server :9000
 
 # Terminal 3: Run the UI
-go run main.go web-ui start --port 8081
+go run main.go web-ui start --port 8081 --skip-ssl
 ```
 
 ## AI Integration
