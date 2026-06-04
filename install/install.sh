@@ -172,16 +172,17 @@ main() {
     # Determine whether sudo is needed:
     # - Never use sudo if the user explicitly set CHRONOQUEUE_INSTALL_DIR
     # - Use sudo only if the default /usr/local/bin is not writable
-    mkdir -p "${install_dir}"
     local use_sudo="false"
     if [[ "${user_set_dir}" != "true" ]] && [[ ! -w "${install_dir}" ]]; then
         use_sudo="true"
     fi
 
     if [[ "${use_sudo}" == "true" ]]; then
+        sudo mkdir -p "${install_dir}"
         say "Installing ${BINARY_NAME} to ${install_dir} (sudo required)..."
         sudo install -m 0755 "${tmp_dir}/${binary_in_archive}" "${install_dir}/${BINARY_NAME}"
     else
+        mkdir -p "${install_dir}"
         say "Installing ${BINARY_NAME} to ${install_dir}..."
         install -m 0755 "${tmp_dir}/${binary_in_archive}" "${install_dir}/${BINARY_NAME}"
     fi

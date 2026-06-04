@@ -228,7 +228,7 @@ npx @chronoqueue/mcp-server
 - 🔐 Secure gRPC communication with ChronoQueue server
 - 📝 Type-safe TypeScript implementation
 
-For complete documentation and setup guides, visit the [TypeScript SDK repository](https://github.com/adrien19/chronoqueue-sdk-ts).
+For complete documentation and setup guides, visit the [TypeScript SDK repository](https://github.com/adrien19/chronoqueue-typescript-sdk).
 
 ## Documentation
 

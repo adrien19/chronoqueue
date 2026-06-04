@@ -110,7 +110,7 @@ function Install-ChronoQueue {
         $InstallDir = $Env:CHRONOQUEUE_INSTALL_DIR
         $userSetDir = $true
     } else {
-        $InstallDir = Join-Path $Env:SystemDrive "chronoqueue"
+        $InstallDir = Join-Path $Env:LOCALAPPDATA "Programs\chronoqueue"
     }
 
     # ── URLs ──────────────────────────────────────────────────────────────────
@@ -142,7 +142,7 @@ function Install-ChronoQueue {
         }
 
         # ── Verify ────────────────────────────────────────────────────────────
-        Test-Checksum -FilePath $archivePath -ChecksumsFile $checksumPath
+        Test-Checksum -FilePath $archivePath -ChecksumFile $checksumPath
 
         # ── Extract ───────────────────────────────────────────────────────────
         Write-Step "Extracting..."
