@@ -4,7 +4,7 @@ package integration
 //
 // These tests validate:
 // - Priority-based message ordering
-// - Multiple priority levels (0-100)
+// - Multiple priority levels (0-4)
 // - FIFO behavior within same priority
 // - Mixed priority scenarios
 //
@@ -29,7 +29,7 @@ import (
 
 // TestPriorityQueue_HighToLowOrdering validates priority-based message ordering
 //
-// Test Scenario: Priority queue with messages across full priority range (0-100)
+// Test Scenario: Priority queue with messages across full priority range (0-4)
 // Expected: Messages retrieved in strict priority order (highest first)
 func TestPriorityQueue_HighToLowOrdering(t *testing.T) {
 	t.Parallel()
@@ -53,7 +53,7 @@ func TestPriorityQueue_HighToLowOrdering(t *testing.T) {
 	require.NoError(t, err)
 
 	// Post messages with various priorities (intentionally out of order)
-	priorities := []int64{25, 95, 10, 75, 50, 100, 5, 80, 30, 60}
+	priorities := []int64{1, 4, 0, 3, 2, 4, 0, 3, 1, 2}
 
 	for i, priority := range priorities {
 		payload := &common_pb.Payload{
@@ -94,9 +94,9 @@ func TestPriorityQueue_HighToLowOrdering(t *testing.T) {
 
 	// Assert - Verify strict priority ordering (Postgres implementation)
 	// Postgres orders by priority DESC (highest first), not by priority levels
-	// Posted order: [25, 95, 10, 75, 50, 100, 5, 80, 30, 60]
-	// Expected retrieval: [100, 95, 80, 75, 60, 50, 30, 25, 10, 5]
-	expectedOrder := []int64{100, 95, 80, 75, 60, 50, 30, 25, 10, 5}
+	// Posted order: [1, 4, 0, 3, 2, 4, 0, 3, 1, 2]
+	// Expected retrieval: [4, 4, 3, 3, 2, 2, 1, 1, 0, 0]
+	expectedOrder := []int64{4, 4, 3, 3, 2, 2, 1, 1, 0, 0}
 	assert.Equal(t, expectedOrder, retrievedPriorities, "Messages should be retrieved in strict priority order (highest to lowest)")
 
 	t.Logf("Retrieved priorities in order: %v", retrievedPriorities)
@@ -128,7 +128,7 @@ func TestPriorityQueue_SamePriorityFIFO(t *testing.T) {
 	require.NoError(t, err)
 
 	// Post 10 messages with same priority
-	const samePriority = int64(50)
+	const samePriority = int64(2)
 	messageIDs := make([]string, 10)
 
 	for i := 0; i < 10; i++ {
@@ -209,9 +209,9 @@ func TestPriorityQueue_MixedPriorities(t *testing.T) {
 		priority int64
 		label    string
 	}{
-		{10, 10, "low"},
-		{10, 50, "medium"},
-		{10, 90, "high"},
+		{10, 0, "low"},
+		{10, 2, "medium"},
+		{10, 4, "high"},
 	}
 
 	totalMessages := 0
@@ -255,13 +255,13 @@ func TestPriorityQueue_MixedPriorities(t *testing.T) {
 		retrievedPriorities[i] = getResp.Message.Metadata.Priority
 	}
 
-	// Assert - First 10 should all be high priority (90), next 5 should be medium (50)
+	// Assert - First 10 should all be high priority (4), next 5 should be medium (2)
 	for i := 0; i < 10; i++ {
-		assert.Equal(t, int64(90), retrievedPriorities[i],
+		assert.Equal(t, int64(4), retrievedPriorities[i],
 			"First 10 messages should be high priority")
 	}
 	for i := 10; i < 15; i++ {
-		assert.Equal(t, int64(50), retrievedPriorities[i],
+		assert.Equal(t, int64(2), retrievedPriorities[i],
 			"Next 5 messages should be medium priority")
 	}
 
@@ -293,8 +293,8 @@ func TestPriorityQueue_PeekWithPriorityRange(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Post messages with priorities: 10, 30, 50, 70, 90
-	priorities := []int64{10, 30, 50, 70, 90}
+	// Post messages with priorities: 0, 1, 2, 3, 4
+	priorities := []int64{0, 1, 2, 3, 4}
 	for i, priority := range priorities {
 		payload := &common_pb.Payload{
 			Data:        createStruct(t, map[string]interface{}{"priority": priority}),
@@ -317,37 +317,37 @@ func TestPriorityQueue_PeekWithPriorityRange(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Act - Peek messages with priority range 40-80
+	// Act - Peek messages with priority range 2-4
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
 		Limit:     10,
 		PriorityRange: &queueservice_pb.PeekQueueMessagesRequest_PriorityRange{
-			Min: 40,
-			Max: 80,
+			Min: 2,
+			Max: 4,
 		},
 	})
 
 	// Assert
 	require.NoError(t, err, "Peek with priority range should succeed")
 
-	// Should return messages with priority 50 and 70 (within range 40-80)
+	// Should return messages with priority 2, 3, and 4 (within range 2-4)
 	// However, peek might return all messages if range filtering is not implemented
 	// Just verify that any returned messages have the correct priority if filter is working
-	if len(peekResp.Messages) <= 2 {
+	if len(peekResp.Messages) <= 3 {
 		// Range filtering is working
 		for _, msg := range peekResp.Messages {
 			priority := msg.Metadata.Priority
-			assert.GreaterOrEqual(t, priority, int64(40), "Priority should be >= 40")
-			assert.LessOrEqual(t, priority, int64(80), "Priority should be <= 80")
+			assert.GreaterOrEqual(t, priority, int64(2), "Priority should be >= 2")
+			assert.LessOrEqual(t, priority, int64(4), "Priority should be <= 4")
 		}
 	}
 
-	t.Logf("Peeked %d messages in priority range 40-80", len(peekResp.Messages))
+	t.Logf("Peeked %d messages in priority range 2-4", len(peekResp.Messages))
 }
 
 // TestPriorityQueue_BoundaryValues validates priority boundary conditions
 //
-// Test Scenario: Messages with priority 0, 1, 99, 100
+// Test Scenario: Messages with priority 0, 1, 3, 4
 // Expected: All priorities handled correctly, extreme values work
 func TestPriorityQueue_BoundaryValues(t *testing.T) {
 	t.Parallel()
@@ -370,9 +370,8 @@ func TestPriorityQueue_BoundaryValues(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Post messages with boundary priorities
-	// Note: Priority 0 is treated as "not set" and defaults to 5, so we use 1 as the minimum
-	boundaryPriorities := []int64{1, 2, 99, 100}
+	// Post messages with boundary priorities (0-4 range)
+	boundaryPriorities := []int64{0, 1, 3, 4}
 	for i, priority := range boundaryPriorities {
 		payload := &common_pb.Payload{
 			Data:        createStruct(t, map[string]interface{}{"priority": priority}),
@@ -412,9 +411,9 @@ func TestPriorityQueue_BoundaryValues(t *testing.T) {
 
 	// Assert - Should be retrieved in strict priority order (Postgres implementation)
 	// Postgres orders by priority DESC (highest first)
-	// Posted order: [1, 2, 99, 100]
-	// Expected retrieval: [100, 99, 2, 1]
-	expectedOrder := []int64{100, 99, 2, 1}
+	// Posted order: [0, 1, 3, 4]
+	// Expected retrieval: [4, 3, 1, 0]
+	expectedOrder := []int64{4, 3, 1, 0}
 	assert.Equal(t, expectedOrder, retrievedPriorities, "Boundary priorities should be ordered by priority (highest to lowest)")
 }
 

@@ -285,7 +285,7 @@ schema := helpers.LoadJSONSchema(t, "order_schema")
 
 // Assertions
 helpers.AssertQueueExists(t, client, ctx, queueName)
-helpers.AssertMessagePriority(t, message, 50)
+helpers.AssertMessagePriority(t, message, 2)
 helpers.AssertLeaseActive(t, message)
 ```
 

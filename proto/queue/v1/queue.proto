@@ -43,89 +43,89 @@ enum QueueType {
 //       MaxPayloadSize: 1024 * 512,  // 512KB
 //       AllowedContentTypes: []string{"application/json"},
 //   }
-  message QueueMetadata {
+message QueueMetadata {
     // Reserved field for backward compatibility (removed invisibility_duration feature)
-    reserved 5;
-    reserved "invisibility_duration";
+  reserved 5;
+  reserved "invisibility_duration";
 
     // type: Determines message consumption pattern.
     // SIMPLE: Multiple workers process concurrently (most common).
     // EXCLUSIVE: Single worker processes sequentially (ensures order).
-    QueueType type = 1;
+  QueueType type = 1;
 
     // default_max_attempts: Default retry count for messages without explicit max_attempts.
     // Messages failing this many times move to the dead letter queue.
     // Common values: 1 (no retry), 3 (standard), 5 (aggressive retry).
     // Set to -1 for infinite retries (use with extreme caution).
-    int32 default_max_attempts = 2;
+  int32 default_max_attempts = 2;
 
     // lease_duration: Default time workers have to process a message.
     // If a worker doesn't acknowledge within this time, message returns to queue.
     // Workers can renew leases for longer operations via RenewLease/SendHeartbeat.
     // Common values: 30s (quick tasks), 5m (standard), 30m (long-running).
     // Balance between: too short = unnecessary retries, too long = slow failure detection.
-    google.protobuf.Duration lease_duration = 3;
+  google.protobuf.Duration lease_duration = 3;
 
     // exclusivity_key: For EXCLUSIVE queues, this key ensures single-consumer access.
     // Only one worker with a matching exclusivity key can consume from this queue.
     // Leave empty for non-exclusive queues.
     // Use cases: ordered processing, singleton workers, distributed locks.
-    string exclusivity_key = 4;
+  string exclusivity_key = 4;
 
     // dead_letter_queue_name: Name of the DLQ for messages that exhaust retries.
     // Messages that fail after max_attempts are moved here for investigation.
     // Naming convention: "{original-queue}-dlq" or "{original-queue}-errors"
     // Access DLQ messages via DLQ APIs: GetDLQMessage, ListDLQMessages, RequeueDLQMessage.
-    string dead_letter_queue_name = 6;
+  string dead_letter_queue_name = 6;
 
     // auto_create_dlq: If true, ChronoQueue automatically creates the DLQ if it doesn't exist.
     // Recommended: true for production (ensures no messages are lost).
     // Set to false if you want to manually control DLQ creation and configuration.
-    bool auto_create_dlq = 7;
+  bool auto_create_dlq = 7;
 
     // schema_id: Default schema for validating messages posted to this queue.
     // All messages must conform to this schema (if schema_required is true).
     // Helps ensure data quality and catch errors before processing.
     // Example: "order.created.v1", "user.profile.v2"
     // Register schemas via RegisterSchema API.
-    string schema_id = 8;
+  string schema_id = 8;
 
     // schema_required: If true, all messages must have a valid schema and pass validation.
     // Messages without a schema or failing validation are rejected.
     // Use in production for critical data pipelines to prevent bad data.
     // Set to false for development or when schema validation isn't needed.
-    bool schema_required = 9;
+  bool schema_required = 9;
 
     // max_payload_size: Maximum size of message payload in bytes.
     // Messages exceeding this limit are rejected.
     // If not set or 0, uses system default (typically 256KB).
     // Increase for large payloads (e.g., 1MB = 1048576).
     // Note: Very large messages impact performance - consider using references instead.
-    int32 max_payload_size = 10;
+  int32 max_payload_size = 10;
 
     // allowed_content_types: List of permitted MIME types for message payloads.
     // Empty list = all content types allowed (default).
     // Examples: ["application/json"], ["application/json", "application/xml"]
     // Use to enforce data format standards across your organization.
-    repeated string allowed_content_types = 11;
+  repeated string allowed_content_types = 11;
 
     // priority_config: Advanced priority scheduling configuration.
     // Controls how messages with different priorities are processed.
     // Most users can omit this - defaults work well for common cases.
     // Customize for: complex fairness requirements, aging prevention, weighted priorities.
-    PriorityConfig priority_config = 12;
+  PriorityConfig priority_config = 12;
 
     // ---------------------------------------------------------------------------
     // Lease model defaults (queue-level)
     // ---------------------------------------------------------------------------
     // Message-level policies can selectively override these fields.
-    chronoqueue.api.common.v1.LeasePolicy lease_policy = 13;
+  chronoqueue.api.common.v1.LeasePolicy lease_policy = 13;
 
     // message_retention_policy: Controls how long messages are retained after completion/error.
     // By default (if not set), messages are deleted immediately upon acknowledgment.
     // Configure retention for audit trails, debugging, compliance, or analytics.
-    MessageRetentionPolicy message_retention_policy = 14;
-  }
+  MessageRetentionPolicy message_retention_policy = 14;
+}
 
 // MessageRetentionPolicy defines message retention behavior after processing.
 //
@@ -144,55 +144,55 @@ enum QueueType {
 //
 // 3. Retain forever (compliance):
 //    retention_policy: { mode: RETAIN_FOREVER }
-  message MessageRetentionPolicy {
-    enum Mode {
+message MessageRetentionPolicy {
+  enum Mode {
         // DELETE_IMMEDIATELY: Remove message from database immediately upon acknowledgment.
         // Default behavior - maintains backward compatibility.
         // Use when: No audit requirements, minimal storage preferred, development/testing.
-      DELETE_IMMEDIATELY = 0;
+    DELETE_IMMEDIATELY = 0;
 
         // RETAIN_DURATION: Soft-delete messages and remove after retention_seconds.
         // Messages remain queryable during retention period.
         // Use when: Need temporary audit trail, compliance with retention periods.
-      RETAIN_DURATION = 1;
+    RETAIN_DURATION = 1;
 
         // RETAIN_FOREVER: Soft-delete messages but never auto-remove them.
         // Messages remain queryable indefinitely (manual deletion only).
         // Use when: Permanent audit trail required, event sourcing, compliance.
-      RETAIN_FOREVER = 2;
-    }
+    RETAIN_FOREVER = 2;
+  }
 
     // mode: Retention strategy for this queue's messages.
-    Mode mode = 1;
+  Mode mode = 1;
 
     // retention_seconds: How long to retain messages (used with RETAIN_DURATION mode).
     // After this period, messages are permanently deleted by background cleanup service.
     // Common values: 86400 (1 day), 604800 (7 days), 2592000 (30 days).
     // Ignored for DELETE_IMMEDIATELY and RETAIN_FOREVER modes.
-    int64 retention_seconds = 2;
-  }
+  int64 retention_seconds = 2;
+}
 
 // FairnessPolicy determines how messages with different priorities compete for processing.
 //
 // Priority fairness is critical in systems with both urgent and background tasks.
 // Without fairness policies, low-priority messages could starve indefinitely.
-  enum FairnessPolicy {
-    STRICT = 0; // Process strictly by priority (high before medium before low)
+enum FairnessPolicy {
+  STRICT = 0; // Process strictly by priority (high before medium before low)
                     // Risk: Low-priority messages can starve if high-priority keeps arriving
                     // Use when: Priority is absolute (emergency alerts, system critical tasks)
 
-    WEIGHTED = 1; // Balance priority with fairness using weights
+  WEIGHTED = 1; // Balance priority with fairness using weights
                     // Example: Process 70% high, 20% medium, 10% low priority messages
                     // Use when: You want guaranteed progress for all priorities
 
-    AGING = 2; // Boost priority of messages waiting too long
+  AGING = 2; // Boost priority of messages waiting too long
                     // Low-priority messages gradually increase priority over time
                     // Use when: You want to prevent starvation while maintaining priorities
 
-    HYBRID = 3; // Combines weighted and aging strategies
+  HYBRID = 3; // Combines weighted and aging strategies
                     // Most sophisticated - maintains priorities while ensuring progress
                     // Use when: Complex requirements (e.g., SLA-based processing)
-  }
+}
 
 // PriorityConfig provides fine-grained control over priority-based processing.
 //
@@ -200,36 +200,36 @@ enum QueueType {
 //   config := &queue.PriorityConfig{
 //       Policy: queue.FairnessPolicy_HYBRID,
     //       PriorityWeights: map[int32]int32{
-      //           100: 70,  // High priority: 70% of processing capacity
-      //           50:  20,  // Medium priority: 20%
-      //           10:  10,  // Low priority: 10%
+      //           4: 70,  // High priority: 70% of processing capacity
+      //           2: 20,  // Medium priority: 20%
+      //           0: 10,  // Low priority: 10%
       //       },
 //       AgeBoostThreshold: durationpb.New(30*time.Minute),  // Boost after 30min wait
 //       AgeBoostMultiplier: 2,  // Double the priority every 30min
 //   }
-    message PriorityConfig {
+message PriorityConfig {
     // policy: The fairness strategy to use.
     // See FairnessPolicy enum for detailed descriptions.
-      FairnessPolicy policy = 1;
+  FairnessPolicy policy = 1;
 
     // priority_weights: For WEIGHTED/HYBRID policies, maps priority levels to weights.
-    // Key: priority level (e.g., 100, 50, 10)
+    // Key: priority level (e.g., 4, 2, 0)
     // Value: relative weight (e.g., 70, 20, 10 = 70% high, 20% medium, 10% low)
     // Weights are relative - they're normalized to percentages.
-      map<int32, int32> priority_weights = 2;
+  map<int32, int32> priority_weights = 2;
 
     // age_boost_threshold: For AGING/HYBRID policies, how long before boosting priority.
     // Messages waiting longer than this duration get their priority boosted.
     // Prevents indefinite starvation of low-priority messages.
     // Typical values: 15m (aggressive), 30m (standard), 1h (relaxed).
-      google.protobuf.Duration age_boost_threshold = 3;
+  google.protobuf.Duration age_boost_threshold = 3;
 
     // age_boost_multiplier: For AGING/HYBRID policies, how much to boost priority.
     // Priority multiplied by this factor every age_boost_threshold period.
     // Example: multiplier=2, threshold=30m means priority doubles every 30 minutes.
     // Typical values: 1.5 (gentle), 2 (standard), 3 (aggressive).
-      int32 age_boost_multiplier = 4;
-    }
+  int32 age_boost_multiplier = 4;
+}
 
 // Queue represents a named message container with specific processing behavior.
 //
@@ -246,13 +246,13 @@ enum QueueType {
 // - "webhook-deliveries"        // External API calls
 // - "data-analytics-high"       // Time-sensitive analytics
 // - "cleanup-tasks-low"         // Background maintenance
-    message Queue {
+message Queue {
     // name: Unique identifier for this queue.
     // Must be unique across your ChronoQueue instance.
     // Naming convention: lowercase, hyphens, descriptive
     // Examples: "order-processing", "email-sender", "webhook-delivery"
-      string name = 1;
+  string name = 1;
 
     // metadata: Queue configuration and behavior settings.
-      QueueMetadata metadata = 2;
-    }
+  QueueMetadata metadata = 2;
+}

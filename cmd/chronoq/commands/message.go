@@ -207,12 +207,12 @@ Example messages file (messages.json):
   {
     "id": "msg-001",
     "data": {"order": "item-1", "quantity": 2},
-    "priority": 10
+    "priority": 2
   },
   {
     "id": "msg-002",
     "data": {"order": "item-2", "quantity": 5},
-    "priority": 5
+    "priority": 0
   }
 ]
 

@@ -702,8 +702,8 @@ func TestCreateQueueMessagesBulk_InheritsQueueDefaults(t *testing.T) {
 		t.Fatalf("expected attempts_left=5, got %d", enqueuedMsg.GetMetadata().GetAttemptsLeft())
 	}
 
-	if enqueuedMsg.GetMetadata().GetPriority() != 5 {
-		t.Fatalf("expected default priority=5, got %d", enqueuedMsg.GetMetadata().GetPriority())
+	if enqueuedMsg.GetMetadata().GetPriority() != 0 {
+		t.Fatalf("expected default priority=0, got %d", enqueuedMsg.GetMetadata().GetPriority())
 	}
 
 	if enqueuedMsg.GetMetadata().GetState() != messagepb.Message_Metadata_PENDING {

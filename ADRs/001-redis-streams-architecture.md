@@ -29,7 +29,7 @@ We will migrate ChronoQueue's core queue implementation from Redis Sorted Sets t
 
 ### Key Design Choices
 
-1. **Three-Tier Priority Streams**: Messages are routed to `stream:high:{queue}`, `stream:medium:{queue}`, or `stream:low:{queue}` based on priority thresholds (high ≥70, medium ≥30, low <30).
+1. **Three-Tier Priority Streams**: Messages are routed to `stream:high:{queue}`, `stream:medium:{queue}`, or `stream:low:{queue}` based on priority thresholds (high ≥3, medium 2, low ≤1).
 
 2. **Consumer Groups**: Each queue has a consumer group `cg:{queue}` enabling automatic message distribution via `XREADGROUP` with fair consumer balancing.
 

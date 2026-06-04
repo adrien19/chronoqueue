@@ -273,7 +273,7 @@ func (CalendarException_ExceptionType) EnumDescriptor() ([]byte, []int) {
 //	            }},
 //	            Timezone: "America/New_York",
 //	        },
-//	        Priority: 100,
+//	        Priority: 4,
 //	        MaxMessages: 1000,  // Safety limit
 //	    },
 //	}
@@ -1999,7 +1999,7 @@ type Schedule_Metadata struct {
 	StateMessage string `protobuf:"bytes,11,opt,name=state_message,json=stateMessage,proto3" json:"state_message,omitempty"`
 	// priority: Priority for messages created by this schedule.
 	// Inherited by posted messages unless message specifies otherwise.
-	// Common values: 100 (high), 50 (normal), 10 (low).
+	// Common values: 5 (high), 2 (normal), 0 (low).
 	Priority int64 `protobuf:"varint,12,opt,name=priority,proto3" json:"priority,omitempty"`
 	// has_max_messages: If true, enforces max_messages limit.
 	// Safety feature to prevent runaway schedules.

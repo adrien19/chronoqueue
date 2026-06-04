@@ -28,7 +28,7 @@
             "lease_duration": "30s",
             "invisibility_duration": "5m",
             "auto_create_dlq": true,
-            "max_priority": 100
+            "max_priority": 4
         }
     },
     "schema_enforced_queue": {

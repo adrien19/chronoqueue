@@ -195,9 +195,9 @@ func TestMessageLifecycle_PostWithPriority(t *testing.T) {
 		fixtureName string
 		priority    int64
 	}{
-		{"low_priority_log", 10},
-		{"medium_priority_event", 50},
-		{"high_priority_alert", 95},
+		{"low_priority_log", 0},
+		{"medium_priority_event", 2},
+		{"high_priority_alert", 4},
 	}
 
 	// Post all messages first to ensure they're in the schedule
@@ -244,8 +244,8 @@ func TestMessageLifecycle_PostWithPriority(t *testing.T) {
 		retrievedMessages = append(retrievedMessages, getResp.Message)
 	}
 
-	// Assert - Messages should be in priority order (high to low: 95, 50, 10)
-	expectedPriorities := []int64{95, 50, 10}
+	// Assert - Messages should be in priority order (high to low: 4, 2, 0)
+	expectedPriorities := []int64{4, 2, 0}
 	helpers.AssertMessagePriority(t, retrievedMessages, expectedPriorities)
 }
 
@@ -291,8 +291,8 @@ func TestMessageLifecycle_GetNextMessageFIFO(t *testing.T) {
 			MessageId: msgID,
 			Metadata: &message_pb.Message_Metadata{
 				Payload:     payload,
-				Priority:    50, // Same priority for all
-				MaxAttempts: 1,  // Set max attempts to 1 for simplicity
+				Priority:    2, // Same priority for all
+				MaxAttempts: 1, // Set max attempts to 1 for simplicity
 			},
 		}
 
@@ -362,7 +362,7 @@ func TestMessageLifecycle_MessageLeaseManagement(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 1, // Set max attempts to 1 for simplicity
 		},
 	}
@@ -442,7 +442,7 @@ func TestMessageLifecycle_RenewMessageLease(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 1, // Set max attempts to 1 for simplicity
 		},
 	}
@@ -515,7 +515,7 @@ func TestMessageLifecycle_AcknowledgeMessage(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 1, // Set max attempts to 1 for simplicity
 		},
 	}
@@ -601,8 +601,8 @@ func TestMessageLifecycle_PeekMessages(t *testing.T) {
 			MessageId: helpers.GenerateUniqueMessageID(t),
 			Metadata: &message_pb.Message_Metadata{
 				Payload:     payload,
-				Priority:    int64(50 + i), // Vary priority slightly to ensure different scores
-				MaxAttempts: 1,             // Set max attempts to 1 for simplicity
+				Priority:    int64(i), // Vary priority (0-4) to ensure different scores
+				MaxAttempts: 1,        // Set max attempts to 1 for simplicity
 			},
 		}
 
@@ -677,7 +677,7 @@ func TestMessageLifecycle_SendHeartbeat(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 1, // Set max attempts to 1 for simplicity
 		},
 	}
@@ -789,7 +789,7 @@ func TestMessageLifecycle_CancelInvisibleMessage(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:       payload,
-			Priority:      50,
+			Priority:      2,
 			MaxAttempts:   3,
 			ScheduledTime: timestamppb.New(futureTime),
 		},
@@ -858,7 +858,7 @@ func TestMessageLifecycle_CancelPendingMessage(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 3,
 		},
 	}
@@ -928,7 +928,7 @@ func TestMessageLifecycle_CancelRunningMessageFails(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 3,
 		},
 	}
@@ -1036,7 +1036,7 @@ func TestMessageLifecycle_CancelWithReason(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 3,
 		},
 	}
@@ -1116,7 +1116,7 @@ func TestMessageLifecycle_CancelMultipleMessages(t *testing.T) {
 			MessageId: msgID,
 			Metadata: &message_pb.Message_Metadata{
 				Payload:     payload,
-				Priority:    50,
+				Priority:    2,
 				MaxAttempts: 3,
 			},
 		}
@@ -1187,7 +1187,7 @@ func TestMessageLifecycle_CancelAfterAcknowledgeFails(t *testing.T) {
 		MessageId: msgID,
 		Metadata: &message_pb.Message_Metadata{
 			Payload:     payload,
-			Priority:    50,
+			Priority:    2,
 			MaxAttempts: 3,
 		},
 	}

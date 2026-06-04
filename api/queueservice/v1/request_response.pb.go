@@ -531,7 +531,9 @@ func (x *PostMessagesBulkRequest) GetTransactionMode() PostMessagesBulkRequest_T
 
 type PostMessagesBulkResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Overall success indicator (true if successful_count > 0)
+	// Overall success indicator.
+	// ALL_OR_NOTHING: true only if every message succeeded (failed_count == 0)
+	// BEST_EFFORT: true if at least one message succeeded (successful_count > 0)
 	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	// Number of messages successfully posted
 	SuccessfulCount int32 `protobuf:"varint,2,opt,name=successful_count,json=successfulCount,proto3" json:"successful_count,omitempty"`
