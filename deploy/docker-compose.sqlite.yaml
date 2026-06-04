@@ -41,18 +41,19 @@ services:
       dockerfile: ./images/Dockerfile.sqlite
     entrypoint: ["/chronoqueue"]
     command:
-      - ui
+      - web-ui
       - start
       - --port
-      - "8083"
+      - "8081"
       - --grpc-address
       - chronoqueue-server:9000
+      - --skip-ssl
     depends_on:
       - chronoqueuesvc
     networks:
       - chronoqueue-network
     ports:
-      - "8083:8083"
+      - "8081:8081"
     restart: unless-stopped
 
 networks:
