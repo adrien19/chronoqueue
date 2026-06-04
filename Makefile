@@ -463,15 +463,17 @@ modtidy:
 .PHONY: ui-deps
 ui-deps:
 	@echo "Installing UI dependencies..."
-	@cd cmd/chronoq/ui && npm install
+	@cd cmd/chronoq/web-ui && npm install
 
 ################################################################################
-# Target: ui-build (build UI CSS)                                              #
+# Target: ui-build (build UI CSS and binary)                                   #
 ################################################################################
 .PHONY: ui-build
 ui-build: ui-deps
 	@echo "Building UI CSS..."
-	@cd cmd/chronoq/ui && npm run build:css
+	@cd cmd/chronoq/web-ui && npm run build:css
+	@echo "Building UI binary..."
+	@go build -ldflags "$(LDFLAGS)" -o $(CHRONOQUEUE_OUT_DIR)/chronoqueue .
 
 ################################################################################
 # Target: ui-watch (watch and rebuild UI CSS)                                  #
@@ -479,58 +481,23 @@ ui-build: ui-deps
 .PHONY: ui-watch
 ui-watch: ui-deps
 	@echo "Watching UI CSS for changes..."
-	@cd cmd/chronoq/ui && npm run watch:css
-
-################################################################################
-# Target: ui-dev (run UI server in dev mode)                                   #
-################################################################################
-.PHONY: ui-dev
-ui-dev: ui-build build
-	@echo "Starting UI in development mode..."
-	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue ui start
-
-
-################################################################################
-# Target: web-ui-deps (install web-ui dependencies)                            #
-################################################################################
-.PHONY: web-ui-deps
-web-ui-deps:
-	@echo "Installing web-ui dependencies..."
-	@cd cmd/chronoq/web-ui && npm install
-
-################################################################################
-# Target: web-ui-build (build web-ui CSS and binary)                           #
-################################################################################
-.PHONY: web-ui-build
-web-ui-build: web-ui-deps
-	@echo "Building web-ui CSS..."
-	@cd cmd/chronoq/web-ui && npm run build:css
-	@echo "Building web-ui binary..."
-	@go build -ldflags "$(LDFLAGS)" -o $(CHRONOQUEUE_OUT_DIR)/chronoqueue .
-
-################################################################################
-# Target: web-ui-watch (watch and rebuild web-ui CSS)                          #
-################################################################################
-.PHONY: web-ui-watch
-web-ui-watch: web-ui-deps
-	@echo "Watching web-ui CSS for changes..."
 	@cd cmd/chronoq/web-ui && npm run watch:css
 
 ################################################################################
-# Target: web-ui-dev (run chronoqueue with the new web-ui in dev mode)         #
+# Target: ui-dev (run chronoqueue with the UI in dev mode)                     #
 ################################################################################
 # Usage:
-#   make web-ui-dev                              # default gRPC localhost:9000, UI :8081
-#   make web-ui-dev WEB_UI_GRPC_ADDR=:9090       # custom gRPC address
-#   make web-ui_dev WEB_UI_PORT=9000             # custom UI listen port
+#   make ui-dev                                  # default gRPC localhost:9000, UI :8081
+#   make ui-dev UI_GRPC_ADDR=:9090               # custom gRPC address
+#   make ui-dev UI_PORT=9000                     # custom UI listen port
 ################################################################################
-WEB_UI_GRPC_ADDR?=localhost:9000
-WEB_UI_PORT?=8081
+UI_GRPC_ADDR?=localhost:9000
+UI_PORT?=8081
 
-.PHONY: web-ui-dev
-web-ui-dev: web-ui-build
-	@echo "Starting ChronoQueue with web-ui on :$(WEB_UI_PORT) (gRPC: $(WEB_UI_GRPC_ADDR))..."
-	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue web-ui start --port $(WEB_UI_PORT) --grpc-address $(WEB_UI_GRPC_ADDR) --skip-ssl
+.PHONY: ui-dev
+ui-dev: ui-build
+	@echo "Starting ChronoQueue with UI on :$(UI_PORT) (gRPC: $(UI_GRPC_ADDR))..."
+	@./$(CHRONOQUEUE_OUT_DIR)/chronoqueue web-ui start --port $(UI_PORT) --grpc-address $(UI_GRPC_ADDR) --skip-ssl
 
 
 ################################################################################

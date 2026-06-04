@@ -30,7 +30,7 @@ import (
 
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
-	ui "github.com/adrien19/chronoqueue/cmd/chronoq/ui"
+	webui "github.com/adrien19/chronoqueue/cmd/chronoq/web-ui"
 	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/adrien19/chronoqueue/tests/helpers"
 )
@@ -40,8 +40,8 @@ import (
 func startUIServer(t *testing.T, grpcAddr string) (string, func()) {
 	logger := log.NewLogger()
 
-	// Create UI server
-	server, err := ui.NewUIServer(grpcAddr, logger)
+	// Create UI server (skipSSL=true for local testing)
+	server, err := webui.NewUIServer(grpcAddr, true, logger)
 	require.NoError(t, err, "Failed to create UI server")
 
 	var uiURL string
