@@ -158,8 +158,8 @@ func TestUIIntegration_Dashboard_Success(t *testing.T) {
 	// Verify expected content in dashboard
 	bodyStr := string(body)
 	assert.Contains(t, bodyStr, "ChronoQueue", "Dashboard should contain ChronoQueue title")
-	assert.Contains(t, bodyStr, "Dashboard", "Dashboard should contain Dashboard text")
-	assert.Contains(t, bodyStr, "Total Queues", "Dashboard should display queue metrics")
+	assert.Contains(t, bodyStr, "Broker state", "Dashboard should contain Broker state section")
+	assert.Contains(t, bodyStr, "Queues", "Dashboard should display queues section")
 }
 
 // TestUIIntegration_QueuesList_Success validates the queues list page.
@@ -256,7 +256,7 @@ func TestUIIntegration_QueueDetail_Success(t *testing.T) {
 
 	bodyStr := string(body)
 	assert.Contains(t, bodyStr, queueName, "Page should display queue name")
-	assert.Contains(t, bodyStr, "Pending", "Page should show queue state")
+	assert.Contains(t, bodyStr, "Ready", "Page should show queue state with Ready metric")
 }
 
 // TestUIIntegration_DashboardMetricsAPI_Success validates the metrics API endpoint.
@@ -289,8 +289,8 @@ func TestUIIntegration_DashboardMetricsAPI_Success(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Act - Make API request for dashboard metrics (HTMX endpoint)
-	metricsURL := uiURL + "/api/metrics/dashboard"
+	// Act - Make API request for dashboard stats (HTMX fragment endpoint)
+	metricsURL := uiURL + "/fragments/dashboard-stats"
 	resp, err := http.Get(metricsURL)
 
 	// Assert
@@ -304,8 +304,8 @@ func TestUIIntegration_DashboardMetricsAPI_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	bodyStr := string(body)
-	assert.Contains(t, bodyStr, "Total Queues", "Metrics should include queue count")
-	assert.Contains(t, bodyStr, "Pending", "Metrics should include pending count")
+	assert.Contains(t, bodyStr, "Broker state", "Stats fragment should include broker state section")
+	assert.Contains(t, bodyStr, "Ready", "Stats fragment should include Ready metric")
 }
 
 // TestUIIntegration_StaticAssets_Success validates static assets are served correctly.
@@ -320,7 +320,7 @@ func TestUIIntegration_StaticAssets_Success(t *testing.T) {
 	defer cleanup()
 
 	// Act - Request CSS file
-	cssURL := uiURL + "/static/css/styles.css"
+	cssURL := uiURL + "/static/css/app.css"
 	resp, err := http.Get(cssURL)
 
 	// Assert

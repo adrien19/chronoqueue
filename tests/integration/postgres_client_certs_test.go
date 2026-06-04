@@ -6,6 +6,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -209,11 +210,15 @@ func TestPostgreSQLClientCertificatesWithRealConnection(t *testing.T) {
 		port, err := container.MappedPort(ctx, "5432")
 		require.NoError(t, err)
 
+		// Convert port to int
+		portInt, err := strconv.Atoi(port.Port())
+		require.NoError(t, err)
+
 		// Create connection with client certificates
 		config := &postgresrepository.Config{
 			Conn: postgresrepository.ConnectionConfig{
 				Host:           host,
-				Port:           port.Int(),
+				Port:           portInt,
 				User:           "testuser",
 				Password:       "testpass",
 				Database:       "testdb",
@@ -230,7 +235,7 @@ func TestPostgreSQLClientCertificatesWithRealConnection(t *testing.T) {
 		// The exact behavior depends on PostgreSQL SSL configuration
 		// This test serves as a placeholder for manual testing with proper SSL setup
 		t.Logf("Connection attempt with client certificates - SSL setup required")
-		t.Logf("Config: host=%s port=%d sslmode=verify-full", host, port.Int())
+		t.Logf("Config: host=%s port=%d sslmode=verify-full", host, portInt)
 	})
 }
 
