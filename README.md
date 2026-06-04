@@ -50,9 +50,48 @@ ChronoQueue is queue management system designed to handle high-volume message pr
 
 ### Installation
 
+#### Quick Install (Recommended)
+
+The fastest way to install ChronoQueue is using the installation script:
+
+**Linux / macOS:**
+
+```bash
+# Install latest version to /usr/local/bin
+curl -fsSL https://raw.githubusercontent.com/adrien19/chronoqueue/develop/install/install.sh | bash
+
+# Install a specific version
+curl -fsSL https://raw.githubusercontent.com/adrien19/chronoqueue/develop/install/install.sh | bash -s 0.1.0
+
+# Install to a custom directory (no sudo required)
+curl -fsSL https://raw.githubusercontent.com/adrien19/chronoqueue/develop/install/install.sh | CHRONOQUEUE_INSTALL_DIR="$HOME/.chronoqueue" bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+# Install latest version
+powershell -Command "iwr -useb https://raw.githubusercontent.com/adrien19/chronoqueue/develop/install/install.ps1 | iex"
+
+# Install a specific version
+$s=iwr -useb https://raw.githubusercontent.com/adrien19/chronoqueue/develop/install/install.ps1; `
+$b=[ScriptBlock]::Create($s); invoke-command -ScriptBlock $b -ArgumentList '0.1.0'
+
+# Install to a custom directory
+$Env:CHRONOQUEUE_INSTALL_DIR="C:\tools\chronoqueue"
+powershell -Command "iwr -useb https://raw.githubusercontent.com/adrien19/chronoqueue/develop/install/install.ps1 | iex"
+```
+
+The scripts automatically:
+
+- Download the latest release (or specified version)
+- Verify checksums for security
+- Install the binary to your PATH
+- Work on Linux, macOS, and Windows
+
 #### Docker Compose Option
 
-The easiest way to get started locally is to use [docker-compose](https://docs.docker.com/compose/). ChronoQueue supports PostgreSQL and SQLite storage backends. Simply:
+Another easy way to get started locally is to use [docker-compose](https://docs.docker.com/compose/). ChronoQueue supports PostgreSQL and SQLite storage backends. Simply:
 
 1. Clone the repository:
 
@@ -170,13 +209,16 @@ go run main.go web-ui start --port 8081 --skip-ssl
 
 ChronoQueue provides a **Model Context Protocol (MCP) server** that enables AI assistants like Claude, ChatGPT, and custom agents to interact with ChronoQueue for reliable task queuing and scheduling.
 
+> **⚠️ Early Development**: The MCP server is currently in early development and is maintained in the [TypeScript SDK repository](https://github.com/adrien19/chronoqueue-typescript-sdk).
+
 **Quick Start:**
 
 ```bash
-cd mcp
-npm install
-npm run build
-npm start
+# From npm (once published)
+npm install -g @chronoqueue/mcp-server
+
+# Or run directly with npx
+npx @chronoqueue/mcp-server
 ```
 
 **Features:**
@@ -186,10 +228,7 @@ npm start
 - 🔐 Secure gRPC communication with ChronoQueue server
 - 📝 Type-safe TypeScript implementation
 
-**Setup Guides:**
-
-- **[VS Code Integration →](./mcp/VSCODE_SETUP.md)** - Use ChronoQueue in GitHub Copilot Chat
-- **[MCP Server Documentation →](./mcp/README.md)** - Complete reference for all AI assistants
+For complete documentation and setup guides, visit the [TypeScript SDK repository](https://github.com/adrien19/chronoqueue-typescript-sdk).
 
 ## Documentation
 
