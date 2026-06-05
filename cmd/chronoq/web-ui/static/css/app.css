@@ -292,6 +292,12 @@
   .hidden {
     display: none;
   }
+  .inline-block {
+    display: inline-block;
+  }
+  .h-2 {
+    height: calc(var(--spacing) * 2);
+  }
   .h-3\.5 {
     height: calc(var(--spacing) * 3.5);
   }
@@ -312,6 +318,9 @@
   }
   .min-h-screen {
     min-height: 100vh;
+  }
+  .w-2 {
+    width: calc(var(--spacing) * 2);
   }
   .w-3\.5 {
     width: calc(var(--spacing) * 3.5);
@@ -396,6 +405,12 @@
   }
   .justify-end {
     justify-content: flex-end;
+  }
+  .gap-1 {
+    gap: calc(var(--spacing) * 1);
+  }
+  .gap-1\.5 {
+    gap: calc(var(--spacing) * 1.5);
   }
   .gap-2 {
     gap: calc(var(--spacing) * 2);
@@ -561,6 +576,9 @@
     @supports (color: color-mix(in lab, red, red)) {
       background-color: color-mix(in oklab, var(--color-purple-500) 10%, transparent);
     }
+  }
+  .bg-red-400 {
+    background-color: var(--color-red-400);
   }
   .bg-red-500\/10 {
     background-color: color-mix(in srgb, oklch(63.7% 0.237 25.331) 10%, transparent);
@@ -843,6 +861,13 @@
     &:hover {
       @media (hover: hover) {
         color: var(--color-blue-300);
+      }
+    }
+  }
+  .hover\:text-red-300 {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--color-red-300);
       }
     }
   }

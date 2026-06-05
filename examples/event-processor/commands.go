@@ -85,8 +85,10 @@ func initializeSystem(ctx context.Context) error {
 				MaxExtension:     "60s",
 				ExtendStep:       "10s",
 			},
-			DequeueAttempts: 3,
-			RetentionPolicy: q.retentionPolicy,
+			DequeueAttempts:     3,
+			DeadLetterQueueName: q.name + "-dlq",
+			AutoCreateDLQ:       true,
+			RetentionPolicy:     q.retentionPolicy,
 		}
 
 		_, err := c.CreateQueue(ctx, q.name, queueOpts)
@@ -97,7 +99,7 @@ func initializeSystem(ctx context.Context) error {
 				return fmt.Errorf("failed to create queue %s: %w", q.name, err)
 			}
 		} else {
-			fmt.Printf("  ✓ Created queue: %s\n", q.name)
+			fmt.Printf("  ✓ Created queue: %s (dlq: %s-dlq)\n", q.name, q.name)
 		}
 	}
 
@@ -864,15 +866,15 @@ func getQueueForType(eventType string) string {
 func parsePriority(priority string) int64 {
 	switch strings.ToLower(priority) {
 	case "critical":
-		return 100
+		return 4
 	case "high":
-		return 75
+		return 3
 	case "medium":
-		return 50
+		return 2
 	case "low":
-		return 25
+		return 1
 	default:
-		return 50
+		return 2
 	}
 }
 
