@@ -1,7 +1,7 @@
 {{ define "message_table" }}
 <div class="overflow-x-auto">
 <table class="cq-table">
-  <thead><tr><th>ID</th><th>State</th><th>Priority</th><th>Attempts</th><th>Created at</th><th>Deliver at</th></tr></thead>
+  <thead><tr><th>ID</th><th>State</th><th>Priority</th><th>Attempts</th><th>Created at</th><th>Deliver at</th>{{ if $.Queue.IsDLQ }}<th></th>{{ end }}</tr></thead>
   <tbody>
   {{ range .QueueMessages }}
   <tr>
@@ -16,10 +16,22 @@
     <td>{{ .AttemptCount }}</td>
     <td>{{ formatTime .CreatedAt }}</td>
     <td>{{ if .DeliverAt }}{{ formatTime (derefTime .DeliverAt) }}{{ else }}<span class="text-zinc-600">—</span>{{ end }}</td>
+    {{ if $.Queue.IsDLQ }}
+    <td>
+      <div class="flex items-center gap-2">
+        <form method="POST" action="/api/queues/{{ $.Queue.Name }}/messages/{{ .Id }}/requeue" onsubmit="return confirm('Requeue this message?')">
+          <button type="submit" class="cq-btn cq-btn-primary !px-2 !py-1 text-xs">Requeue</button>
+        </form>
+        <form method="POST" action="/api/queues/{{ $.Queue.Name }}/messages/{{ .Id }}/dlq-delete" onsubmit="return confirm('Permanently delete this message?')">
+          <button type="submit" class="cq-btn !px-2 !py-1 text-xs text-red-400 hover:text-red-300">Delete</button>
+        </form>
+      </div>
+    </td>
+    {{ end }}
   </tr>
   {{ end }}
   {{ if not .QueueMessages }}
-  <tr><td colspan="6" class="py-8 text-center text-zinc-500">No messages found.</td></tr>
+  <tr><td colspan="{{ if $.Queue.IsDLQ }}7{{ else }}6{{ end }}" class="py-8 text-center text-zinc-500">No messages found.</td></tr>
   {{ end }}
   </tbody>
 </table>

@@ -12,7 +12,6 @@ A comprehensive demonstration of ChronoQueue's SQL-based architecture for high-t
 - ✅ **Automatic heartbeats** - Processing acknowledgment with lease renewal
 - ✅ **Retry logic** - Exponential backoff for failed events
 - ✅ **DLQ handling** - Dead letter queue for undeliverable events
-- ✅ **Stream architecture** - Consumer groups, PEL tracking, stream entry IDs
 - ✅ **Multiple worker types** - Email, webhook, and SMS processors
 - ✅ **JSON payload files** - Easy event definition without CLI formatting
 - ✅ **Message retention policies** - Configurable retention per queue (immediate delete, timed, or forever)
@@ -52,11 +51,17 @@ go build -o event-processor .
 Expected output:
 
 ```
-✓ Created queue: events-critical (priority: strict)
-✓ Created queue: events-normal (priority: weighted)
-✓ Created queue: events-low (priority: weighted)
-✓ Created DLQ queue: events-dlq
-✓ Initialization complete!
+Initializing Event Processing System...
+  ✓ Created queue: email-notifications (dlq: email-notifications-dlq)
+  ✓ Created queue: webhook-events (dlq: webhook-events-dlq)
+  ✓ Created queue: sms-alerts (dlq: sms-alerts-dlq)
+
+✨ System initialized successfully!
+
+Queues created:
+  • email-notifications - High-priority email notifications (7-day retention)
+  • webhook-events - Webhook delivery with retries (30-day retention)
+  • sms-alerts - SMS alerts for critical events (immediate delete)
 ```
 
 ## 📚 Step-by-Step Tutorial
@@ -77,8 +82,7 @@ Publish messages individually using the standard `publish` command:
 
 ```
 📤 Publishing events...
-✓ Published event: evt-critical-001 (priority: 10, type: webhook)
-  Stream Entry ID: 1730470123456-0
+✓ Published event: evt-critical-001 (priority: 4, type: webhook)
   Queue: events-critical
   
 📊 Summary:
@@ -172,20 +176,17 @@ You should see 5-10x performance improvement with bulk posting!
 
 ```
 📤 Publishing events...
-✓ Published event: evt-001 (priority: 9, type: email)
-  Stream Entry ID: 1730470123457-0
-✓ Published event: evt-002 (priority: 5, type: webhook)
-  Stream Entry ID: 1730470123458-0
-✓ Published event: evt-003 (priority: 2, type: sms)
-  Stream Entry ID: 1730470123459-0
-✓ Published event: evt-004 (priority: 10, type: webhook)
-  Stream Entry ID: 1730470123460-0
+✓ Published event: evt-001 (priority: 3, type: email)
+✓ Published event: evt-002 (priority: 2, type: webhook)
+✓ Published event: evt-003 (priority: 1, type: sms)
+✓ Published event: evt-004 (priority: 4, type: webhook)
 
 📊 Summary:
   Total events: 4
-  Critical: 2 (priority 8-10)
-  Normal: 1 (priority 4-7)
-  Low: 1 (priority 1-3)
+  Critical: 1 (priority 4)
+  High: 1 (priority 3)
+  Medium: 1 (priority 2)
+  Low: 1 (priority 1)
   
 ⏱️  Published in 45ms
 ```
@@ -308,7 +309,7 @@ Waiting for more events...
 
 [Worker webhook-2] 🪝 Processing event: evt-002
   Type: webhook
-  Priority: 5
+  Priority: 2
   URL: https://api.example.com/webhooks/standard
   Stream Entry ID: 1730470123458-0
   
@@ -434,11 +435,10 @@ The `schedule_in_minutes` field sets the `invisibility_expiry` timestamp, causin
 ```
 [Worker webhook-1] 🪝 Processing event: evt-fail-001
   Type: webhook
-  Priority: 8
+  Priority: 3
   URL: https://api.example.com/webhooks/failing-endpoint
-  Stream Entry ID: 1730470124000-0
   Retry Attempt: 1/3
-  
+
 [Worker webhook-1] → POST https://api.example.com/webhooks/failing-endpoint
 [Worker webhook-1] ← 503 Service Unavailable
 [Worker webhook-1] ⚠️  Webhook delivery failed (attempt 1/3)
@@ -452,7 +452,7 @@ The `schedule_in_minutes` field sets the `invisibility_expiry` timestamp, causin
 [Worker webhook-1] → POST https://api.example.com/webhooks/failing-endpoint
 [Worker webhook-1] ← 503 Service Unavailable
 [Worker webhook-1] ❌ Webhook delivery failed (attempt 3/3)
-[Worker webhook-1] ➡️  Moving to DLQ: events-dlq
+[Worker webhook-1] ➡️  Moving to DLQ: webhook-events-dlq
 [Worker webhook-1] ✓ Event evt-fail-001 moved to DLQ
   Reason: Max retries exceeded (3 attempts)
   Last Error: HTTP 503 Service Unavailable
@@ -466,68 +466,13 @@ The `schedule_in_minutes` field sets the `invisibility_expiry` timestamp, causin
 ./event-processor dlq list
 ```
 
-**Expected Output:**
-
-```
-💀 Dead Letter Queue: events-dlq
-
-┌─────────────────┬──────────┬──────────────────────┬──────────┬──────────────────────┐
-│ Event ID        │ Type     │ Failed At            │ Attempts │ Error                │
-├─────────────────┼──────────┼──────────────────────┼──────────┼──────────────────────┤
-│ evt-fail-001    │ webhook  │ 2025-11-01 14:30:45  │ 3        │ HTTP 503 Service ... │
-└─────────────────┴──────────┴──────────────────────┴──────────┴──────────────────────┘
-
-Total: 1 failed event(s)
-
-💡 Tip: Use 'event-processor dlq requeue <event-id>' to retry
-```
-
 #### 6.2 View Detailed Event Information
 
 ```bash
 ./event-processor dlq inspect evt-fail-001
 ```
 
-**Expected Output:**
-
-```
-💀 DLQ Event Details: evt-fail-001
-
-Event Information:
-  ├─ Event ID: evt-fail-001
-  ├─ Type: webhook
-  ├─ Priority: 8
-  ├─ Created: 2025-11-01 14:30:30
-  ├─ Failed: 2025-11-01 14:30:45
-  └─ Stream Entry ID: 1730470124000-0
-
-Failure Details:
-  ├─ Total Attempts: 3
-  ├─ Last Attempt: 2025-11-01 14:30:45
-  ├─ Error: HTTP 503 Service Unavailable
-  └─ Failure Reason: Max retries exceeded
-
-Payload:
-{
-  "type": "webhook",
-  "url": "https://api.example.com/webhooks/failing-endpoint",
-  "method": "POST",
-  "headers": {
-    "Content-Type": "application/json"
-  },
-  "body": {
-    "event": "order.created",
-    "data": {...}
-  }
-}
-
-Retry History:
-  1. 2025-11-01 14:30:38 → HTTP 503 (delay: 2s)
-  2. 2025-11-01 14:30:42 → HTTP 503 (delay: 4s)
-  3. 2025-11-01 14:30:45 → HTTP 503 (final attempt)
-```
-
-#### 5.3 Requeue Failed Event
+#### 6.3 Requeue Failed Event
 
 ```bash
 ./event-processor dlq requeue evt-fail-001
@@ -539,17 +484,16 @@ Retry History:
 🔄 Requeuing event from DLQ...
 
 ✓ Event evt-fail-001 requeued successfully
-  ├─ Removed from DLQ: events-dlq
-  ├─ Added to queue: events-critical
-  ├─ New Stream Entry ID: 1730470125000-0
-  ├─ Priority: 8
+  ├─ Removed from DLQ: webhook-events-dlq
+  ├─ Added to queue: webhook-events
+  ├─ Priority: 3
   ├─ Retry count reset: 0/3
   └─ Status: PENDING
 
 Event will be processed by next available worker.
 ```
 
-#### 5.4 Delete Event from DLQ
+#### 6.4 Delete Event from DLQ
 
 ```bash
 ./event-processor dlq delete evt-fail-001
@@ -561,13 +505,13 @@ Event will be processed by next available worker.
 🗑️  Deleting event from DLQ...
 
 ✓ Event evt-fail-001 deleted successfully
-  ├─ Removed from: events-dlq
+  ├─ Removed from: webhook-events-dlq
   └─ This action is permanent
 
 DLQ now contains: 0 event(s)
 ```
 
-#### 5.5 Purge Entire DLQ
+#### 6.5 Purge Entire DLQ
 
 ```bash
 ./event-processor dlq purge --confirm
@@ -578,7 +522,7 @@ DLQ now contains: 0 event(s)
 ```
 ⚠️  WARNING: This will permanently delete ALL events from DLQ!
 
-Purging DLQ: events-dlq...
+Purging DLQ: webhook-events-dlq...
 
 ✓ Purged 5 event(s) from DLQ
   └─ DLQ is now empty
@@ -634,15 +578,15 @@ DLQ: 6 events │ Oldest: 15m ago
 ```
 👀 Peeking into queue: events-critical (limit: 5)
 
-┌─────────────────┬──────────┬──────────┬──────────────────────┬────────────────────┐
-│ Event ID        │ Type     │ Priority │ Scheduled For        │ Stream Entry ID    │
-├─────────────────┼──────────┼──────────┼──────────────────────┼────────────────────┤
-│ evt-urgent-023  │ webhook  │ 10       │ 2025-11-01 14:35:30  │ 1730470130000-0    │
-│ evt-alert-045   │ email    │ 9        │ 2025-11-01 14:35:31  │ 1730470131000-0    │
-│ evt-critical-12 │ sms      │ 9        │ 2025-11-01 14:35:32  │ 1730470132000-0    │
-│ evt-high-078    │ webhook  │ 8        │ 2025-11-01 14:35:33  │ 1730470133000-0    │
-│ evt-urgent-099  │ email    │ 8        │ 2025-11-01 14:35:35  │ 1730470135000-0    │
-└─────────────────┴──────────┴──────────┴──────────────────────┴────────────────────┘
+┌─────────────────┬──────────┬──────────┬──────────────────────┐
+│ Event ID        │ Type     │ Priority │ Scheduled For        │
+├─────────────────┼──────────┼──────────┼──────────────────────┤
+│ evt-urgent-023  │ webhook  │ 4        │ 2025-11-01 14:35:30  │
+│ evt-alert-045   │ email    │ 4        │ 2025-11-01 14:35:31  │
+│ evt-critical-12 │ sms      │ 4        │ 2025-11-01 14:35:32  │
+│ evt-high-078    │ webhook  │ 3        │ 2025-11-01 14:35:33  │
+│ evt-urgent-099  │ email    │ 3        │ 2025-11-01 14:35:35  │
+└─────────────────┴──────────┴──────────┴──────────────────────┘
 
 Showing 5 of 12 pending events
 ```
@@ -888,24 +832,7 @@ This script demonstrates:
 ./event-processor dlq requeue --all
 ```
 
-### Scenario 4: Stream Architecture Benefits
-
-```bash
-# Demonstrate consumer group coordination
-./event-processor worker --type email --workers 3 --name group-1 &
-./event-processor worker --type email --workers 3 --name group-2 &
-
-# Publish events
-./event-processor publish events/mixed-batch.json
-
-# Observe:
-# - Each event processed by only one worker
-# - Automatic load distribution
-# - PEL tracking prevents duplicate processing
-# - Stream entry IDs enable precise acknowledgment
-```
-
-## 🔍 Architecture Insights
+### Scenario 4: Failure Recovery with DLQ
 
 ### Redis Streams Benefits Demonstrated
 

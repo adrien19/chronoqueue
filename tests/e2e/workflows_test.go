@@ -80,7 +80,7 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 	// Step 2: Post 10 messages with varying priorities
 	t.Log("Step 2: Posting 10 messages with priorities...")
 	messageIDs := make([]string, 10)
-	priorities := []int64{50, 90, 30, 70, 10, 95, 40, 60, 20, 80}
+	priorities := []int64{2, 4, 1, 3, 0, 4, 1, 3, 0, 4}
 
 	for i, priority := range priorities {
 		msgID := fmt.Sprintf("e2e-msg-%d", i)
@@ -379,13 +379,13 @@ func TestE2E_HighPriorityAlertSystem(t *testing.T) {
 		msgType := "unknown"
 
 		switch priority {
-		case 95:
+		case 4:
 			alertCount++
 			msgType = "alert"
-		case 50:
+		case 2:
 			eventCount++
 			msgType = "event"
-		case 10:
+		case 0:
 			logCount++
 			msgType = "log"
 		}

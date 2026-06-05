@@ -87,6 +87,8 @@ func (s *UIServer) Start(addr string) error {
 	mux.HandleFunc("GET /queues/{name}/messages/new", queues.NewMessage)
 	mux.HandleFunc("POST /queues/{name}/requeue-all", queues.RequeueAll)
 	mux.HandleFunc("POST /queues/{name}/purge", queues.Purge)
+	mux.HandleFunc("POST /api/queues/{name}/messages/{messageId}/requeue", queues.RequeueMessage)
+	mux.HandleFunc("POST /api/queues/{name}/messages/{messageId}/dlq-delete", queues.DeleteDLQMessage)
 	mux.HandleFunc("GET /workers", workers.List)
 	mux.HandleFunc("GET /lease-monitor", leaseMonitor.List)
 	mux.HandleFunc("GET /schedules", schedules.List)

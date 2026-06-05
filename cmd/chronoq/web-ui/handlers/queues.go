@@ -38,13 +38,15 @@ type MessageDisplay struct {
 
 // QueueDetail contains the view model for the queue detail page.
 type QueueDetail struct {
-	Name      string
-	Ready     string
-	InFlight  string
-	Retries   string
-	DLQ       string
-	Completed string
-	IsDLQ     bool
+	Name        string
+	Ready       string
+	InFlight    string
+	Retries     string
+	DLQ         string
+	DLQName     string // non-empty when this queue has an associated DLQ
+	SourceQueue string // non-empty when this queue is itself a DLQ
+	Completed   string
+	IsDLQ       bool
 }
 
 // shortenID truncates an ID to the first 12 characters.
@@ -300,6 +302,23 @@ func (h *QueuesHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		DLQ:       "0",
 		Completed: fmt.Sprintf("%d", counts["COMPLETED"]),
 		IsDLQ:     isDLQ(queueName),
+	}
+
+	// Resolve linked DLQ name from queue metadata, and source queue for DLQ pages.
+	if queue.IsDLQ {
+		queue.SourceQueue = strings.TrimSuffix(strings.TrimSuffix(queueName, "-dlq"), "_dlq")
+	} else {
+		listResp, err := h.activeClient().ListQueues(ctx, queueName)
+		if err == nil {
+			for _, q := range listResp.GetQueues() {
+				if q.GetName() == queueName {
+					if meta := q.GetMetadata(); meta != nil {
+						queue.DLQName = meta.GetDeadLetterQueueName()
+					}
+					break
+				}
+			}
+		}
 	}
 
 	data := map[string]any{
@@ -575,6 +594,54 @@ func (h *QueuesHandler) RequeueAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.logger.InfoWithFields("Requeued messages from DLQ", "queue", queueName, "count", requeued)
+	http.Redirect(w, r, "/queues/"+queueName, http.StatusSeeOther)
+}
+
+// RequeueMessage requeues a single message from a DLQ back to its source queue.
+func (h *QueuesHandler) RequeueMessage(w http.ResponseWriter, r *http.Request) {
+	queueName := r.PathValue("name")
+	messageID := r.PathValue("messageId")
+
+	if !isDLQ(queueName) {
+		http.Error(w, "Not a DLQ", http.StatusBadRequest)
+		return
+	}
+
+	sourceQueue := strings.TrimSuffix(strings.TrimSuffix(queueName, "-dlq"), "_dlq")
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	if _, err := h.activeClient().RequeueFromDLQ(ctx, queueName, messageID, sourceQueue); err != nil {
+		h.logger.ErrorWithFields("Failed to requeue message from DLQ", "error", err, "queue", queueName, "message", messageID)
+		http.Error(w, "Failed to requeue message", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.InfoWithFields("Requeued message from DLQ", "queue", queueName, "message", messageID)
+	http.Redirect(w, r, "/queues/"+queueName, http.StatusSeeOther)
+}
+
+// DeleteDLQMessage permanently deletes a single message from a DLQ.
+func (h *QueuesHandler) DeleteDLQMessage(w http.ResponseWriter, r *http.Request) {
+	queueName := r.PathValue("name")
+	messageID := r.PathValue("messageId")
+
+	if !isDLQ(queueName) {
+		http.Error(w, "Not a DLQ", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	if _, err := h.activeClient().DeleteFromDLQ(ctx, queueName, messageID); err != nil {
+		h.logger.ErrorWithFields("Failed to delete message from DLQ", "error", err, "queue", queueName, "message", messageID)
+		http.Error(w, "Failed to delete message", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.InfoWithFields("Deleted message from DLQ", "queue", queueName, "message", messageID)
 	http.Redirect(w, r, "/queues/"+queueName, http.StatusSeeOther)
 }
 

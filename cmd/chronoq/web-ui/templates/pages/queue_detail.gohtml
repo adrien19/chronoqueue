@@ -3,13 +3,33 @@
   <div class="cq-panel p-6">
     <div class="flex items-start justify-between gap-4">
       <div>
-        <div class="mb-1 text-sm text-zinc-500"><a href="/queues" class="hover:text-white">Queues</a> / <span class="text-zinc-300">{{ .Queue.Name }}</span></div>
+        <div class="mb-1 text-sm text-zinc-500">
+          <a href="/queues" class="hover:text-white">Queues</a>
+          {{ if .Queue.SourceQueue }} / <a href="/queues/{{ .Queue.SourceQueue }}" class="hover:text-white">{{ .Queue.SourceQueue }}</a>{{ end }}
+          / <span class="text-zinc-300">{{ .Queue.Name }}</span>
+        </div>
         <div class="text-3xl font-semibold text-white">{{ .Queue.Name }}</div>
-        {{ if .Queue.IsDLQ }}<div class="mt-2"><span class="cq-badge border-red-500/25 bg-red-500/10 text-red-300">DLQ</span></div>{{ end }}
+        {{ if .Queue.IsDLQ }}
+        <div class="mt-2 flex items-center gap-3">
+          <span class="cq-badge border-red-500/25 bg-red-500/10 text-red-300">DLQ</span>
+          {{ if .Queue.SourceQueue }}
+          <a href="/queues/{{ .Queue.SourceQueue }}" class="flex items-center gap-1 text-sm text-zinc-400 hover:text-white">
+            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+            Source: {{ .Queue.SourceQueue }}
+          </a>
+          {{ end }}
+        </div>
+        {{ end }}
       </div>
       <div class="flex gap-2">
+        {{ if .Queue.DLQName }}
+        <a href="/queues/{{ .Queue.DLQName }}" class="cq-btn flex items-center gap-1.5">
+          <span class="inline-block h-2 w-2 rounded-full bg-red-400"></span>
+          View DLQ
+        </a>
+        {{ end }}
         {{ if .Queue.IsDLQ }}
-        <form method="POST" action="/queues/{{ .Queue.Name }}/requeue-all" onsubmit="return confirm('Requeue all messages from DLQ?')">
+        <form method="POST" action="/queues/{{ .Queue.Name }}/requeue-all" onsubmit="return confirm('Requeue all messages from DLQ back to {{ .Queue.SourceQueue }}?')">
           <button class="cq-btn cq-btn-primary" type="submit">Requeue all</button>
         </form>
         {{ end }}
@@ -32,7 +52,9 @@
       <div class="text-lg font-semibold text-white">Messages</div>
       <div class="flex items-center gap-3">
         <span class="text-sm text-zinc-500">showing up to 100</span>
+        {{ if not .Queue.IsDLQ }}
         <a href="/queues/{{ .Queue.Name }}/messages/new" class="cq-btn cq-btn-primary">New message</a>
+        {{ end }}
       </div>
     </div>
     {{ template "message_table" . }}
