@@ -1,12 +1,11 @@
-//go:build integration && sqlite
-// +build integration,sqlite
+//go:build integration && sqlite && cgo
+// +build integration,sqlite,cgo
 
 package integration
 
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -14,119 +13,124 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/adrien19/chronoqueue/internal/server"
-
+	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
+	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
+	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 )
 
 func TestSQLiteServerIntegration(t *testing.T) {
-	// Create temporary directory for test database
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
+	h := startSQLiteServer(t, "test.db")
+	defer h.shutdown(t)
 
-	// Configure server with SQLite
-	config := server.DefaultConfig()
-	config.StorageType = "sqlite"
-	config.SQLiteDBPath = dbPath
-	config.GRPCAddr = ":19000" // Use different port to avoid conflicts
-	config.HTTPAddr = ":18080"
-	config.IsDevelopment = true
-
-	// Create and start server
-	srv, err := server.New(config)
-	require.NoError(t, err)
-
-	// Start server in background
-	serverDone := make(chan error, 1)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	go func() {
-		serverDone <- srv.Start(ctx)
-	}()
-
-	// Give server time to start
-	time.Sleep(500 * time.Millisecond)
-
-	// Connect to gRPC server
-	conn, err := grpc.Dial(
-		"localhost:19000",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	conn, err := grpc.NewClient(h.grpcTarget, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := queueservicepb.NewQueueServiceClient(conn)
+	queueName := "test-queue"
+	messageID := "msg-1"
 
-	// Test 1: Create a queue
 	t.Run("CreateQueue", func(t *testing.T) {
 		createResp, err := client.CreateQueue(ctx, &queueservicepb.CreateQueueRequest{
-			Name: "test-queue",
-			Type: "simple",
+			Name: queueName,
+			Metadata: &queuepb.QueueMetadata{
+				Type: queuepb.QueueType_SIMPLE,
+			},
 		})
 		require.NoError(t, err)
-		assert.NotNil(t, createResp)
-		assert.Equal(t, "test-queue", createResp.Queue.Name)
+		assert.True(t, createResp.GetSuccess())
 	})
 
-	// Test 2: Post a message
 	t.Run("PostMessage", func(t *testing.T) {
-		postResp, err := client.PostMessage(ctx, &queueservicepb.PostMessageRequest{
-			QueueName: "test-queue",
-			MessageId: "msg-1",
-			Payload:   []byte(`{"test": "data"}`),
-			Priority:  5,
+		payloadData, err := structpb.NewStruct(map[string]interface{}{
+			"test": "data",
 		})
 		require.NoError(t, err)
-		assert.NotNil(t, postResp)
-		assert.Equal(t, "msg-1", postResp.MessageId)
+
+		postResp, err := client.PostMessage(ctx, &queueservicepb.PostMessageRequest{
+			QueueName: queueName,
+			Message: &messagepb.Message{
+				MessageId: messageID,
+				Metadata: &messagepb.Message_Metadata{
+					Payload: &commonpb.Payload{
+						Data:        payloadData,
+						ContentType: "application/json",
+					},
+					Priority:    1,
+					MaxAttempts: 2,
+				},
+			},
+		})
+		require.NoError(t, err)
+		assert.True(t, postResp.GetSuccess())
 	})
 
-	// Test 3: Get a message
+	var attemptID string
 	t.Run("GetMessage", func(t *testing.T) {
 		getResp, err := client.GetNextMessage(ctx, &queueservicepb.GetNextMessageRequest{
-			QueueName: "test-queue",
+			QueueName:     queueName,
+			LeaseDuration: durationpb.New(30 * time.Second),
 		})
 		require.NoError(t, err)
-		assert.NotNil(t, getResp)
-		assert.Equal(t, "msg-1", getResp.Message.MessageId)
-		assert.Equal(t, []byte(`{"test": "data"}`), getResp.Message.Metadata.Payload)
+		require.NotNil(t, getResp.GetMessage())
+		assert.Equal(t, messageID, getResp.GetMessage().GetMessageId())
+		assert.Equal(t, messagepb.Message_Metadata_RUNNING, getResp.GetMessage().GetMetadata().GetState())
+		assert.NotNil(t, getResp.GetMessage().GetMetadata().GetPayload())
+		attemptID = getResp.GetAttemptId()
 	})
 
-	// Test 4: List queues
 	t.Run("ListQueues", func(t *testing.T) {
 		listResp, err := client.ListQueues(ctx, &queueservicepb.ListQueuesRequest{})
 		require.NoError(t, err)
-		assert.NotNil(t, listResp)
-		assert.Len(t, listResp.Queues, 1)
-		assert.Equal(t, "test-queue", listResp.Queues[0].Name)
+		require.NotNil(t, listResp)
+
+		found := false
+		for _, q := range listResp.GetQueues() {
+			if q.GetName() == queueName {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "created queue should appear in list")
 	})
 
-	// Test 5: Get queue state
 	t.Run("GetQueueState", func(t *testing.T) {
 		stateResp, err := client.GetQueueState(ctx, &queueservicepb.GetQueueStateRequest{
-			QueueName: "test-queue",
+			QueueName: queueName,
 		})
 		require.NoError(t, err)
-		assert.NotNil(t, stateResp)
-		assert.Equal(t, "test-queue", stateResp.QueueName)
-		// Message is in RUNNING state after GetNextMessage
-		assert.Equal(t, int64(1), stateResp.RunningCount)
+		require.NotNil(t, stateResp)
+		assert.Equal(t, int32(0), stateResp.GetStateCounts()["PENDING"])
+		assert.Equal(t, int32(1), stateResp.GetStateCounts()["RUNNING"])
 	})
 
-	// Shutdown server
-	cancel()
-	select {
-	case err := <-serverDone:
-		if err != nil {
-			t.Logf("Server shutdown with: %v", err)
+	t.Run("AcknowledgeMessage", func(t *testing.T) {
+		ackReq := &queueservicepb.AcknowledgeMessageRequest{
+			QueueName: queueName,
+			MessageId: messageID,
+			State:     messagepb.Message_Metadata_COMPLETED,
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("Server did not shutdown in time")
-	}
+		if attemptID != "" {
+			ackReq.AttemptId = &attemptID
+		}
 
-	// Verify database file was created
-	_, err = os.Stat(dbPath)
+		ackResp, err := client.AcknowledgeMessage(ctx, ackReq)
+		require.NoError(t, err)
+		assert.True(t, ackResp.GetSuccess())
+
+		stateResp, err := client.GetQueueState(ctx, &queueservicepb.GetQueueStateRequest{QueueName: queueName})
+		require.NoError(t, err)
+		assert.Equal(t, int32(0), stateResp.GetStateCounts()["RUNNING"])
+		assert.Equal(t, int32(0), stateResp.GetStateCounts()["PENDING"])
+	})
+
+	_, err = os.Stat(h.dbPath)
 	require.NoError(t, err, "SQLite database file should exist")
 }

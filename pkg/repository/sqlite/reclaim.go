@@ -21,7 +21,11 @@ func (s *Storage) FindExpiredMessages(ctx context.Context, queueName string, lim
 	query := `
 		SELECT metadata_pb
 		FROM cq_messages
-		WHERE queue_name = ? AND state = ? AND (lease_expiry <= ? OR heartbeat_expiry <= ?)
+		WHERE queue_name = ? AND state = ?
+		  AND (
+		        lease_expiry <= ?
+		        OR (heartbeat_expiry IS NOT NULL AND heartbeat_expiry > 0 AND heartbeat_expiry <= ?)
+		      )
 		  AND deleted_at IS NULL
 		LIMIT ?
 	`
