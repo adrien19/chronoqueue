@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"net/http"
+	"strings"
 
 	"github.com/adrien19/chronoqueue/client"
 	clusterstore "github.com/adrien19/chronoqueue/cmd/chronoq/web-ui/cluster"
@@ -107,6 +108,7 @@ func consoleNav() []NavItem {
 	return []NavItem{
 		{Label: "Home", Href: "/", Key: "home"},
 		{Label: "Queues", Href: "/queues", Key: "queues"},
+		{Label: "Schemas", Href: "/schemas", Key: "schemas"},
 		{Label: "Workers", Href: "/workers", Key: "workers"},
 		{Label: "Lease monitor", Href: "/lease-monitor", Key: "lease-monitor"},
 		{Label: "Schedules", Href: "/schedules", Key: "schedules"},
@@ -171,4 +173,8 @@ func ToJSON(v any) template.JS {
 		return template.JS("null")
 	}
 	return template.JS(b) //nolint:gosec // data is already marshalled JSON, not user HTML
+}
+
+func isHTMXRequest(r *http.Request) bool {
+	return strings.EqualFold(strings.TrimSpace(r.Header.Get("HX-Request")), "true")
 }

@@ -34,6 +34,12 @@
           {{ template "schedules_content" . }}
         {{ else if eq .ContentTemplate "schedule_new_content" }}
           {{ template "schedule_new_content" . }}
+        {{ else if eq .ContentTemplate "schemas_content" }}
+          {{ template "schemas_content" . }}
+        {{ else if eq .ContentTemplate "schema_new_content" }}
+          {{ template "schema_new_content" . }}
+        {{ else if eq .ContentTemplate "schema_detail_content" }}
+          {{ template "schema_detail_content" . }}
         {{ else if eq .ContentTemplate "settings_clusters_content" }}
           {{ template "settings_clusters_content" . }}
         {{ else if eq .ContentTemplate "settings_cluster_new_content" }}

@@ -1,0 +1,53 @@
+{{ define "schema_new_content" }}
+<section class="space-y-5">
+  <div class="flex items-center gap-3">
+    <a href="/schemas" class="cq-btn !px-2">←</a>
+    <h2 class="text-2xl font-semibold text-white">Register Schema</h2>
+  </div>
+
+  <div class="cq-panel p-6">
+    <form method="POST" action="/api/schemas/register" hx-post="/api/schemas/register" hx-target="#form-result" class="space-y-6">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Schema ID <span class="text-red-400">*</span></label>
+          <input class="cq-input w-full" type="text" name="schema_id" required placeholder="order-schema">
+          <p class="mt-1 text-xs text-zinc-500">Stable ID for a schema family.</p>
+        </div>
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Name</label>
+          <input class="cq-input w-full" type="text" name="name" placeholder="Order Validation Schema">
+          <p class="mt-1 text-xs text-zinc-500">Human-readable display name.</p>
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Description</label>
+        <textarea class="cq-input w-full min-h-[80px]" name="description" placeholder="Used to validate order messages"></textarea>
+      </div>
+
+      <div>
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Content Type</label>
+        <input class="cq-input w-full" type="text" name="content_type" value="json-schema" placeholder="json-schema">
+      </div>
+
+      <div>
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Metadata</label>
+        <textarea class="cq-input w-full min-h-[100px] font-mono text-sm" name="metadata" placeholder="owner=team-checkout&#10;contact=checkout@example.com"></textarea>
+        <p class="mt-1 text-xs text-zinc-500">One key=value entry per line.</p>
+      </div>
+
+      <div>
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Schema Content (JSON) <span class="text-red-400">*</span></label>
+        <textarea class="cq-input w-full min-h-[240px] font-mono text-sm" name="content" required placeholder='{"type":"object","properties":{"orderId":{"type":"string"}},"required":["orderId"]}'></textarea>
+      </div>
+
+      <div id="form-result"></div>
+
+      <div class="flex items-center gap-3 border-t border-line pt-4">
+        <button class="cq-btn cq-btn-primary" type="submit">Register</button>
+        <a href="/schemas" class="cq-btn">Cancel</a>
+      </div>
+    </form>
+  </div>
+</section>
+{{ end }}

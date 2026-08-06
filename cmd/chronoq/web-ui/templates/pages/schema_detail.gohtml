@@ -1,0 +1,67 @@
+{{ define "schema_detail_content" }}
+<section class="space-y-5">
+  <div class="cq-panel p-6">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <div class="mb-1 text-sm text-zinc-500"><a href="/schemas" class="hover:text-white">Schemas</a> / <span class="text-zinc-300">{{ .Schema.SchemaID }}</span></div>
+        <div class="text-3xl font-semibold text-white">{{ .Schema.SchemaID }}</div>
+        {{ if .Schema.Name }}
+        <div class="mt-2 text-zinc-300">{{ .Schema.Name }}</div>
+        {{ end }}
+        {{ if .Schema.Description }}
+        <p class="mt-2 text-sm text-zinc-400">{{ .Schema.Description }}</p>
+        {{ end }}
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="/schemas/new" class="cq-btn">Register new</a>
+        <form method="POST" action="/api/schemas/{{ .Schema.SchemaID }}/versions/{{ .Schema.Version }}/delete" onsubmit="return confirm('Delete schema {{ .Schema.SchemaID }} version {{ .Schema.Version }}?')">
+          <button class="cq-btn border-red-500/30 text-red-300 hover:border-red-500/50" type="submit">Delete v{{ .Schema.Version }}</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="mt-6 grid grid-cols-4 gap-3">
+      <div class="cq-panel-soft p-4"><div class="cq-label">Version</div><div class="mt-2 text-2xl font-semibold text-blue-300">v{{ .Schema.Version }}</div></div>
+      <div class="cq-panel-soft p-4"><div class="cq-label">Type</div><div class="mt-2 text-sm font-semibold text-white">{{ .Schema.ContentType }}</div></div>
+      <div class="cq-panel-soft p-4"><div class="cq-label">Created</div><div class="mt-2 text-sm text-zinc-200">{{ .Schema.CreatedAt }}</div></div>
+      <div class="cq-panel-soft p-4"><div class="cq-label">Status</div><div class="mt-2">{{ if .Schema.IsActive }}<span class="cq-badge cq-badge-good">Active</span>{{ else }}<span class="cq-badge cq-badge-muted">Inactive</span>{{ end }}</div></div>
+    </div>
+
+    <div class="mt-6">
+      <div class="mb-2 text-sm font-medium text-zinc-300">Schema Content</div>
+      <pre class="max-h-[420px] overflow-auto rounded-xl border border-line bg-zinc-950/80 p-4 text-xs text-zinc-200 font-mono whitespace-pre-wrap break-words">{{ .Schema.Content }}</pre>
+    </div>
+
+    {{ if .Schema.Metadata }}
+    <div class="mt-6">
+      <div class="mb-2 text-sm font-medium text-zinc-300">Metadata</div>
+      <div class="rounded-xl border border-line bg-zinc-950/40 p-4">
+        <div class="grid grid-cols-2 gap-2 text-sm">
+          {{ range $k, $v := .Schema.Metadata }}
+          <div class="text-zinc-400">{{ $k }}</div>
+          <div class="break-words text-zinc-200">{{ $v }}</div>
+          {{ end }}
+        </div>
+      </div>
+    </div>
+    {{ end }}
+  </div>
+
+  <div class="cq-panel p-6">
+    <h3 class="text-lg font-semibold text-white">Validate Payload</h3>
+    <p class="mt-1 text-sm text-zinc-500">Dry-run payload validation against this schema version.</p>
+
+    <form class="mt-4 space-y-4" method="POST" action="/api/schemas/{{ .Schema.SchemaID }}/validate" hx-post="/api/schemas/{{ .Schema.SchemaID }}/validate" hx-target="#validation-result">
+      <input type="hidden" name="version" value="{{ .Schema.Version }}">
+      <div>
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Payload (JSON)</label>
+        <textarea class="cq-input w-full min-h-[180px] font-mono text-sm" name="payload" required placeholder='{"orderId":"ORD-1"}'></textarea>
+      </div>
+      <div id="validation-result"></div>
+      <div class="flex items-center gap-3 border-t border-line pt-4">
+        <button class="cq-btn cq-btn-primary" type="submit">Validate</button>
+      </div>
+    </form>
+  </div>
+</section>
+{{ end }}

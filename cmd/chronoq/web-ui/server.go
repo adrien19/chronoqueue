@@ -76,6 +76,7 @@ func (s *UIServer) Start(addr string) error {
 	workers := handlers.NewWorkersHandler(s.templates, s.store, s.logger)
 	leaseMonitor := handlers.NewLeaseMonitorHandler(s.templates, s.store, s.logger)
 	schedules := handlers.NewSchedulesHandler(s.templates, s.store, s.logger)
+	schemas := handlers.NewSchemasHandler(s.templates, s.store, s.logger)
 	settings := handlers.NewSettingsHandler(s.templates, s.store, s.logger)
 
 	// Console pages
@@ -93,13 +94,20 @@ func (s *UIServer) Start(addr string) error {
 	mux.HandleFunc("GET /lease-monitor", leaseMonitor.List)
 	mux.HandleFunc("GET /schedules", schedules.List)
 	mux.HandleFunc("GET /schedules/new", schedules.New)
+	mux.HandleFunc("GET /schemas", schemas.List)
+	mux.HandleFunc("GET /schemas/new", schemas.New)
+	mux.HandleFunc("GET /schemas/{schemaId}", schemas.Detail)
 
 	// HTMX / API endpoints
 	mux.HandleFunc("POST /api/queues/create", queues.Create)
 	mux.HandleFunc("POST /api/queues/{name}/messages", queues.PostMessage)
+	mux.HandleFunc("POST /api/queues/{name}/messages/validate", queues.ValidateMessage)
 	mux.HandleFunc("POST /api/schedules/create", schedules.Create)
 	mux.HandleFunc("POST /api/schedules/toggle", schedules.Toggle)
 	mux.HandleFunc("DELETE /api/schedules/{id}", schedules.Delete)
+	mux.HandleFunc("POST /api/schemas/register", schemas.Create)
+	mux.HandleFunc("POST /api/schemas/{schemaId}/validate", schemas.Validate)
+	mux.HandleFunc("POST /api/schemas/{schemaId}/versions/{version}/delete", schemas.Delete)
 	mux.HandleFunc("GET /fragments/live-overview", dashboard.LiveOverview)
 	mux.HandleFunc("GET /fragments/dashboard-stats", dashboard.DashboardStats)
 	mux.HandleFunc("GET /fragments/lease-table", leaseMonitor.Table)

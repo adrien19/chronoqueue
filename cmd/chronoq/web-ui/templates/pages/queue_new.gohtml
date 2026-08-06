@@ -6,7 +6,7 @@
   </div>
 
   <div class="cq-panel p-6">
-    <form hx-post="/api/queues/create" hx-target="#form-result" class="space-y-6">
+    <form method="POST" action="/api/queues/create" hx-post="/api/queues/create" hx-target="#form-result" class="space-y-6">
 
       <div>
         <label class="mb-2 block text-sm font-medium text-zinc-200">Queue Name <span class="text-red-400">*</span></label>
@@ -57,6 +57,24 @@
             <input type="checkbox" class="rounded border-line bg-zinc-900 text-blue-500" name="auto_create_dlq" id="auto_create_dlq" value="true">
             <label for="auto_create_dlq" class="text-sm text-zinc-300">Auto-create DLQ</label>
           </div>
+        </div>
+      </div>
+
+      <div class="space-y-4 rounded-xl border border-line bg-zinc-950/40 p-5">
+        <p class="text-sm font-medium text-zinc-300">Schema Validation</p>
+        <div>
+          <label class="mb-2 block text-sm font-medium text-zinc-200">Schema ID</label>
+          <input class="cq-input w-full" type="text" name="schema_id" list="schema-options" placeholder="order-schema">
+          <datalist id="schema-options">
+            {{ range .Schemas }}
+            <option value="{{ .SchemaID }}">{{ if .Name }}{{ .Name }}{{ else }}{{ .SchemaID }}{{ end }} (latest v{{ .LatestVersion }})</option>
+            {{ end }}
+          </datalist>
+          <p class="mt-1 text-xs text-zinc-500">Optional queue-level default schema. Leave blank to disable default validation.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <input type="checkbox" class="rounded border-line bg-zinc-900 text-blue-500" name="schema_required" id="schema_required" value="true">
+          <label for="schema_required" class="text-sm text-zinc-300">Require schema validation for all messages in this queue</label>
         </div>
       </div>
 
