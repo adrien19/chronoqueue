@@ -92,7 +92,7 @@
       <div id="form-result"></div>
 
       <div class="flex items-center gap-3 border-t border-line pt-4">
-        <button class="cq-btn" type="button"
+        <button class="cq-btn" type="submit"
           formaction="/api/queues/{{ .QueueName }}/messages/validate"
           formmethod="POST"
           hx-post="/api/queues/{{ .QueueName }}/messages/validate"
@@ -143,8 +143,13 @@
     }
 
     var parts = parseLocalDateTimeParts(raw);
+    if (!parts) {
+      deliverAt.setCustomValidity('Enter a date and time in the format YYYY-MM-DDTHH:MM.');
+      if (report) deliverAt.reportValidity();
+      return false;
+    }
     var parsed = new Date(raw);
-    if (!parts || isNaN(parsed.getTime()) || !localDateMatchesParts(parsed, parts)) {
+    if (isNaN(parsed.getTime()) || !localDateMatchesParts(parsed, parts)) {
       deliverAt.setCustomValidity('Selected local time does not exist in your timezone due to daylight saving time. Choose another time.');
       if (report) deliverAt.reportValidity();
       return false;

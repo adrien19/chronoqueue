@@ -191,5 +191,7 @@ func (h *BaseHandler) writeInlineFormError(w http.ResponseWriter, r *http.Reques
 	}
 	escaped := html.EscapeString(message)
 	escaped = strings.ReplaceAll(escaped, "\n", "<br>")
-	_, _ = fmt.Fprintf(w, `<div class="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">%s</div>`, escaped)
+	if _, err := fmt.Fprintf(w, `<div class="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">%s</div>`, escaped); err != nil {
+		h.logger.ErrorWithFields("Failed to write inline form error", "error", err)
+	}
 }

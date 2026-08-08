@@ -70,6 +70,9 @@ func NewUIServer(grpcAddr string, skipSSL bool, logger *log.Logger) (*UIServer, 
 		publicOrigin = parsedOrigin
 		hasPublicOrigin = true
 	}
+	if !hasPublicOrigin {
+		logger.Warn("CHRONOQUEUE_UI_PUBLIC_ORIGIN is not set; all UI mutation requests will be rejected with 403")
+	}
 
 	trustProxyHeaders := false
 	if rawTrustProxy := strings.TrimSpace(os.Getenv("CHRONOQUEUE_UI_TRUST_PROXY_HEADERS")); rawTrustProxy != "" {
@@ -351,6 +354,8 @@ func requestTargetOrigin(r *http.Request, trustProxyHeaders bool) (normalizedOri
 	if parsedHost, parsedPort, err := net.SplitHostPort(hostPort); err == nil {
 		host = parsedHost
 		port = parsedPort
+	} else if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		host = host[1 : len(host)-1]
 	}
 	host = strings.ToLower(strings.TrimSpace(host))
 	if host == "" {

@@ -296,8 +296,8 @@ func (h *SchemasHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	versionRaw := strings.TrimSpace(r.PathValue("version"))
 	versionVal, err := strconv.ParseInt(versionRaw, 10, 32)
-	if err != nil || versionVal < 0 {
-		h.renderError(w, http.StatusBadRequest, "Version must be a non-negative integer")
+	if err != nil || versionVal < 1 {
+		h.renderError(w, http.StatusBadRequest, "Version must be a positive integer")
 		return
 	}
 	version := int32(versionVal)

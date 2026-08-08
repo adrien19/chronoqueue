@@ -47,7 +47,7 @@ tests/
 ### Prerequisites
 
 1. **Docker** must be running (for Testcontainers)
-2. **Go 1.25+** installed
+2. **Go 1.26.5+** installed
 3. **ChronoQueue dependencies** installed: `go mod download`
 
 ### Run All Tests
@@ -95,7 +95,7 @@ go tool cover -html=coverage.out
 ## 📊 Test Coverage
 
 | Test Suite | Tests | Features Covered |
-|------------|-------|------------------|
+| ------------ | ------- | ------------------ |
 | **Queue Operations** | 5+ | Queue CRUD, listing, state management |
 | **Message Lifecycle** | 10+ | Post, get, acknowledge, lease, heartbeat, peek |
 | **Priority Queues** | 5+ | Priority ordering, FIFO within priority |

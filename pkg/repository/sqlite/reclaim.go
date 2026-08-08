@@ -64,6 +64,7 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 		if newAttemptsLeft <= 0 {
 			newState = messagepb.Message_Metadata_ERRORED
 		}
+		nowMs := s.Clock.NowMs()
 
 		// Update message
 		updateQuery := `
@@ -80,13 +81,25 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 				heartbeat_expiry = NULL,
 				updated_at = CURRENT_TIMESTAMP
 			WHERE message_id = ?
+			AND state = ?
+			  AND (
+				lease_expiry <= ?
+				OR (heartbeat_expiry IS NOT NULL AND heartbeat_expiry > 0 AND heartbeat_expiry <= ?)
+			  )
 		`
-		_, err := tx.ExecContext(ctx, updateQuery, newState, newAttemptsLeft, message.GetMessageId())
+		result, err := tx.ExecContext(ctx, updateQuery, newState, newAttemptsLeft, message.GetMessageId(), messagepb.Message_Metadata_RUNNING, nowMs, nowMs)
 		if err != nil {
 			return fmt.Errorf("update message: %w", err)
 		}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("get reclaimed rows affected: %w", err)
+		}
+		if rows != 1 {
+			return fmt.Errorf("message is no longer expired")
+		}
 
 		// Update state counts
-		return s.StateManager.UpdateCounters(ctx, tx, queueName, message.GetMetadata().GetState(), newState)
+		return s.StateManager.UpdateCounters(ctx, tx, queueName, messagepb.Message_Metadata_RUNNING, newState)
 	})
 }

@@ -458,7 +458,7 @@ func (h *QueuesHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		schemaVersion = int32(n)
 	}
-	if schemaVersionStr != "" && schemaID == "" {
+	if schemaVersion > 0 && schemaID == "" {
 		h.writeInlineFormError(w, r, "Schema ID is required when schema version is provided")
 		return
 	}
