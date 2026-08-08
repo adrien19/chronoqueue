@@ -30,7 +30,11 @@ func TestSQLiteSchemaIntegration(t *testing.T) {
 
 	conn, err := grpc.NewClient(h.grpcTarget, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
-	defer func() { _ = conn.Close() }()
+	defer func() {
+		if closeErr := conn.Close(); closeErr != nil {
+			t.Errorf("failed to close grpc connection: %v", closeErr)
+		}
+	}()
 
 	client := queueservicepb.NewQueueServiceClient(conn)
 	queueName := "validated-queue"

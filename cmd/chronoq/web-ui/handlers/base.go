@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"html"
 	"html/template"
 	"net/http"
 	"strings"
@@ -177,4 +179,17 @@ func ToJSON(v any) template.JS {
 
 func isHTMXRequest(r *http.Request) bool {
 	return strings.EqualFold(strings.TrimSpace(r.Header.Get("HX-Request")), "true")
+}
+
+func (h *BaseHandler) writeInlineFormError(w http.ResponseWriter, r *http.Request, message string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if isHTMXRequest(r) {
+		// HTMX does not swap non-2xx responses by default.
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+	escaped := html.EscapeString(message)
+	escaped = strings.ReplaceAll(escaped, "\n", "<br>")
+	_, _ = fmt.Fprintf(w, `<div class="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">%s</div>`, escaped)
 }

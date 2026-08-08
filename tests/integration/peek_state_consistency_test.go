@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 package integration
 
 import (
@@ -72,7 +75,7 @@ func TestPeekStateConsistency_LeasedMessageReportedAsRunning(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, getResp.GetMessage(), "expected leased message")
-	require.NotNil(t, getResp.GetAttemptId(), "attempt_id should be set for leased messages")
+	require.NotEmpty(t, getResp.GetAttemptId(), "attempt_id should be set for leased messages")
 
 	assert.Equal(t, messageID, getResp.GetMessage().GetMessageId())
 	assert.Equal(t, message_pb.Message_Metadata_RUNNING, getResp.GetMessage().GetMetadata().GetState())

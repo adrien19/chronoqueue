@@ -15,6 +15,7 @@
         <input class="cq-input w-full" type="text" name="prefix" value="{{ .Prefix }}" placeholder="order-">
       </div>
       <label class="flex items-center gap-2 pb-2 text-sm text-zinc-300">
+        <input type="hidden" name="active_only" value="false">
         <input type="checkbox" class="rounded border-line bg-zinc-900 text-blue-500" name="active_only" value="true" {{ if .ActiveOnly }}checked{{ end }}>
         Active only
       </label>

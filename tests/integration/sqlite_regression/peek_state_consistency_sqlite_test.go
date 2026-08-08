@@ -57,7 +57,11 @@ func TestSQLitePeekStateConsistency_LeasedMessageReportedAsRunning(t *testing.T)
 
 	conn, err := grpc.NewClient(fmt.Sprintf("127.0.0.1:%d", grpcPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
-	defer func() { _ = conn.Close() }()
+	defer func() {
+		if closeErr := conn.Close(); closeErr != nil {
+			t.Errorf("failed to close grpc connection: %v", closeErr)
+		}
+	}()
 
 	client := queueservicepb.NewQueueServiceClient(conn)
 
@@ -165,7 +169,11 @@ func freePort(t *testing.T) int {
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer func() { _ = listener.Close() }()
+	defer func() {
+		if closeErr := listener.Close(); closeErr != nil {
+			t.Errorf("failed to close listener: %v", closeErr)
+		}
+	}()
 
 	return listener.Addr().(*net.TCPAddr).Port
 }
@@ -178,6 +186,7 @@ func waitForHTTPHealth(addr string, timeout time.Duration, serverDone <-chan err
 	defer ticker.Stop()
 
 	url := fmt.Sprintf("http://%s/health", addr)
+	httpClient := &http.Client{}
 
 	for {
 		select {
@@ -189,9 +198,16 @@ func waitForHTTPHealth(addr string, timeout time.Duration, serverDone <-chan err
 		default:
 		}
 
-		resp, err := http.Get(url)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create health request: %w", err)
+		}
+
+		resp, err := httpClient.Do(req)
 		if err == nil {
-			_ = resp.Body.Close()
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				return fmt.Errorf("failed to close health response body: %w", closeErr)
+			}
 			if resp.StatusCode == http.StatusOK {
 				return nil
 			}

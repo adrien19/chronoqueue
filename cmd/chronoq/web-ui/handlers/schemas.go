@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html"
 	"html/template"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -46,6 +47,9 @@ type SchemasHandler struct {
 	BaseHandler
 }
 
+// schemaIDPattern validates schema IDs: letters, digits, dot, hyphen and underscore, starting with a letter or digit.
+var schemaIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
+
 // NewSchemasHandler creates a SchemasHandler.
 func NewSchemasHandler(
 	templates *template.Template,
@@ -68,7 +72,8 @@ func (h *SchemasHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	prefix := strings.TrimSpace(r.URL.Query().Get("prefix"))
 	activeOnly := true
-	if raw := strings.TrimSpace(r.URL.Query().Get("active_only")); raw != "" {
+	if values, ok := r.URL.Query()["active_only"]; ok && len(values) > 0 {
+		raw := strings.TrimSpace(values[len(values)-1])
 		activeOnly = raw == "true" || raw == "1" || strings.EqualFold(raw, "on")
 	}
 
@@ -114,23 +119,27 @@ func (h *SchemasHandler) New(w http.ResponseWriter, r *http.Request) {
 func (h *SchemasHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		h.logger.ErrorWithFields("Failed to parse schema form", "error", err)
-		h.writeSchemaFormError(w, r, "Invalid form data")
+		h.writeInlineFormError(w, r, "Invalid form data")
 		return
 	}
 
 	schemaID := strings.TrimSpace(r.FormValue("schema_id"))
+	if schemaID == "" {
+		h.writeInlineFormError(w, r, "Schema ID is required")
+		return
+	}
+	if !schemaIDPattern.MatchString(schemaID) {
+		h.writeInlineFormError(w, r, "Schema ID may only contain letters, digits, dots, hyphens, and underscores, and must start with a letter or digit")
+		return
+	}
 	name := strings.TrimSpace(r.FormValue("name"))
 	description := strings.TrimSpace(r.FormValue("description"))
 	contentType := strings.TrimSpace(r.FormValue("content_type"))
 	content := strings.TrimSpace(r.FormValue("content"))
 	metadataText := strings.TrimSpace(r.FormValue("metadata"))
 
-	if schemaID == "" {
-		h.writeSchemaFormError(w, r, "Schema ID is required")
-		return
-	}
 	if content == "" {
-		h.writeSchemaFormError(w, r, "Schema content is required")
+		h.writeInlineFormError(w, r, "Schema content is required")
 		return
 	}
 	if contentType == "" {
@@ -139,13 +148,13 @@ func (h *SchemasHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var schemaJSON map[string]any
 	if err := json.Unmarshal([]byte(content), &schemaJSON); err != nil {
-		h.writeSchemaFormError(w, r, fmt.Sprintf("Invalid schema JSON: %v", err))
+		h.writeInlineFormError(w, r, fmt.Sprintf("Invalid schema JSON: %v", err))
 		return
 	}
 
 	metadata, err := parseSchemaMetadata(metadataText)
 	if err != nil {
-		h.writeSchemaFormError(w, r, err.Error())
+		h.writeInlineFormError(w, r, err.Error())
 		return
 	}
 
@@ -161,12 +170,13 @@ func (h *SchemasHandler) Create(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		h.logger.ErrorWithFields("Failed to register schema", "error", err, "schema_id", schemaID)
-		h.writeSchemaFormError(w, r, fmt.Sprintf("Failed to register schema: %v", err))
+		h.writeInlineFormError(w, r, fmt.Sprintf("Failed to register schema: %v", err))
 		return
 	}
 
+	redirectTarget := "/schemas/" + url.PathEscape(schemaID)
 	if isHTMXRequest(r) {
-		w.Header().Set("HX-Redirect", "/schemas/"+schemaID)
+		w.Header().Set("HX-Redirect", redirectTarget)
 		w.WriteHeader(http.StatusCreated)
 		if _, writeErr := w.Write([]byte("Schema registered")); writeErr != nil {
 			h.logger.ErrorWithFields("Failed to write schema create response", "error", writeErr)
@@ -174,7 +184,7 @@ func (h *SchemasHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/schemas/"+schemaID, http.StatusSeeOther)
+	http.Redirect(w, r, redirectTarget, http.StatusSeeOther)
 }
 
 // Detail renders a schema detail page for a schema id and optional version.
@@ -230,24 +240,24 @@ func (h *SchemasHandler) Detail(w http.ResponseWriter, r *http.Request) {
 func (h *SchemasHandler) Validate(w http.ResponseWriter, r *http.Request) {
 	schemaID := strings.TrimSpace(r.PathValue("schemaId"))
 	if schemaID == "" {
-		h.writeSchemaFormError(w, r, "Schema ID required")
+		h.writeInlineFormError(w, r, "Schema ID required")
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		h.writeSchemaFormError(w, r, "Invalid form data")
+		h.writeInlineFormError(w, r, "Invalid form data")
 		return
 	}
 
 	payload := strings.TrimSpace(r.FormValue("payload"))
 	if payload == "" {
-		h.writeSchemaFormError(w, r, "Payload is required")
+		h.writeInlineFormError(w, r, "Payload is required")
 		return
 	}
 
 	var payloadJSON any
 	if err := json.Unmarshal([]byte(payload), &payloadJSON); err != nil {
-		h.writeSchemaFormError(w, r, fmt.Sprintf("Invalid payload JSON: %v", err))
+		h.writeInlineFormError(w, r, fmt.Sprintf("Invalid payload JSON: %v", err))
 		return
 	}
 
@@ -255,7 +265,7 @@ func (h *SchemasHandler) Validate(w http.ResponseWriter, r *http.Request) {
 	if raw := strings.TrimSpace(r.FormValue("version")); raw != "" {
 		parsed, err := strconv.ParseInt(raw, 10, 32)
 		if err != nil || parsed < 0 {
-			h.writeSchemaFormError(w, r, "Version must be a non-negative integer")
+			h.writeInlineFormError(w, r, "Version must be a non-negative integer")
 			return
 		}
 		version = int32(parsed)
@@ -266,7 +276,7 @@ func (h *SchemasHandler) Validate(w http.ResponseWriter, r *http.Request) {
 
 	err := h.activeClient().ValidatePayload(ctx, schemaID, version, payload)
 	if err != nil {
-		h.writeSchemaFormError(w, r, fmt.Sprintf("Validation failed: %v", err))
+		h.writeInlineFormError(w, r, fmt.Sprintf("Validation failed: %v", err))
 		return
 	}
 
@@ -305,20 +315,7 @@ func (h *SchemasHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/schemas", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/schemas/"+schemaID, http.StatusSeeOther)
-}
-
-func (h *SchemasHandler) writeSchemaFormError(w http.ResponseWriter, r *http.Request, message string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if isHTMXRequest(r) {
-		// HTMX does not swap non-2xx responses by default.
-		w.WriteHeader(http.StatusOK)
-	} else {
-		w.WriteHeader(http.StatusBadRequest)
-	}
-	escaped := html.EscapeString(message)
-	escaped = strings.ReplaceAll(escaped, "\n", "<br>")
-	_, _ = fmt.Fprintf(w, `<div class="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">%s</div>`, escaped)
+	http.Redirect(w, r, "/schemas/"+url.PathEscape(schemaID), http.StatusSeeOther)
 }
 
 func parseSchemaMetadata(raw string) (map[string]string, error) {

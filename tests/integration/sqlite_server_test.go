@@ -31,7 +31,11 @@ func TestSQLiteServerIntegration(t *testing.T) {
 
 	conn, err := grpc.NewClient(h.grpcTarget, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
-	defer func() { _ = conn.Close() }()
+	defer func() {
+		if closeErr := conn.Close(); closeErr != nil {
+			t.Errorf("failed to close grpc connection: %v", closeErr)
+		}
+	}()
 
 	client := queueservicepb.NewQueueServiceClient(conn)
 	queueName := "test-queue"
@@ -84,6 +88,7 @@ func TestSQLiteServerIntegration(t *testing.T) {
 		assert.Equal(t, messagepb.Message_Metadata_RUNNING, getResp.GetMessage().GetMetadata().GetState())
 		assert.NotNil(t, getResp.GetMessage().GetMetadata().GetPayload())
 		attemptID = getResp.GetAttemptId()
+		require.NotEmpty(t, attemptID)
 	})
 
 	t.Run("ListQueues", func(t *testing.T) {
@@ -112,14 +117,25 @@ func TestSQLiteServerIntegration(t *testing.T) {
 	})
 
 	t.Run("AcknowledgeMessage", func(t *testing.T) {
+		wrongAttemptID := "attempt-mismatch"
+		_, err := client.AcknowledgeMessage(ctx, &queueservicepb.AcknowledgeMessageRequest{
+			QueueName: queueName,
+			MessageId: messageID,
+			State:     messagepb.Message_Metadata_COMPLETED,
+			AttemptId: &wrongAttemptID,
+		})
+		require.Error(t, err)
+
+		stateAfterMismatch, err := client.GetQueueState(ctx, &queueservicepb.GetQueueStateRequest{QueueName: queueName})
+		require.NoError(t, err)
+		assert.Equal(t, int32(1), stateAfterMismatch.GetStateCounts()["RUNNING"])
+
 		ackReq := &queueservicepb.AcknowledgeMessageRequest{
 			QueueName: queueName,
 			MessageId: messageID,
 			State:     messagepb.Message_Metadata_COMPLETED,
 		}
-		if attemptID != "" {
-			ackReq.AttemptId = &attemptID
-		}
+		ackReq.AttemptId = &attemptID
 
 		ackResp, err := client.AcknowledgeMessage(ctx, ackReq)
 		require.NoError(t, err)

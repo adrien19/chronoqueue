@@ -6,6 +6,12 @@ import (
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 )
 
+func TestApplyRuntimeMetadata_AllowsNilMessage(t *testing.T) {
+	ApplyRuntimeMetadata(nil, RuntimeMetadata{
+		State: messagepb.Message_Metadata_RUNNING,
+	})
+}
+
 func TestApplyRuntimeMetadata_UpdatesStateAndAttemptRuntime(t *testing.T) {
 	msg := &messagepb.Message{
 		MessageId: "msg-1",

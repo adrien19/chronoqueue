@@ -15,7 +15,7 @@ func TestWriteFormError_StatusCode(t *testing.T) {
 		req.Header.Set("HX-Request", "true")
 		rr := httptest.NewRecorder()
 
-		h.writeFormError(rr, req, "validation failed")
+		h.writeInlineFormError(rr, req, "validation failed")
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
@@ -29,7 +29,7 @@ func TestWriteFormError_StatusCode(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/queues/create", nil)
 		rr := httptest.NewRecorder()
 
-		h.writeFormError(rr, req, "validation failed")
+		h.writeInlineFormError(rr, req, "validation failed")
 
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
@@ -45,7 +45,7 @@ func TestWriteSchemaFormError_StatusCode(t *testing.T) {
 		req.Header.Set("HX-Request", "true")
 		rr := httptest.NewRecorder()
 
-		h.writeSchemaFormError(rr, req, "validation failed")
+		h.writeInlineFormError(rr, req, "validation failed")
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
@@ -59,7 +59,7 @@ func TestWriteSchemaFormError_StatusCode(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/schemas/register", nil)
 		rr := httptest.NewRecorder()
 
-		h.writeSchemaFormError(rr, req, "validation failed")
+		h.writeInlineFormError(rr, req, "validation failed")
 
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
