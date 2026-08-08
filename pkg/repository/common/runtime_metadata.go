@@ -59,7 +59,7 @@ func ApplyRuntimeMetadata(msg *messagepb.Message, runtime RuntimeMetadata) {
 	hasAttemptRuntime := runtime.HasCurrentAttemptID || runtime.HasCurrentWorkerID || runtime.HasLeaseStartedAtMs ||
 		runtime.HasLeaseExpiryMs || runtime.HasLastHeartbeatAtMs || runtime.HasHeartbeatExpiryMs
 	hasLeaseRuntime := runtime.HasLeaseExtensionUsedMs || runtime.HasLeaseRenewalCount
-	if !hasAttemptRuntime && !(hasLeaseRuntime && attempt != nil) {
+	if !hasAttemptRuntime && (!hasLeaseRuntime || attempt == nil) {
 		return
 	}
 

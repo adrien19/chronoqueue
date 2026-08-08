@@ -162,15 +162,6 @@ endef
 
 # Generate binary targets
 $(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EXT),.,$(GOOS),$(GOARCH),$(CHRONOQUEUE_OUT_DIR))))
-define genBinariesForTarget
-.PHONY: $(5)/$(1)
-$(5)/$(1):
-	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags="$(LDFLAGS)" -tags=$(CHRONOQUEUE_GO_BUILD_TAGS) \
-	-o $(5)/$(1) $(2)/;
-endef
-
-# Generate binary targets
-$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EXT),.,$(GOOS),$(GOARCH),$(CHRONOQUEUE_OUT_DIR))))
 
 
 ################################################################################
