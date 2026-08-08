@@ -364,17 +364,19 @@ func (h *QueuesHandler) NewMessage(w http.ResponseWriter, r *http.Request) {
 	schemaOptions := h.loadSchemaOptions(ctx)
 
 	queueSchemaID, queueSchemaRequired, err := h.resolveQueueSchemaDefaults(ctx, queueName)
+	queueSchemaLookupFailed := err != nil
 	if err != nil {
 		h.logger.WarnWithFields("Failed to load queue schema defaults", "error", err, "queue", queueName)
 	}
 
 	h.render(w, "queue_message_new_content", map[string]any{
-		"PageTitle":           "New Message — " + queueName,
-		"Active":              "queues",
-		"QueueName":           queueName,
-		"Schemas":             schemaOptions,
-		"QueueSchemaID":       queueSchemaID,
-		"QueueSchemaRequired": queueSchemaRequired,
+		"PageTitle":               "New Message — " + queueName,
+		"Active":                  "queues",
+		"QueueName":               queueName,
+		"Schemas":                 schemaOptions,
+		"QueueSchemaID":           queueSchemaID,
+		"QueueSchemaRequired":     queueSchemaRequired,
+		"QueueSchemaLookupFailed": queueSchemaLookupFailed,
 	})
 }
 
@@ -588,7 +590,9 @@ func (h *QueuesHandler) ValidateMessage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = fmt.Fprintf(w, `<div class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">Payload is valid for schema <span class="font-mono">%s</span> (%s).</div>`, html.EscapeString(schemaID), html.EscapeString(versionLabel))
+	if _, err := fmt.Fprintf(w, `<div class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">Payload is valid for schema <span class="font-mono">%s</span> (%s).</div>`, html.EscapeString(schemaID), html.EscapeString(versionLabel)); err != nil {
+		h.logger.ErrorWithFields("Failed to write message validation response", "error", err)
+	}
 }
 
 func (h *QueuesHandler) resolveQueueSchemaDefaults(ctx context.Context, queueName string) (string, bool, error) {

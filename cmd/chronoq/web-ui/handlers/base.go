@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -76,9 +77,38 @@ func (h *BaseHandler) render(w http.ResponseWriter, contentTemplate string, data
 	}
 }
 
-// renderError writes a plain-text error response.
+// renderError writes an error response in the full UI shell when templates are available.
 func (h *BaseHandler) renderError(w http.ResponseWriter, statusCode int, message string) {
-	http.Error(w, message, statusCode)
+	if h.templates == nil || h.store == nil {
+		http.Error(w, message, statusCode)
+		return
+	}
+
+	data := map[string]any{
+		"PageTitle":    "Error",
+		"ErrorCode":    statusCode,
+		"ErrorTitle":   http.StatusText(statusCode),
+		"ErrorMessage": message,
+	}
+	h.injectBaseData(data)
+	data["ContentTemplate"] = "error_content"
+
+	var rendered bytes.Buffer
+	if err := h.templates.ExecuteTemplate(&rendered, "base", data); err != nil {
+		if h.logger != nil {
+			h.logger.ErrorWithFields("template execution failed", "error", err, "content", "error_content")
+		}
+		http.Error(w, message, statusCode)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(statusCode)
+	if _, err := w.Write(rendered.Bytes()); err != nil {
+		if h.logger != nil {
+			h.logger.ErrorWithFields("failed to write error response", "error", err)
+		}
+	}
 }
 
 // injectBaseData adds fields that every page template requires.
@@ -182,13 +212,14 @@ func isHTMXRequest(r *http.Request) bool {
 }
 
 func (h *BaseHandler) writeInlineFormError(w http.ResponseWriter, r *http.Request, message string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if isHTMXRequest(r) {
-		// HTMX does not swap non-2xx responses by default.
-		w.WriteHeader(http.StatusOK)
-	} else {
-		w.WriteHeader(http.StatusBadRequest)
+	if !isHTMXRequest(r) {
+		h.renderError(w, http.StatusBadRequest, message)
+		return
 	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// HTMX does not swap non-2xx responses by default.
+	w.WriteHeader(http.StatusOK)
 	escaped := html.EscapeString(message)
 	escaped = strings.ReplaceAll(escaped, "\n", "<br>")
 	if _, err := fmt.Fprintf(w, `<div class="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">%s</div>`, escaped); err != nil {

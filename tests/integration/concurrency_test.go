@@ -436,12 +436,16 @@ func TestConcurrency_LeaseExpiry_ConcurrentReclaim(t *testing.T) {
 	// Each message should be reclaimed exactly once
 	for msgID, count := range reclaimed {
 		assert.Equal(t, 1, count, "Message %s should be reclaimed exactly once, got %d", msgID, count)
-		finalState, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{QueueName: queueName})
-		require.NoError(t, err)
-
-		errored := finalState.GetStateCounts()["ERRORED"]
-		require.Equal(t, numMessages, len(reclaimed)+int(errored),
-			"each message must be reclaimed exactly once or move to ERRORED")
-		t.Skip("No reclaim observed within test window; skipping to avoid environment-timing flake")
 	}
+
+	finalState, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{QueueName: queueName})
+	require.NoError(t, err)
+
+	errored := finalState.GetStateCounts()["ERRORED"]
+	if len(reclaimed) == 0 && int(errored) != numMessages {
+		t.Skip("No reclaim observed and messages are not yet terminal; skipping to avoid environment-timing flake")
+	}
+
+	require.Equal(t, numMessages, len(reclaimed)+int(errored),
+		"each message must be reclaimed exactly once or move to ERRORED")
 }
