@@ -9,7 +9,7 @@
   </div>
 
   <div class="cq-panel p-6">
-    <form id="message-form" hx-post="/api/queues/{{ .QueueName }}/messages" hx-target="#form-result" class="space-y-6">
+    <form id="message-form" method="POST" action="/api/queues/{{ .QueueName }}/messages" hx-post="/api/queues/{{ .QueueName }}/messages" hx-target="#form-result" class="space-y-6">
 
       <div>
         <label class="mb-2 block text-sm font-medium text-zinc-200">Message ID</label>
@@ -55,9 +55,49 @@
         </div>
       </div>
 
+      <div class="space-y-4 rounded-xl border border-line bg-zinc-950/40 p-5">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-zinc-300">Schema Override</p>
+          {{ if .QueueSchemaID }}
+          <span class="cq-badge border-sky-500/25 bg-sky-500/10 text-sky-300">Queue default: {{ .QueueSchemaID }}</span>
+          {{ else }}
+          <span class="cq-badge cq-badge-muted">No queue default schema</span>
+          {{ end }}
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="mb-2 block text-sm font-medium text-zinc-200">Schema ID</label>
+            <input class="cq-input w-full" type="text" name="schema_id" list="message-schema-options" placeholder="order-schema">
+            <datalist id="message-schema-options">
+              {{ range .Schemas }}
+              <option value="{{ .SchemaID }}">{{ if .Name }}{{ .Name }}{{ else }}{{ .SchemaID }}{{ end }} (latest v{{ .LatestVersion }})</option>
+              {{ end }}
+            </datalist>
+            <p class="mt-1 text-xs text-zinc-500">Optional per-message schema override. Leave blank to use queue defaults.</p>
+          </div>
+          <div>
+            <label class="mb-2 block text-sm font-medium text-zinc-200">Schema Version</label>
+            <input class="cq-input w-full" type="number" name="schema_version" min="0" placeholder="0 (latest active)">
+            <p class="mt-1 text-xs text-zinc-500">Optional. Use 0 or leave blank to resolve latest active version.</p>
+          </div>
+        </div>
+        {{ if .QueueSchemaRequired }}
+        <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          This queue requires schema validation for all messages.
+        </div>
+        {{ end }}
+        <div id="validation-result"></div>
+      </div>
+
       <div id="form-result"></div>
 
       <div class="flex items-center gap-3 border-t border-line pt-4">
+        <button class="cq-btn" type="button"
+          formaction="/api/queues/{{ .QueueName }}/messages/validate"
+          formmethod="POST"
+          hx-post="/api/queues/{{ .QueueName }}/messages/validate"
+          hx-include="#message-form"
+          hx-target="#validation-result">Validate Payload</button>
         <button class="cq-btn cq-btn-primary" type="submit">Post Message</button>
         <a href="/queues/{{ .QueueName }}" class="cq-btn">Cancel</a>
       </div>
@@ -69,14 +109,124 @@
 (function () {
   var form = document.getElementById('message-form');
   if (!form) return;
-  form.addEventListener('htmx:configRequest', function (e) {
-    var raw = e.detail.parameters['deliver_at'];
+
+  function parseLocalDateTimeParts(raw) {
+    var match = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (!match) return null;
+    return {
+      year: Number(match[1]),
+      month: Number(match[2]),
+      day: Number(match[3]),
+      hour: Number(match[4]),
+      minute: Number(match[5]),
+      second: match[6] ? Number(match[6]) : 0
+    };
+  }
+
+  function localDateMatchesParts(date, parts) {
+    return date.getFullYear() === parts.year &&
+      date.getMonth() + 1 === parts.month &&
+      date.getDate() === parts.day &&
+      date.getHours() === parts.hour &&
+      date.getMinutes() === parts.minute &&
+      date.getSeconds() === parts.second;
+  }
+
+  function validateDeliverAtInput(report) {
+    var deliverAt = form.querySelector('#deliver_at');
+    if (!deliverAt) return true;
+
+    var raw = deliverAt.value;
+    if (!raw) {
+      deliverAt.setCustomValidity('');
+      return true;
+    }
+
+    var parts = parseLocalDateTimeParts(raw);
+    var parsed = new Date(raw);
+    if (!parts || isNaN(parsed.getTime()) || !localDateMatchesParts(parsed, parts)) {
+      deliverAt.setCustomValidity('Selected local time does not exist in your timezone due to daylight saving time. Choose another time.');
+      if (report) deliverAt.reportValidity();
+      return false;
+    }
+
+    deliverAt.setCustomValidity('');
+    return true;
+  }
+
+  function getUTCDeliverAtValue() {
+    var deliverAt = form.querySelector('#deliver_at');
+    if (!deliverAt || !deliverAt.value) return '';
+    if (!validateDeliverAtInput(false)) return '';
+    var d = new Date(deliverAt.value);
+    if (isNaN(d.getTime())) return '';
+    return d.toISOString().slice(0, 16);
+  }
+
+  function ensureFallbackHiddenField() {
+    var hidden = form.querySelector('#deliver_at_utc');
+    if (!hidden) {
+      hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.id = 'deliver_at_utc';
+      form.appendChild(hidden);
+    }
+    return hidden;
+  }
+
+  function applyFallbackSubmitDeliverAt() {
+    var raw = form.querySelector('#deliver_at');
     if (!raw) return;
-    var d = new Date(raw);
-    if (isNaN(d.getTime())) return;
-    // Replace the local datetime string with its UTC equivalent before sending.
-    e.detail.parameters['deliver_at'] = d.toISOString().slice(0, 16);
+
+    var originalName = raw.getAttribute('name') || 'deliver_at';
+    var hidden = form.querySelector('#deliver_at_utc');
+    var utcValue = getUTCDeliverAtValue();
+    if (!utcValue) {
+      if (hidden) hidden.remove();
+      raw.setAttribute('name', originalName);
+      return;
+    }
+
+    hidden = ensureFallbackHiddenField();
+
+    hidden.name = originalName;
+    hidden.value = utcValue;
+    raw.removeAttribute('name');
+  }
+
+  // Works for standard form submits when HTMX is unavailable.
+  form.addEventListener('submit', function (e) {
+    if (!validateDeliverAtInput(true)) {
+      e.preventDefault();
+      return;
+    }
+    if (typeof window.htmx !== 'undefined') return;
+    applyFallbackSubmitDeliverAt();
   });
+
+  // Prevent HTMX requests when deliver_at is a DST-normalized nonexistent local time.
+  form.addEventListener('htmx:beforeRequest', function (e) {
+    if (!validateDeliverAtInput(true)) {
+      e.preventDefault();
+    }
+  });
+
+  // Works for HTMX requests.
+  form.addEventListener('htmx:configRequest', function (e) {
+    var utcValue = getUTCDeliverAtValue();
+    if (!utcValue) return;
+    e.detail.parameters['deliver_at'] = utcValue;
+  });
+
+  var deliverAtInput = form.querySelector('#deliver_at');
+  if (deliverAtInput) {
+    deliverAtInput.addEventListener('input', function () {
+      validateDeliverAtInput(false);
+    });
+    deliverAtInput.addEventListener('change', function () {
+      validateDeliverAtInput(false);
+    });
+  }
 })();
 </script>
 {{ end }}

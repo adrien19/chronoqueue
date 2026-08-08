@@ -2,8 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"html"
 	"html/template"
 	"net/http"
+	"strings"
 
 	"github.com/adrien19/chronoqueue/client"
 	clusterstore "github.com/adrien19/chronoqueue/cmd/chronoq/web-ui/cluster"
@@ -107,6 +110,7 @@ func consoleNav() []NavItem {
 	return []NavItem{
 		{Label: "Home", Href: "/", Key: "home"},
 		{Label: "Queues", Href: "/queues", Key: "queues"},
+		{Label: "Schemas", Href: "/schemas", Key: "schemas"},
 		{Label: "Workers", Href: "/workers", Key: "workers"},
 		{Label: "Lease monitor", Href: "/lease-monitor", Key: "lease-monitor"},
 		{Label: "Schedules", Href: "/schedules", Key: "schedules"},
@@ -171,4 +175,21 @@ func ToJSON(v any) template.JS {
 		return template.JS("null")
 	}
 	return template.JS(b) //nolint:gosec // data is already marshalled JSON, not user HTML
+}
+
+func isHTMXRequest(r *http.Request) bool {
+	return strings.EqualFold(strings.TrimSpace(r.Header.Get("HX-Request")), "true")
+}
+
+func (h *BaseHandler) writeInlineFormError(w http.ResponseWriter, r *http.Request, message string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if isHTMXRequest(r) {
+		// HTMX does not swap non-2xx responses by default.
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+	escaped := html.EscapeString(message)
+	escaped = strings.ReplaceAll(escaped, "\n", "<br>")
+	_, _ = fmt.Fprintf(w, `<div class="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">%s</div>`, escaped)
 }

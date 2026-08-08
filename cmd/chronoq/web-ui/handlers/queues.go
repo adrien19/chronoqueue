@@ -7,6 +7,7 @@ import (
 	"html"
 	"html/template"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -47,6 +48,13 @@ type QueueDetail struct {
 	SourceQueue string // non-empty when this queue is itself a DLQ
 	Completed   string
 	IsDLQ       bool
+}
+
+// QueueSchemaOption is the view model for queue create schema suggestions.
+type QueueSchemaOption struct {
+	SchemaID      string
+	LatestVersion int32
+	Name          string
 }
 
 // shortenID truncates an ID to the first 12 characters.
@@ -144,9 +152,15 @@ var queueNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
 // New renders the create queue form.
 func (h *QueuesHandler) New(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	schemaOptions := h.loadSchemaOptions(ctx)
+
 	h.render(w, "queue_new_content", map[string]any{
 		"PageTitle": "New Queue",
 		"Active":    "queues",
+		"Schemas":   schemaOptions,
 	})
 }
 
@@ -154,7 +168,7 @@ func (h *QueuesHandler) New(w http.ResponseWriter, r *http.Request) {
 func (h *QueuesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		h.logger.ErrorWithFields("Failed to parse form", "error", err)
-		h.writeFormError(w, "Invalid form data")
+		h.writeInlineFormError(w, r, "Invalid form data")
 		return
 	}
 
@@ -165,24 +179,26 @@ func (h *QueuesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	dlqName := strings.TrimSpace(r.FormValue("dlq_name"))
 	autoCreateDLQ := r.FormValue("auto_create_dlq") == "true"
 	maxAttemptsStr := r.FormValue("default_max_attempts")
+	schemaID := strings.TrimSpace(r.FormValue("schema_id"))
+	schemaRequired := r.FormValue("schema_required") == "true"
 
 	if name == "" {
-		h.writeFormError(w, "Queue name is required")
+		h.writeInlineFormError(w, r, "Queue name is required")
 		return
 	}
 	if !queueNamePattern.MatchString(name) {
-		h.writeFormError(w, "Queue name may only contain letters, digits, hyphens, and underscores, and must start with a letter or digit")
+		h.writeInlineFormError(w, r, "Queue name may only contain letters, digits, hyphens, and underscores, and must start with a letter or digit")
 		return
 	}
 	if queueType == "exclusive" && exclusivityKey == "" {
-		h.writeFormError(w, "Exclusivity key is required for exclusive queues")
+		h.writeInlineFormError(w, r, "Exclusivity key is required for exclusive queues")
 		return
 	}
 	if leaseDuration == "" {
 		leaseDuration = "30s"
 	}
 	if _, err := time.ParseDuration(leaseDuration); err != nil {
-		h.writeFormError(w, fmt.Sprintf("Invalid lease duration %q — use Go duration syntax, e.g. 30s, 5m, 1h", leaseDuration))
+		h.writeInlineFormError(w, r, fmt.Sprintf("Invalid lease duration %q — use Go duration syntax, e.g. 30s, 5m, 1h", leaseDuration))
 		return
 	}
 
@@ -190,7 +206,7 @@ func (h *QueuesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if maxAttemptsStr != "" {
 		v, err := strconv.ParseInt(maxAttemptsStr, 10, 32)
 		if err != nil || v < 1 {
-			h.writeFormError(w, "Max attempts must be a positive integer")
+			h.writeInlineFormError(w, r, "Max attempts must be a positive integer")
 			return
 		}
 		maxAttempts = int32(v)
@@ -200,6 +216,11 @@ func (h *QueuesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		dlqName = name + "-dlq"
 	}
 
+	if schemaRequired && schemaID == "" {
+		h.writeInlineFormError(w, r, "Schema ID is required when schema validation is mandatory")
+		return
+	}
+
 	opts := client.QueueOptions{
 		Type:                client.ParseQueueType(queueType),
 		DequeueAttempts:     maxAttempts,
@@ -207,6 +228,8 @@ func (h *QueuesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ExclusivityKey:      exclusivityKey,
 		DeadLetterQueueName: dlqName,
 		AutoCreateDLQ:       autoCreateDLQ,
+		SchemaID:            schemaID,
+		SchemaRequired:      schemaRequired,
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
@@ -214,23 +237,20 @@ func (h *QueuesHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := h.activeClient().CreateQueue(ctx, name, opts); err != nil {
 		h.logger.ErrorWithFields("Failed to create queue", "error", err, "queue", name)
-		h.writeFormError(w, fmt.Sprintf("Failed to create queue: %v", err))
+		h.writeInlineFormError(w, r, fmt.Sprintf("Failed to create queue: %v", err))
 		return
 	}
 
-	w.Header().Set("HX-Redirect", "/queues")
-	w.WriteHeader(http.StatusCreated)
-	if _, err := w.Write([]byte("Queue created successfully")); err != nil {
-		h.logger.Error("Failed to write response", "error", err)
+	if isHTMXRequest(r) {
+		w.Header().Set("HX-Redirect", "/queues")
+		w.WriteHeader(http.StatusCreated)
+		if _, err := w.Write([]byte("Queue created successfully")); err != nil {
+			h.logger.Error("Failed to write response", "error", err)
+		}
+		return
 	}
-}
 
-// writeFormError writes an inline error fragment into the HTMX form result target.
-func (h *QueuesHandler) writeFormError(w http.ResponseWriter, message string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusBadRequest)
-	escaped := html.EscapeString(message)
-	_, _ = fmt.Fprintf(w, `<div class="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">%s</div>`, escaped)
+	http.Redirect(w, r, "/queues", http.StatusSeeOther)
 }
 
 // Detail renders the queue detail page with message list.
@@ -337,10 +357,24 @@ func (h *QueuesHandler) NewMessage(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, http.StatusBadRequest, "Queue name required")
 		return
 	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	schemaOptions := h.loadSchemaOptions(ctx)
+
+	queueSchemaID, queueSchemaRequired, err := h.resolveQueueSchemaDefaults(ctx, queueName)
+	if err != nil {
+		h.logger.WarnWithFields("Failed to load queue schema defaults", "error", err, "queue", queueName)
+	}
+
 	h.render(w, "queue_message_new_content", map[string]any{
-		"PageTitle": "New Message — " + queueName,
-		"Active":    "queues",
-		"QueueName": queueName,
+		"PageTitle":           "New Message — " + queueName,
+		"Active":              "queues",
+		"QueueName":           queueName,
+		"Schemas":             schemaOptions,
+		"QueueSchemaID":       queueSchemaID,
+		"QueueSchemaRequired": queueSchemaRequired,
 	})
 }
 
@@ -348,13 +382,13 @@ func (h *QueuesHandler) NewMessage(w http.ResponseWriter, r *http.Request) {
 func (h *QueuesHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 	queueName := r.PathValue("name")
 	if queueName == "" {
-		h.writeFormError(w, "Queue name required")
+		h.writeInlineFormError(w, r, "Queue name required")
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
 		h.logger.ErrorWithFields("Failed to parse form", "error", err)
-		h.writeFormError(w, "Invalid form data")
+		h.writeInlineFormError(w, r, "Invalid form data")
 		return
 	}
 
@@ -365,17 +399,17 @@ func (h *QueuesHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 
 	payloadRaw := strings.TrimSpace(r.FormValue("payload_data"))
 	if payloadRaw == "" {
-		h.writeFormError(w, "Payload is required")
+		h.writeInlineFormError(w, r, "Payload is required")
 		return
 	}
 	var payloadMap map[string]any
 	if err := json.Unmarshal([]byte(payloadRaw), &payloadMap); err != nil {
-		h.writeFormError(w, fmt.Sprintf("Invalid JSON payload: %v", err))
+		h.writeInlineFormError(w, r, fmt.Sprintf("Invalid JSON payload: %v", err))
 		return
 	}
 	payloadStruct, err := structpb.NewStruct(payloadMap)
 	if err != nil {
-		h.writeFormError(w, fmt.Sprintf("Failed to build payload: %v", err))
+		h.writeInlineFormError(w, r, fmt.Sprintf("Failed to build payload: %v", err))
 		return
 	}
 
@@ -383,7 +417,7 @@ func (h *QueuesHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 	if v := strings.TrimSpace(r.FormValue("max_attempts")); v != "" {
 		n, err := strconv.ParseInt(v, 10, 32)
 		if err != nil || n < 1 {
-			h.writeFormError(w, "Max attempts must be a positive integer")
+			h.writeInlineFormError(w, r, "Max attempts must be a positive integer")
 			return
 		}
 		maxAttempts = int32(n)
@@ -393,11 +427,11 @@ func (h *QueuesHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 	if v := strings.TrimSpace(r.FormValue("priority")); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)
 		if err != nil || n < 0 {
-			h.writeFormError(w, "Priority must be a non-negative integer")
+			h.writeInlineFormError(w, r, "Priority must be a non-negative integer")
 			return
 		}
 		if n > 4 {
-			h.writeFormError(w, "Priority must be between 0 and 4")
+			h.writeInlineFormError(w, r, "Priority must be between 0 and 4")
 			return
 		}
 		priority = n
@@ -406,12 +440,28 @@ func (h *QueuesHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 	leaseDuration := strings.TrimSpace(r.FormValue("lease_duration"))
 	if leaseDuration != "" {
 		if _, err := time.ParseDuration(leaseDuration); err != nil {
-			h.writeFormError(w, fmt.Sprintf("Invalid lease duration %q — use Go duration syntax, e.g. 30s, 5m", leaseDuration))
+			h.writeInlineFormError(w, r, fmt.Sprintf("Invalid lease duration %q — use Go duration syntax, e.g. 30s, 5m", leaseDuration))
 			return
 		}
 	}
 
 	contentType := strings.TrimSpace(r.FormValue("content_type"))
+	schemaID := strings.TrimSpace(r.FormValue("schema_id"))
+	schemaVersionStr := strings.TrimSpace(r.FormValue("schema_version"))
+
+	var schemaVersion int32
+	if schemaVersionStr != "" {
+		n, err := strconv.ParseInt(schemaVersionStr, 10, 32)
+		if err != nil || n < 0 {
+			h.writeInlineFormError(w, r, "Schema version must be a non-negative integer")
+			return
+		}
+		schemaVersion = int32(n)
+	}
+	if schemaVersionStr != "" && schemaID == "" {
+		h.writeInlineFormError(w, r, "Schema ID is required when schema version is provided")
+		return
+	}
 
 	var scheduledTime *time.Time
 	if v := strings.TrimSpace(r.FormValue("deliver_at")); v != "" {
@@ -426,12 +476,12 @@ func (h *QueuesHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err != nil {
-			h.writeFormError(w, fmt.Sprintf("Invalid deliver-at time %q — expected YYYY-MM-DDTHH:MM", v))
+			h.writeInlineFormError(w, r, fmt.Sprintf("Invalid deliver-at time %q — expected YYYY-MM-DDTHH:MM", v))
 			return
 		}
 		parsed = parsed.UTC()
 		if !parsed.After(time.Now().UTC()) {
-			h.writeFormError(w, "Deliver at must be a future time")
+			h.writeInlineFormError(w, r, "Deliver at must be a future time")
 			return
 		}
 		scheduledTime = &parsed
@@ -439,8 +489,10 @@ func (h *QueuesHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 
 	opts := client.MessageOptions{
 		Payload: client.Payload{
-			Data:        payloadStruct,
-			ContentType: contentType,
+			Data:          payloadStruct,
+			ContentType:   contentType,
+			SchemaID:      schemaID,
+			SchemaVersion: schemaVersion,
 		},
 		MaxAttempts:   maxAttempts,
 		AttemptsLeft:  maxAttempts,
@@ -454,15 +506,127 @@ func (h *QueuesHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := h.activeClient().PostMessage(ctx, queueName, messageID, opts); err != nil {
 		h.logger.ErrorWithFields("Failed to post message", "error", err, "queue", queueName)
-		h.writeFormError(w, fmt.Sprintf("Failed to post message: %v", err))
+		h.writeInlineFormError(w, r, fmt.Sprintf("Failed to post message: %v", err))
 		return
 	}
 
-	w.Header().Set("HX-Redirect", "/queues/"+html.EscapeString(queueName))
-	w.WriteHeader(http.StatusCreated)
-	if _, err := w.Write([]byte("Message posted")); err != nil {
-		h.logger.Error("Failed to write response", "error", err)
+	redirectTarget := "/queues/" + url.PathEscape(queueName)
+	if isHTMXRequest(r) {
+		w.Header().Set("HX-Redirect", redirectTarget)
+		w.WriteHeader(http.StatusCreated)
+		if _, err := w.Write([]byte("Message posted")); err != nil {
+			h.logger.Error("Failed to write response", "error", err)
+		}
+		return
 	}
+
+	http.Redirect(w, r, redirectTarget, http.StatusSeeOther)
+}
+
+// ValidateMessage validates payload JSON against selected schema in the post-message flow.
+func (h *QueuesHandler) ValidateMessage(w http.ResponseWriter, r *http.Request) {
+	queueName := r.PathValue("name")
+	if queueName == "" {
+		h.writeInlineFormError(w, r, "Queue name required")
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		h.writeInlineFormError(w, r, "Invalid form data")
+		return
+	}
+
+	payloadRaw := strings.TrimSpace(r.FormValue("payload_data"))
+	if payloadRaw == "" {
+		h.writeInlineFormError(w, r, "Payload is required")
+		return
+	}
+	var payloadJSON any
+	if err := json.Unmarshal([]byte(payloadRaw), &payloadJSON); err != nil {
+		h.writeInlineFormError(w, r, fmt.Sprintf("Invalid JSON payload: %v", err))
+		return
+	}
+
+	schemaID := strings.TrimSpace(r.FormValue("schema_id"))
+	schemaVersionStr := strings.TrimSpace(r.FormValue("schema_version"))
+
+	var schemaVersion int32
+	if schemaVersionStr != "" {
+		n, err := strconv.ParseInt(schemaVersionStr, 10, 32)
+		if err != nil || n < 0 {
+			h.writeInlineFormError(w, r, "Schema version must be a non-negative integer")
+			return
+		}
+		schemaVersion = int32(n)
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	if schemaID == "" {
+		queueSchemaID, _, err := h.resolveQueueSchemaDefaults(ctx, queueName)
+		if err != nil {
+			h.logger.ErrorWithFields("Failed to resolve queue schema defaults", "error", err, "queue", queueName)
+			h.writeInlineFormError(w, r, "Failed to resolve queue schema defaults")
+			return
+		}
+		schemaID = queueSchemaID
+	}
+	if schemaID == "" {
+		h.writeInlineFormError(w, r, "Select a schema or configure a queue default schema before validating")
+		return
+	}
+
+	if err := h.activeClient().ValidatePayload(ctx, schemaID, schemaVersion, payloadRaw); err != nil {
+		h.writeInlineFormError(w, r, fmt.Sprintf("Validation failed: %v", err))
+		return
+	}
+
+	versionLabel := "latest active version"
+	if schemaVersion > 0 {
+		versionLabel = fmt.Sprintf("v%d", schemaVersion)
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = fmt.Fprintf(w, `<div class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">Payload is valid for schema <span class="font-mono">%s</span> (%s).</div>`, html.EscapeString(schemaID), html.EscapeString(versionLabel))
+}
+
+func (h *QueuesHandler) resolveQueueSchemaDefaults(ctx context.Context, queueName string) (string, bool, error) {
+	listResp, err := h.activeClient().ListQueues(ctx, queueName)
+	if err != nil {
+		return "", false, err
+	}
+
+	for _, q := range listResp.GetQueues() {
+		if q.GetName() != queueName {
+			continue
+		}
+		if meta := q.GetMetadata(); meta != nil {
+			return meta.GetSchemaId(), meta.GetSchemaRequired(), nil
+		}
+		break
+	}
+
+	return "", false, nil
+}
+
+func (h *QueuesHandler) loadSchemaOptions(ctx context.Context) []QueueSchemaOption {
+	schemaOptions := make([]QueueSchemaOption, 0)
+	schemas, err := h.activeClient().ListSchemas(ctx, "", 200, true)
+	if err != nil {
+		h.logger.WarnWithFields("Failed to load schema options", "error", err)
+		return schemaOptions
+	}
+
+	for _, item := range schemas {
+		schemaOptions = append(schemaOptions, QueueSchemaOption{
+			SchemaID:      mapString(item, "schema_id"),
+			LatestVersion: mapInt32(item, "version"),
+			Name:          mapString(item, "name"),
+		})
+	}
+
+	return schemaOptions
 }
 
 // MessageDetail returns the modal HTML for a specific message (HTMX partial).

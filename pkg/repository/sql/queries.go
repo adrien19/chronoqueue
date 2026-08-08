@@ -25,7 +25,7 @@ func (qb *QueryBuilder) BuildFindExpiredMessagesQuery() string {
 		FROM cq_messages
 		WHERE queue_name = %s
 		  AND state = 2
-		  AND (lease_expiry < %s OR (heartbeat_expiry IS NOT NULL AND heartbeat_expiry < %s))
+		  AND (lease_expiry <= %s OR (heartbeat_expiry IS NOT NULL AND heartbeat_expiry > 0 AND heartbeat_expiry <= %s))
 		ORDER BY priority DESC, id ASC
 		LIMIT %s
 	`, qb.dialect.Placeholder(1), qb.dialect.Placeholder(2),

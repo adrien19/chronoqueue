@@ -848,15 +848,26 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 
 // PeekMessages retrieves messages without claiming them
 func (s *Storage) PeekMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error) {
+	nowMs := s.Clock.NowMs()
 	query := `
-		SELECT metadata_pb
+		SELECT metadata_pb,
+		       state,
+		       current_attempt_id,
+		       current_worker_id,
+		       lease_started_at,
+		       lease_expiry,
+		       lease_extension_used,
+		       lease_renewal_count,
+		       last_heartbeat_at,
+		       heartbeat_expiry
 		FROM cq_messages
-		WHERE queue_name = ? AND deleted_at IS NULL
+		WHERE queue_name = ?
+		  AND (deleted_at IS NULL OR deleted_at > ?)
 		ORDER BY priority DESC, id ASC
 		LIMIT ?
 	`
 
-	rows, err := s.DB.QueryContext(ctx, query, queueName, limit)
+	rows, err := s.DB.QueryContext(ctx, query, queueName, nowMs, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query messages: %w", err)
 	}
@@ -865,7 +876,28 @@ func (s *Storage) PeekMessages(ctx context.Context, queueName string, limit int3
 	var messages []*messagepb.Message
 	for rows.Next() {
 		var messageBytes []byte
-		if err := rows.Scan(&messageBytes); err != nil {
+		var stateInt int32
+		var currentAttemptID sql.NullString
+		var currentWorkerID sql.NullString
+		var leaseStartedAt sql.NullInt64
+		var leaseExpiry sql.NullInt64
+		var leaseExtensionUsed sql.NullInt64
+		var leaseRenewalCount sql.NullInt32
+		var lastHeartbeatAt sql.NullInt64
+		var heartbeatExpiry sql.NullInt64
+
+		if err := rows.Scan(
+			&messageBytes,
+			&stateInt,
+			&currentAttemptID,
+			&currentWorkerID,
+			&leaseStartedAt,
+			&leaseExpiry,
+			&leaseExtensionUsed,
+			&leaseRenewalCount,
+			&lastHeartbeatAt,
+			&heartbeatExpiry,
+		); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 
@@ -877,6 +909,26 @@ func (s *Storage) PeekMessages(ctx context.Context, queueName string, limit int3
 		if err := repositorycommon.DecryptMessagePayload(msg, s.KeyManager); err != nil {
 			return nil, fmt.Errorf("decrypt message payload: %w", err)
 		}
+
+		repositorycommon.ApplyRuntimeMetadata(msg, repositorycommon.RuntimeMetadata{
+			State:                   messagepb.Message_Metadata_State(stateInt),
+			CurrentAttemptID:        currentAttemptID.String,
+			HasCurrentAttemptID:     currentAttemptID.Valid,
+			CurrentWorkerID:         currentWorkerID.String,
+			HasCurrentWorkerID:      currentWorkerID.Valid,
+			LeaseStartedAtMs:        leaseStartedAt.Int64,
+			HasLeaseStartedAtMs:     leaseStartedAt.Valid,
+			LeaseExpiryMs:           leaseExpiry.Int64,
+			HasLeaseExpiryMs:        leaseExpiry.Valid,
+			LeaseExtensionUsedMs:    leaseExtensionUsed.Int64,
+			HasLeaseExtensionUsedMs: leaseExtensionUsed.Valid,
+			LeaseRenewalCount:       leaseRenewalCount.Int32,
+			HasLeaseRenewalCount:    leaseRenewalCount.Valid,
+			LastHeartbeatAtMs:       lastHeartbeatAt.Int64,
+			HasLastHeartbeatAtMs:    lastHeartbeatAt.Valid,
+			HeartbeatExpiryMs:       heartbeatExpiry.Int64,
+			HasHeartbeatExpiryMs:    heartbeatExpiry.Valid,
+		})
 
 		messages = append(messages, msg)
 	}

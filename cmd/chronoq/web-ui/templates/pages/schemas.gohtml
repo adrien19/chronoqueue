@@ -1,0 +1,64 @@
+{{ define "schemas_content" }}
+<section class="space-y-5">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h2 class="text-2xl font-semibold text-white">Schemas</h2>
+      <p class="mt-1 text-sm text-zinc-500">Manage queue payload validation schemas</p>
+    </div>
+    <a href="/schemas/new" class="cq-btn cq-btn-primary">Register schema</a>
+  </div>
+
+  <div class="cq-panel p-4">
+    <form method="GET" action="/schemas" class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-end gap-3">
+      <div>
+        <label class="mb-2 block text-sm font-medium text-zinc-200">Prefix</label>
+        <input class="cq-input w-full" type="text" name="prefix" value="{{ .Prefix }}" placeholder="order-">
+      </div>
+      <label class="flex items-center gap-2 pb-2 text-sm text-zinc-300">
+        <input type="hidden" name="active_only" value="false">
+        <input type="checkbox" class="rounded border-line bg-zinc-900 text-blue-500" name="active_only" value="true" {{ if .ActiveOnly }}checked{{ end }}>
+        Active only
+      </label>
+      <button type="submit" class="cq-btn">Filter</button>
+    </form>
+  </div>
+
+  <div class="cq-panel overflow-hidden">
+    <table class="cq-table">
+      <thead>
+        <tr>
+          <th>Schema ID</th>
+          <th>Name</th>
+          <th>Latest</th>
+          <th>Versions</th>
+          <th>Created</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ range .SchemaItems }}
+        <tr>
+          <td class="font-medium text-white"><a class="hover:text-blue-300" href="/schemas/{{ .SchemaID }}">{{ .SchemaID }}</a></td>
+          <td>{{ if .Name }}{{ .Name }}{{ else }}<span class="text-zinc-500">-</span>{{ end }}</td>
+          <td>v{{ .LatestVersion }}</td>
+          <td>{{ .VersionCount }}</td>
+          <td class="text-zinc-400">{{ .CreatedAt }}</td>
+          <td>
+            {{ if .IsActive }}
+            <span class="cq-badge cq-badge-good">Active</span>
+            {{ else }}
+            <span class="cq-badge cq-badge-muted">Inactive</span>
+            {{ end }}
+          </td>
+        </tr>
+        {{ end }}
+        {{ if not .SchemaItems }}
+        <tr>
+          <td colspan="6" class="py-8 text-center text-zinc-500">No schemas found. <a href="/schemas/new" class="text-blue-300">Register one -></a></td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{ end }}

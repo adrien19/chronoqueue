@@ -111,9 +111,7 @@ func TestRetentionPolicy_DeleteImmediately(t *testing.T) {
 }
 
 // TestRetentionPolicy_RetainDuration validates that messages with RETAIN_DURATION policy
-// are soft-deleted and not visible after acknowledgment.
-//
-// Expected: Message is soft-deleted (not visible) but retained for audit purposes
+// are hidden from consumers but remain visible to peek for audit/UI purposes.
 func TestRetentionPolicy_RetainDuration(t *testing.T) {
 	t.Parallel()
 
@@ -197,19 +195,19 @@ func TestRetentionPolicy_RetainDuration(t *testing.T) {
 		t.Error("Soft-deleted message should not be visible after acknowledgment with RETAIN_DURATION policy")
 	}
 
-	// Verify message is also not visible via Peek
+	// Verify message remains visible via Peek for audit/UI purposes until retention expires.
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
 		Limit:     10,
 	})
 	require.NoError(t, err)
-	assert.Empty(t, peekResp.Messages, "Soft-deleted messages should not be visible in peek")
+	require.Len(t, peekResp.Messages, 1)
+	assert.Equal(t, msgID, peekResp.Messages[0].GetMessageId())
+	assert.Equal(t, message_pb.Message_Metadata_COMPLETED, peekResp.Messages[0].GetMetadata().GetState())
 }
 
 // TestRetentionPolicy_RetainForever validates that messages with RETAIN_FOREVER policy
-// are soft-deleted and never auto-cleaned.
-//
-// Expected: Message is soft-deleted (not visible) but retained indefinitely
+// are hidden from consumers but remain visible to peek indefinitely.
 func TestRetentionPolicy_RetainForever(t *testing.T) {
 	t.Parallel()
 
@@ -290,6 +288,15 @@ func TestRetentionPolicy_RetainForever(t *testing.T) {
 	if err == nil && getResp2 != nil && getResp2.Message != nil {
 		t.Error("Soft-deleted message should not be visible after acknowledgment with RETAIN_FOREVER policy")
 	}
+
+	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
+		QueueName: queueName,
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, peekResp.Messages, 1)
+	assert.Equal(t, msgID, peekResp.Messages[0].GetMessageId())
+	assert.Equal(t, message_pb.Message_Metadata_COMPLETED, peekResp.Messages[0].GetMetadata().GetState())
 }
 
 // TestRetentionPolicy_NackWithRetention validates that NACK with max retries exhausted
@@ -379,6 +386,15 @@ func TestRetentionPolicy_NackWithRetention(t *testing.T) {
 	if err == nil && getResp2 != nil && getResp2.Message != nil {
 		t.Error("Message should be soft-deleted after NACK exhausts retries with retention policy")
 	}
+
+	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
+		QueueName: queueName,
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, peekResp.Messages, 1)
+	assert.Equal(t, msgID, peekResp.Messages[0].GetMessageId())
+	assert.Equal(t, message_pb.Message_Metadata_ERRORED, peekResp.Messages[0].GetMetadata().GetState())
 }
 
 // TestRetentionPolicy_MultipleMessages validates retention policy works correctly
@@ -471,13 +487,16 @@ func TestRetentionPolicy_MultipleMessages(t *testing.T) {
 		t.Error("All messages should be soft-deleted")
 	}
 
-	// Verify peek also returns empty
+	// Verify peek still exposes the retained completed messages for audit/UI purposes.
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
 		Limit:     10,
 	})
 	require.NoError(t, err)
-	assert.Empty(t, peekResp.Messages, "Peek should return no messages after all are soft-deleted")
+	require.Len(t, peekResp.Messages, messageCount)
+	for _, msg := range peekResp.Messages {
+		assert.Equal(t, message_pb.Message_Metadata_COMPLETED, msg.GetMetadata().GetState())
+	}
 }
 
 // TestRetentionPolicy_ExplicitDeleteImmediately validates that explicitly setting

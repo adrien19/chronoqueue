@@ -1,11 +1,11 @@
-//go:build integration && sqlite
-// +build integration,sqlite
+//go:build integration && sqlite && cgo
+// +build integration,sqlite,cgo
 
 package integration
 
 import (
 	"context"
-	"path/filepath"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -13,232 +13,224 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/adrien19/chronoqueue/internal/server"
-
+	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
+	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
+	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
-	schema_pb "github.com/adrien19/chronoqueue/api/schema/v1"
 )
 
 func TestSQLiteSchemaIntegration(t *testing.T) {
-	// Create temporary directory for test database
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test-schema.db")
+	h := startSQLiteServer(t, "test-schema.db")
+	defer h.shutdown(t)
 
-	// Configure server with SQLite
-	config := server.DefaultConfig()
-	config.StorageType = "sqlite"
-	config.SQLiteDBPath = dbPath
-	config.GRPCAddr = ":19001" // Use different port
-	config.HTTPAddr = ":18081"
-	config.IsDevelopment = true
-
-	// Create and start server
-	srv, err := server.New(config)
-	require.NoError(t, err)
-
-	// Start server in background
-	serverDone := make(chan error, 1)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	go func() {
-		serverDone <- srv.Start(ctx)
+	conn, err := grpc.NewClient(h.grpcTarget, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	defer func() {
+		if closeErr := conn.Close(); closeErr != nil {
+			t.Errorf("failed to close grpc connection: %v", closeErr)
+		}
 	}()
 
-	// Give server time to start
-	time.Sleep(500 * time.Millisecond)
-
-	// Connect to gRPC server
-	conn, err := grpc.Dial(
-		"localhost:19001",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	require.NoError(t, err)
-	defer conn.Close()
-
 	client := queueservicepb.NewQueueServiceClient(conn)
+	queueName := "validated-queue"
 
-	// Test 1: Register a schema
 	t.Run("RegisterSchema", func(t *testing.T) {
-		registerReq := &queueservicepb.RegisterSchemaRequest{
-			Schema: &schema_pb.Schema{
-				SchemaId:    "user.profile.v1",
-				Name:        "User Profile Schema",
-				Description: "Schema for user profile data",
-				Content: `{
-					"type": "object",
-					"required": ["name", "email"],
-					"properties": {
-						"name": {"type": "string"},
-						"email": {"type": "string", "format": "email"},
-						"age": {"type": "number", "minimum": 0}
-					}
-				}`,
-				ContentType: "json-schema",
-			},
-		}
-
-		resp, err := client.RegisterSchema(ctx, registerReq)
+		resp, err := client.RegisterSchema(ctx, &queueservicepb.RegisterSchemaRequest{
+			SchemaId:    "user.profile.v1",
+			Name:        "User Profile Schema",
+			Description: "Schema for user profile data",
+			Content: `{
+				"type": "object",
+				"required": ["name", "email"],
+				"properties": {
+					"name": {"type": "string"},
+					"email": {"type": "string", "format": "email"},
+					"age": {"type": "number", "minimum": 0}
+				}
+			}`,
+			ContentType: "json-schema",
+		})
 		require.NoError(t, err)
-		assert.NotNil(t, resp)
-		assert.Equal(t, "user.profile.v1", resp.SchemaId)
-		assert.Equal(t, int32(1), resp.Version)
+		assert.Equal(t, "user.profile.v1", resp.GetSchemaId())
+		assert.Equal(t, int32(1), resp.GetVersion())
 	})
 
-	// Test 2: Get the registered schema
 	t.Run("GetSchema", func(t *testing.T) {
-		getReq := &queueservicepb.GetSchemaRequest{
+		resp, err := client.GetSchema(ctx, &queueservicepb.GetSchemaRequest{
 			SchemaId: "user.profile.v1",
 			Version:  1,
-		}
-
-		resp, err := client.GetSchema(ctx, getReq)
+		})
 		require.NoError(t, err)
-		assert.NotNil(t, resp.Schema)
-		assert.Equal(t, "user.profile.v1", resp.Schema.SchemaId)
-		assert.Equal(t, int32(1), resp.Schema.Version)
-		assert.Equal(t, "User Profile Schema", resp.Schema.Name)
-		assert.True(t, resp.Schema.IsActive)
+		require.NotNil(t, resp.GetSchema())
+		assert.Equal(t, "user.profile.v1", resp.GetSchema().GetSchemaId())
+		assert.Equal(t, int32(1), resp.GetSchema().GetVersion())
+		assert.Equal(t, "User Profile Schema", resp.GetSchema().GetName())
+		assert.True(t, resp.GetSchema().GetIsActive())
 	})
 
-	// Test 3: List schemas
 	t.Run("ListSchemas", func(t *testing.T) {
-		listReq := &queueservicepb.ListSchemasRequest{}
-
-		resp, err := client.ListSchemas(ctx, listReq)
+		resp, err := client.ListSchemas(ctx, &queueservicepb.ListSchemasRequest{})
 		require.NoError(t, err)
-		assert.NotNil(t, resp)
-		assert.Len(t, resp.Schemas, 1)
-		assert.Equal(t, "user.profile.v1", resp.Schemas[0].SchemaId)
+		require.NotEmpty(t, resp.GetSchemas())
+		assert.Equal(t, "user.profile.v1", resp.GetSchemas()[0].GetSchemaId())
 	})
 
-	// Test 4: Validate payload against schema
 	t.Run("ValidatePayload", func(t *testing.T) {
-		// Valid payload
-		validateReq := &queueservicepb.ValidatePayloadRequest{
+		resp, err := client.ValidatePayload(ctx, &queueservicepb.ValidatePayloadRequest{
 			SchemaId: "user.profile.v1",
 			Version:  1,
-			Payload: []byte(`{
+			Payload: `{
 				"name": "John Doe",
 				"email": "john@example.com",
 				"age": 30
-			}`),
-		}
-
-		resp, err := client.ValidatePayload(ctx, validateReq)
+			}`,
+		})
 		require.NoError(t, err)
-		assert.NotNil(t, resp.Result)
-		assert.True(t, resp.Result.Valid)
-		assert.Empty(t, resp.Result.Errors)
+		assert.True(t, resp.GetValid())
+		assert.Empty(t, resp.GetErrors())
 	})
 
-	// Test 5: Validate invalid payload
 	t.Run("ValidateInvalidPayload", func(t *testing.T) {
-		// Missing required field
-		validateReq := &queueservicepb.ValidatePayloadRequest{
+		resp, err := client.ValidatePayload(ctx, &queueservicepb.ValidatePayloadRequest{
 			SchemaId: "user.profile.v1",
 			Version:  1,
-			Payload: []byte(`{
+			Payload: `{
 				"name": "John Doe"
-			}`),
-		}
-
-		resp, err := client.ValidatePayload(ctx, validateReq)
+			}`,
+		})
 		require.NoError(t, err)
-		assert.NotNil(t, resp.Result)
-		assert.False(t, resp.Result.Valid)
-		assert.NotEmpty(t, resp.Result.Errors)
+		assert.False(t, resp.GetValid())
+		assert.NotEmpty(t, resp.GetErrors())
 	})
 
-	// Test 6: Create queue with schema validation
 	t.Run("CreateQueueWithSchema", func(t *testing.T) {
-		createReq := &queueservicepb.CreateQueueRequest{
-			Name:     "validated-queue",
-			Type:     "simple",
-			SchemaId: "user.profile.v1",
-		}
-
-		resp, err := client.CreateQueue(ctx, createReq)
-		require.NoError(t, err)
-		assert.NotNil(t, resp)
-		assert.Equal(t, "validated-queue", resp.Queue.Name)
-	})
-
-	// Test 7: Post message with valid payload (should succeed)
-	t.Run("PostValidMessage", func(t *testing.T) {
-		postReq := &queueservicepb.PostMessageRequest{
-			QueueName: "validated-queue",
-			MessageId: "msg-valid",
-			Payload: []byte(`{
-				"name": "Jane Doe",
-				"email": "jane@example.com",
-				"age": 25
-			}`),
-		}
-
-		resp, err := client.PostMessage(ctx, postReq)
-		require.NoError(t, err)
-		assert.NotNil(t, resp)
-		assert.Equal(t, "msg-valid", resp.MessageId)
-	})
-
-	// Test 8: Register new version of schema
-	t.Run("RegisterSchemaVersion2", func(t *testing.T) {
-		registerReq := &queueservicepb.RegisterSchemaRequest{
-			Schema: &schema_pb.Schema{
-				SchemaId:    "user.profile.v1",
-				Name:        "User Profile Schema v2",
-				Description: "Updated schema with phone field",
-				Content: `{
-					"type": "object",
-					"required": ["name", "email"],
-					"properties": {
-						"name": {"type": "string"},
-						"email": {"type": "string", "format": "email"},
-						"age": {"type": "number", "minimum": 0},
-						"phone": {"type": "string"}
-					}
-				}`,
-				ContentType: "json-schema",
+		resp, err := client.CreateQueue(ctx, &queueservicepb.CreateQueueRequest{
+			Name: queueName,
+			Metadata: &queuepb.QueueMetadata{
+				Type:           queuepb.QueueType_SIMPLE,
+				SchemaId:       "user.profile.v1",
+				SchemaRequired: true,
 			},
-		}
-
-		resp, err := client.RegisterSchema(ctx, registerReq)
+		})
 		require.NoError(t, err)
-		assert.NotNil(t, resp)
-		assert.Equal(t, int32(2), resp.Version)
+		assert.True(t, resp.GetSuccess())
 	})
 
-	// Test 9: Deactivate schema version
-	t.Run("DeactivateSchema", func(t *testing.T) {
-		deactivateReq := &queueservicepb.DeactivateSchemaRequest{
-			SchemaId: "user.profile.v1",
-			Version:  1,
-		}
+	t.Run("PostValidMessage", func(t *testing.T) {
+		payloadData := mustJSONStruct(t, map[string]interface{}{
+			"name":  "Jane Doe",
+			"email": "jane@example.com",
+			"age":   25,
+		})
 
-		_, err := client.DeactivateSchema(ctx, deactivateReq)
+		resp, err := client.PostMessage(ctx, &queueservicepb.PostMessageRequest{
+			QueueName: queueName,
+			Message: &messagepb.Message{
+				MessageId: "msg-valid",
+				Metadata: &messagepb.Message_Metadata{
+					Payload: &commonpb.Payload{
+						Data:        payloadData,
+						ContentType: "application/json",
+					},
+					Priority:    1,
+					MaxAttempts: 1,
+				},
+			},
+		})
 		require.NoError(t, err)
-
-		// Verify it's deactivated
-		getReq := &queueservicepb.GetSchemaRequest{
-			SchemaId: "user.profile.v1",
-			Version:  1,
-		}
-
-		resp, err := client.GetSchema(ctx, getReq)
-		require.NoError(t, err)
-		assert.False(t, resp.Schema.IsActive)
+		assert.True(t, resp.GetSuccess())
 	})
 
-	// Shutdown server
-	cancel()
-	select {
-	case err := <-serverDone:
-		if err != nil {
-			t.Logf("Server shutdown with: %v", err)
+	t.Run("PostInvalidMessageFailsValidation", func(t *testing.T) {
+		payloadData := mustJSONStruct(t, map[string]interface{}{
+			"name": "Only Name",
+		})
+
+		_, err := client.PostMessage(ctx, &queueservicepb.PostMessageRequest{
+			QueueName: queueName,
+			Message: &messagepb.Message{
+				MessageId: "msg-invalid",
+				Metadata: &messagepb.Message_Metadata{
+					Payload: &commonpb.Payload{
+						Data:        payloadData,
+						ContentType: "application/json",
+					},
+					Priority:    1,
+					MaxAttempts: 1,
+				},
+			},
+		})
+		require.Error(t, err)
+	})
+
+	t.Run("RegisterSchemaVersion2", func(t *testing.T) {
+		resp, err := client.RegisterSchema(ctx, &queueservicepb.RegisterSchemaRequest{
+			SchemaId:    "user.profile.v1",
+			Name:        "User Profile Schema v2",
+			Description: "Updated schema with phone field",
+			Content: `{
+				"type": "object",
+				"required": ["name", "email"],
+				"properties": {
+					"name": {"type": "string"},
+					"email": {"type": "string", "format": "email"},
+					"age": {"type": "number", "minimum": 0},
+					"phone": {"type": "string"}
+				}
+			}`,
+			ContentType: "json-schema",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, int32(2), resp.GetVersion())
+	})
+
+	t.Run("DeleteSchemaVersion", func(t *testing.T) {
+		resp, err := client.DeleteSchema(ctx, &queueservicepb.DeleteSchemaRequest{
+			SchemaId: "user.profile.v1",
+			Version:  1,
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.GetSuccess())
+		assert.Equal(t, int32(1), resp.GetVersionsDeleted())
+
+		schemaResp, err := client.GetSchema(ctx, &queueservicepb.GetSchemaRequest{
+			SchemaId: "user.profile.v1",
+			Version:  1,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, schemaResp.GetSchema())
+		assert.False(t, schemaResp.GetSchema().GetIsActive())
+
+		activeOnlyResp, err := client.ListSchemas(ctx, &queueservicepb.ListSchemasRequest{
+			ActiveOnly: true,
+		})
+		require.NoError(t, err)
+		foundActiveV2 := false
+		for _, s := range activeOnlyResp.GetSchemas() {
+			if s.GetSchemaId() == "user.profile.v1" && s.GetLatestVersion() == 2 {
+				foundActiveV2 = true
+			}
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("Server did not shutdown in time")
-	}
+		assert.True(t, foundActiveV2, "schema user.profile.v1 should remain active via version 2")
+	})
+}
+
+func mustJSONStruct(t *testing.T, v map[string]interface{}) *structpb.Struct {
+	t.Helper()
+
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+
+	var asMap map[string]interface{}
+	err = json.Unmarshal(b, &asMap)
+	require.NoError(t, err)
+
+	s, err := structpb.NewStruct(asMap)
+	require.NoError(t, err)
+	return s
 }

@@ -1,6 +1,8 @@
 package webui
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -57,6 +59,71 @@ func TestTemplateFuncs(t *testing.T) {
 		}
 		if fn(5, 2) != 3 {
 			t.Error("expected 3")
+		}
+	})
+}
+
+func TestValidateMutationOrigin(t *testing.T) {
+	configured := normalizedOrigin{Scheme: "https", Host: "console.example", Port: "8443"}
+
+	t.Run("rejects missing origin", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "https://console.example:8443/api/queues/create", nil)
+		req.Host = "console.example:8443"
+
+		err := validateMutationOrigin(req, configured, true, false)
+		if err == nil {
+			t.Fatal("expected error for missing origin")
+		}
+	})
+
+	t.Run("accepts exact origin", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "https://console.example:8443/api/queues/create", nil)
+		req.Host = "console.example:8443"
+		req.Header.Set("Origin", "https://console.example:8443")
+
+		err := validateMutationOrigin(req, configured, true, false)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects mismatched port", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "https://console.example/api/queues/create", nil)
+		req.Host = "console.example"
+		req.Header.Set("Origin", "https://console.example")
+
+		err := validateMutationOrigin(req, configured, true, false)
+		if err == nil {
+			t.Fatal("expected mismatch error")
+		}
+	})
+
+	t.Run("rejects when configured origin is missing", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "https://console.example:8443/api/queues/create", nil)
+		req.Host = "console.example:8443"
+		req.Header.Set("Origin", "https://console.example:8443")
+
+		err := validateMutationOrigin(req, normalizedOrigin{}, false, false)
+		if err == nil {
+			t.Fatal("expected error when configured origin is missing")
+		}
+	})
+
+	t.Run("honors proxy headers only when explicitly trusted", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "http://internal:8080/api/queues/create", nil)
+		req.Host = "internal:8080"
+		req.Header.Set("Origin", "https://console.example:8443")
+		req.Header.Set("X-Forwarded-Proto", "https")
+		req.Header.Set("X-Forwarded-Host", "console.example:8443")
+
+		err := validateMutationOrigin(req, configured, true, false)
+		if err == nil {
+			t.Fatal("expected mismatch when proxy headers are not trusted")
+		}
+
+		err = validateMutationOrigin(req, configured, true, true)
+		if err != nil {
+			t.Fatalf("expected success when proxy headers are trusted: %v", err)
 		}
 	})
 }
