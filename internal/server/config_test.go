@@ -1,8 +1,11 @@
 package server
 
 import (
+	"net/http"
 	"testing"
+	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,6 +44,7 @@ func TestTLSDefaultsAndProductionValidation(t *testing.T) {
 	assert.False(t, DefaultConfig().EnableTLS)
 	productionConfig := ProductionConfig()
 	assert.True(t, productionConfig.EnableTLS)
+	productionConfig.StorageType = "sqlite"
 
 	productionConfig.AuthEnabled = true
 	productionConfig.APIKeys = []string{"secret"}
@@ -57,6 +61,137 @@ func TestTLSDefaultsAndProductionValidation(t *testing.T) {
 	productionConfig.CertFile = "server.crt"
 	productionConfig.KeyFile = "server.key"
 	assert.NoError(t, productionConfig.Validate())
+}
+
+func TestPostgresSecurityDefaults(t *testing.T) {
+	t.Setenv("POSTGRES_PASSWORD", "")
+	t.Setenv("POSTGRES_SSLMODE", "")
+	t.Setenv("POSTGRES_ROOT_CERT", "")
+
+	developmentConfig := DefaultConfig()
+	assert.Equal(t, "chronoqueue", developmentConfig.PostgresPassword)
+	assert.Equal(t, "disable", developmentConfig.PostgresSSLMode)
+
+	productionConfig := ProductionConfig()
+	assert.Empty(t, productionConfig.PostgresPassword)
+	assert.Equal(t, "verify-full", productionConfig.PostgresSSLMode)
+}
+
+func TestValidateProductionPostgresSecurity(t *testing.T) {
+	config := ProductionConfig()
+	config.AuthEnabled = true
+	config.APIKeys = []string{"secret"}
+	config.EnableTLS = true
+	config.CertFile = "server.crt"
+	config.KeyFile = "server.key"
+	config.PostgresPassword = ""
+	config.PostgresSSLMode = "verify-full"
+	config.PostgresRootCertFile = ""
+
+	err := config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "postgres password is required")
+
+	config.PostgresPassword = "secret"
+	err = config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "postgres-root-cert is required")
+
+	config.PostgresRootCertFile = "root.crt"
+	assert.NoError(t, config.Validate())
+
+	config.PostgresSSLMode = "disable"
+	err = config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "postgres sslmode must be")
+
+	config.PostgresSSLMode = "require"
+	config.PostgresRootCertFile = ""
+	assert.NoError(t, config.Validate())
+}
+
+func TestValidateProductionPostgresDSN(t *testing.T) {
+	config := ProductionConfig()
+	config.AuthEnabled = true
+	config.APIKeys = []string{"secret"}
+	config.EnableTLS = true
+	config.CertFile = "server.crt"
+	config.KeyFile = "server.key"
+
+	config.PostgresDSN = "postgres://user:secret@db/chronoqueue?sslmode=disable"
+	err := config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "postgres sslmode must be")
+
+	config.PostgresDSN = "host=db user=user password=secret dbname=chronoqueue sslmode=verify-full"
+	err = config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "postgres-root-cert is required")
+
+	config.PostgresDSN = "host=db user=user password=secret dbname=chronoqueue sslmode=verify-full sslrootcert=/certs/root.crt"
+	assert.NoError(t, config.Validate())
+}
+
+func TestValidatePostgresClientCertificatePair(t *testing.T) {
+	config := DefaultConfig()
+	config.PostgresClientCertFile = "client.crt"
+
+	err := config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "postgres client cert and key files must be specified together")
+
+	config.PostgresClientKeyFile = "client.key"
+	assert.NoError(t, config.Validate())
+}
+
+func TestHTTPGatewayTimeouts(t *testing.T) {
+	config := DefaultConfig()
+	assert.Equal(t, 5*time.Second, config.HTTPReadHeaderTimeout)
+	assert.Equal(t, 15*time.Second, config.HTTPReadTimeout)
+	assert.Equal(t, 30*time.Second, config.HTTPWriteTimeout)
+	assert.Equal(t, 60*time.Second, config.HTTPIdleTimeout)
+
+	server := (&Server{config: config}).newHTTPServer(http.NotFoundHandler())
+	assert.Equal(t, config.HTTPReadHeaderTimeout, server.ReadHeaderTimeout)
+	assert.Equal(t, config.HTTPReadTimeout, server.ReadTimeout)
+	assert.Equal(t, config.HTTPWriteTimeout, server.WriteTimeout)
+	assert.Equal(t, config.HTTPIdleTimeout, server.IdleTimeout)
+
+	config.HTTPReadHeaderTimeout = 0
+	err := config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HTTP gateway timeouts must be greater than 0")
+}
+
+func TestHTTPGatewayTimeoutsFromEnvironment(t *testing.T) {
+	t.Setenv("HTTP_READ_HEADER_TIMEOUT", "2s")
+	t.Setenv("HTTP_READ_TIMEOUT", "3s")
+	t.Setenv("HTTP_WRITE_TIMEOUT", "4s")
+	t.Setenv("HTTP_IDLE_TIMEOUT", "5s")
+
+	config := DefaultConfig()
+	assert.Equal(t, 2*time.Second, config.HTTPReadHeaderTimeout)
+	assert.Equal(t, 3*time.Second, config.HTTPReadTimeout)
+	assert.Equal(t, 4*time.Second, config.HTTPWriteTimeout)
+	assert.Equal(t, 5*time.Second, config.HTTPIdleTimeout)
+}
+
+func TestHTTPGatewayTimeoutsFromFlags(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	AddServerFlags(cmd, DefaultConfig())
+	require.NoError(t, cmd.ParseFlags([]string{
+		"--http-read-header-timeout=6s",
+		"--http-read-timeout=7s",
+		"--http-write-timeout=8s",
+		"--http-idle-timeout=9s",
+	}))
+
+	config, err := ParseConfigFromFlags(cmd)
+	require.NoError(t, err)
+	assert.Equal(t, 6*time.Second, config.HTTPReadHeaderTimeout)
+	assert.Equal(t, 7*time.Second, config.HTTPReadTimeout)
+	assert.Equal(t, 8*time.Second, config.HTTPWriteTimeout)
+	assert.Equal(t, 9*time.Second, config.HTTPIdleTimeout)
 }
 
 func TestTLSConfigFromEnvironment(t *testing.T) {

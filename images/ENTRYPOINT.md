@@ -57,7 +57,8 @@ The `entrypoint.sh` script provides a flexible way to start the ChronoQueue serv
 | `POSTGRES_USER` | PostgreSQL user | `chronoqueue` |
 | `POSTGRES_PASSWORD` | PostgreSQL password | _(required)_ |
 | `POSTGRES_DB` | PostgreSQL database | `chronoqueue` |
-| `POSTGRES_SSLMODE` | SSL mode | `disable` |
+| `POSTGRES_SSLMODE` | SSL mode | `disable` in development; `verify-full` in production |
+| `POSTGRES_ROOT_CERT` | PostgreSQL root CA certificate | _(required with production `verify-full`)_ |
 
 ### SQLite Configuration
 
@@ -74,7 +75,7 @@ The `entrypoint.sh` script provides a flexible way to start the ChronoQueue serv
 ### TLS Configuration
 
 | Variable | Description | Default |
-|----------|-------------|---------|
+| ---------- | ------------- | --------- |
 | `ENABLE_TLS` | Enable TLS for gRPC/HTTP | `false` |
 | `CERT_FILE` | Path to server certificate | _(empty)_ |
 | `KEY_FILE` | Path to server private key | _(empty)_ |
@@ -122,8 +123,11 @@ docker run -d \
   -e POSTGRES_USER=chronoqueue \
   -e POSTGRES_PASSWORD=secret \
   -e POSTGRES_DB=chronoqueue \
-  -e POSTGRES_SSLMODE=require \
+  -e POSTGRES_SSLMODE=verify-full \
+  -e POSTGRES_ROOT_CERT=/secrets/postgres-root.crt \
+  -e API_KEYS=replace-with-a-secret \
   -e LOG_LEVEL=info \
+  -v /path/to/postgres-root.crt:/secrets/postgres-root.crt:ro \
   -p 9000:9000 \
   -p 8080:8080 \
   chronoqueue:latest

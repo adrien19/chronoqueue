@@ -92,7 +92,7 @@ Examples:
   chronoqueue server --dev --storage-type sqlite --sqlite-db-path ./chronoqueue.db
 
   # Production server with PostgreSQL
-  chronoqueue server --storage-type postgresql --postgresql-conn-string "user=postgres dbname=chronoqueue sslmode=disable"
+  API_KEYS=secret CERT_FILE=server.crt KEY_FILE=server.key POSTGRES_PASSWORD=secret chronoqueue server --production --storage-type postgres --postgres-sslmode verify-full --postgres-root-cert root.crt
 
   # Server with TLS enabled
   chronoqueue server --enable-tls --cert-file server.crt --key-file server.key`,
@@ -144,6 +144,14 @@ func runServer(cmd *cobra.Command, args []string) error {
 	parsedConfig.IsDevelopment = config.IsDevelopment
 	parsedConfig.AuthEnabled = config.AuthEnabled
 	parsedConfig.APIKeys = config.APIKeys
+	if prodMode {
+		if !cmd.Flags().Changed("postgres-password") {
+			parsedConfig.PostgresPassword = config.PostgresPassword
+		}
+		if !cmd.Flags().Changed("postgres-sslmode") {
+			parsedConfig.PostgresSSLMode = config.PostgresSSLMode
+		}
+	}
 	if !cmd.Flags().Changed("enable-tls") {
 		parsedConfig.EnableTLS = config.EnableTLS
 	}

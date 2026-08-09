@@ -39,6 +39,10 @@ func AddServerFlags(cmd *cobra.Command, config *Config) {
 	cmd.Flags().StringVar(&config.GatewayClientKeyFile, "gateway-client-key", config.GatewayClientKeyFile, "Client key for gateway→gRPC mTLS")
 	cmd.Flags().BoolVar(&config.EnableCORS, "enable-cors", config.EnableCORS, "Enable CORS for HTTP gateway")
 	cmd.Flags().StringSliceVar(&config.AllowOrigins, "cors-origins", config.AllowOrigins, "Allowed CORS origins")
+	cmd.Flags().DurationVar(&config.HTTPReadHeaderTimeout, "http-read-header-timeout", config.HTTPReadHeaderTimeout, "HTTP gateway read header timeout")
+	cmd.Flags().DurationVar(&config.HTTPReadTimeout, "http-read-timeout", config.HTTPReadTimeout, "HTTP gateway read timeout")
+	cmd.Flags().DurationVar(&config.HTTPWriteTimeout, "http-write-timeout", config.HTTPWriteTimeout, "HTTP gateway write timeout")
+	cmd.Flags().DurationVar(&config.HTTPIdleTimeout, "http-idle-timeout", config.HTTPIdleTimeout, "HTTP gateway idle timeout")
 	cmd.Flags().BoolVar(&config.EnableAPIDocs, "enable-api-docs", config.EnableAPIDocs, "Enable API documentation endpoints (disabled by default in production)")
 	cmd.Flags().StringSliceVar(&config.APIDocsAllowOrigins, "api-docs-cors-origins", config.APIDocsAllowOrigins, "Allowed CORS origins for API documentation (uses --cors-origins if not set)")
 }
@@ -152,6 +156,34 @@ func ParseConfigFromFlags(cmd *cobra.Command) (*Config, error) {
 	}
 	if cmd.Flags().Changed("postgres-root-cert") {
 		config.PostgresRootCertFile, _ = cmd.Flags().GetString("postgres-root-cert")
+	}
+	if cmd.Flags().Changed("http-read-header-timeout") {
+		value, err := cmd.Flags().GetDuration("http-read-header-timeout")
+		if err != nil {
+			return nil, fmt.Errorf("read --http-read-header-timeout: %w", err)
+		}
+		config.HTTPReadHeaderTimeout = value
+	}
+	if cmd.Flags().Changed("http-read-timeout") {
+		value, err := cmd.Flags().GetDuration("http-read-timeout")
+		if err != nil {
+			return nil, fmt.Errorf("read --http-read-timeout: %w", err)
+		}
+		config.HTTPReadTimeout = value
+	}
+	if cmd.Flags().Changed("http-write-timeout") {
+		value, err := cmd.Flags().GetDuration("http-write-timeout")
+		if err != nil {
+			return nil, fmt.Errorf("read --http-write-timeout: %w", err)
+		}
+		config.HTTPWriteTimeout = value
+	}
+	if cmd.Flags().Changed("http-idle-timeout") {
+		value, err := cmd.Flags().GetDuration("http-idle-timeout")
+		if err != nil {
+			return nil, fmt.Errorf("read --http-idle-timeout: %w", err)
+		}
+		config.HTTPIdleTimeout = value
 	}
 
 	return config, config.Validate()

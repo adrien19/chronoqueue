@@ -359,11 +359,7 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 
 	s.logger.InfoWithFields("Starting HTTP gateway", "addr", s.config.HTTPAddr)
 
-	server := &http.Server{
-		Addr:      s.config.HTTPAddr,
-		Handler:   handler,
-		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12},
-	}
+	server := s.newHTTPServer(handler)
 
 	var serveErr error
 	if s.config.EnableTLS {
@@ -376,6 +372,18 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (s *Server) newHTTPServer(handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              s.config.HTTPAddr,
+		Handler:           handler,
+		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
+		ReadHeaderTimeout: s.config.HTTPReadHeaderTimeout,
+		ReadTimeout:       s.config.HTTPReadTimeout,
+		WriteTimeout:      s.config.HTTPWriteTimeout,
+		IdleTimeout:       s.config.HTTPIdleTimeout,
+	}
 }
 
 // getTLSConfig returns TLS configuration if enabled

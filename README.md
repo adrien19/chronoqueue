@@ -128,10 +128,11 @@ Another easy way to get started locally is to use [docker-compose](https://docs.
 3. Configure your environment:
    - Choose a storage backend: PostgreSQL (recommended) or SQLite for development
    - Refer to the .env.example file for configuration guidance
-   - For PostgreSQL: Set `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
+   - For PostgreSQL: Set `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, and `POSTGRES_ROOT_CERT`. Production defaults to `POSTGRES_SSLMODE=verify-full`; development retains `disable` for local use.
    - For SQLite: Set `SQLITE_DB_PATH` (e.g., `/data/chronoqueue.db`)
    - Production mode requires authentication by default. Set `API_KEYS` to a comma-separated list of keys; clients must send a key in the `api-key` header or as an `Authorization: Bearer` token. The CLI and web UI read `CHRONOQUEUE_API_KEY` (or use the CLI `--api-key` flag). Development mode can opt in with `AUTH_ENABLED=true`.
    - Production mode also requires TLS for both gRPC and HTTP. Set `CERT_FILE` and `KEY_FILE`; optionally set `CA_CERT_FILE` to require gRPC client certificates. When enabling mTLS, also set `GATEWAY_CLIENT_CERT_FILE` and `GATEWAY_CLIENT_KEY_FILE` for the internal gateway connection.
+   - HTTP gateway timeouts default to `5s` for headers, `15s` for reads, `30s` for writes, and `60s` for idle connections. Override them with `HTTP_READ_HEADER_TIMEOUT`, `HTTP_READ_TIMEOUT`, `HTTP_WRITE_TIMEOUT`, and `HTTP_IDLE_TIMEOUT`.
 
 4. Start the ChronoQueue server:
 
