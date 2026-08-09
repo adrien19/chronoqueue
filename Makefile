@@ -84,6 +84,8 @@ else
 	export ARCHIVE_EXT = .tar.gz
 endif
 GOLANGCI_LINT_VERSION ?= v2.5.0
+TOOL_BIN_DIR := $(CURDIR)/bin
+GOLANGCI_LINT_BIN := $(TOOL_BIN_DIR)/$(GOLANGCI_LINT)
 
 export BINARY_EXT ?= $(BINARY_EXT_LOCAL)
 
@@ -392,14 +394,13 @@ ci-test-all: ci-test ci-test-integration ci-test-e2e
 check-linter:
 	@which $(GOLANGCI_LINT) > /dev/null || { \
 		echo "Installing golangci-lint..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin $(GOLANGCI_LINT_VERSION); \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
 	}
 
 ################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Please use golangci-lint version v1.55.2 , otherwise you might encounter errors.
-# You can download version v1.55.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.55.2
+# Keep this pinned to $(GOLANGCI_LINT_VERSION) and install via go install in check-linter.
 .PHONY: lint
 lint: check-linter
 	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
@@ -428,7 +429,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.25; cd -
+	cd "$(shell dirname $(1))" && CGO_ENABLED=$(CGO) go mod tidy -compat=1.26
 endef
 
 # Generate modtidy target action for each go.mod file

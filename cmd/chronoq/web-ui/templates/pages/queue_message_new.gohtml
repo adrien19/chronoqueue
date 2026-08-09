@@ -58,7 +58,9 @@
       <div class="space-y-4 rounded-xl border border-line bg-zinc-950/40 p-5">
         <div class="flex items-center justify-between gap-3">
           <p class="text-sm font-medium text-zinc-300">Schema Override</p>
-          {{ if .QueueSchemaID }}
+          {{ if .QueueSchemaLookupFailed }}
+          <span class="cq-badge border-amber-500/25 bg-amber-500/10 text-amber-300">Queue default unavailable</span>
+          {{ else if .QueueSchemaID }}
           <span class="cq-badge border-sky-500/25 bg-sky-500/10 text-sky-300">Queue default: {{ .QueueSchemaID }}</span>
           {{ else }}
           <span class="cq-badge cq-badge-muted">No queue default schema</span>
@@ -85,6 +87,10 @@
         <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
           This queue requires schema validation for all messages.
         </div>
+        {{ else if .QueueSchemaLookupFailed }}
+        <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          Queue schema defaults could not be loaded. Message validation may still be required.
+        </div>
         {{ end }}
         <div id="validation-result"></div>
       </div>
@@ -92,7 +98,7 @@
       <div id="form-result"></div>
 
       <div class="flex items-center gap-3 border-t border-line pt-4">
-        <button class="cq-btn" type="button"
+        <button class="cq-btn" type="submit"
           formaction="/api/queues/{{ .QueueName }}/messages/validate"
           formmethod="POST"
           hx-post="/api/queues/{{ .QueueName }}/messages/validate"
@@ -143,8 +149,13 @@
     }
 
     var parts = parseLocalDateTimeParts(raw);
+    if (!parts) {
+      deliverAt.setCustomValidity('Enter a date and time in the format YYYY-MM-DDTHH:MM.');
+      if (report) deliverAt.reportValidity();
+      return false;
+    }
     var parsed = new Date(raw);
-    if (!parts || isNaN(parsed.getTime()) || !localDateMatchesParts(parsed, parts)) {
+    if (isNaN(parsed.getTime()) || !localDateMatchesParts(parsed, parts)) {
       deliverAt.setCustomValidity('Selected local time does not exist in your timezone due to daylight saving time. Choose another time.');
       if (report) deliverAt.reportValidity();
       return false;

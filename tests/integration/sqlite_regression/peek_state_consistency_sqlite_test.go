@@ -104,7 +104,7 @@ func TestSQLitePeekStateConsistency_LeasedMessageReportedAsRunning(t *testing.T)
 	})
 	require.NoError(t, err)
 	require.NotNil(t, getResp.GetMessage())
-	require.NotNil(t, getResp.GetAttemptId())
+	require.NotEmpty(t, getResp.GetAttemptId())
 	assert.Equal(t, messagepb.Message_Metadata_RUNNING, getResp.GetMessage().GetMetadata().GetState())
 
 	stateResp, err := client.GetQueueState(ctx, &queueservicepb.GetQueueStateRequest{QueueName: queueName})
