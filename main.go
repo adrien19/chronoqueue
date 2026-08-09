@@ -43,6 +43,7 @@ Examples:
 	rootCmd.PersistentFlags().String("cert-file", "", "Path to client certificate file")
 	rootCmd.PersistentFlags().String("key-file", "", "Path to client private key file")
 	rootCmd.PersistentFlags().String("ca-file", "", "Path to CA certificate file")
+	rootCmd.PersistentFlags().String("api-key", os.Getenv("CHRONOQUEUE_API_KEY"), "API key for server authentication")
 	rootCmd.PersistentFlags().String("output", "table", "Output format (table, json, yaml)")
 	rootCmd.PersistentFlags().Bool("verbose", false, "Enable verbose output")
 	rootCmd.PersistentFlags().Duration("timeout", 0, "Request timeout (0 for no timeout)")
@@ -141,6 +142,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// Merge the parsed config (preserving mode setting)
 	parsedConfig.IsDevelopment = config.IsDevelopment
+	parsedConfig.AuthEnabled = config.AuthEnabled
+	parsedConfig.APIKeys = config.APIKeys
 	config = parsedConfig
 
 	// Inject version information

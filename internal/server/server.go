@@ -249,7 +249,7 @@ func (s *Server) startGRPCServer() error {
 	interceptors := []grpc.UnaryServerInterceptor{
 		gateway.RecoveryInterceptor(s.logger),
 		gateway.LoggingInterceptor(s.logger),
-		gateway.AuthInterceptor(s.logger),
+		gateway.AuthInterceptor(s.logger, s.config.AuthEnabled, s.config.APIKeys),
 		gateway.MetricsInterceptor(s.logger),
 		gateway.ValidationInterceptor(s.logger),
 	}

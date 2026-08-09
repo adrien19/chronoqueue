@@ -39,6 +39,7 @@ func TestPostgreSQLClientCertificates(t *testing.T) {
 			postgres.WithDatabase("testdb"),
 			postgres.WithUsername("testuser"),
 			postgres.WithPassword("testpass"),
+			testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
 		)
 		require.NoError(t, err, "Failed to start PostgreSQL container")
 		defer func() { _ = container.Terminate(ctx) }()

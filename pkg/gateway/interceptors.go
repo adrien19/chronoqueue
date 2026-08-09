@@ -2,9 +2,11 @@ package gateway
 
 import (
 	"context"
+	"crypto/subtle"
 	"crypto/x509"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -62,26 +64,34 @@ func LoggingInterceptor(logger *log.Logger) grpc.UnaryServerInterceptor {
 }
 
 // AuthInterceptor handles authentication and authorization
-func AuthInterceptor(logger *log.Logger) grpc.UnaryServerInterceptor {
+func AuthInterceptor(logger *log.Logger, enabled bool, validAPIKeys []string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		// Extract metadata from context
+		if !enabled {
+			return handler(ctx, req)
+		}
+
 		md, ok := metadata.FromIncomingContext(ctx)
 		if !ok {
-			logger.Warn("No metadata found in gRPC request")
+			return nil, status.Error(codes.Unauthenticated, "missing credentials")
 		}
 
-		// Check for API key or other authentication tokens
-		apiKeys := md.Get("api-key")
-		if len(apiKeys) == 0 {
-			// For now, we'll allow unauthenticated requests
-			// In production, you would validate the API key here
-			logger.Debug("No API key provided in request")
-		} else {
-			logger.DebugWithFields("API key provided", "key_length", len(apiKeys[0]))
-			// Validate API key here in production
+		credentials := append([]string(nil), md.Get("api-key")...)
+		for _, authorization := range md.Get("authorization") {
+			if scheme, token, found := strings.Cut(authorization, " "); found && strings.EqualFold(scheme, "bearer") {
+				credentials = append(credentials, token)
+			}
 		}
 
-		return handler(ctx, req)
+		for _, credential := range credentials {
+			for _, validAPIKey := range validAPIKeys {
+				if validAPIKey != "" && len(credential) == len(validAPIKey) && subtle.ConstantTimeCompare([]byte(credential), []byte(validAPIKey)) == 1 {
+					return handler(ctx, req)
+				}
+			}
+		}
+
+		logger.WarnWithFields("gRPC authentication failed", "method", info.FullMethod)
+		return nil, status.Error(codes.Unauthenticated, "invalid credentials")
 	}
 }
 

@@ -3,6 +3,7 @@ package helpers
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"testing"
 	"time"
@@ -84,6 +85,14 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Docker network: %w", err)
 	}
+	networkOwned := true
+	defer func() {
+		if networkOwned {
+			if err := net.Remove(ctx); err != nil {
+				log.Printf("failed to remove Docker network after setup failure: %v", err)
+			}
+		}
+	}()
 
 	// Start Postgres container using the Postgres module
 	postgresContainer, err := postgres.Run(
@@ -92,11 +101,21 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 		postgres.WithDatabase("chronoqueue"),
 		postgres.WithUsername("chronoqueue"),
 		postgres.WithPassword("chronoqueue"),
+		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
 		network.WithNetwork([]string{"postgres"}, net),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start Postgres container: %w", err)
 	}
+
+	postgresOwned := postgresContainer != nil
+	defer func() {
+		if postgresOwned {
+			if err := postgresContainer.Terminate(ctx); err != nil {
+				log.Printf("failed to terminate Postgres container after setup failure: %v", err)
+			}
+		}
+	}()
 
 	// Get connection string for host->Postgres connections (used by tests)
 	connectionString, err := postgresContainer.ConnectionString(ctx)
@@ -118,11 +137,9 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 	serverReq := testcontainers.ContainerRequest{
 		Image:        "chronoqueue:test-latest",
 		ExposedPorts: []string{"9000/tcp", "8080/tcp"},
-		Networks:     []string{net.Name},
-		NetworkAliases: map[string][]string{
-			net.Name: {"chronoqueue"},
-		},
 		Env: map[string]string{
+			"AUTH_ENABLED":          "true",
+			"API_KEYS":              TestAPIKey,
 			"SERVER_MODE":           "development",        // Use development mode for tests
 			"STORAGE_TYPE":          "postgres",           // Use Postgres storage
 			"POSTGRES_HOST":         postgresInternalHost, // Use internal network address
@@ -141,11 +158,19 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 			WithStartupTimeout(60 * time.Second),
 	}
 
-	serverContainer, err := testcontainers.GenericContainer(ctx,
-		testcontainers.GenericContainerRequest{
-			ContainerRequest: serverReq,
-			Started:          true,
-		})
+	serverGenericReq := testcontainers.GenericContainerRequest{ContainerRequest: serverReq, Started: true}
+	if err := network.WithNetwork([]string{"chronoqueue"}, net)(&serverGenericReq); err != nil {
+		return nil, fmt.Errorf("configure ChronoQueue container network: %w", err)
+	}
+	serverContainer, err := testcontainers.GenericContainer(ctx, serverGenericReq)
+	serverOwned := serverContainer != nil
+	defer func() {
+		if serverOwned {
+			if err := serverContainer.Terminate(ctx); err != nil {
+				log.Printf("failed to terminate ChronoQueue container after setup failure: %v", err)
+			}
+		}
+	}()
 	if err != nil {
 		return nil, fmt.Errorf("failed to start ChronoQueue server container (did you run 'make build-test-image'?): %w", err)
 	}
@@ -181,6 +206,9 @@ func createSharedEnvironment() (*TestEnvironment, error) {
 	// Allow time for scheduler and reclaim services to initialize
 	// Scheduler runs every 300ms, reclaim every 2s - wait 2.5s to ensure both have started
 	time.Sleep(2500 * time.Millisecond)
+	serverOwned = false
+	postgresOwned = false
+	networkOwned = false
 
 	return env, nil
 }
@@ -204,6 +232,7 @@ func (e *TestEnvironment) NewGRPCClientShared(t *testing.T) *grpc.ClientConn {
 	conn, err := grpc.NewClient(
 		e.GRPCAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		AuthenticatedGRPCDialOption(TestAPIKey),
 	)
 	require.NoError(t, err, "Failed to create gRPC client")
 

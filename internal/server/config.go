@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -51,6 +52,10 @@ type Config struct {
 	EnableCORS   bool
 	AllowOrigins []string
 
+	// Authentication Configuration
+	AuthEnabled bool
+	APIKeys     []string
+
 	// API Documentation Configuration
 	EnableAPIDocs       bool     // Enable API documentation endpoints (default: false in production)
 	APIDocsAllowOrigins []string // Allowed CORS origins for API docs (comma-separated)
@@ -82,6 +87,8 @@ func DefaultConfig() *Config {
 		EnableTLS:           getEnvBool("CHRONOQUEUE_TLS_ENABLED", false),
 		EnableCORS:          getEnvBool("ENABLE_CORS", true),
 		AllowOrigins:        getEnvSlice("ALLOW_ORIGINS", []string{"*"}),
+		AuthEnabled:         getEnvBool("AUTH_ENABLED", false),
+		APIKeys:             getEnvSlice("API_KEYS", nil),
 		SchedulerIntervalMs: getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
 		ReclaimIntervalMs:   getEnvInt("RECLAIM_INTERVAL_MS", 5000),
 		IsDevelopment:       true,
@@ -107,6 +114,8 @@ func ProductionConfig() *Config {
 		EnableTLS:           getEnvBool("CHRONOQUEUE_TLS_ENABLED", false),
 		EnableCORS:          getEnvBool("ENABLE_CORS", false),
 		AllowOrigins:        getEnvSlice("ALLOW_ORIGINS", []string{}),
+		AuthEnabled:         getEnvBool("AUTH_ENABLED", true),
+		APIKeys:             getEnvSlice("API_KEYS", nil),
 		EnableAPIDocs:       getEnvBool("ENABLE_API_DOCS", false), // Disabled by default in production
 		APIDocsAllowOrigins: getEnvSlice("API_DOCS_CORS_ORIGINS", []string{}),
 		SchedulerIntervalMs: getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
@@ -117,6 +126,13 @@ func ProductionConfig() *Config {
 
 // Validate checks if the configuration is valid
 func (c *Config) Validate() error {
+	if c.AuthEnabled && len(c.APIKeys) == 0 {
+		return fmt.Errorf("authentication enabled but no API keys configured")
+	}
+	if slices.Contains(c.APIKeys, "") {
+		return fmt.Errorf("API keys cannot be empty")
+	}
+
 	if c.EnableTLS && (c.CertFile == "" || c.KeyFile == "") {
 		return fmt.Errorf("TLS enabled but cert-file or key-file not specified")
 	}

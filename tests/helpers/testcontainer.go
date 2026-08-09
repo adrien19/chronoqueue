@@ -72,6 +72,14 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 		network.WithDriver("bridge"),
 	)
 	require.NoError(t, err, "Failed to create Docker network")
+	networkOwned := true
+	t.Cleanup(func() {
+		if networkOwned {
+			if err := net.Remove(ctx); err != nil {
+				t.Errorf("failed to remove Docker network after setup failure: %v", err)
+			}
+		}
+	})
 
 	// Start Postgres container using the Postgres module
 	t.Log("Starting Postgres container...")
@@ -81,8 +89,17 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 		postgres.WithDatabase("chronoqueue"),
 		postgres.WithUsername("chronoqueue"),
 		postgres.WithPassword("chronoqueue"),
+		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
 		network.WithNetwork([]string{"postgres"}, net),
 	)
+	postgresOwned := postgresContainer != nil
+	t.Cleanup(func() {
+		if postgresOwned {
+			if err := postgresContainer.Terminate(ctx); err != nil {
+				t.Errorf("failed to terminate Postgres container after setup failure: %v", err)
+			}
+		}
+	})
 	require.NoError(t, err, "Failed to start Postgres container")
 
 	// Get connection string for host->Postgres connections (used by tests)
@@ -106,7 +123,6 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 			Dockerfile: "images/Dockerfile",
 		},
 		ExposedPorts: []string{"9000/tcp", "8080/tcp"},
-		Networks:     []string{net.Name},
 		Env: map[string]string{
 			"SERVER_MODE":       "development",        // Use development mode for tests
 			"STORAGE_TYPE":      "postgres",           // Use Postgres storage
@@ -124,11 +140,17 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 			WithStartupTimeout(60 * time.Second),
 	}
 
-	serverContainer, err := testcontainers.GenericContainer(ctx,
-		testcontainers.GenericContainerRequest{
-			ContainerRequest: serverReq,
-			Started:          true,
-		})
+	serverGenericReq := testcontainers.GenericContainerRequest{ContainerRequest: serverReq, Started: true}
+	require.NoError(t, network.WithNetwork([]string{"chronoqueue"}, net)(&serverGenericReq))
+	serverContainer, err := testcontainers.GenericContainer(ctx, serverGenericReq)
+	serverOwned := serverContainer != nil
+	t.Cleanup(func() {
+		if serverOwned {
+			if err := serverContainer.Terminate(ctx); err != nil {
+				t.Errorf("failed to terminate ChronoQueue container after setup failure: %v", err)
+			}
+		}
+	})
 	require.NoError(t, err, "Failed to start ChronoQueue server container")
 
 	serverHost, err := serverContainer.Host(ctx)
@@ -159,6 +181,9 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 	t.Cleanup(func() {
 		env.Cleanup()
 	})
+	serverOwned = false
+	postgresOwned = false
+	networkOwned = false
 
 	return env
 }
@@ -262,6 +287,7 @@ func SetupTestEnvironmentWithTLS(t *testing.T, certs *TestCertificates) *TestEnv
 		postgres.WithDatabase("chronoqueue"),
 		postgres.WithUsername("chronoqueue"),
 		postgres.WithPassword("chronoqueue"),
+		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
 		network.WithNetwork([]string{"postgres"}, net),
 	)
 	require.NoError(t, err, "Failed to start Postgres container")

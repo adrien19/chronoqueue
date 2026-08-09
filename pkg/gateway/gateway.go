@@ -48,6 +48,7 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{}),
 		runtime.WithErrorHandler(customErrorHandler(logger)),
 		runtime.WithForwardResponseOption(responseModifier),
+		runtime.WithIncomingHeaderMatcher(incomingHeaderMatcher),
 	)
 
 	// Set up gRPC client options
@@ -105,6 +106,16 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 	}
 
 	return mux, nil
+}
+
+func incomingHeaderMatcher(key string) (string, bool) {
+	switch {
+	case strings.EqualFold(key, "api-key"):
+		return "api-key", true
+	case strings.EqualFold(key, "authorization"):
+		return "authorization", true
+	}
+	return runtime.DefaultHeaderMatcher(key)
 }
 
 // customErrorHandler provides custom error handling for the gateway
@@ -171,7 +182,7 @@ func corsHandler(handler http.Handler, allowedOrigins []string) http.Handler {
 		}
 
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization, X-CSRF-Token")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization, api-key, X-CSRF-Token")
 		w.Header().Set("Access-Control-Expose-Headers", "X-Worker-ID, X-ChronoQueue-Version, X-Attempt-ID")
 
 		// Handle preflight requests
