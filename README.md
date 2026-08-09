@@ -131,6 +131,7 @@ Another easy way to get started locally is to use [docker-compose](https://docs.
    - For PostgreSQL: Set `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
    - For SQLite: Set `SQLITE_DB_PATH` (e.g., `/data/chronoqueue.db`)
    - Production mode requires authentication by default. Set `API_KEYS` to a comma-separated list of keys; clients must send a key in the `api-key` header or as an `Authorization: Bearer` token. The CLI and web UI read `CHRONOQUEUE_API_KEY` (or use the CLI `--api-key` flag). Development mode can opt in with `AUTH_ENABLED=true`.
+   - Production mode also requires TLS for both gRPC and HTTP. Set `CERT_FILE` and `KEY_FILE`; optionally set `CA_CERT_FILE` to require gRPC client certificates. When enabling mTLS, also set `GATEWAY_CLIENT_CERT_FILE` and `GATEWAY_CLIENT_KEY_FILE` for the internal gateway connection.
 
 4. Start the ChronoQueue server:
 

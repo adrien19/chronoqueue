@@ -304,7 +304,7 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 
 	// For localhost connections in development mode, we can skip verification to avoid certificate issues
 	gatewayInsecure := s.config.GatewayInsecure
-	if gatewayUseTLS && !gatewayInsecure && s.config.IsDevelopment {
+	if gatewayUseTLS && !gatewayInsecure && s.config.IsDevelopment && s.config.CACertFile == "" {
 		// Auto-detect localhost and enable insecure mode only in development
 		if s.config.GRPCAddr == "localhost:9000" || s.config.GRPCAddr == "127.0.0.1:9000" || s.config.GRPCAddr == ":9000" {
 			gatewayInsecure = true
@@ -326,6 +326,8 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 		UseTLS:              gatewayUseTLS,
 		TLSInsecure:         gatewayInsecure,
 		ServerCertFile:      s.config.CACertFile, // Reuse CA cert for verification
+		ClientCertFile:      s.config.GatewayClientCertFile,
+		ClientKeyFile:       s.config.GatewayClientKeyFile,
 		EnableAPIDocs:       s.config.EnableAPIDocs,
 		APIDocsAllowOrigins: s.config.APIDocsAllowOrigins,
 	}
@@ -358,12 +360,19 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	s.logger.InfoWithFields("Starting HTTP gateway", "addr", s.config.HTTPAddr)
 
 	server := &http.Server{
-		Addr:    s.config.HTTPAddr,
-		Handler: handler,
+		Addr:      s.config.HTTPAddr,
+		Handler:   handler,
+		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12},
 	}
 
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		return fmt.Errorf("failed to serve HTTP: %w", err)
+	var serveErr error
+	if s.config.EnableTLS {
+		serveErr = server.ListenAndServeTLS(s.config.CertFile, s.config.KeyFile)
+	} else {
+		serveErr = server.ListenAndServe()
+	}
+	if serveErr != nil && serveErr != http.ErrServerClosed {
+		return fmt.Errorf("failed to serve HTTP: %w", serveErr)
 	}
 
 	return nil
@@ -385,6 +394,7 @@ func (s *Server) getTLSConfig() *tls.Config {
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		ClientAuth:   tls.NoClientCert,
+		MinVersion:   tls.VersionTLS12,
 	}
 
 	// Load CA certificate for mutual TLS if provided

@@ -1,6 +1,8 @@
 package server
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +35,8 @@ func AddServerFlags(cmd *cobra.Command, config *Config) {
 	cmd.Flags().StringVar(&config.CACertFile, "ca-cert-file", config.CACertFile, "CA certificate file for mutual TLS (optional)")
 	cmd.Flags().BoolVar(&config.GatewayUseTLS, "gateway-use-tls", config.GatewayUseTLS, "Enable TLS for gateway→gRPC internal connection (default: inherits from --enable-tls)")
 	cmd.Flags().BoolVar(&config.GatewayInsecure, "gateway-insecure", config.GatewayInsecure, "Skip TLS verification for gateway→gRPC connection (auto-enabled for localhost)")
+	cmd.Flags().StringVar(&config.GatewayClientCertFile, "gateway-client-cert", config.GatewayClientCertFile, "Client certificate for gateway→gRPC mTLS")
+	cmd.Flags().StringVar(&config.GatewayClientKeyFile, "gateway-client-key", config.GatewayClientKeyFile, "Client key for gateway→gRPC mTLS")
 	cmd.Flags().BoolVar(&config.EnableCORS, "enable-cors", config.EnableCORS, "Enable CORS for HTTP gateway")
 	cmd.Flags().StringSliceVar(&config.AllowOrigins, "cors-origins", config.AllowOrigins, "Allowed CORS origins")
 	cmd.Flags().BoolVar(&config.EnableAPIDocs, "enable-api-docs", config.EnableAPIDocs, "Enable API documentation endpoints (disabled by default in production)")
@@ -125,6 +129,20 @@ func ParseConfigFromFlags(cmd *cobra.Command) (*Config, error) {
 	}
 	if cmd.Flags().Changed("gateway-insecure") {
 		config.GatewayInsecure, _ = cmd.Flags().GetBool("gateway-insecure")
+	}
+	if cmd.Flags().Changed("gateway-client-cert") {
+		value, err := cmd.Flags().GetString("gateway-client-cert")
+		if err != nil {
+			return nil, fmt.Errorf("read --gateway-client-cert: %w", err)
+		}
+		config.GatewayClientCertFile = value
+	}
+	if cmd.Flags().Changed("gateway-client-key") {
+		value, err := cmd.Flags().GetString("gateway-client-key")
+		if err != nil {
+			return nil, fmt.Errorf("read --gateway-client-key: %w", err)
+		}
+		config.GatewayClientKeyFile = value
 	}
 	if cmd.Flags().Changed("postgres-client-cert") {
 		config.PostgresClientCertFile, _ = cmd.Flags().GetString("postgres-client-cert")

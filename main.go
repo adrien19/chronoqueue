@@ -144,6 +144,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 	parsedConfig.IsDevelopment = config.IsDevelopment
 	parsedConfig.AuthEnabled = config.AuthEnabled
 	parsedConfig.APIKeys = config.APIKeys
+	if !cmd.Flags().Changed("enable-tls") {
+		parsedConfig.EnableTLS = config.EnableTLS
+	}
 	config = parsedConfig
 
 	// Inject version information

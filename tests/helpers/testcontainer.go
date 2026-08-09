@@ -267,6 +267,22 @@ func (e *TestEnvironment) WaitForHealthy(t *testing.T, timeout time.Duration) {
 //	    // ... use tlsConfig with gRPC client
 //	}
 func SetupTestEnvironmentWithTLS(t *testing.T, certs *TestCertificates) *TestEnvironment {
+	return setupTestEnvironmentWithTLSGatewayCertificates(t, certs, certs.CACert, certs.ClientCert, certs.ClientKey)
+}
+
+// SetupTestEnvironmentWithTLSGatewayCredentials configures the gateway with the
+// provided client certificate and key.
+func SetupTestEnvironmentWithTLSGatewayCredentials(t *testing.T, certs *TestCertificates, gatewayClientCert, gatewayClientKey string) *TestEnvironment {
+	return setupTestEnvironmentWithTLSGatewayCertificates(t, certs, certs.CACert, gatewayClientCert, gatewayClientKey)
+}
+
+// SetupTestEnvironmentWithTLSGatewayCertificates configures the CA and client
+// certificate used for the gateway's internal mTLS connection.
+func SetupTestEnvironmentWithTLSGatewayCertificates(t *testing.T, certs *TestCertificates, gatewayCACert, gatewayClientCert, gatewayClientKey string) *TestEnvironment {
+	return setupTestEnvironmentWithTLSGatewayCertificates(t, certs, gatewayCACert, gatewayClientCert, gatewayClientKey)
+}
+
+func setupTestEnvironmentWithTLSGatewayCertificates(t *testing.T, certs *TestCertificates, gatewayCACert, gatewayClientCert, gatewayClientKey string) *TestEnvironment {
 	// Validate certificates are provided to avoid nil dereference
 	require.NotNil(t, certs, "TestCertificates must be provided")
 
@@ -330,7 +346,8 @@ func SetupTestEnvironmentWithTLS(t *testing.T, certs *TestCertificates) *TestEnv
 			"--key-file", "/certs/server.key",
 			"--ca-cert-file", "/certs/ca.crt",
 			"--gateway-use-tls",
-			"--gateway-insecure",
+			"--gateway-client-cert", "/certs/client.crt",
+			"--gateway-client-key", "/certs/client.key",
 		},
 		Env: map[string]string{
 			"POSTGRES_PASSWORD": "chronoqueue", // Password must be passed via environment
@@ -347,15 +364,26 @@ func SetupTestEnvironmentWithTLS(t *testing.T, certs *TestCertificates) *TestEnv
 				FileMode:          0o600,
 			},
 			{
-				HostFilePath:      certs.CACert,
+				HostFilePath:      gatewayCACert,
 				ContainerFilePath: "/certs/ca.crt",
 				FileMode:          0o644,
+			},
+			{
+				HostFilePath:      gatewayClientCert,
+				ContainerFilePath: "/certs/client.crt",
+				FileMode:          0o644,
+			},
+			{
+				HostFilePath:      gatewayClientKey,
+				ContainerFilePath: "/certs/client.key",
+				FileMode:          0o600,
 			},
 		},
 		WaitingFor: wait.ForHTTP("/health").
 			WithPort("8080").
+			WithTLS(true, certs.LoadClientTLSConfig(t)).
 			WithStartupTimeout(60 * time.Second).
-			WithAllowInsecure(true), // Allow insecure for TLS server
+			WithAllowInsecure(true),
 	}
 
 	serverContainer, err := testcontainers.GenericContainer(ctx,
@@ -375,7 +403,7 @@ func SetupTestEnvironmentWithTLS(t *testing.T, certs *TestCertificates) *TestEnv
 	require.NoError(t, err)
 
 	grpcAddr := fmt.Sprintf("%s:%s", serverHost, grpcPort.Port())
-	httpAddr := fmt.Sprintf("http://%s:%s", serverHost, httpPort.Port()) // Note: HTTP (TLS is on gRPC only)
+	httpAddr := fmt.Sprintf("https://%s:%s", serverHost, httpPort.Port())
 
 	t.Logf("ChronoQueue server with TLS started - gRPC: %s, HTTP: %s", grpcAddr, httpAddr)
 

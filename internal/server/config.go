@@ -45,8 +45,10 @@ type Config struct {
 	CACertFile string
 
 	// Gateway TLS Configuration
-	GatewayUseTLS   bool // Use TLS for gateway→gRPC internal connection
-	GatewayInsecure bool // Skip TLS verification for gateway→gRPC (for localhost)
+	GatewayUseTLS         bool // Use TLS for gateway→gRPC internal connection
+	GatewayInsecure       bool // Skip TLS verification for gateway→gRPC (for localhost)
+	GatewayClientCertFile string
+	GatewayClientKeyFile  string
 
 	// HTTP Gateway Configuration
 	EnableCORS   bool
@@ -71,61 +73,75 @@ type Config struct {
 // DefaultConfig returns a configuration suitable for development
 func DefaultConfig() *Config {
 	return &Config{
-		GRPCAddr:            getEnv("GRPC_ADDR", ":9000"),
-		HTTPAddr:            getEnv("HTTP_ADDR", ":8080"),
-		StorageType:         getEnv("STORAGE_TYPE", "postgres"),
-		SQLiteDBPath:        getEnv("SQLITE_DB_PATH", "chronoqueue.db"),
-		PostgresDSN:         getEnv("POSTGRES_DSN", ""),
-		PostgresHost:        getEnv("POSTGRES_HOST", "localhost"),
-		PostgresPort:        getEnvInt("POSTGRES_PORT", 5432),
-		PostgresUser:        getEnv("POSTGRES_USER", "chronoqueue"),
-		PostgresPassword:    getEnv("POSTGRES_PASSWORD", "chronoqueue"),
-		PostgresDBName:      getEnv("POSTGRES_DB", "chronoqueue"),
-		PostgresSSLMode:     getEnv("POSTGRES_SSLMODE", "disable"),
-		LogLevel:            getEnv("LOG_LEVEL", "info"),
-		LogFormat:           getEnv("LOG_FORMAT", "text"),
-		EnableTLS:           getEnvBool("CHRONOQUEUE_TLS_ENABLED", false),
-		EnableCORS:          getEnvBool("ENABLE_CORS", true),
-		AllowOrigins:        getEnvSlice("ALLOW_ORIGINS", []string{"*"}),
-		AuthEnabled:         getEnvBool("AUTH_ENABLED", false),
-		APIKeys:             getEnvSlice("API_KEYS", nil),
-		SchedulerIntervalMs: getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
-		ReclaimIntervalMs:   getEnvInt("RECLAIM_INTERVAL_MS", 5000),
-		IsDevelopment:       true,
+		GRPCAddr:              getEnv("GRPC_ADDR", ":9000"),
+		HTTPAddr:              getEnv("HTTP_ADDR", ":8080"),
+		StorageType:           getEnv("STORAGE_TYPE", "postgres"),
+		SQLiteDBPath:          getEnv("SQLITE_DB_PATH", "chronoqueue.db"),
+		PostgresDSN:           getEnv("POSTGRES_DSN", ""),
+		PostgresHost:          getEnv("POSTGRES_HOST", "localhost"),
+		PostgresPort:          getEnvInt("POSTGRES_PORT", 5432),
+		PostgresUser:          getEnv("POSTGRES_USER", "chronoqueue"),
+		PostgresPassword:      getEnv("POSTGRES_PASSWORD", "chronoqueue"),
+		PostgresDBName:        getEnv("POSTGRES_DB", "chronoqueue"),
+		PostgresSSLMode:       getEnv("POSTGRES_SSLMODE", "disable"),
+		LogLevel:              getEnv("LOG_LEVEL", "info"),
+		LogFormat:             getEnv("LOG_FORMAT", "text"),
+		EnableTLS:             getEnvBool("CHRONOQUEUE_TLS_ENABLED", false),
+		CertFile:              getEnv("CERT_FILE", ""),
+		KeyFile:               getEnv("KEY_FILE", ""),
+		CACertFile:            getEnv("CA_CERT_FILE", ""),
+		GatewayClientCertFile: getEnv("GATEWAY_CLIENT_CERT_FILE", ""),
+		GatewayClientKeyFile:  getEnv("GATEWAY_CLIENT_KEY_FILE", ""),
+		EnableCORS:            getEnvBool("ENABLE_CORS", true),
+		AllowOrigins:          getEnvSlice("ALLOW_ORIGINS", []string{"*"}),
+		AuthEnabled:           getEnvBool("AUTH_ENABLED", false),
+		APIKeys:               getEnvSlice("API_KEYS", nil),
+		SchedulerIntervalMs:   getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
+		ReclaimIntervalMs:     getEnvInt("RECLAIM_INTERVAL_MS", 5000),
+		IsDevelopment:         true,
 	}
 }
 
 // ProductionConfig returns a configuration suitable for production
 func ProductionConfig() *Config {
 	return &Config{
-		GRPCAddr:            getEnv("GRPC_ADDR", ":9000"),
-		HTTPAddr:            getEnv("HTTP_ADDR", ":8080"),
-		StorageType:         getEnv("STORAGE_TYPE", "postgres"),
-		SQLiteDBPath:        getEnv("SQLITE_DB_PATH", "chronoqueue.db"),
-		PostgresDSN:         getEnv("POSTGRES_DSN", ""),
-		PostgresHost:        getEnv("POSTGRES_HOST", "localhost"),
-		PostgresPort:        getEnvInt("POSTGRES_PORT", 5432),
-		PostgresUser:        getEnv("POSTGRES_USER", "chronoqueue"),
-		PostgresPassword:    getEnv("POSTGRES_PASSWORD", "chronoqueue"),
-		PostgresDBName:      getEnv("POSTGRES_DB", "chronoqueue"),
-		PostgresSSLMode:     getEnv("POSTGRES_SSLMODE", "disable"),
-		LogLevel:            getEnv("LOG_LEVEL", "info"),
-		LogFormat:           getEnv("LOG_FORMAT", "json"),
-		EnableTLS:           getEnvBool("CHRONOQUEUE_TLS_ENABLED", false),
-		EnableCORS:          getEnvBool("ENABLE_CORS", false),
-		AllowOrigins:        getEnvSlice("ALLOW_ORIGINS", []string{}),
-		AuthEnabled:         getEnvBool("AUTH_ENABLED", true),
-		APIKeys:             getEnvSlice("API_KEYS", nil),
-		EnableAPIDocs:       getEnvBool("ENABLE_API_DOCS", false), // Disabled by default in production
-		APIDocsAllowOrigins: getEnvSlice("API_DOCS_CORS_ORIGINS", []string{}),
-		SchedulerIntervalMs: getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
-		ReclaimIntervalMs:   getEnvInt("RECLAIM_INTERVAL_MS", 5000),
-		IsDevelopment:       false,
+		GRPCAddr:              getEnv("GRPC_ADDR", ":9000"),
+		HTTPAddr:              getEnv("HTTP_ADDR", ":8080"),
+		StorageType:           getEnv("STORAGE_TYPE", "postgres"),
+		SQLiteDBPath:          getEnv("SQLITE_DB_PATH", "chronoqueue.db"),
+		PostgresDSN:           getEnv("POSTGRES_DSN", ""),
+		PostgresHost:          getEnv("POSTGRES_HOST", "localhost"),
+		PostgresPort:          getEnvInt("POSTGRES_PORT", 5432),
+		PostgresUser:          getEnv("POSTGRES_USER", "chronoqueue"),
+		PostgresPassword:      getEnv("POSTGRES_PASSWORD", "chronoqueue"),
+		PostgresDBName:        getEnv("POSTGRES_DB", "chronoqueue"),
+		PostgresSSLMode:       getEnv("POSTGRES_SSLMODE", "disable"),
+		LogLevel:              getEnv("LOG_LEVEL", "info"),
+		LogFormat:             getEnv("LOG_FORMAT", "json"),
+		EnableTLS:             getEnvBool("CHRONOQUEUE_TLS_ENABLED", true),
+		CertFile:              getEnv("CERT_FILE", ""),
+		KeyFile:               getEnv("KEY_FILE", ""),
+		CACertFile:            getEnv("CA_CERT_FILE", ""),
+		GatewayClientCertFile: getEnv("GATEWAY_CLIENT_CERT_FILE", ""),
+		GatewayClientKeyFile:  getEnv("GATEWAY_CLIENT_KEY_FILE", ""),
+		EnableCORS:            getEnvBool("ENABLE_CORS", false),
+		AllowOrigins:          getEnvSlice("ALLOW_ORIGINS", []string{}),
+		AuthEnabled:           getEnvBool("AUTH_ENABLED", true),
+		APIKeys:               getEnvSlice("API_KEYS", nil),
+		EnableAPIDocs:         getEnvBool("ENABLE_API_DOCS", false), // Disabled by default in production
+		APIDocsAllowOrigins:   getEnvSlice("API_DOCS_CORS_ORIGINS", []string{}),
+		SchedulerIntervalMs:   getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
+		ReclaimIntervalMs:     getEnvInt("RECLAIM_INTERVAL_MS", 5000),
+		IsDevelopment:         false,
 	}
 }
 
 // Validate checks if the configuration is valid
 func (c *Config) Validate() error {
+	if !c.IsDevelopment && !c.EnableTLS {
+		return fmt.Errorf("TLS must be enabled in production")
+	}
+
 	if c.AuthEnabled && len(c.APIKeys) == 0 {
 		return fmt.Errorf("authentication enabled but no API keys configured")
 	}
@@ -135,6 +151,22 @@ func (c *Config) Validate() error {
 
 	if c.EnableTLS && (c.CertFile == "" || c.KeyFile == "") {
 		return fmt.Errorf("TLS enabled but cert-file or key-file not specified")
+	}
+	if !c.IsDevelopment && c.GatewayInsecure {
+		return fmt.Errorf("gateway-insecure cannot be enabled in production")
+	}
+
+	if (c.GatewayClientCertFile == "") != (c.GatewayClientKeyFile == "") {
+		return fmt.Errorf("gateway client cert and key files must be specified together")
+	}
+	if c.GatewayClientCertFile != "" && !c.GatewayUseTLS {
+		return fmt.Errorf("gateway client certificates require gateway TLS")
+	}
+	if c.GatewayClientCertFile != "" && c.CACertFile == "" {
+		return fmt.Errorf("gateway client certificates require ca-cert-file")
+	}
+	if c.CACertFile != "" && (c.GatewayClientCertFile == "" || c.GatewayClientKeyFile == "") {
+		return fmt.Errorf("mTLS enabled but gateway client cert or key file not specified")
 	}
 
 	if c.GRPCAddr == "" {

@@ -35,6 +35,8 @@ type GatewayConfig struct {
 	UseTLS         bool   // Enable TLS for internal gateway→gRPC connection
 	TLSInsecure    bool   // Skip TLS verification (for localhost)
 	ServerCertFile string // Optional: CA cert to verify server certificate
+	ClientCertFile string // Optional: client certificate for mTLS
+	ClientKeyFile  string // Optional: client key for mTLS
 
 	// API Documentation Configuration
 	EnableAPIDocs       bool     // Enable API documentation endpoints (disabled by default in production)
@@ -56,6 +58,10 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 	// The first request will trigger the connection
 	var opts []grpc.DialOption
 
+	if (config.ClientCertFile == "") != (config.ClientKeyFile == "") {
+		return nil, fmt.Errorf("gateway client cert and key files must be specified together")
+	}
+
 	if config.UseTLS {
 		tlsConfig := &tls.Config{
 			InsecureSkipVerify: config.TLSInsecure,
@@ -75,6 +81,14 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 				return nil, fmt.Errorf("failed to parse server CA cert")
 			}
 			tlsConfig.RootCAs = caCertPool
+		}
+
+		if config.ClientCertFile != "" {
+			clientCert, err := tls.LoadX509KeyPair(config.ClientCertFile, config.ClientKeyFile)
+			if err != nil {
+				return nil, fmt.Errorf("load gateway client certificate: %w", err)
+			}
+			tlsConfig.Certificates = []tls.Certificate{clientCert}
 		}
 
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
