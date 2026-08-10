@@ -4,6 +4,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -49,6 +50,7 @@ func TestTLSDefaultsAndProductionValidation(t *testing.T) {
 
 	assert.False(t, DefaultConfig().EnableTLS)
 	productionConfig := ProductionConfig()
+	productionConfig.MetricsBearerToken = "metrics-secret"
 	assert.True(t, productionConfig.EnableTLS)
 	productionConfig.StorageType = "sqlite"
 	productionConfig.EncryptionKeySourceType = "VAULT"
@@ -86,6 +88,7 @@ func TestPostgresSecurityDefaults(t *testing.T) {
 
 func TestValidateProductionPostgresSecurity(t *testing.T) {
 	config := ProductionConfig()
+	config.MetricsBearerToken = "metrics-secret"
 	config.EncryptionKeySourceType = "VAULT"
 	config.AuthEnabled = true
 	config.APIKeys = []string{"secret"}
@@ -120,6 +123,7 @@ func TestValidateProductionPostgresSecurity(t *testing.T) {
 
 func TestValidateProductionPostgresDSN(t *testing.T) {
 	config := ProductionConfig()
+	config.MetricsBearerToken = "metrics-secret"
 	config.EncryptionKeySourceType = "VAULT"
 	config.AuthEnabled = true
 	config.APIKeys = []string{"secret"}
@@ -186,6 +190,7 @@ func TestHTTPGatewayTimeoutsFromEnvironment(t *testing.T) {
 }
 
 func TestHTTPGatewayTimeoutsFromFlags(t *testing.T) {
+	t.Setenv("METRICS_BEARER_TOKEN", "metrics-secret")
 	cmd := &cobra.Command{Use: "test"}
 	AddServerFlags(cmd, DefaultConfig())
 	require.NoError(t, cmd.ParseFlags([]string{
@@ -199,6 +204,7 @@ func TestHTTPGatewayTimeoutsFromFlags(t *testing.T) {
 		"--rate-limit-requests-per-second=12.5",
 		"--rate-limit-burst=25",
 		"--rate-limit-max-buckets=500",
+		"--metrics-auth-enabled",
 	}))
 
 	config, err := ParseConfigFromFlags(cmd)
@@ -213,6 +219,9 @@ func TestHTTPGatewayTimeoutsFromFlags(t *testing.T) {
 	assert.Equal(t, 12.5, config.RateLimitRequestsPerSecond)
 	assert.Equal(t, 25, config.RateLimitBurst)
 	assert.Equal(t, 500, config.RateLimitMaxBuckets)
+	assert.True(t, config.MetricsEnabled)
+	assert.True(t, config.MetricsAuthEnabled)
+	assert.Equal(t, "metrics-secret", config.MetricsBearerToken)
 }
 
 func TestSafePostgresDSNSummary(t *testing.T) {
@@ -276,6 +285,7 @@ func TestPayloadEncryptionProductionPolicy(t *testing.T) {
 
 	assert.False(t, DefaultConfig().EncryptionEnabled)
 	config := ProductionConfig()
+	config.MetricsBearerToken = "metrics-secret"
 	assert.True(t, config.EncryptionEnabled)
 	config.StorageType = "sqlite"
 	config.AuthEnabled = true
@@ -338,8 +348,86 @@ func TestRateLimitDefaultsAndValidation(t *testing.T) {
 	assert.Contains(t, err.Error(), "max buckets")
 }
 
+func TestMetricsDefaultsAndProductionValidation(t *testing.T) {
+	t.Setenv("METRICS_ENABLED", "")
+	t.Setenv("METRICS_AUTH_ENABLED", "")
+	t.Setenv("METRICS_BEARER_TOKEN", "")
+
+	developmentConfig := DefaultConfig()
+	assert.True(t, developmentConfig.MetricsEnabled)
+	assert.False(t, developmentConfig.MetricsAuthEnabled)
+	productionConfig := ProductionConfig()
+	assert.True(t, productionConfig.MetricsEnabled)
+	assert.True(t, productionConfig.MetricsAuthEnabled)
+
+	productionConfig.StorageType = "sqlite"
+	productionConfig.AuthEnabled = true
+	productionConfig.APIKeys = []string{"secret"}
+	productionConfig.EncryptionKeySourceType = "VAULT"
+	productionConfig.CertFile = "server.crt"
+	productionConfig.KeyFile = "server.key"
+	productionConfig.MetricsAuthEnabled = false
+	err := productionConfig.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "metrics authentication must be enabled")
+
+	productionConfig.MetricsAuthEnabled = true
+	err = productionConfig.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no bearer token configured")
+
+	productionConfig.MetricsBearerToken = "metrics-secret"
+	assert.NoError(t, productionConfig.Validate())
+
+	productionConfig.MetricsEnabled = false
+	productionConfig.MetricsAuthEnabled = false
+	productionConfig.MetricsBearerToken = ""
+	assert.NoError(t, productionConfig.Validate())
+}
+
+func TestMetricsHTTPHandler(t *testing.T) {
+	t.Run("disabled", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		metricsHTTPHandler(&Config{}).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+		assert.Equal(t, http.StatusNotFound, recorder.Code)
+	})
+
+	t.Run("authentication required", func(t *testing.T) {
+		config := &Config{MetricsEnabled: true, MetricsAuthEnabled: true, MetricsBearerToken: "metrics-secret"}
+		handler := metricsHTTPHandler(config)
+
+		for _, authorization := range []string{"", "Bearer wrong-secret", "Basic bWV0cmljczptZXRyaWNz"} {
+			unauthorized := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+			request.Header.Set("Authorization", authorization)
+			handler.ServeHTTP(unauthorized, request)
+			assert.Equal(t, http.StatusUnauthorized, unauthorized.Code)
+			assert.Equal(t, `Bearer realm="ChronoQueue metrics"`, unauthorized.Header().Get("WWW-Authenticate"))
+		}
+
+		authorized := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		request.Header.Set("Authorization", "Bearer metrics-secret")
+		handler.ServeHTTP(authorized, request)
+		assert.Equal(t, http.StatusOK, authorized.Code)
+		assert.Contains(t, authorized.Body.String(), "# HELP")
+	})
+
+	t.Run("authentication disabled", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		metricsHTTPHandler(&Config{MetricsEnabled: true}).ServeHTTP(
+			recorder,
+			httptest.NewRequest(http.MethodGet, "/metrics", nil),
+		)
+
+		assert.Equal(t, http.StatusOK, recorder.Code)
+		assert.Contains(t, recorder.Body.String(), "# HELP")
+	})
+}
+
 func TestProductionRejectsInsecureGateway(t *testing.T) {
 	config := ProductionConfig()
+	config.MetricsBearerToken = "metrics-secret"
 	config.StorageType = "sqlite"
 	config.AuthEnabled = true
 	config.APIKeys = []string{"secret"}

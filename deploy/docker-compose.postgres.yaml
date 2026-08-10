@@ -47,9 +47,18 @@ services:
       context: ..
       dockerfile: ./images/Dockerfile
     entrypoint: ["/chronoqueue"]
+    environment:
+      - CHRONOQUEUE_UI_AUTH_ENABLED=true
+      - CHRONOQUEUE_UI_AUTH_USERNAME=admin
+      - CHRONOQUEUE_UI_AUTH_PASSWORD=chronoqueue_dev_password
+      - CHRONOQUEUE_UI_TLS_CERT_FILE=/secrets/server.crt
+      - CHRONOQUEUE_UI_TLS_KEY_FILE=/secrets/server.key
+      - CHRONOQUEUE_UI_PUBLIC_ORIGIN=https://localhost:8081
     command:
       - web-ui
       - start
+      - --host
+      - 0.0.0.0
       - --port
       - "8081"
       - --grpc-address
@@ -59,8 +68,10 @@ services:
       - chronoqueuesvc
     networks:
       - chronoqueue-network
+    volumes:
+      - ${WORKSPACE_FOLDER}/certs:/secrets:ro
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     restart: unless-stopped
 
   postgres:

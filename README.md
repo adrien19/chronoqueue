@@ -135,6 +135,7 @@ Another easy way to get started locally is to use [docker-compose](https://docs.
    - HTTP gateway timeouts default to `5s` for headers, `15s` for reads, `30s` for writes, and `60s` for idle connections. Override them with `HTTP_READ_HEADER_TIMEOUT`, `HTTP_READ_TIMEOUT`, `HTTP_WRITE_TIMEOUT`, and `HTTP_IDLE_TIMEOUT`.
    - Production mode requires payload encryption and an explicit `ENCRYPTION_KEY_SOURCE_TYPE`; use `VAULT` for production. `LOCAL` keys require `ALLOW_LOCAL_ENCRYPTION_KEY_IN_PRODUCTION=true` and should be limited to exceptional deployments.
    - Per-principal rate limiting is enabled by default in production at 100 requests/second with a burst of 200 and at most 10,000 in-memory principals. Configure it with `RATE_LIMIT_ENABLED`, `RATE_LIMIT_REQUESTS_PER_SECOND`, `RATE_LIMIT_BURST`, and `RATE_LIMIT_MAX_BUCKETS`.
+   - Production metrics require a dedicated bearer token in `METRICS_BEARER_TOKEN`. Prometheus should send it in the `Authorization: Bearer` header.
 
 4. Start the ChronoQueue server:
 
@@ -176,6 +177,8 @@ ChronoQueue includes a built-in web interface for monitoring and managing your q
     ```
 
 4. Open your browser to `http://localhost:8081`
+
+The UI binds to `127.0.0.1` by default. A non-loopback bind such as `--host 0.0.0.0` requires `CHRONOQUEUE_UI_TLS_CERT_FILE` and `CHRONOQUEUE_UI_TLS_KEY_FILE`; the UI then serves HTTPS with TLS 1.2 or newer. Enable Basic authentication with `CHRONOQUEUE_UI_AUTH_ENABLED=true`, `CHRONOQUEUE_UI_AUTH_USERNAME`, and `CHRONOQUEUE_UI_AUTH_PASSWORD`. `--skip-ssl` affects only the UI-to-gRPC connection.
 
 #### UI Features
 

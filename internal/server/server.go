@@ -145,7 +145,9 @@ func (s *Server) printStartupInfo() {
 	if s.config.IsDevelopment {
 		fmt.Printf("ℹ Available endpoints:\n")
 		fmt.Printf("  - Health: http://localhost%s/health\n", s.config.HTTPAddr)
-		fmt.Printf("  - Metrics: http://localhost%s/metrics\n", s.config.HTTPAddr)
+		if s.config.MetricsEnabled {
+			fmt.Printf("  - Metrics: http://localhost%s/metrics\n", s.config.HTTPAddr)
+		}
 		fmt.Printf("  - API Docs: http://localhost%s/docs/\n", s.config.HTTPAddr)
 	}
 
@@ -362,7 +364,7 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	httpMux.Handle("/health", gateway.HealthCheckHandler())
 
 	// Add metrics endpoint
-	httpMux.Handle("/metrics", gateway.MetricsHandler())
+	httpMux.Handle("/metrics", metricsHTTPHandler(s.config))
 
 	// Add API documentation endpoints (controlled by EnableAPIDocs config)
 	httpMux.Handle("/docs/", gateway.SwaggerUIHandler(gatewayConfig, s.logger))
@@ -389,6 +391,17 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func metricsHTTPHandler(config *Config) http.Handler {
+	if !config.MetricsEnabled {
+		return http.NotFoundHandler()
+	}
+	handler := gateway.MetricsHandler()
+	if config.MetricsAuthEnabled {
+		handler = gateway.BearerAuthMiddleware(config.MetricsBearerToken, handler)
+	}
+	return handler
 }
 
 func (s *Server) newHTTPServer(handler http.Handler) *http.Server {

@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"crypto/subtle"
 	"crypto/tls"
 	"crypto/x509"
 	"embed"
@@ -246,6 +247,22 @@ func MetricsHandler() http.Handler {
 		InitMetrics()
 	}
 	return metricsRegistry.Handler()
+}
+
+// BearerAuthMiddleware requires a bearer token before serving a protected endpoint.
+func BearerAuthMiddleware(token string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		scheme, credential, found := strings.Cut(r.Header.Get("Authorization"), " ")
+		authorized := found && strings.EqualFold(scheme, "Bearer") &&
+			len(credential) == len(token) && subtle.ConstantTimeCompare([]byte(credential), []byte(token)) == 1
+		if !authorized {
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("WWW-Authenticate", `Bearer realm="ChronoQueue metrics"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // SwaggerUIHandler serves the Swagger UI for API documentation

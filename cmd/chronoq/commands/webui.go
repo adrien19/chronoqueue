@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -29,6 +30,7 @@ func NewWebUICommand() *cobra.Command {
 
 func newWebUIStartCommand() *cobra.Command {
 	var (
+		host     string
 		port     string
 		grpcAddr string
 		skipSSL  bool
@@ -43,10 +45,11 @@ schedules, and viewing dead letter queues. Uses the dark cq-* design system.
 Example:
   chronoq web-ui start --port 8081 --grpc-address localhost:9000`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runWebUIStart(port, grpcAddr, skipSSL)
+			return runWebUIStart(host, port, grpcAddr, skipSSL)
 		},
 	}
 
+	cmd.Flags().StringVar(&host, "host", "127.0.0.1", "Host address for the web UI")
 	cmd.Flags().StringVar(&port, "port", "8081", "Port for the web UI")
 	cmd.Flags().StringVar(&grpcAddr, "grpc-address", "localhost:9000", "Address of the ChronoQueue gRPC server")
 	cmd.Flags().BoolVar(&skipSSL, "skip-ssl", false, "Disable TLS verification for the gRPC connection (for local/dev use)")
@@ -54,7 +57,7 @@ Example:
 	return cmd
 }
 
-func runWebUIStart(port, grpcAddr string, skipSSL bool) error {
+func runWebUIStart(host, port, grpcAddr string, skipSSL bool) error {
 	logger := log.NewLogger()
 
 	server, err := webui.NewUIServer(grpcAddr, skipSSL, logger)
@@ -70,11 +73,11 @@ func runWebUIStart(port, grpcAddr string, skipSSL bool) error {
 
 	errChan := make(chan error, 1)
 	go func() {
-		addr := fmt.Sprintf(":%s", port)
+		addr := net.JoinHostPort(host, port)
 		logger.InfoWithFields("Starting ChronoQueue web-UI", "address", addr, "grpc", grpcAddr)
 		fmt.Printf("\n")
 		fmt.Printf("ChronoQueue web-UI is starting...\n")
-		fmt.Printf("Dashboard: http://localhost:%s\n", port)
+		fmt.Printf("Dashboard: %s://localhost:%s\n", server.URLScheme(), port)
 		fmt.Printf("Connected to: %s\n", grpcAddr)
 		fmt.Printf("\n")
 		fmt.Printf("Press Ctrl+C to stop\n\n")

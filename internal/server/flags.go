@@ -50,6 +50,8 @@ func AddServerFlags(cmd *cobra.Command, config *Config) {
 	cmd.Flags().Float64Var(&config.RateLimitRequestsPerSecond, "rate-limit-requests-per-second", config.RateLimitRequestsPerSecond, "Sustained gRPC requests per second per principal")
 	cmd.Flags().IntVar(&config.RateLimitBurst, "rate-limit-burst", config.RateLimitBurst, "Maximum gRPC request burst per principal")
 	cmd.Flags().IntVar(&config.RateLimitMaxBuckets, "rate-limit-max-buckets", config.RateLimitMaxBuckets, "Maximum number of rate limit principals tracked in memory")
+	cmd.Flags().BoolVar(&config.MetricsEnabled, "metrics-enabled", config.MetricsEnabled, "Enable the Prometheus metrics endpoint")
+	cmd.Flags().BoolVar(&config.MetricsAuthEnabled, "metrics-auth-enabled", config.MetricsAuthEnabled, "Require bearer authentication for Prometheus metrics")
 	cmd.Flags().BoolVar(&config.EnableAPIDocs, "enable-api-docs", config.EnableAPIDocs, "Enable API documentation endpoints (disabled by default in production)")
 	cmd.Flags().StringSliceVar(&config.APIDocsAllowOrigins, "api-docs-cors-origins", config.APIDocsAllowOrigins, "Allowed CORS origins for API documentation (uses --cors-origins if not set)")
 }
@@ -240,6 +242,20 @@ func ParseConfigFromFlags(cmd *cobra.Command) (*Config, error) {
 			return nil, fmt.Errorf("read --rate-limit-max-buckets: %w", err)
 		}
 		config.RateLimitMaxBuckets = value
+	}
+	if cmd.Flags().Changed("metrics-enabled") {
+		value, err := cmd.Flags().GetBool("metrics-enabled")
+		if err != nil {
+			return nil, fmt.Errorf("read --metrics-enabled: %w", err)
+		}
+		config.MetricsEnabled = value
+	}
+	if cmd.Flags().Changed("metrics-auth-enabled") {
+		value, err := cmd.Flags().GetBool("metrics-auth-enabled")
+		if err != nil {
+			return nil, fmt.Errorf("read --metrics-auth-enabled: %w", err)
+		}
+		config.MetricsAuthEnabled = value
 	}
 
 	return config, config.Validate()

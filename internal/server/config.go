@@ -78,6 +78,11 @@ type Config struct {
 	RateLimitBurst             int
 	RateLimitMaxBuckets        int
 
+	// Metrics Configuration
+	MetricsEnabled     bool
+	MetricsAuthEnabled bool
+	MetricsBearerToken string
+
 	// API Documentation Configuration
 	EnableAPIDocs       bool     // Enable API documentation endpoints (default: false in production)
 	APIDocsAllowOrigins []string // Allowed CORS origins for API docs (comma-separated)
@@ -130,6 +135,9 @@ func DefaultConfig() *Config {
 		RateLimitRequestsPerSecond:          getEnvFloat64("RATE_LIMIT_REQUESTS_PER_SECOND", 100),
 		RateLimitBurst:                      getEnvInt("RATE_LIMIT_BURST", 200),
 		RateLimitMaxBuckets:                 getEnvInt("RATE_LIMIT_MAX_BUCKETS", 10000),
+		MetricsEnabled:                      getEnvBool("METRICS_ENABLED", true),
+		MetricsAuthEnabled:                  getEnvBool("METRICS_AUTH_ENABLED", false),
+		MetricsBearerToken:                  getEnv("METRICS_BEARER_TOKEN", ""),
 		SchedulerIntervalMs:                 getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
 		ReclaimIntervalMs:                   getEnvInt("RECLAIM_INTERVAL_MS", 5000),
 		IsDevelopment:                       true,
@@ -176,6 +184,9 @@ func ProductionConfig() *Config {
 		RateLimitRequestsPerSecond:          getEnvFloat64("RATE_LIMIT_REQUESTS_PER_SECOND", 100),
 		RateLimitBurst:                      getEnvInt("RATE_LIMIT_BURST", 200),
 		RateLimitMaxBuckets:                 getEnvInt("RATE_LIMIT_MAX_BUCKETS", 10000),
+		MetricsEnabled:                      getEnvBool("METRICS_ENABLED", true),
+		MetricsAuthEnabled:                  getEnvBool("METRICS_AUTH_ENABLED", true),
+		MetricsBearerToken:                  getEnv("METRICS_BEARER_TOKEN", ""),
 		EnableAPIDocs:                       getEnvBool("ENABLE_API_DOCS", false), // Disabled by default in production
 		APIDocsAllowOrigins:                 getEnvSlice("API_DOCS_CORS_ORIGINS", []string{}),
 		SchedulerIntervalMs:                 getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
@@ -211,6 +222,12 @@ func (c *Config) Validate() error {
 	}
 	if c.RateLimitEnabled && (c.RateLimitRequestsPerSecond <= 0 || math.IsNaN(c.RateLimitRequestsPerSecond) || math.IsInf(c.RateLimitRequestsPerSecond, 0) || c.RateLimitBurst <= 0 || c.RateLimitMaxBuckets <= 0) {
 		return fmt.Errorf("rate limit requests per second, burst, and max buckets must be greater than 0")
+	}
+	if c.MetricsEnabled && !c.IsDevelopment && !c.MetricsAuthEnabled {
+		return fmt.Errorf("metrics authentication must be enabled in production")
+	}
+	if c.MetricsEnabled && c.MetricsAuthEnabled && c.MetricsBearerToken == "" {
+		return fmt.Errorf("metrics authentication enabled but no bearer token configured")
 	}
 
 	if c.EnableTLS && (c.CertFile == "" || c.KeyFile == "") {

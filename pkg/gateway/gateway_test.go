@@ -238,3 +238,40 @@ func TestRateLimitErrorMapsToHTTPTooManyRequests(t *testing.T) {
 
 	assert.Equal(t, http.StatusTooManyRequests, recorder.Code)
 }
+
+func TestBearerAuthMiddleware(t *testing.T) {
+	handlerCalls := 0
+	handler := BearerAuthMiddleware("metrics-secret", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		handlerCalls++
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	tests := []struct {
+		name          string
+		authorization string
+		wantStatus    int
+	}{
+		{name: "missing token", wantStatus: http.StatusUnauthorized},
+		{name: "invalid token", authorization: "Bearer wrong", wantStatus: http.StatusUnauthorized},
+		{name: "wrong scheme", authorization: "Basic metrics-secret", wantStatus: http.StatusUnauthorized},
+		{name: "valid token", authorization: "Bearer metrics-secret", wantStatus: http.StatusOK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+			if tt.authorization != "" {
+				request.Header.Set("Authorization", tt.authorization)
+			}
+
+			handler.ServeHTTP(recorder, request)
+
+			assert.Equal(t, tt.wantStatus, recorder.Code)
+			if tt.wantStatus == http.StatusUnauthorized {
+				assert.Equal(t, `Bearer realm="ChronoQueue metrics"`, recorder.Header().Get("WWW-Authenticate"))
+			}
+		})
+	}
+	assert.Equal(t, 1, handlerCalls)
+}

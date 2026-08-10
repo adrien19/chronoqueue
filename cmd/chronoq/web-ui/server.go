@@ -2,6 +2,8 @@ package webui
 
 import (
 	"context"
+	"crypto/subtle"
+	"crypto/tls"
 	"embed"
 	"fmt"
 	"html/template"
@@ -32,13 +34,38 @@ type UIServer struct {
 	publicOrigin      normalizedOrigin
 	hasPublicOrigin   bool
 	trustProxyHeaders bool
+	auth              uiAuthConfig
+	tls               uiTLSConfig
+}
+
+type uiAuthConfig struct {
+	enabled  bool
+	username string
+	password string
+}
+
+type uiTLSConfig struct {
+	enabled     bool
+	certificate tls.Certificate
+}
+
+func (c uiTLSConfig) serverConfig() *tls.Config {
+	return &tls.Config{
+		MinVersion:   tls.VersionTLS12,
+		Certificates: []tls.Certificate{c.certificate},
+	}
 }
 
 // NewUIServer creates a new UIServer, parses templates, and seeds the cluster store.
 func NewUIServer(grpcAddr string, skipSSL bool, logger *log.Logger) (*UIServer, error) {
+	tlsConfig, err := uiTLSConfigFromEnvironment()
+	if err != nil {
+		return nil, err
+	}
+
 	tmpl := template.New("").Funcs(templateFuncs())
 
-	tmpl, err := tmpl.ParseFS(
+	tmpl, err = tmpl.ParseFS(
 		content,
 		"templates/layouts/*.gohtml",
 		"templates/partials/*.gohtml",
@@ -83,6 +110,23 @@ func NewUIServer(grpcAddr string, skipSSL bool, logger *log.Logger) (*UIServer, 
 		trustProxyHeaders = parsedTrustProxy
 	}
 
+	authEnabled := false
+	if rawAuthEnabled := strings.TrimSpace(os.Getenv("CHRONOQUEUE_UI_AUTH_ENABLED")); rawAuthEnabled != "" {
+		parsedAuthEnabled, err := strconv.ParseBool(rawAuthEnabled)
+		if err != nil {
+			return nil, fmt.Errorf("invalid CHRONOQUEUE_UI_AUTH_ENABLED: %w", err)
+		}
+		authEnabled = parsedAuthEnabled
+	}
+	auth := uiAuthConfig{
+		enabled:  authEnabled,
+		username: os.Getenv("CHRONOQUEUE_UI_AUTH_USERNAME"),
+		password: os.Getenv("CHRONOQUEUE_UI_AUTH_PASSWORD"),
+	}
+	if auth.enabled && (auth.username == "" || auth.password == "") {
+		return nil, fmt.Errorf("web UI authentication enabled but username or password is missing")
+	}
+
 	return &UIServer{
 		templates:         tmpl,
 		store:             store,
@@ -90,17 +134,77 @@ func NewUIServer(grpcAddr string, skipSSL bool, logger *log.Logger) (*UIServer, 
 		publicOrigin:      publicOrigin,
 		hasPublicOrigin:   hasPublicOrigin,
 		trustProxyHeaders: trustProxyHeaders,
+		auth:              auth,
+		tls:               tlsConfig,
 	}, nil
+}
+
+func uiTLSConfigFromEnvironment() (uiTLSConfig, error) {
+	certFile := strings.TrimSpace(os.Getenv("CHRONOQUEUE_UI_TLS_CERT_FILE"))
+	keyFile := strings.TrimSpace(os.Getenv("CHRONOQUEUE_UI_TLS_KEY_FILE"))
+	if (certFile == "") != (keyFile == "") {
+		return uiTLSConfig{}, fmt.Errorf("web UI TLS certificate and key must be configured together")
+	}
+	if certFile == "" {
+		return uiTLSConfig{}, nil
+	}
+
+	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return uiTLSConfig{}, fmt.Errorf("load web UI TLS certificate: %w", err)
+	}
+	return uiTLSConfig{enabled: true, certificate: certificate}, nil
 }
 
 // Start registers routes and starts the HTTP server.
 func (s *UIServer) Start(addr string) error {
+	if err := validateUIListenAddress(addr, s.tls.enabled); err != nil {
+		return err
+	}
+
+	handler, err := s.httpHandler()
+	if err != nil {
+		return err
+	}
+
+	s.server = &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+	if s.tls.enabled {
+		s.server.TLSConfig = s.tls.serverConfig()
+		return s.server.ListenAndServeTLS("", "")
+	}
+
+	return s.server.ListenAndServe()
+}
+
+func validateUIListenAddress(addr string, tlsEnabled bool) error {
+	if !isLoopbackListenAddress(addr) && !tlsEnabled {
+		return fmt.Errorf("web UI TLS is required when binding to a non-loopback address")
+	}
+	return nil
+}
+
+// URLScheme returns the transport scheme used by the UI listener.
+func (s *UIServer) URLScheme() string {
+	if s.tls.enabled {
+		return "https"
+	}
+	return "http"
+}
+
+func (s *UIServer) httpHandler() (http.Handler, error) {
 	mux := http.NewServeMux()
 
 	// Static assets from the embedded filesystem
 	staticFS, err := fs.Sub(content, "static")
 	if err != nil {
-		return fmt.Errorf("failed to create static sub-fs: %w", err)
+		return nil, fmt.Errorf("failed to create static sub-fs: %w", err)
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 
@@ -174,16 +278,41 @@ func (s *UIServer) Start(addr string) error {
 		}
 	})
 
-	s.server = &http.Server{
-		Addr:              addr,
-		Handler:           uiSecurityHeaders(mux),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
+	return uiSecurityHeaders(uiAuthMiddleware(s.auth, mux)), nil
+}
 
-	return s.server.ListenAndServe()
+func isLoopbackListenAddress(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func uiAuthMiddleware(config uiAuthConfig, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !config.enabled || r.URL.Path == "/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		username, password, ok := r.BasicAuth()
+		authorized := ok && len(username) == len(config.username) && len(password) == len(config.password) &&
+			subtle.ConstantTimeCompare([]byte(username), []byte(config.username)) == 1 &&
+			subtle.ConstantTimeCompare([]byte(password), []byte(config.password)) == 1
+		if !authorized {
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("WWW-Authenticate", `Basic realm="ChronoQueue", charset="UTF-8"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 const uiContentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self'; script-src 'self' 'sha256-IUOv9nmQrfTDlLJauGABujh0XbcvcUmLJX6WZmaEdzc='; style-src 'self'; connect-src 'self'"

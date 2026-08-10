@@ -92,6 +92,9 @@ The `entrypoint.sh` script provides a flexible way to start the ChronoQueue serv
 | `RATE_LIMIT_REQUESTS_PER_SECOND` | Sustained requests per second per principal | `100` |
 | `RATE_LIMIT_BURST` | Maximum request burst per principal | `200` |
 | `RATE_LIMIT_MAX_BUCKETS` | Maximum principals tracked in memory | `10000` |
+| `METRICS_ENABLED` | Expose the Prometheus metrics endpoint | `true` |
+| `METRICS_AUTH_ENABLED` | Require a bearer token for metrics | `false` in development; `true` in production |
+| `METRICS_BEARER_TOKEN` | Dedicated metrics bearer token | _(required for production metrics)_ |
 
 ## Usage Examples
 
@@ -138,6 +141,7 @@ docker run -d \
   -e POSTGRES_SSLMODE=verify-full \
   -e POSTGRES_ROOT_CERT=/secrets/postgres-root.crt \
   -e API_KEYS=replace-with-a-secret \
+  -e METRICS_BEARER_TOKEN=replace-with-a-separate-metrics-secret \
   -e CHRONOQUEUE_TLS_ENABLED=true \
   -e CERT_FILE=/secrets/tls/server.crt \
   -e KEY_FILE=/secrets/tls/server.key \
@@ -162,10 +166,17 @@ docker run -d \
   -e STORAGE_TYPE=postgres \
   -e POSTGRES_HOST=postgres-prod \
   -e POSTGRES_PASSWORD=secret \
+  -e POSTGRES_SSLMODE=require \
+  -e API_KEYS=replace-with-a-secret \
+  -e METRICS_BEARER_TOKEN=replace-with-a-separate-metrics-secret \
   -e CHRONOQUEUE_TLS_ENABLED=true \
   -e CERT_FILE=/secrets/server.crt \
   -e KEY_FILE=/secrets/server.key \
-  -e CA_CERT_FILE=/secrets/ca.crt \
+  -e ENABLE_ENCRYPTION=true \
+  -e ENCRYPTION_KEY_SOURCE_TYPE=VAULT \
+  -e VAULT_ENDPOINT=https://vault.example \
+  -e VAULT_AUTH_METHOD=TOKEN \
+  -e VAULT_SECRET_PATH=secret/data/chronoqueue \
   -v /path/to/certs:/secrets:ro \
   -p 9000:9000 \
   -p 8080:8080 \
