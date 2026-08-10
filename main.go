@@ -92,7 +92,7 @@ Examples:
   chronoqueue server --dev --storage-type sqlite --sqlite-db-path ./chronoqueue.db
 
   # Production server with PostgreSQL
-  API_KEYS=secret CERT_FILE=server.crt KEY_FILE=server.key POSTGRES_PASSWORD=secret chronoqueue server --production --storage-type postgres --postgres-sslmode verify-full --postgres-root-cert root.crt
+  API_KEYS=secret CERT_FILE=server.crt KEY_FILE=server.key POSTGRES_PASSWORD=secret ENCRYPTION_KEY_SOURCE_TYPE=VAULT chronoqueue server --production --storage-type postgres --postgres-sslmode verify-full --postgres-root-cert root.crt
 
   # Server with TLS enabled
   chronoqueue server --enable-tls --cert-file server.crt --key-file server.key`,
@@ -150,6 +150,27 @@ func runServer(cmd *cobra.Command, args []string) error {
 		}
 		if !cmd.Flags().Changed("postgres-sslmode") {
 			parsedConfig.PostgresSSLMode = config.PostgresSSLMode
+		}
+		if !cmd.Flags().Changed("enable-encryption") {
+			parsedConfig.EncryptionEnabled = config.EncryptionEnabled
+		}
+		if !cmd.Flags().Changed("encryption-key-source") {
+			parsedConfig.EncryptionKeySourceType = config.EncryptionKeySourceType
+		}
+		if !cmd.Flags().Changed("allow-local-encryption-key-in-production") {
+			parsedConfig.AllowLocalEncryptionKeyInProduction = config.AllowLocalEncryptionKeyInProduction
+		}
+		if !cmd.Flags().Changed("rate-limit-enabled") {
+			parsedConfig.RateLimitEnabled = config.RateLimitEnabled
+		}
+		if !cmd.Flags().Changed("rate-limit-requests-per-second") {
+			parsedConfig.RateLimitRequestsPerSecond = config.RateLimitRequestsPerSecond
+		}
+		if !cmd.Flags().Changed("rate-limit-burst") {
+			parsedConfig.RateLimitBurst = config.RateLimitBurst
+		}
+		if !cmd.Flags().Changed("rate-limit-max-buckets") {
+			parsedConfig.RateLimitMaxBuckets = config.RateLimitMaxBuckets
 		}
 	}
 	if !cmd.Flags().Changed("enable-tls") {

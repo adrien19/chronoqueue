@@ -4,13 +4,19 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/adrien19/chronoqueue/pkg/log"
 )
@@ -180,4 +186,55 @@ func TestNewHTTPGateway_WithCORS(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, handler)
+}
+
+func TestSwaggerUISelfHostedWithSecurityHeaders(t *testing.T) {
+	const approvedCSP = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'"
+
+	logger := log.NewLogger(log.WithLevel(logrus.PanicLevel))
+	config := GatewayConfig{EnableAPIDocs: true}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/docs/", nil)
+
+	SecurityHeadersMiddleware(SwaggerUIHandler(config, logger)).ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Equal(t, approvedCSP, recorder.Header().Get("Content-Security-Policy"))
+	assert.Equal(t, "DENY", recorder.Header().Get("X-Frame-Options"))
+	assert.Equal(t, "nosniff", recorder.Header().Get("X-Content-Type-Options"))
+	assert.NotContains(t, recorder.Body.String(), "https://unpkg.com")
+	assert.Contains(t, recorder.Body.String(), "/docs/assets/swagger-ui-bundle.js")
+
+	assetRecorder := httptest.NewRecorder()
+	assetRequest := httptest.NewRequest(http.MethodGet, "/docs/assets/swagger-ui-init.js", nil)
+	SwaggerAssetHandler(config, logger).ServeHTTP(assetRecorder, assetRequest)
+	assert.Equal(t, http.StatusOK, assetRecorder.Code)
+	assert.True(t, strings.HasPrefix(assetRecorder.Header().Get("Content-Type"), "text/javascript"))
+}
+
+func TestSwaggerAssetHandlerRejectsUnknownAsset(t *testing.T) {
+	logger := log.NewLogger(log.WithLevel(logrus.PanicLevel))
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/docs/assets/unknown.js", nil)
+
+	SwaggerAssetHandler(GatewayConfig{EnableAPIDocs: true}, logger).ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+}
+
+func TestRateLimitErrorMapsToHTTPTooManyRequests(t *testing.T) {
+	logger := log.NewLogger(log.WithLevel(logrus.PanicLevel))
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/v1/queues", nil)
+
+	customErrorHandler(logger)(
+		context.Background(),
+		runtime.NewServeMux(),
+		&runtime.JSONPb{},
+		recorder,
+		request,
+		status.Error(codes.ResourceExhausted, "rate limit exceeded"),
+	)
+
+	assert.Equal(t, http.StatusTooManyRequests, recorder.Code)
 }

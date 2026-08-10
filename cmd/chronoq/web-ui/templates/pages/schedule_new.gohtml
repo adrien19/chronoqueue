@@ -16,7 +16,7 @@
 
       <div>
         <label class="mb-2 block text-sm font-medium text-zinc-200">Schedule Type <span class="text-red-400">*</span></label>
-        <select class="cq-input w-full" name="schedule_type" id="schedule_type" required onchange="toggleScheduleType()">
+        <select class="cq-input w-full" name="schedule_type" id="schedule_type" required>
           <option value="cron">Cron Expression</option>
           <option value="calendar">Calendar Schedule</option>
         </select>
@@ -89,22 +89,4 @@
     </form>
   </div>
 </section>
-<script>
-function toggleScheduleType() {
-  const t = document.getElementById('schedule_type').value;
-  const cs = document.getElementById('cron_section');
-  const cal = document.getElementById('calendar_section');
-  const ce = document.getElementById('cron_expression');
-  const tz = document.getElementById('timezone');
-  if (t === 'cron') {
-    cs.classList.remove('hidden');
-    cal.classList.add('hidden');
-    ce.required = true; tz.required = false;
-  } else {
-    cs.classList.add('hidden');
-    cal.classList.remove('hidden');
-    ce.required = false; tz.required = true;
-  }
-}
-</script>
 {{ end }}

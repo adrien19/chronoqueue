@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"net"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -10,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
 	"github.com/adrien19/chronoqueue/pkg/log"
@@ -57,4 +59,68 @@ func TestIncomingHeaderMatcher(t *testing.T) {
 	key, ok = incomingHeaderMatcher("Authorization")
 	require.True(t, ok)
 	assert.Equal(t, "authorization", key)
+}
+
+func TestRateLimitingInterceptor(t *testing.T) {
+	logger := log.NewLogger(log.WithLevel(logrus.PanicLevel))
+	interceptor := RateLimitingInterceptor(logger, 1, 2, 100)
+	ctx := context.WithValue(context.Background(), authenticatedPrincipalKey{}, credentialPrincipal("secret"))
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
+	handlerCalls := 0
+	handler := func(context.Context, interface{}) (interface{}, error) {
+		handlerCalls++
+		return "ok", nil
+	}
+
+	_, err := interceptor(ctx, nil, info, handler)
+	require.NoError(t, err)
+	_, err = interceptor(ctx, nil, info, handler)
+	require.NoError(t, err)
+	_, err = interceptor(ctx, nil, info, handler)
+	assert.Equal(t, codes.ResourceExhausted, status.Code(err))
+	assert.Equal(t, 2, handlerCalls)
+}
+
+func TestRateLimitingSeparatesAuthenticatedPrincipals(t *testing.T) {
+	logger := log.NewLogger(log.WithLevel(logrus.PanicLevel))
+	rateLimiter := RateLimitingInterceptor(logger, 1, 1, 100)
+	auth := AuthInterceptor(logger, true, []string{"key-one", "key-two"})
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
+	handler := func(context.Context, interface{}) (interface{}, error) { return "ok", nil }
+
+	invoke := func(apiKey string) error {
+		ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("api-key", apiKey))
+		_, err := auth(ctx, nil, info, func(authenticatedContext context.Context, req interface{}) (interface{}, error) {
+			return rateLimiter(authenticatedContext, req, info, handler)
+		})
+		return err
+	}
+
+	require.NoError(t, invoke("key-one"))
+	assert.Equal(t, codes.ResourceExhausted, status.Code(invoke("key-one")))
+	require.NoError(t, invoke("key-two"))
+}
+
+func TestRateLimitingRejectsNewPeerAtBucketCapacity(t *testing.T) {
+	logger := log.NewLogger(log.WithLevel(logrus.PanicLevel))
+	interceptor := RateLimitingInterceptor(logger, 1, 1, 2)
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
+	handlerCalls := 0
+	handler := func(context.Context, interface{}) (interface{}, error) {
+		handlerCalls++
+		return "ok", nil
+	}
+
+	invoke := func(address string) error {
+		ctx := peer.NewContext(context.Background(), &peer.Peer{
+			Addr: &net.TCPAddr{IP: net.ParseIP(address), Port: 9000},
+		})
+		_, err := interceptor(ctx, nil, info, handler)
+		return err
+	}
+
+	require.NoError(t, invoke("192.0.2.1"))
+	require.NoError(t, invoke("192.0.2.2"))
+	assert.Equal(t, codes.ResourceExhausted, status.Code(invoke("192.0.2.3")))
+	assert.Equal(t, 2, handlerCalls)
 }

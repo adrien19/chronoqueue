@@ -1,11 +1,60 @@
 package webui
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestUISecurityHeadersAndLocalAssets(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	uiSecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})).ServeHTTP(recorder, request)
+
+	if recorder.Header().Get("Content-Security-Policy") == "" {
+		t.Fatal("Content-Security-Policy header is missing")
+	}
+
+	baseTemplate, err := content.ReadFile("templates/layouts/base.gohtml")
+	if err != nil {
+		t.Fatalf("read base template: %v", err)
+	}
+	if strings.Contains(string(baseTemplate), "https://unpkg.com") {
+		t.Fatal("base template still references unpkg.com")
+	}
+	if _, err := content.ReadFile("static/third-party/htmx-1.9.12.min.js"); err != nil {
+		t.Fatalf("read embedded HTMX asset: %v", err)
+	}
+	if _, err := content.ReadFile("static/third-party/htmx-sse-2.2.1.js"); err != nil {
+		t.Fatalf("read embedded HTMX SSE asset: %v", err)
+	}
+}
+
+func TestUIInlineScriptAllowedByHash(t *testing.T) {
+	page, err := content.ReadFile("templates/pages/queue_message_new.gohtml")
+	if err != nil {
+		t.Fatalf("read message template: %v", err)
+	}
+	_, scriptAndRemainder, found := strings.Cut(string(page), "<script>")
+	if !found {
+		t.Fatal("inline script not found")
+	}
+	script, _, found := strings.Cut(scriptAndRemainder, "</script>")
+	if !found {
+		t.Fatal("inline script closing tag not found")
+	}
+	digest := sha256.Sum256([]byte(script))
+	directive := "'sha256-" + base64.StdEncoding.EncodeToString(digest[:]) + "'"
+	if !strings.Contains(uiContentSecurityPolicy, directive) {
+		t.Fatalf("CSP does not allow the inline script hash %s", directive)
+	}
+}
 
 func TestTemplateFuncs(t *testing.T) {
 	fns := templateFuncs()

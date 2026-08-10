@@ -1,13 +1,19 @@
 package server
 
 import (
+	"io"
+	"math"
 	"net/http"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/adrien19/chronoqueue/pkg/log"
 )
 
 func TestAuthenticationDefaults(t *testing.T) {
@@ -45,6 +51,7 @@ func TestTLSDefaultsAndProductionValidation(t *testing.T) {
 	productionConfig := ProductionConfig()
 	assert.True(t, productionConfig.EnableTLS)
 	productionConfig.StorageType = "sqlite"
+	productionConfig.EncryptionKeySourceType = "VAULT"
 
 	productionConfig.AuthEnabled = true
 	productionConfig.APIKeys = []string{"secret"}
@@ -79,6 +86,7 @@ func TestPostgresSecurityDefaults(t *testing.T) {
 
 func TestValidateProductionPostgresSecurity(t *testing.T) {
 	config := ProductionConfig()
+	config.EncryptionKeySourceType = "VAULT"
 	config.AuthEnabled = true
 	config.APIKeys = []string{"secret"}
 	config.EnableTLS = true
@@ -112,6 +120,7 @@ func TestValidateProductionPostgresSecurity(t *testing.T) {
 
 func TestValidateProductionPostgresDSN(t *testing.T) {
 	config := ProductionConfig()
+	config.EncryptionKeySourceType = "VAULT"
 	config.AuthEnabled = true
 	config.APIKeys = []string{"secret"}
 	config.EnableTLS = true
@@ -184,6 +193,12 @@ func TestHTTPGatewayTimeoutsFromFlags(t *testing.T) {
 		"--http-read-timeout=7s",
 		"--http-write-timeout=8s",
 		"--http-idle-timeout=9s",
+		"--enable-encryption",
+		"--encryption-key-source=LOCAL",
+		"--rate-limit-enabled",
+		"--rate-limit-requests-per-second=12.5",
+		"--rate-limit-burst=25",
+		"--rate-limit-max-buckets=500",
 	}))
 
 	config, err := ParseConfigFromFlags(cmd)
@@ -192,6 +207,150 @@ func TestHTTPGatewayTimeoutsFromFlags(t *testing.T) {
 	assert.Equal(t, 7*time.Second, config.HTTPReadTimeout)
 	assert.Equal(t, 8*time.Second, config.HTTPWriteTimeout)
 	assert.Equal(t, 9*time.Second, config.HTTPIdleTimeout)
+	assert.True(t, config.EncryptionEnabled)
+	assert.Equal(t, "LOCAL", config.EncryptionKeySourceType)
+	assert.True(t, config.RateLimitEnabled)
+	assert.Equal(t, 12.5, config.RateLimitRequestsPerSecond)
+	assert.Equal(t, 25, config.RateLimitBurst)
+	assert.Equal(t, 500, config.RateLimitMaxBuckets)
+}
+
+func TestSafePostgresDSNSummary(t *testing.T) {
+	tests := []struct {
+		name     string
+		dsn      string
+		contains []string
+		secret   string
+	}{
+		{
+			name:     "URL DSN",
+			dsn:      "postgres://app:p%40ss%3Aword@db.example:5433/queue?sslmode=verify-full",
+			contains: []string{`host="db.example"`, `port="5433"`, `dbname="queue"`, `user="app"`, `sslmode="verify-full"`},
+			secret:   "p@ss:word",
+		},
+		{
+			name:     "keyword DSN",
+			dsn:      "user=app password='secret value' host=db dbname=queue sslmode=require",
+			contains: []string{`host="db"`, `dbname="queue"`, `user="app"`, `sslmode="require"`},
+			secret:   "secret value",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			summary := safePostgresDSNSummary(tt.dsn)
+			for _, expected := range tt.contains {
+				assert.Contains(t, summary, expected)
+			}
+			assert.NotContains(t, summary, tt.secret)
+			assert.NotContains(t, strings.ToLower(summary), "password")
+		})
+	}
+}
+
+func TestPrintStartupInfoDoesNotExposePostgresPassword(t *testing.T) {
+	config := DefaultConfig()
+	config.PostgresDSN = "postgres://app:super-secret@db.example/queue?sslmode=require"
+	server := &Server{config: config, logger: log.NewLogger()}
+
+	originalStdout := os.Stdout
+	reader, writer, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = writer
+	defer func() { os.Stdout = originalStdout }()
+
+	server.printStartupInfo()
+	require.NoError(t, writer.Close())
+	output, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.NoError(t, reader.Close())
+
+	assert.NotContains(t, string(output), "super-secret")
+	assert.Contains(t, string(output), `host="db.example"`)
+}
+
+func TestPayloadEncryptionProductionPolicy(t *testing.T) {
+	t.Setenv("ENABLE_ENCRYPTION", "")
+	t.Setenv("ENCRYPTION_KEY_SOURCE_TYPE", "")
+	t.Setenv("ALLOW_LOCAL_ENCRYPTION_KEY_IN_PRODUCTION", "")
+
+	assert.False(t, DefaultConfig().EncryptionEnabled)
+	config := ProductionConfig()
+	assert.True(t, config.EncryptionEnabled)
+	config.StorageType = "sqlite"
+	config.AuthEnabled = true
+	config.APIKeys = []string{"secret"}
+	config.CertFile = "server.crt"
+	config.KeyFile = "server.key"
+
+	err := config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "encryption key source type")
+
+	config.EncryptionEnabled = false
+	err = config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "payload encryption must be enabled")
+
+	config.EncryptionEnabled = true
+	config.EncryptionKeySourceType = "LOCAL"
+	err = config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "explicit production override")
+
+	config.AllowLocalEncryptionKeyInProduction = true
+	assert.NoError(t, config.Validate())
+
+	config.AllowLocalEncryptionKeyInProduction = false
+	config.EncryptionKeySourceType = "VAULT"
+	assert.NoError(t, config.Validate())
+}
+
+func TestRateLimitDefaultsAndValidation(t *testing.T) {
+	t.Setenv("RATE_LIMIT_ENABLED", "")
+	t.Setenv("RATE_LIMIT_REQUESTS_PER_SECOND", "")
+	t.Setenv("RATE_LIMIT_BURST", "")
+	t.Setenv("RATE_LIMIT_MAX_BUCKETS", "")
+
+	assert.False(t, DefaultConfig().RateLimitEnabled)
+	productionConfig := ProductionConfig()
+	assert.True(t, productionConfig.RateLimitEnabled)
+	assert.Equal(t, float64(100), productionConfig.RateLimitRequestsPerSecond)
+	assert.Equal(t, 200, productionConfig.RateLimitBurst)
+	assert.Equal(t, 10000, productionConfig.RateLimitMaxBuckets)
+
+	config := DefaultConfig()
+	config.RateLimitEnabled = true
+	config.RateLimitRequestsPerSecond = 0
+	err := config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rate limit requests per second")
+
+	config.RateLimitRequestsPerSecond = math.NaN()
+	err = config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rate limit requests per second")
+
+	config.RateLimitRequestsPerSecond = 1
+	config.RateLimitMaxBuckets = 0
+	err = config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "max buckets")
+}
+
+func TestProductionRejectsInsecureGateway(t *testing.T) {
+	config := ProductionConfig()
+	config.StorageType = "sqlite"
+	config.AuthEnabled = true
+	config.APIKeys = []string{"secret"}
+	config.EncryptionKeySourceType = "VAULT"
+	config.CertFile = "server.crt"
+	config.KeyFile = "server.key"
+	config.GatewayInsecure = true
+
+	err := config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "gateway-insecure cannot be enabled in production")
 }
 
 func TestTLSConfigFromEnvironment(t *testing.T) {

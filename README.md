@@ -133,6 +133,8 @@ Another easy way to get started locally is to use [docker-compose](https://docs.
    - Production mode requires authentication by default. Set `API_KEYS` to a comma-separated list of keys; clients must send a key in the `api-key` header or as an `Authorization: Bearer` token. The CLI and web UI read `CHRONOQUEUE_API_KEY` (or use the CLI `--api-key` flag). Development mode can opt in with `AUTH_ENABLED=true`.
    - Production mode also requires TLS for both gRPC and HTTP. Set `CERT_FILE` and `KEY_FILE`; optionally set `CA_CERT_FILE` to require gRPC client certificates. When enabling mTLS, also set `GATEWAY_CLIENT_CERT_FILE` and `GATEWAY_CLIENT_KEY_FILE` for the internal gateway connection.
    - HTTP gateway timeouts default to `5s` for headers, `15s` for reads, `30s` for writes, and `60s` for idle connections. Override them with `HTTP_READ_HEADER_TIMEOUT`, `HTTP_READ_TIMEOUT`, `HTTP_WRITE_TIMEOUT`, and `HTTP_IDLE_TIMEOUT`.
+   - Production mode requires payload encryption and an explicit `ENCRYPTION_KEY_SOURCE_TYPE`; use `VAULT` for production. `LOCAL` keys require `ALLOW_LOCAL_ENCRYPTION_KEY_IN_PRODUCTION=true` and should be limited to exceptional deployments.
+   - Per-principal rate limiting is enabled by default in production at 100 requests/second with a burst of 200 and at most 10,000 in-memory principals. Configure it with `RATE_LIMIT_ENABLED`, `RATE_LIMIT_REQUESTS_PER_SECOND`, `RATE_LIMIT_BURST`, and `RATE_LIMIT_MAX_BUCKETS`.
 
 4. Start the ChronoQueue server:
 

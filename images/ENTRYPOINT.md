@@ -76,10 +76,22 @@ The `entrypoint.sh` script provides a flexible way to start the ChronoQueue serv
 
 | Variable | Description | Default |
 | ---------- | ------------- | --------- |
-| `ENABLE_TLS` | Enable TLS for gRPC/HTTP | `false` |
+| `CHRONOQUEUE_TLS_ENABLED` | Enable TLS for gRPC/HTTP | `false` in development; `true` in production |
 | `CERT_FILE` | Path to server certificate | _(empty)_ |
 | `KEY_FILE` | Path to server private key | _(empty)_ |
 | `CA_CERT_FILE` | Path to CA certificate | _(empty)_ |
+
+### Payload Protection
+
+| Variable | Description | Default |
+| ---------- | ------------- | --------- |
+| `ENABLE_ENCRYPTION` | Encrypt message and schedule payloads | `false` in development; `true` in production |
+| `ENCRYPTION_KEY_SOURCE_TYPE` | Encryption key source | _(required when encryption is enabled)_ |
+| `ALLOW_LOCAL_ENCRYPTION_KEY_IN_PRODUCTION` | Explicitly allow an environment-based local key in production | `false` |
+| `RATE_LIMIT_ENABLED` | Enable per-principal request limiting | `false` in development; `true` in production |
+| `RATE_LIMIT_REQUESTS_PER_SECOND` | Sustained requests per second per principal | `100` |
+| `RATE_LIMIT_BURST` | Maximum request burst per principal | `200` |
+| `RATE_LIMIT_MAX_BUCKETS` | Maximum principals tracked in memory | `10000` |
 
 ## Usage Examples
 
@@ -126,8 +138,17 @@ docker run -d \
   -e POSTGRES_SSLMODE=verify-full \
   -e POSTGRES_ROOT_CERT=/secrets/postgres-root.crt \
   -e API_KEYS=replace-with-a-secret \
+  -e CHRONOQUEUE_TLS_ENABLED=true \
+  -e CERT_FILE=/secrets/tls/server.crt \
+  -e KEY_FILE=/secrets/tls/server.key \
+  -e ENABLE_ENCRYPTION=true \
+  -e ENCRYPTION_KEY_SOURCE_TYPE=VAULT \
+  -e VAULT_ENDPOINT=https://vault.example \
+  -e VAULT_AUTH_METHOD=TOKEN \
+  -e VAULT_SECRET_PATH=secret/data/chronoqueue \
   -e LOG_LEVEL=info \
   -v /path/to/postgres-root.crt:/secrets/postgres-root.crt:ro \
+  -v /path/to/certs:/secrets/tls:ro \
   -p 9000:9000 \
   -p 8080:8080 \
   chronoqueue:latest
@@ -141,7 +162,7 @@ docker run -d \
   -e STORAGE_TYPE=postgres \
   -e POSTGRES_HOST=postgres-prod \
   -e POSTGRES_PASSWORD=secret \
-  -e ENABLE_TLS=true \
+  -e CHRONOQUEUE_TLS_ENABLED=true \
   -e CERT_FILE=/secrets/server.crt \
   -e KEY_FILE=/secrets/server.key \
   -e CA_CERT_FILE=/secrets/ca.crt \

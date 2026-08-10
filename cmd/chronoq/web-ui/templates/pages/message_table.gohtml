@@ -19,10 +19,10 @@
     {{ if $.Queue.IsDLQ }}
     <td>
       <div class="flex items-center gap-2">
-        <form method="POST" action="/api/queues/{{ $.Queue.Name }}/messages/{{ .Id }}/requeue" onsubmit="return confirm('Requeue this message?')">
+        <form method="POST" action="/api/queues/{{ $.Queue.Name }}/messages/{{ .Id }}/requeue" data-confirm="Requeue this message?">
           <button type="submit" class="cq-btn cq-btn-primary !px-2 !py-1 text-xs">Requeue</button>
         </form>
-        <form method="POST" action="/api/queues/{{ $.Queue.Name }}/messages/{{ .Id }}/dlq-delete" onsubmit="return confirm('Permanently delete this message?')">
+        <form method="POST" action="/api/queues/{{ $.Queue.Name }}/messages/{{ .Id }}/dlq-delete" data-confirm="Permanently delete this message?">
           <button type="submit" class="cq-btn !px-2 !py-1 text-xs text-red-400 hover:text-red-300">Delete</button>
         </form>
       </div>

@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	_ "embed"
+	"embed"
 	"fmt"
 	"net/http"
 	"os"
@@ -23,6 +23,9 @@ import (
 
 //go:embed chronoqueue.swagger.json
 var swaggerSpec []byte
+
+//go:embed swagger-ui/*
+var swaggerUIAssets embed.FS
 
 // GatewayConfig holds configuration for the HTTP gateway
 type GatewayConfig struct {
@@ -276,53 +279,64 @@ func SwaggerUIHandler(config GatewayConfig, logger *log.Logger) http.Handler {
 <head>
     <meta charset="UTF-8">
     <title>ChronoQueue API Documentation</title>
-    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@3.52.5/swagger-ui.css" />
-    <style>
-        html {
-            box-sizing: border-box;
-            overflow: -moz-scrollbars-vertical;
-            overflow-y: scroll;
-        }
-        *, *:before, *:after {
-            box-sizing: inherit;
-        }
-        body {
-            margin:0;
-            background: #fafafa;
-        }
-    </style>
+    <link rel="stylesheet" type="text/css" href="/docs/assets/swagger-ui.css" />
+    <link rel="stylesheet" type="text/css" href="/docs/assets/chronoqueue.css" />
 </head>
 <body>
     <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@3.52.5/swagger-ui-bundle.js"></script>
-    <script src="https://unpkg.com/swagger-ui-dist@3.52.5/swagger-ui-standalone-preset.js"></script>
-    <script>
-        window.onload = function() {
-            const ui = SwaggerUIBundle({
-                url: '/docs/swagger.json',
-                dom_id: '#swagger-ui',
-                deepLinking: true,
-                presets: [
-                    SwaggerUIBundle.presets.apis,
-                    SwaggerUIStandalonePreset
-                ],
-                plugins: [
-                    SwaggerUIBundle.plugins.DownloadUrl
-                ],
-                layout: "StandaloneLayout",
-                docExpansion: "list",
-                defaultModelExpandDepth: 3,
-                defaultModelsExpandDepth: 1,
-                tryItOutEnabled: true
-            });
-        };
-    </script>
+    <script src="/docs/assets/swagger-ui-bundle.js"></script>
+    <script src="/docs/assets/swagger-ui-standalone-preset.js"></script>
+    <script src="/docs/assets/swagger-ui-init.js"></script>
 </body>
 </html>`
-			_, _ = fmt.Fprint(w, swaggerHTML)
+			if _, err := fmt.Fprint(w, swaggerHTML); err != nil {
+				logger.ErrorWithFields("Failed to write Swagger UI response", "error", err)
+			}
 		} else {
 			// Handle other paths under /docs/
 			http.NotFound(w, r)
+		}
+	})
+}
+
+// SwaggerAssetHandler serves the embedded Swagger UI assets.
+func SwaggerAssetHandler(config GatewayConfig, logger *log.Logger) http.Handler {
+	contentTypes := map[string]string{
+		"chronoqueue.css":                 "text/css; charset=utf-8",
+		"swagger-ui.css":                  "text/css; charset=utf-8",
+		"swagger-ui-bundle.js":            "text/javascript; charset=utf-8",
+		"swagger-ui-init.js":              "text/javascript; charset=utf-8",
+		"swagger-ui-standalone-preset.js": "text/javascript; charset=utf-8",
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !config.EnableAPIDocs {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		assetName := strings.TrimPrefix(r.URL.Path, "/docs/assets/")
+		contentType, ok := contentTypes[assetName]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		asset, err := swaggerUIAssets.ReadFile("swagger-ui/" + assetName)
+		if err != nil {
+			logger.ErrorWithFields("Failed to read embedded Swagger UI asset", "asset", assetName, "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		if r.Method == http.MethodHead {
+			return
+		}
+		if _, err := w.Write(asset); err != nil {
+			logger.ErrorWithFields("Failed to write Swagger UI asset", "asset", assetName, "error", err)
 		}
 	})
 }

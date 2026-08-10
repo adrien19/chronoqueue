@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"regexp"
@@ -66,6 +67,17 @@ type Config struct {
 	AuthEnabled bool
 	APIKeys     []string
 
+	// Payload Encryption Configuration
+	EncryptionEnabled                   bool
+	EncryptionKeySourceType             string
+	AllowLocalEncryptionKeyInProduction bool
+
+	// Rate Limiting Configuration
+	RateLimitEnabled           bool
+	RateLimitRequestsPerSecond float64
+	RateLimitBurst             int
+	RateLimitMaxBuckets        int
+
 	// API Documentation Configuration
 	EnableAPIDocs       bool     // Enable API documentation endpoints (default: false in production)
 	APIDocsAllowOrigins []string // Allowed CORS origins for API docs (comma-separated)
@@ -81,80 +93,94 @@ type Config struct {
 // DefaultConfig returns a configuration suitable for development
 func DefaultConfig() *Config {
 	return &Config{
-		GRPCAddr:               getEnv("GRPC_ADDR", ":9000"),
-		HTTPAddr:               getEnv("HTTP_ADDR", ":8080"),
-		StorageType:            getEnv("STORAGE_TYPE", "postgres"),
-		SQLiteDBPath:           getEnv("SQLITE_DB_PATH", "chronoqueue.db"),
-		PostgresDSN:            getEnv("POSTGRES_DSN", ""),
-		PostgresHost:           getEnv("POSTGRES_HOST", "localhost"),
-		PostgresPort:           getEnvInt("POSTGRES_PORT", 5432),
-		PostgresUser:           getEnv("POSTGRES_USER", "chronoqueue"),
-		PostgresPassword:       getEnv("POSTGRES_PASSWORD", "chronoqueue"),
-		PostgresDBName:         getEnv("POSTGRES_DB", "chronoqueue"),
-		PostgresSSLMode:        getEnv("POSTGRES_SSLMODE", "disable"),
-		PostgresClientCertFile: getEnv("POSTGRES_CLIENT_CERT", ""),
-		PostgresClientKeyFile:  getEnv("POSTGRES_CLIENT_KEY", ""),
-		PostgresRootCertFile:   getEnv("POSTGRES_ROOT_CERT", ""),
-		LogLevel:               getEnv("LOG_LEVEL", "info"),
-		LogFormat:              getEnv("LOG_FORMAT", "text"),
-		EnableTLS:              getEnvBool("CHRONOQUEUE_TLS_ENABLED", false),
-		CertFile:               getEnv("CERT_FILE", ""),
-		KeyFile:                getEnv("KEY_FILE", ""),
-		CACertFile:             getEnv("CA_CERT_FILE", ""),
-		GatewayClientCertFile:  getEnv("GATEWAY_CLIENT_CERT_FILE", ""),
-		GatewayClientKeyFile:   getEnv("GATEWAY_CLIENT_KEY_FILE", ""),
-		EnableCORS:             getEnvBool("ENABLE_CORS", true),
-		AllowOrigins:           getEnvSlice("ALLOW_ORIGINS", []string{"*"}),
-		HTTPReadHeaderTimeout:  getEnvDuration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
-		HTTPReadTimeout:        getEnvDuration("HTTP_READ_TIMEOUT", 15*time.Second),
-		HTTPWriteTimeout:       getEnvDuration("HTTP_WRITE_TIMEOUT", 30*time.Second),
-		HTTPIdleTimeout:        getEnvDuration("HTTP_IDLE_TIMEOUT", 60*time.Second),
-		AuthEnabled:            getEnvBool("AUTH_ENABLED", false),
-		APIKeys:                getEnvSlice("API_KEYS", nil),
-		SchedulerIntervalMs:    getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
-		ReclaimIntervalMs:      getEnvInt("RECLAIM_INTERVAL_MS", 5000),
-		IsDevelopment:          true,
+		GRPCAddr:                            getEnv("GRPC_ADDR", ":9000"),
+		HTTPAddr:                            getEnv("HTTP_ADDR", ":8080"),
+		StorageType:                         getEnv("STORAGE_TYPE", "postgres"),
+		SQLiteDBPath:                        getEnv("SQLITE_DB_PATH", "chronoqueue.db"),
+		PostgresDSN:                         getEnv("POSTGRES_DSN", ""),
+		PostgresHost:                        getEnv("POSTGRES_HOST", "localhost"),
+		PostgresPort:                        getEnvInt("POSTGRES_PORT", 5432),
+		PostgresUser:                        getEnv("POSTGRES_USER", "chronoqueue"),
+		PostgresPassword:                    getEnv("POSTGRES_PASSWORD", "chronoqueue"),
+		PostgresDBName:                      getEnv("POSTGRES_DB", "chronoqueue"),
+		PostgresSSLMode:                     getEnv("POSTGRES_SSLMODE", "disable"),
+		PostgresClientCertFile:              getEnv("POSTGRES_CLIENT_CERT", ""),
+		PostgresClientKeyFile:               getEnv("POSTGRES_CLIENT_KEY", ""),
+		PostgresRootCertFile:                getEnv("POSTGRES_ROOT_CERT", ""),
+		LogLevel:                            getEnv("LOG_LEVEL", "info"),
+		LogFormat:                           getEnv("LOG_FORMAT", "text"),
+		EnableTLS:                           getEnvBool("CHRONOQUEUE_TLS_ENABLED", false),
+		CertFile:                            getEnv("CERT_FILE", ""),
+		KeyFile:                             getEnv("KEY_FILE", ""),
+		CACertFile:                          getEnv("CA_CERT_FILE", ""),
+		GatewayClientCertFile:               getEnv("GATEWAY_CLIENT_CERT_FILE", ""),
+		GatewayClientKeyFile:                getEnv("GATEWAY_CLIENT_KEY_FILE", ""),
+		EnableCORS:                          getEnvBool("ENABLE_CORS", true),
+		AllowOrigins:                        getEnvSlice("ALLOW_ORIGINS", []string{"*"}),
+		HTTPReadHeaderTimeout:               getEnvDuration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
+		HTTPReadTimeout:                     getEnvDuration("HTTP_READ_TIMEOUT", 15*time.Second),
+		HTTPWriteTimeout:                    getEnvDuration("HTTP_WRITE_TIMEOUT", 30*time.Second),
+		HTTPIdleTimeout:                     getEnvDuration("HTTP_IDLE_TIMEOUT", 60*time.Second),
+		AuthEnabled:                         getEnvBool("AUTH_ENABLED", false),
+		APIKeys:                             getEnvSlice("API_KEYS", nil),
+		EncryptionEnabled:                   getEnvBool("ENABLE_ENCRYPTION", false),
+		EncryptionKeySourceType:             getEnv("ENCRYPTION_KEY_SOURCE_TYPE", ""),
+		AllowLocalEncryptionKeyInProduction: getEnvBool("ALLOW_LOCAL_ENCRYPTION_KEY_IN_PRODUCTION", false),
+		RateLimitEnabled:                    getEnvBool("RATE_LIMIT_ENABLED", false),
+		RateLimitRequestsPerSecond:          getEnvFloat64("RATE_LIMIT_REQUESTS_PER_SECOND", 100),
+		RateLimitBurst:                      getEnvInt("RATE_LIMIT_BURST", 200),
+		RateLimitMaxBuckets:                 getEnvInt("RATE_LIMIT_MAX_BUCKETS", 10000),
+		SchedulerIntervalMs:                 getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
+		ReclaimIntervalMs:                   getEnvInt("RECLAIM_INTERVAL_MS", 5000),
+		IsDevelopment:                       true,
 	}
 }
 
 // ProductionConfig returns a configuration suitable for production
 func ProductionConfig() *Config {
 	return &Config{
-		GRPCAddr:               getEnv("GRPC_ADDR", ":9000"),
-		HTTPAddr:               getEnv("HTTP_ADDR", ":8080"),
-		StorageType:            getEnv("STORAGE_TYPE", "postgres"),
-		SQLiteDBPath:           getEnv("SQLITE_DB_PATH", "chronoqueue.db"),
-		PostgresDSN:            getEnv("POSTGRES_DSN", ""),
-		PostgresHost:           getEnv("POSTGRES_HOST", "localhost"),
-		PostgresPort:           getEnvInt("POSTGRES_PORT", 5432),
-		PostgresUser:           getEnv("POSTGRES_USER", "chronoqueue"),
-		PostgresPassword:       getEnv("POSTGRES_PASSWORD", ""),
-		PostgresDBName:         getEnv("POSTGRES_DB", "chronoqueue"),
-		PostgresSSLMode:        getEnv("POSTGRES_SSLMODE", "verify-full"),
-		PostgresClientCertFile: getEnv("POSTGRES_CLIENT_CERT", ""),
-		PostgresClientKeyFile:  getEnv("POSTGRES_CLIENT_KEY", ""),
-		PostgresRootCertFile:   getEnv("POSTGRES_ROOT_CERT", ""),
-		LogLevel:               getEnv("LOG_LEVEL", "info"),
-		LogFormat:              getEnv("LOG_FORMAT", "json"),
-		EnableTLS:              getEnvBool("CHRONOQUEUE_TLS_ENABLED", true),
-		CertFile:               getEnv("CERT_FILE", ""),
-		KeyFile:                getEnv("KEY_FILE", ""),
-		CACertFile:             getEnv("CA_CERT_FILE", ""),
-		GatewayClientCertFile:  getEnv("GATEWAY_CLIENT_CERT_FILE", ""),
-		GatewayClientKeyFile:   getEnv("GATEWAY_CLIENT_KEY_FILE", ""),
-		EnableCORS:             getEnvBool("ENABLE_CORS", false),
-		AllowOrigins:           getEnvSlice("ALLOW_ORIGINS", []string{}),
-		HTTPReadHeaderTimeout:  getEnvDuration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
-		HTTPReadTimeout:        getEnvDuration("HTTP_READ_TIMEOUT", 15*time.Second),
-		HTTPWriteTimeout:       getEnvDuration("HTTP_WRITE_TIMEOUT", 30*time.Second),
-		HTTPIdleTimeout:        getEnvDuration("HTTP_IDLE_TIMEOUT", 60*time.Second),
-		AuthEnabled:            getEnvBool("AUTH_ENABLED", true),
-		APIKeys:                getEnvSlice("API_KEYS", nil),
-		EnableAPIDocs:          getEnvBool("ENABLE_API_DOCS", false), // Disabled by default in production
-		APIDocsAllowOrigins:    getEnvSlice("API_DOCS_CORS_ORIGINS", []string{}),
-		SchedulerIntervalMs:    getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
-		ReclaimIntervalMs:      getEnvInt("RECLAIM_INTERVAL_MS", 5000),
-		IsDevelopment:          false,
+		GRPCAddr:                            getEnv("GRPC_ADDR", ":9000"),
+		HTTPAddr:                            getEnv("HTTP_ADDR", ":8080"),
+		StorageType:                         getEnv("STORAGE_TYPE", "postgres"),
+		SQLiteDBPath:                        getEnv("SQLITE_DB_PATH", "chronoqueue.db"),
+		PostgresDSN:                         getEnv("POSTGRES_DSN", ""),
+		PostgresHost:                        getEnv("POSTGRES_HOST", "localhost"),
+		PostgresPort:                        getEnvInt("POSTGRES_PORT", 5432),
+		PostgresUser:                        getEnv("POSTGRES_USER", "chronoqueue"),
+		PostgresPassword:                    getEnv("POSTGRES_PASSWORD", ""),
+		PostgresDBName:                      getEnv("POSTGRES_DB", "chronoqueue"),
+		PostgresSSLMode:                     getEnv("POSTGRES_SSLMODE", "verify-full"),
+		PostgresClientCertFile:              getEnv("POSTGRES_CLIENT_CERT", ""),
+		PostgresClientKeyFile:               getEnv("POSTGRES_CLIENT_KEY", ""),
+		PostgresRootCertFile:                getEnv("POSTGRES_ROOT_CERT", ""),
+		LogLevel:                            getEnv("LOG_LEVEL", "info"),
+		LogFormat:                           getEnv("LOG_FORMAT", "json"),
+		EnableTLS:                           getEnvBool("CHRONOQUEUE_TLS_ENABLED", true),
+		CertFile:                            getEnv("CERT_FILE", ""),
+		KeyFile:                             getEnv("KEY_FILE", ""),
+		CACertFile:                          getEnv("CA_CERT_FILE", ""),
+		GatewayClientCertFile:               getEnv("GATEWAY_CLIENT_CERT_FILE", ""),
+		GatewayClientKeyFile:                getEnv("GATEWAY_CLIENT_KEY_FILE", ""),
+		EnableCORS:                          getEnvBool("ENABLE_CORS", false),
+		AllowOrigins:                        getEnvSlice("ALLOW_ORIGINS", []string{}),
+		HTTPReadHeaderTimeout:               getEnvDuration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
+		HTTPReadTimeout:                     getEnvDuration("HTTP_READ_TIMEOUT", 15*time.Second),
+		HTTPWriteTimeout:                    getEnvDuration("HTTP_WRITE_TIMEOUT", 30*time.Second),
+		HTTPIdleTimeout:                     getEnvDuration("HTTP_IDLE_TIMEOUT", 60*time.Second),
+		AuthEnabled:                         getEnvBool("AUTH_ENABLED", true),
+		APIKeys:                             getEnvSlice("API_KEYS", nil),
+		EncryptionEnabled:                   getEnvBool("ENABLE_ENCRYPTION", true),
+		EncryptionKeySourceType:             getEnv("ENCRYPTION_KEY_SOURCE_TYPE", ""),
+		AllowLocalEncryptionKeyInProduction: getEnvBool("ALLOW_LOCAL_ENCRYPTION_KEY_IN_PRODUCTION", false),
+		RateLimitEnabled:                    getEnvBool("RATE_LIMIT_ENABLED", true),
+		RateLimitRequestsPerSecond:          getEnvFloat64("RATE_LIMIT_REQUESTS_PER_SECOND", 100),
+		RateLimitBurst:                      getEnvInt("RATE_LIMIT_BURST", 200),
+		RateLimitMaxBuckets:                 getEnvInt("RATE_LIMIT_MAX_BUCKETS", 10000),
+		EnableAPIDocs:                       getEnvBool("ENABLE_API_DOCS", false), // Disabled by default in production
+		APIDocsAllowOrigins:                 getEnvSlice("API_DOCS_CORS_ORIGINS", []string{}),
+		SchedulerIntervalMs:                 getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
+		ReclaimIntervalMs:                   getEnvInt("RECLAIM_INTERVAL_MS", 5000),
+		IsDevelopment:                       false,
 	}
 }
 
@@ -169,6 +195,22 @@ func (c *Config) Validate() error {
 	}
 	if slices.Contains(c.APIKeys, "") {
 		return fmt.Errorf("API keys cannot be empty")
+	}
+	if c.EncryptionEnabled {
+		switch c.EncryptionKeySourceType {
+		case "LOCAL":
+			if !c.IsDevelopment && !c.AllowLocalEncryptionKeyInProduction {
+				return fmt.Errorf("LOCAL encryption keys require explicit production override")
+			}
+		case "VAULT":
+		default:
+			return fmt.Errorf("encryption key source type must be LOCAL or VAULT")
+		}
+	} else if !c.IsDevelopment {
+		return fmt.Errorf("payload encryption must be enabled in production")
+	}
+	if c.RateLimitEnabled && (c.RateLimitRequestsPerSecond <= 0 || math.IsNaN(c.RateLimitRequestsPerSecond) || math.IsInf(c.RateLimitRequestsPerSecond, 0) || c.RateLimitBurst <= 0 || c.RateLimitMaxBuckets <= 0) {
+		return fmt.Errorf("rate limit requests per second, burst, and max buckets must be greater than 0")
 	}
 
 	if c.EnableTLS && (c.CertFile == "" || c.KeyFile == "") {
@@ -242,23 +284,34 @@ func (c *Config) Validate() error {
 }
 
 func validateProductionPostgresDSN(dsn string) error {
-	sslMode, rootCert, err := postgresDSNTLSSettings(dsn)
+	parameters, err := postgresDSNParameters(dsn)
 	if err != nil {
 		return err
 	}
+	sslMode := parameters["sslmode"]
 	if sslMode == "" {
 		sslMode = "require"
 	}
-	return validateProductionPostgresTLS(sslMode, rootCert)
+	return validateProductionPostgresTLS(sslMode, parameters["sslrootcert"])
 }
 
-func postgresDSNTLSSettings(dsn string) (string, string, error) {
+func postgresDSNParameters(dsn string) (map[string]string, error) {
 	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
 		parsed, err := url.Parse(dsn)
 		if err != nil {
-			return "", "", fmt.Errorf("invalid postgres-dsn: %w", err)
+			return nil, fmt.Errorf("invalid postgres-dsn: %w", err)
 		}
-		return parsed.Query().Get("sslmode"), parsed.Query().Get("sslrootcert"), nil
+		parameters := map[string]string{
+			"host":        parsed.Hostname(),
+			"port":        parsed.Port(),
+			"dbname":      strings.TrimPrefix(parsed.Path, "/"),
+			"sslmode":     parsed.Query().Get("sslmode"),
+			"sslrootcert": parsed.Query().Get("sslrootcert"),
+		}
+		if parsed.User != nil {
+			parameters["user"] = parsed.User.Username()
+		}
+		return parameters, nil
 	}
 
 	parameters := make(map[string]string)
@@ -272,7 +325,25 @@ func postgresDSNTLSSettings(dsn string) (string, string, error) {
 		}
 		parameters[strings.ToLower(match[1])] = value
 	}
-	return parameters["sslmode"], parameters["sslrootcert"], nil
+	return parameters, nil
+}
+
+func safePostgresDSNSummary(dsn string) string {
+	parameters, err := postgresDSNParameters(dsn)
+	if err != nil {
+		return "configured (details redacted)"
+	}
+
+	fields := make([]string, 0, 5)
+	for _, key := range []string{"host", "port", "dbname", "user", "sslmode"} {
+		if value := parameters[key]; value != "" {
+			fields = append(fields, fmt.Sprintf("%s=%q", key, value))
+		}
+	}
+	if len(fields) == 0 {
+		return "configured (details redacted)"
+	}
+	return strings.Join(fields, " ")
 }
 
 func validateProductionPostgresTLS(sslMode, rootCert string) error {
@@ -310,6 +381,15 @@ func getEnvInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intVal, err := strconv.Atoi(value); err == nil {
 			return intVal
+		}
+	}
+	return defaultValue
+}
+
+func getEnvFloat64(key string, defaultValue float64) float64 {
+	if value := os.Getenv(key); value != "" {
+		if floatValue, err := strconv.ParseFloat(value, 64); err == nil {
+			return floatValue
 		}
 	}
 	return defaultValue

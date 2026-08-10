@@ -43,6 +43,13 @@ func AddServerFlags(cmd *cobra.Command, config *Config) {
 	cmd.Flags().DurationVar(&config.HTTPReadTimeout, "http-read-timeout", config.HTTPReadTimeout, "HTTP gateway read timeout")
 	cmd.Flags().DurationVar(&config.HTTPWriteTimeout, "http-write-timeout", config.HTTPWriteTimeout, "HTTP gateway write timeout")
 	cmd.Flags().DurationVar(&config.HTTPIdleTimeout, "http-idle-timeout", config.HTTPIdleTimeout, "HTTP gateway idle timeout")
+	cmd.Flags().BoolVar(&config.EncryptionEnabled, "enable-encryption", config.EncryptionEnabled, "Encrypt message and schedule payloads at rest")
+	cmd.Flags().StringVar(&config.EncryptionKeySourceType, "encryption-key-source", config.EncryptionKeySourceType, "Encryption key source (LOCAL or VAULT)")
+	cmd.Flags().BoolVar(&config.AllowLocalEncryptionKeyInProduction, "allow-local-encryption-key-in-production", config.AllowLocalEncryptionKeyInProduction, "Allow environment-based encryption keys in production")
+	cmd.Flags().BoolVar(&config.RateLimitEnabled, "rate-limit-enabled", config.RateLimitEnabled, "Enable per-principal gRPC rate limiting")
+	cmd.Flags().Float64Var(&config.RateLimitRequestsPerSecond, "rate-limit-requests-per-second", config.RateLimitRequestsPerSecond, "Sustained gRPC requests per second per principal")
+	cmd.Flags().IntVar(&config.RateLimitBurst, "rate-limit-burst", config.RateLimitBurst, "Maximum gRPC request burst per principal")
+	cmd.Flags().IntVar(&config.RateLimitMaxBuckets, "rate-limit-max-buckets", config.RateLimitMaxBuckets, "Maximum number of rate limit principals tracked in memory")
 	cmd.Flags().BoolVar(&config.EnableAPIDocs, "enable-api-docs", config.EnableAPIDocs, "Enable API documentation endpoints (disabled by default in production)")
 	cmd.Flags().StringSliceVar(&config.APIDocsAllowOrigins, "api-docs-cors-origins", config.APIDocsAllowOrigins, "Allowed CORS origins for API documentation (uses --cors-origins if not set)")
 }
@@ -184,6 +191,55 @@ func ParseConfigFromFlags(cmd *cobra.Command) (*Config, error) {
 			return nil, fmt.Errorf("read --http-idle-timeout: %w", err)
 		}
 		config.HTTPIdleTimeout = value
+	}
+	if cmd.Flags().Changed("enable-encryption") {
+		value, err := cmd.Flags().GetBool("enable-encryption")
+		if err != nil {
+			return nil, fmt.Errorf("read --enable-encryption: %w", err)
+		}
+		config.EncryptionEnabled = value
+	}
+	if cmd.Flags().Changed("encryption-key-source") {
+		value, err := cmd.Flags().GetString("encryption-key-source")
+		if err != nil {
+			return nil, fmt.Errorf("read --encryption-key-source: %w", err)
+		}
+		config.EncryptionKeySourceType = value
+	}
+	if cmd.Flags().Changed("allow-local-encryption-key-in-production") {
+		value, err := cmd.Flags().GetBool("allow-local-encryption-key-in-production")
+		if err != nil {
+			return nil, fmt.Errorf("read --allow-local-encryption-key-in-production: %w", err)
+		}
+		config.AllowLocalEncryptionKeyInProduction = value
+	}
+	if cmd.Flags().Changed("rate-limit-enabled") {
+		value, err := cmd.Flags().GetBool("rate-limit-enabled")
+		if err != nil {
+			return nil, fmt.Errorf("read --rate-limit-enabled: %w", err)
+		}
+		config.RateLimitEnabled = value
+	}
+	if cmd.Flags().Changed("rate-limit-requests-per-second") {
+		value, err := cmd.Flags().GetFloat64("rate-limit-requests-per-second")
+		if err != nil {
+			return nil, fmt.Errorf("read --rate-limit-requests-per-second: %w", err)
+		}
+		config.RateLimitRequestsPerSecond = value
+	}
+	if cmd.Flags().Changed("rate-limit-burst") {
+		value, err := cmd.Flags().GetInt("rate-limit-burst")
+		if err != nil {
+			return nil, fmt.Errorf("read --rate-limit-burst: %w", err)
+		}
+		config.RateLimitBurst = value
+	}
+	if cmd.Flags().Changed("rate-limit-max-buckets") {
+		value, err := cmd.Flags().GetInt("rate-limit-max-buckets")
+		if err != nil {
+			return nil, fmt.Errorf("read --rate-limit-max-buckets: %w", err)
+		}
+		config.RateLimitMaxBuckets = value
 	}
 
 	return config, config.Validate()
