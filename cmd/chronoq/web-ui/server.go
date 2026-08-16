@@ -158,7 +158,7 @@ func uiTLSConfigFromEnvironment() (uiTLSConfig, error) {
 
 // Start registers routes and starts the HTTP server.
 func (s *UIServer) Start(addr string) error {
-	if err := validateUIListenAddress(addr, s.tls.enabled); err != nil {
+	if err := validateUIListenAddress(addr, s.tls.enabled, s.auth.enabled); err != nil {
 		return err
 	}
 
@@ -167,14 +167,7 @@ func (s *UIServer) Start(addr string) error {
 		return err
 	}
 
-	s.server = &http.Server{
-		Addr:              addr,
-		Handler:           handler,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
+	s.server = s.newHTTPServer(addr, handler)
 	if s.tls.enabled {
 		s.server.TLSConfig = s.tls.serverConfig()
 		return s.server.ListenAndServeTLS("", "")
@@ -183,9 +176,20 @@ func (s *UIServer) Start(addr string) error {
 	return s.server.ListenAndServe()
 }
 
-func validateUIListenAddress(addr string, tlsEnabled bool) error {
-	if !isLoopbackListenAddress(addr) && !tlsEnabled {
-		return fmt.Errorf("web UI TLS is required when binding to a non-loopback address")
+func (s *UIServer) newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      0,
+		IdleTimeout:       60 * time.Second,
+	}
+}
+
+func validateUIListenAddress(addr string, tlsEnabled, authEnabled bool) error {
+	if !isLoopbackListenAddress(addr) && (!tlsEnabled || !authEnabled) {
+		return fmt.Errorf("web UI TLS and authentication are required when binding to a non-loopback address")
 	}
 	return nil
 }
@@ -278,7 +282,7 @@ func (s *UIServer) httpHandler() (http.Handler, error) {
 		}
 	})
 
-	return uiSecurityHeaders(uiAuthMiddleware(s.auth, mux)), nil
+	return uiSecurityHeaders(s.tls.enabled, uiAuthMiddleware(s.auth, mux)), nil
 }
 
 func isLoopbackListenAddress(addr string) bool {
@@ -317,12 +321,15 @@ func uiAuthMiddleware(config uiAuthConfig, next http.Handler) http.Handler {
 
 const uiContentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self'; script-src 'self' 'sha256-IUOv9nmQrfTDlLJauGABujh0XbcvcUmLJX6WZmaEdzc='; style-src 'self'; connect-src 'self'"
 
-func uiSecurityHeaders(next http.Handler) http.Handler {
+func uiSecurityHeaders(tlsEnabled bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", uiContentSecurityPolicy)
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
+		if tlsEnabled {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

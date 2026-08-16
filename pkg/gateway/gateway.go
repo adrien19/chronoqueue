@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"embed"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
@@ -55,6 +57,7 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 		runtime.WithErrorHandler(customErrorHandler(logger)),
 		runtime.WithForwardResponseOption(responseModifier),
 		runtime.WithIncomingHeaderMatcher(incomingHeaderMatcher),
+		runtime.WithMetadata(gatewayRequestMetadata),
 	)
 
 	// Set up gRPC client options
@@ -124,6 +127,17 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 	}
 
 	return mux, nil
+}
+
+func gatewayRequestMetadata(_ context.Context, r *http.Request) metadata.MD {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || host == "" {
+		host = r.RemoteAddr
+	}
+	if host == "" {
+		return nil
+	}
+	return metadata.Pairs(gatewayClientIDMetadataKey, signedGatewayClientID(host))
 }
 
 func incomingHeaderMatcher(key string) (string, bool) {
@@ -253,7 +267,7 @@ func MetricsHandler() http.Handler {
 func BearerAuthMiddleware(token string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		scheme, credential, found := strings.Cut(r.Header.Get("Authorization"), " ")
-		authorized := found && strings.EqualFold(scheme, "Bearer") &&
+		authorized := token != "" && found && strings.EqualFold(scheme, "Bearer") &&
 			len(credential) == len(token) && subtle.ConstantTimeCompare([]byte(credential), []byte(token)) == 1
 		if !authorized {
 			w.Header().Set("Cache-Control", "no-store")

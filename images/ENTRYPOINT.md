@@ -132,6 +132,7 @@ docker run -d \
 
 ```bash
 docker run -d \
+  --env-file /path/to/vault-token.env \
   -e SERVER_MODE=production \
   -e STORAGE_TYPE=postgres \
   -e POSTGRES_HOST=postgres-prod \
@@ -162,26 +163,31 @@ docker run -d \
 
 ```bash
 docker run -d \
+  --env-file /path/to/vault-token.env \
   -e SERVER_MODE=production \
   -e STORAGE_TYPE=postgres \
   -e POSTGRES_HOST=postgres-prod \
   -e POSTGRES_PASSWORD=secret \
-  -e POSTGRES_SSLMODE=require \
+  -e POSTGRES_SSLMODE=verify-full \
+  -e POSTGRES_ROOT_CERT=/secrets/postgres-root.crt \
   -e API_KEYS=replace-with-a-secret \
   -e METRICS_BEARER_TOKEN=replace-with-a-separate-metrics-secret \
   -e CHRONOQUEUE_TLS_ENABLED=true \
-  -e CERT_FILE=/secrets/server.crt \
-  -e KEY_FILE=/secrets/server.key \
+  -e CERT_FILE=/secrets/tls/server.crt \
+  -e KEY_FILE=/secrets/tls/server.key \
   -e ENABLE_ENCRYPTION=true \
   -e ENCRYPTION_KEY_SOURCE_TYPE=VAULT \
   -e VAULT_ENDPOINT=https://vault.example \
   -e VAULT_AUTH_METHOD=TOKEN \
   -e VAULT_SECRET_PATH=secret/data/chronoqueue \
-  -v /path/to/certs:/secrets:ro \
+  -v /path/to/postgres-root.crt:/secrets/postgres-root.crt:ro \
+  -v /path/to/certs:/secrets/tls:ro \
   -p 9000:9000 \
   -p 8080:8080 \
   chronoqueue:latest
 ```
+
+Create `/path/to/vault-token.env` with a single `VAULT_TOKEN=...` entry and restrict it to the deployment account. Docker reads the credential from that protected file, so the token is not included in the command line. The PostgreSQL root CA must validate the server certificate, whose DNS names must include the configured `POSTGRES_HOST` (`postgres-prod` above).
 
 ### Docker Compose
 

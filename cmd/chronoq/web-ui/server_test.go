@@ -25,12 +25,23 @@ import (
 func TestUISecurityHeadersAndLocalAssets(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
-	uiSecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	uiSecurityHeaders(false, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})).ServeHTTP(recorder, request)
 
 	if recorder.Header().Get("Content-Security-Policy") == "" {
 		t.Fatal("Content-Security-Policy header is missing")
+	}
+	if recorder.Header().Get("Strict-Transport-Security") != "" {
+		t.Fatal("Strict-Transport-Security header is present for plaintext UI")
+	}
+
+	tlsRecorder := httptest.NewRecorder()
+	uiSecurityHeaders(true, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})).ServeHTTP(tlsRecorder, request)
+	if tlsRecorder.Header().Get("Strict-Transport-Security") == "" {
+		t.Fatal("Strict-Transport-Security header is missing for TLS UI")
 	}
 
 	baseTemplate, err := content.ReadFile("templates/layouts/base.gohtml")
@@ -40,7 +51,7 @@ func TestUISecurityHeadersAndLocalAssets(t *testing.T) {
 	if strings.Contains(string(baseTemplate), "https://unpkg.com") {
 		t.Fatal("base template still references unpkg.com")
 	}
-	if _, err := content.ReadFile("static/third-party/htmx-1.9.12.min.js"); err != nil {
+	if _, err := content.ReadFile("static/third-party/htmx-2.0.4.min.js"); err != nil {
 		t.Fatalf("read embedded HTMX asset: %v", err)
 	}
 	if _, err := content.ReadFile("static/third-party/htmx-sse-2.2.1.js"); err != nil {
@@ -177,6 +188,7 @@ func TestUIServerAuthenticationGate(t *testing.T) {
 }
 
 func TestNewUIServerRejectsIncompleteAuthentication(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("CHRONOQUEUE_UI_AUTH_ENABLED", "true")
 	t.Setenv("CHRONOQUEUE_UI_AUTH_USERNAME", "operator")
 	t.Setenv("CHRONOQUEUE_UI_AUTH_PASSWORD", "")
@@ -189,6 +201,7 @@ func TestNewUIServerRejectsIncompleteAuthentication(t *testing.T) {
 }
 
 func TestNewUIServerRejectsIncompleteTLSConfiguration(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("CHRONOQUEUE_UI_TLS_CERT_FILE", "/certs/ui.crt")
 	t.Setenv("CHRONOQUEUE_UI_TLS_KEY_FILE", "")
 	logger := log.NewLogger(log.WithLevel(logrus.PanicLevel))
@@ -323,14 +336,27 @@ func TestLoopbackListenAddress(t *testing.T) {
 			t.Fatalf("expected %s to be non-loopback", addr)
 		}
 	}
-	if err := validateUIListenAddress("127.0.0.1:8081", false); err != nil {
+	if err := validateUIListenAddress("127.0.0.1:8081", false, false); err != nil {
 		t.Fatalf("expected plaintext loopback bind to be accepted, got %v", err)
 	}
-	if err := validateUIListenAddress("0.0.0.0:8081", true); err != nil {
-		t.Fatalf("expected TLS public bind to be accepted, got %v", err)
+	if err := validateUIListenAddress("0.0.0.0:8081", true, true); err != nil {
+		t.Fatalf("expected authenticated TLS public bind to be accepted, got %v", err)
 	}
-	if err := validateUIListenAddress("0.0.0.0:8081", false); err == nil || !strings.Contains(err.Error(), "TLS is required") {
+	if err := validateUIListenAddress("0.0.0.0:8081", true, false); err == nil || !strings.Contains(err.Error(), "authentication") {
+		t.Fatalf("expected unauthenticated public bind rejection, got %v", err)
+	}
+	if err := validateUIListenAddress("0.0.0.0:8081", false, true); err == nil || !strings.Contains(err.Error(), "TLS") {
 		t.Fatalf("expected plaintext public bind rejection, got %v", err)
+	}
+}
+
+func TestUIServerTimeoutsAllowSSE(t *testing.T) {
+	server := (&UIServer{}).newHTTPServer("127.0.0.1:8081", http.NotFoundHandler())
+	if server.WriteTimeout != 0 {
+		t.Fatalf("write timeout = %v, want 0", server.WriteTimeout)
+	}
+	if server.ReadHeaderTimeout != 5*time.Second || server.ReadTimeout != 15*time.Second || server.IdleTimeout != 60*time.Second {
+		t.Fatalf("unexpected HTTP server timeouts: %+v", server)
 	}
 }
 

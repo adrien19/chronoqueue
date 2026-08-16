@@ -77,7 +77,7 @@ Examples:
 // runDevServer handles the dev server command execution
 func runDevServer(cmd *cobra.Command, args []string) error {
 	// Parse configuration from flags
-	config, err := server.ParseConfigFromFlags(cmd)
+	config, err := server.ParseConfigFromFlags(cmd, server.DefaultConfig())
 	if err != nil {
 		return fmt.Errorf("failed to parse configuration: %w", err)
 	}

@@ -43,7 +43,7 @@ Examples:
 	rootCmd.PersistentFlags().String("cert-file", "", "Path to client certificate file")
 	rootCmd.PersistentFlags().String("key-file", "", "Path to client private key file")
 	rootCmd.PersistentFlags().String("ca-file", "", "Path to CA certificate file")
-	rootCmd.PersistentFlags().String("api-key", os.Getenv("CHRONOQUEUE_API_KEY"), "API key for server authentication")
+	rootCmd.PersistentFlags().String("api-key", "", "API key for server authentication")
 	rootCmd.PersistentFlags().String("output", "table", "Output format (table, json, yaml)")
 	rootCmd.PersistentFlags().Bool("verbose", false, "Enable verbose output")
 	rootCmd.PersistentFlags().Duration("timeout", 0, "Request timeout (0 for no timeout)")
@@ -135,54 +135,11 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}
 
 	// Parse configuration from flags
-	parsedConfig, err := server.ParseConfigFromFlags(cmd)
+	parsedConfig, err := server.ParseConfigFromFlags(cmd, config)
 	if err != nil {
 		return fmt.Errorf("failed to parse configuration: %w", err)
 	}
 
-	// Merge the parsed config (preserving mode setting)
-	parsedConfig.IsDevelopment = config.IsDevelopment
-	parsedConfig.AuthEnabled = config.AuthEnabled
-	parsedConfig.APIKeys = config.APIKeys
-	if prodMode {
-		if !cmd.Flags().Changed("postgres-password") {
-			parsedConfig.PostgresPassword = config.PostgresPassword
-		}
-		if !cmd.Flags().Changed("postgres-sslmode") {
-			parsedConfig.PostgresSSLMode = config.PostgresSSLMode
-		}
-		if !cmd.Flags().Changed("enable-encryption") {
-			parsedConfig.EncryptionEnabled = config.EncryptionEnabled
-		}
-		if !cmd.Flags().Changed("encryption-key-source") {
-			parsedConfig.EncryptionKeySourceType = config.EncryptionKeySourceType
-		}
-		if !cmd.Flags().Changed("allow-local-encryption-key-in-production") {
-			parsedConfig.AllowLocalEncryptionKeyInProduction = config.AllowLocalEncryptionKeyInProduction
-		}
-		if !cmd.Flags().Changed("rate-limit-enabled") {
-			parsedConfig.RateLimitEnabled = config.RateLimitEnabled
-		}
-		if !cmd.Flags().Changed("rate-limit-requests-per-second") {
-			parsedConfig.RateLimitRequestsPerSecond = config.RateLimitRequestsPerSecond
-		}
-		if !cmd.Flags().Changed("rate-limit-burst") {
-			parsedConfig.RateLimitBurst = config.RateLimitBurst
-		}
-		if !cmd.Flags().Changed("rate-limit-max-buckets") {
-			parsedConfig.RateLimitMaxBuckets = config.RateLimitMaxBuckets
-		}
-		if !cmd.Flags().Changed("metrics-enabled") {
-			parsedConfig.MetricsEnabled = config.MetricsEnabled
-		}
-		if !cmd.Flags().Changed("metrics-auth-enabled") {
-			parsedConfig.MetricsAuthEnabled = config.MetricsAuthEnabled
-		}
-		parsedConfig.MetricsBearerToken = config.MetricsBearerToken
-	}
-	if !cmd.Flags().Changed("enable-tls") {
-		parsedConfig.EnableTLS = config.EnableTLS
-	}
 	config = parsedConfig
 
 	// Inject version information

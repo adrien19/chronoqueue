@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"net"
+	"net/http"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -99,6 +100,32 @@ func TestRateLimitingSeparatesAuthenticatedPrincipals(t *testing.T) {
 	require.NoError(t, invoke("key-one"))
 	assert.Equal(t, codes.ResourceExhausted, status.Code(invoke("key-one")))
 	require.NoError(t, invoke("key-two"))
+}
+
+func TestRateLimitingSeparatesGatewayClients(t *testing.T) {
+	logger := log.NewLogger(log.WithLevel(logrus.PanicLevel))
+	interceptor := RateLimitingInterceptor(logger, 1, 1, 100)
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}
+	handler := func(context.Context, interface{}) (interface{}, error) { return "ok", nil }
+	gatewayPeer := &peer.Peer{Addr: &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 9000}}
+
+	invoke := func(remoteAddr string) error {
+		request := &http.Request{RemoteAddr: remoteAddr}
+		ctx := peer.NewContext(context.Background(), gatewayPeer)
+		ctx = metadata.NewIncomingContext(ctx, gatewayRequestMetadata(ctx, request))
+		_, err := interceptor(ctx, nil, info, handler)
+		return err
+	}
+
+	require.NoError(t, invoke("192.0.2.1:5000"))
+	assert.Equal(t, codes.ResourceExhausted, status.Code(invoke("192.0.2.1:5001")))
+	require.NoError(t, invoke("192.0.2.2:5000"))
+}
+
+func TestRateLimitClientIDRejectsUnverifiedGatewayMetadata(t *testing.T) {
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(gatewayClientIDMetadataKey, "gateway:192.0.2.1:invalid"))
+	ctx = peer.NewContext(ctx, &peer.Peer{Addr: &net.TCPAddr{IP: net.ParseIP("192.0.2.2"), Port: 9000}})
+	assert.Equal(t, "peer:192.0.2.2", rateLimitClientID(ctx))
 }
 
 func TestRateLimitingRejectsNewPeerAtBucketCapacity(t *testing.T) {

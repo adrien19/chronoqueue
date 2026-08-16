@@ -57,8 +57,9 @@ func AddServerFlags(cmd *cobra.Command, config *Config) {
 }
 
 // ParseConfigFromFlags parses configuration from cobra command flags
-func ParseConfigFromFlags(cmd *cobra.Command) (*Config, error) {
-	config := DefaultConfig()
+func ParseConfigFromFlags(cmd *cobra.Command, baseConfig *Config) (*Config, error) {
+	configValue := *baseConfig
+	config := &configValue
 
 	if cmd.Flags().Changed("grpc-addr") {
 		config.GRPCAddr, _ = cmd.Flags().GetString("grpc-addr")
@@ -115,6 +116,9 @@ func ParseConfigFromFlags(cmd *cobra.Command) (*Config, error) {
 	}
 	if cmd.Flags().Changed("enable-tls") {
 		config.EnableTLS, _ = cmd.Flags().GetBool("enable-tls")
+		if !cmd.Flags().Changed("gateway-use-tls") {
+			config.GatewayUseTLS = config.EnableTLS
+		}
 	}
 	if cmd.Flags().Changed("cert-file") {
 		config.CertFile, _ = cmd.Flags().GetString("cert-file")

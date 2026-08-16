@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -29,7 +30,13 @@ type ClientOptions struct {
 // GetClientOptions extracts client options from cobra command flags
 func GetClientOptions(cmd *cobra.Command) (*ClientOptions, error) {
 	server, _ := cmd.Flags().GetString("server")
-	apiKey, _ := cmd.Flags().GetString("api-key")
+	apiKey, err := cmd.Flags().GetString("api-key")
+	if err != nil {
+		return nil, fmt.Errorf("read --api-key: %w", err)
+	}
+	if apiKey == "" {
+		apiKey = os.Getenv("CHRONOQUEUE_API_KEY")
+	}
 	insecure, _ := cmd.Flags().GetBool("insecure")
 	certFile, _ := cmd.Flags().GetString("cert-file")
 	keyFile, _ := cmd.Flags().GetString("key-file")

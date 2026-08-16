@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -178,6 +179,16 @@ func (h *DashboardHandler) LiveOverview(w http.ResponseWriter, r *http.Request) 
 	}
 	buf = append(buf, "\n\n"...)
 
+	responseController := http.NewResponseController(w)
+	if err := responseController.SetWriteDeadline(time.Now().Add(30 * time.Second)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		h.logger.ErrorWithFields("Failed to set SSE write deadline", "error", err)
+		return
+	}
+	defer func() {
+		if err := responseController.SetWriteDeadline(time.Time{}); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			h.logger.ErrorWithFields("Failed to clear SSE write deadline", "error", err)
+		}
+	}()
 	if _, err := w.Write(buf); err != nil {
 		h.logger.ErrorWithFields("Failed to write SSE data", "error", err)
 		return

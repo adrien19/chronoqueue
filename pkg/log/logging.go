@@ -82,6 +82,15 @@ func (log *Logger) ErrorWithFields(message string, fields ...interface{}) {
 	log.logger.WithFields(parsedFields).Error(message)
 }
 
+func (log *Logger) DPanic(args ...interface{}) {
+	log.logger.Error(args...)
+}
+
+func (log *Logger) DPanicWithFields(message string, fields ...interface{}) {
+	parsedFields := parseLogrusFields(fields)
+	log.logger.WithFields(parsedFields).Error(message)
+}
+
 func (log *Logger) Fatal(args ...interface{}) {
 	log.logger.Fatal(args...)
 }

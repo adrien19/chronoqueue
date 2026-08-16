@@ -118,10 +118,13 @@ func TestValidateProductionPostgresSecurity(t *testing.T) {
 
 	config.PostgresSSLMode = "require"
 	config.PostgresRootCertFile = ""
-	assert.NoError(t, config.Validate())
+	err = config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "postgres sslmode must be")
 }
 
 func TestValidateProductionPostgresDSN(t *testing.T) {
+	t.Setenv("POSTGRES_ROOT_CERT", "")
 	config := ProductionConfig()
 	config.MetricsBearerToken = "metrics-secret"
 	config.EncryptionKeySourceType = "VAULT"
@@ -135,6 +138,16 @@ func TestValidateProductionPostgresDSN(t *testing.T) {
 	err := config.Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "postgres sslmode must be")
+
+	config.PostgresDSN = "postgres://user:secret@db/chronoqueue"
+	err = config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must specify sslmode")
+
+	config.PostgresDSN = "postgres://user:super-secret@db:notaport/chronoqueue?sslmode=verify-full"
+	err = config.Validate()
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "super-secret")
 
 	config.PostgresDSN = "host=db user=user password=secret dbname=chronoqueue sslmode=verify-full"
 	err = config.Validate()
@@ -158,6 +171,10 @@ func TestValidatePostgresClientCertificatePair(t *testing.T) {
 }
 
 func TestHTTPGatewayTimeouts(t *testing.T) {
+	t.Setenv("HTTP_READ_HEADER_TIMEOUT", "")
+	t.Setenv("HTTP_READ_TIMEOUT", "")
+	t.Setenv("HTTP_WRITE_TIMEOUT", "")
+	t.Setenv("HTTP_IDLE_TIMEOUT", "")
 	config := DefaultConfig()
 	assert.Equal(t, 5*time.Second, config.HTTPReadHeaderTimeout)
 	assert.Equal(t, 15*time.Second, config.HTTPReadTimeout)
@@ -207,7 +224,7 @@ func TestHTTPGatewayTimeoutsFromFlags(t *testing.T) {
 		"--metrics-auth-enabled",
 	}))
 
-	config, err := ParseConfigFromFlags(cmd)
+	config, err := ParseConfigFromFlags(cmd, DefaultConfig())
 	require.NoError(t, err)
 	assert.Equal(t, 6*time.Second, config.HTTPReadHeaderTimeout)
 	assert.Equal(t, 7*time.Second, config.HTTPReadTimeout)
@@ -224,12 +241,44 @@ func TestHTTPGatewayTimeoutsFromFlags(t *testing.T) {
 	assert.Equal(t, "metrics-secret", config.MetricsBearerToken)
 }
 
+func TestParseConfigFromFlagsPreservesProductionDefaults(t *testing.T) {
+	t.Setenv("ENABLE_CORS", "")
+	t.Setenv("ALLOW_ORIGINS", "")
+	t.Setenv("LOG_FORMAT", "")
+	base := ProductionConfig()
+	base.StorageType = "sqlite"
+	base.CertFile = "server.crt"
+	base.KeyFile = "server.key"
+	base.AuthEnabled = true
+	base.APIKeys = []string{"secret"}
+	base.EncryptionKeySourceType = "VAULT"
+	base.MetricsBearerToken = "metrics-secret"
+
+	cmd := &cobra.Command{Use: "test"}
+	AddServerFlags(cmd, DefaultConfig())
+	config, err := ParseConfigFromFlags(cmd, base)
+	require.NoError(t, err)
+	assert.False(t, config.EnableCORS)
+	assert.Empty(t, config.AllowOrigins)
+	assert.Equal(t, "json", config.LogFormat)
+
+	require.NoError(t, cmd.Flags().Set("enable-cors", "true"))
+	require.NoError(t, cmd.Flags().Set("cors-origins", "https://console.example"))
+	require.NoError(t, cmd.Flags().Set("log-format", "text"))
+	config, err = ParseConfigFromFlags(cmd, base)
+	require.NoError(t, err)
+	assert.True(t, config.EnableCORS)
+	assert.Equal(t, []string{"https://console.example"}, config.AllowOrigins)
+	assert.Equal(t, "text", config.LogFormat)
+}
+
 func TestSafePostgresDSNSummary(t *testing.T) {
 	tests := []struct {
 		name     string
 		dsn      string
 		contains []string
 		secret   string
+		want     string
 	}{
 		{
 			name:     "URL DSN",
@@ -243,11 +292,20 @@ func TestSafePostgresDSNSummary(t *testing.T) {
 			contains: []string{`host="db"`, `dbname="queue"`, `user="app"`, `sslmode="require"`},
 			secret:   "secret value",
 		},
+		{
+			name:   "malformed URL DSN",
+			dsn:    "postgres://app:super-secret@db:notaport/queue?sslmode=verify-full",
+			secret: "super-secret",
+			want:   "configured (details redacted)",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			summary := safePostgresDSNSummary(tt.dsn)
+			if tt.want != "" {
+				assert.Equal(t, tt.want, summary)
+			}
 			for _, expected := range tt.contains {
 				assert.Contains(t, summary, expected)
 			}
@@ -449,11 +507,34 @@ func TestTLSConfigFromEnvironment(t *testing.T) {
 	t.Setenv("GATEWAY_CLIENT_KEY_FILE", "/certs/gateway.key")
 
 	config := ProductionConfig()
+	assert.Equal(t, config.EnableTLS, config.GatewayUseTLS)
 	assert.Equal(t, "/certs/server.crt", config.CertFile)
 	assert.Equal(t, "/certs/server.key", config.KeyFile)
 	assert.Equal(t, "/certs/ca.crt", config.CACertFile)
 	assert.Equal(t, "/certs/gateway.crt", config.GatewayClientCertFile)
 	assert.Equal(t, "/certs/gateway.key", config.GatewayClientKeyFile)
+}
+
+func TestGatewayTLSInheritsServerTLS(t *testing.T) {
+	t.Setenv("CHRONOQUEUE_TLS_ENABLED", "true")
+	t.Setenv("CERT_FILE", "server.crt")
+	t.Setenv("KEY_FILE", "server.key")
+	t.Setenv("CA_CERT_FILE", "ca.crt")
+	t.Setenv("GATEWAY_CLIENT_CERT_FILE", "")
+	t.Setenv("GATEWAY_CLIENT_KEY_FILE", "")
+
+	config := DefaultConfig()
+	assert.True(t, config.GatewayUseTLS)
+	err := config.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "gateway client cert or key file not specified")
+
+	cmd := &cobra.Command{Use: "test"}
+	AddServerFlags(cmd, config)
+	require.NoError(t, cmd.Flags().Set("gateway-use-tls", "false"))
+	config, err = ParseConfigFromFlags(cmd, config)
+	require.Error(t, err)
+	assert.False(t, config.GatewayUseTLS)
 }
 
 func TestValidateGatewayMTLSCredentials(t *testing.T) {

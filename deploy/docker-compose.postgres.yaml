@@ -19,9 +19,6 @@ services:
       - HTTP_ADDR=:8080
       - LOG_LEVEL=debug
       - LOG_FORMAT=text
-      - SERVER_CERT_PATH=/secrets/server.crt
-      - SERVER_KEY_PATH=/secrets/server.key
-      - CA_CERT_PATH=/secrets/ca.crt
       - CHRONOQUEUE_TLS_ENABLED=false
       - ENABLE_ENCRYPTION=true
       - ENCRYPTION_KEY_SOURCE_TYPE=LOCAL
@@ -34,10 +31,10 @@ services:
     networks:
       - chronoqueue-network
     volumes:
-      - ${WORKSPACE_FOLDER}/certs:/secrets
+      - ../certs:/secrets:ro
     ports:
-      - "9000:9000"
-      - "8080:8080"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:8080:8080"
     restart: unless-stopped
 
   chronoqueueui:
@@ -49,8 +46,8 @@ services:
     entrypoint: ["/chronoqueue"]
     environment:
       - CHRONOQUEUE_UI_AUTH_ENABLED=true
-      - CHRONOQUEUE_UI_AUTH_USERNAME=admin
-      - CHRONOQUEUE_UI_AUTH_PASSWORD=chronoqueue_dev_password
+      - CHRONOQUEUE_UI_AUTH_USERNAME=${CHRONOQUEUE_UI_AUTH_USERNAME:?Set CHRONOQUEUE_UI_AUTH_USERNAME}
+      - CHRONOQUEUE_UI_AUTH_PASSWORD=${CHRONOQUEUE_UI_AUTH_PASSWORD:?Set CHRONOQUEUE_UI_AUTH_PASSWORD}
       - CHRONOQUEUE_UI_TLS_CERT_FILE=/secrets/server.crt
       - CHRONOQUEUE_UI_TLS_KEY_FILE=/secrets/server.key
       - CHRONOQUEUE_UI_PUBLIC_ORIGIN=https://localhost:8081
@@ -62,14 +59,14 @@ services:
       - --port
       - "8081"
       - --grpc-address
-      - chronoqueue-server:9000
+      - chronoqueuesvc:9000
       - --skip-ssl
     depends_on:
       - chronoqueuesvc
     networks:
       - chronoqueue-network
     volumes:
-      - ${WORKSPACE_FOLDER}/certs:/secrets:ro
+      - ../certs:/secrets:ro
     ports:
       - "127.0.0.1:8081:8081"
     restart: unless-stopped

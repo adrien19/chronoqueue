@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"net/url"
@@ -10,9 +11,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/adrien19/chronoqueue/pkg/log"
 )
 
-var postgresDSNParameterPattern = regexp.MustCompile(`(?i)(?:^|\s)([a-z_]+)\s*=\s*(?:'([^']*)'|"([^"]*)"|([^\s]+))`)
+var (
+	postgresDSNParameterPattern = regexp.MustCompile(`(?i)(?:^|\s)([a-z_]+)\s*=\s*(?:'([^']*)'|"([^"]*)"|([^\s]+))`)
+	configLogger                = log.NewLogger()
+)
 
 // Config holds the complete server configuration
 type Config struct {
@@ -97,7 +103,7 @@ type Config struct {
 
 // DefaultConfig returns a configuration suitable for development
 func DefaultConfig() *Config {
-	return &Config{
+	config := &Config{
 		GRPCAddr:                            getEnv("GRPC_ADDR", ":9000"),
 		HTTPAddr:                            getEnv("HTTP_ADDR", ":8080"),
 		StorageType:                         getEnv("STORAGE_TYPE", "postgres"),
@@ -138,15 +144,19 @@ func DefaultConfig() *Config {
 		MetricsEnabled:                      getEnvBool("METRICS_ENABLED", true),
 		MetricsAuthEnabled:                  getEnvBool("METRICS_AUTH_ENABLED", false),
 		MetricsBearerToken:                  getEnv("METRICS_BEARER_TOKEN", ""),
+		EnableAPIDocs:                       getEnvBool("ENABLE_API_DOCS", true),
+		APIDocsAllowOrigins:                 getEnvSlice("API_DOCS_CORS_ORIGINS", []string{"*"}),
 		SchedulerIntervalMs:                 getEnvInt("SCHEDULER_INTERVAL_MS", 1000),
 		ReclaimIntervalMs:                   getEnvInt("RECLAIM_INTERVAL_MS", 5000),
 		IsDevelopment:                       true,
 	}
+	config.GatewayUseTLS = config.EnableTLS
+	return config
 }
 
 // ProductionConfig returns a configuration suitable for production
 func ProductionConfig() *Config {
-	return &Config{
+	config := &Config{
 		GRPCAddr:                            getEnv("GRPC_ADDR", ":9000"),
 		HTTPAddr:                            getEnv("HTTP_ADDR", ":8080"),
 		StorageType:                         getEnv("STORAGE_TYPE", "postgres"),
@@ -193,6 +203,8 @@ func ProductionConfig() *Config {
 		ReclaimIntervalMs:                   getEnvInt("RECLAIM_INTERVAL_MS", 5000),
 		IsDevelopment:                       false,
 	}
+	config.GatewayUseTLS = config.EnableTLS
+	return config
 }
 
 // Validate checks if the configuration is valid
@@ -307,7 +319,7 @@ func validateProductionPostgresDSN(dsn string) error {
 	}
 	sslMode := parameters["sslmode"]
 	if sslMode == "" {
-		sslMode = "require"
+		return fmt.Errorf("postgres-dsn must specify sslmode in production")
 	}
 	return validateProductionPostgresTLS(sslMode, parameters["sslrootcert"])
 }
@@ -316,7 +328,7 @@ func postgresDSNParameters(dsn string) (map[string]string, error) {
 	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
 		parsed, err := url.Parse(dsn)
 		if err != nil {
-			return nil, fmt.Errorf("invalid postgres-dsn: %w", err)
+			return nil, errors.New("invalid postgres-dsn")
 		}
 		parameters := map[string]string{
 			"host":        parsed.Hostname(),
@@ -365,15 +377,13 @@ func safePostgresDSNSummary(dsn string) string {
 
 func validateProductionPostgresTLS(sslMode, rootCert string) error {
 	switch strings.ToLower(sslMode) {
-	case "require", "verify-ca":
-		return nil
-	case "verify-full":
+	case "verify-ca", "verify-full":
 		if rootCert == "" {
-			return fmt.Errorf("postgres-root-cert is required with sslmode=verify-full in production")
+			return fmt.Errorf("postgres-root-cert is required with sslmode=%s in production", strings.ToLower(sslMode))
 		}
 		return nil
 	default:
-		return fmt.Errorf("postgres sslmode must be require, verify-ca, or verify-full in production")
+		return fmt.Errorf("postgres sslmode must be verify-ca or verify-full in production")
 	}
 }
 
@@ -405,18 +415,22 @@ func getEnvInt(key string, defaultValue int) int {
 
 func getEnvFloat64(key string, defaultValue float64) float64 {
 	if value := os.Getenv(key); value != "" {
-		if floatValue, err := strconv.ParseFloat(value, 64); err == nil {
+		floatValue, err := strconv.ParseFloat(value, 64)
+		if err == nil {
 			return floatValue
 		}
+		configLogger.DPanicWithFields("Failed to parse environment variable", "key", key, "error", err)
 	}
 	return defaultValue
 }
 
 func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
 	if value := os.Getenv(key); value != "" {
-		if duration, err := time.ParseDuration(value); err == nil {
+		duration, err := time.ParseDuration(value)
+		if err == nil {
 			return duration
 		}
+		configLogger.DPanicWithFields("Failed to parse environment variable", "key", key, "error", err)
 	}
 	return defaultValue
 }

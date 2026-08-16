@@ -309,13 +309,7 @@ func (s *Server) startGRPCServer() error {
 
 // startHTTPGateway starts the HTTP gateway server
 func (s *Server) startHTTPGateway(ctx context.Context) error {
-	// Determine gateway TLS settings
-	// By default, use the same TLS setting as the server
 	gatewayUseTLS := s.config.GatewayUseTLS
-	if !s.config.GatewayUseTLS && s.config.EnableTLS {
-		// If not explicitly set, inherit from server TLS setting
-		gatewayUseTLS = s.config.EnableTLS
-	}
 
 	// For localhost connections in development mode, we can skip verification to avoid certificate issues
 	gatewayInsecure := s.config.GatewayInsecure

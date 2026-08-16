@@ -12,9 +12,6 @@ services:
       - SQLITE_DB_PATH=/data/chronoqueue.db
       - GRPC_ADDR=:9000
       - HTTP_ADDR=:8080
-      - SERVER_CERT_PATH=/secrets/server.crt
-      - SERVER_KEY_PATH=/secrets/server.key
-      - CA_CERT_PATH=/secrets/ca.crt
       - CHRONOQUEUE_TLS_ENABLED=false
       - ENABLE_ENCRYPTION=true
       - ENCRYPTION_KEY_SOURCE_TYPE=LOCAL
@@ -29,8 +26,8 @@ services:
       - ${WORKSPACE_FOLDER}/certs:/secrets
       - sqlite-data:/data
     ports:
-      - "9000:9000"
-      - "8080:8080"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:8080:8080"
     restart: unless-stopped
 
   chronoqueue-ui:
@@ -55,7 +52,7 @@ services:
       - --port
       - "8081"
       - --grpc-address
-      - chronoqueue-server:9000
+      - chronoqueuesvc:9000
       - --skip-ssl
     depends_on:
       - chronoqueuesvc

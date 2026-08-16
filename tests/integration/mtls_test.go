@@ -164,7 +164,7 @@ func TestHTTPGatewayWithTLS(t *testing.T) {
 
 		resp, err := httpClient.Get(fmt.Sprintf("%s/v1/queues", env.HTTPAddr))
 		require.NoError(t, err, "Failed to access proxied endpoint over HTTPS")
-		defer resp.Body.Close()
+		defer func() { assert.NoError(t, resp.Body.Close()) }()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode, "Proxied endpoint should return 200 OK")
 		require.NotNil(t, resp.TLS)
@@ -183,7 +183,7 @@ func TestHTTPGatewayWithTLS(t *testing.T) {
 		}
 		legacyResp, err := legacyClient.Get(fmt.Sprintf("%s/v1/queues", env.HTTPAddr))
 		if legacyResp != nil {
-			defer legacyResp.Body.Close()
+			defer func() { assert.NoError(t, legacyResp.Body.Close()) }()
 		}
 		assert.Error(t, err, "TLS 1.1 and older should be rejected")
 	})
@@ -214,7 +214,7 @@ func TestGatewayProxiedRequestWithMTLS(t *testing.T) {
 			bytes.NewBufferString(requestBody),
 		)
 		require.NoError(t, err, "Failed to create queue through HTTP gateway")
-		defer resp.Body.Close()
+		defer func() { assert.NoError(t, resp.Body.Close()) }()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode, "Queue creation should return 200 OK")
 		var result struct {
@@ -243,7 +243,7 @@ func TestGatewayRejectsUntrustedClientCertificate(t *testing.T) {
 	}
 	resp, err := httpClient.Get(fmt.Sprintf("%s/v1/queues", env.HTTPAddr))
 	require.NoError(t, err, "Public HTTPS connection should succeed")
-	defer resp.Body.Close()
+	defer func() { assert.NoError(t, resp.Body.Close()) }()
 
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 }
@@ -257,8 +257,8 @@ func TestGatewayRejectsUntrustedServerCertificate(t *testing.T) {
 		t,
 		serverCerts,
 		gatewayCerts.CACert,
-		gatewayCerts.ClientCert,
-		gatewayCerts.ClientKey,
+		serverCerts.ClientCert,
+		serverCerts.ClientKey,
 	)
 
 	httpClient := &http.Client{
@@ -267,7 +267,7 @@ func TestGatewayRejectsUntrustedServerCertificate(t *testing.T) {
 	}
 	resp, err := httpClient.Get(fmt.Sprintf("%s/v1/queues", env.HTTPAddr))
 	require.NoError(t, err, "Public HTTPS connection should succeed")
-	defer resp.Body.Close()
+	defer func() { assert.NoError(t, resp.Body.Close()) }()
 
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 }

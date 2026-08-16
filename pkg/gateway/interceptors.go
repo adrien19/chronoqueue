@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"crypto/x509"
@@ -25,6 +27,45 @@ import (
 )
 
 type authenticatedPrincipalKey struct{}
+
+const gatewayClientIDMetadataKey = "chronoqueue-gateway-client-id"
+
+var gatewayClientIDSigningKey = func() [32]byte {
+	var key [32]byte
+	if _, err := rand.Read(key[:]); err != nil {
+		panic("generate gateway client identity signing key: " + err.Error())
+	}
+	return key
+}()
+
+func signedGatewayClientID(host string) string {
+	payload := "gateway:" + host
+	signature := hmac.New(sha256.New, gatewayClientIDSigningKey[:])
+	if _, err := signature.Write([]byte(payload)); err != nil {
+		panic("sign gateway client identity: " + err.Error())
+	}
+	return payload + ":" + hex.EncodeToString(signature.Sum(nil))
+}
+
+func verifiedGatewayClientID(value string) (string, bool) {
+	separator := strings.LastIndexByte(value, ':')
+	if separator <= len("gateway:") {
+		return "", false
+	}
+	payload := value[:separator]
+	providedSignature, err := hex.DecodeString(value[separator+1:])
+	if err != nil {
+		return "", false
+	}
+	expectedSignature := hmac.New(sha256.New, gatewayClientIDSigningKey[:])
+	if _, err := expectedSignature.Write([]byte(payload)); err != nil {
+		return "", false
+	}
+	if !hmac.Equal(providedSignature, expectedSignature.Sum(nil)) {
+		return "", false
+	}
+	return payload, true
+}
 
 // LoggingInterceptor logs all gRPC requests and responses
 func LoggingInterceptor(logger *log.Logger) grpc.UnaryServerInterceptor {
@@ -224,6 +265,13 @@ func (l *rateLimiter) allow(clientID string, now time.Time) bool {
 func rateLimitClientID(ctx context.Context) string {
 	if principal, ok := ctx.Value(authenticatedPrincipalKey{}).(string); ok && principal != "" {
 		return principal
+	}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if clientIDs := md.Get(gatewayClientIDMetadataKey); len(clientIDs) == 1 && clientIDs[0] != "" {
+			if clientID, valid := verifiedGatewayClientID(clientIDs[0]); valid {
+				return clientID
+			}
+		}
 	}
 	if p, ok := peer.FromContext(ctx); ok {
 		host, _, err := net.SplitHostPort(p.Addr.String())

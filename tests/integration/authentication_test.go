@@ -22,7 +22,7 @@ func TestAuthenticationGRPC(t *testing.T) {
 
 	unauthenticatedConn, err := grpc.NewClient(env.GRPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
-	defer func() { _ = unauthenticatedConn.Close() }()
+	defer func() { assert.NoError(t, unauthenticatedConn.Close()) }()
 
 	service := queueservicepb.NewQueueServiceClient(unauthenticatedConn)
 	_, err = service.ListQueues(context.Background(), &queueservicepb.ListQueuesRequest{})
@@ -59,7 +59,7 @@ func TestAuthenticationHTTPGateway(t *testing.T) {
 
 			resp, err := http.DefaultClient.Do(req)
 			require.NoError(t, err)
-			defer func() { _ = resp.Body.Close() }()
+			defer func() { assert.NoError(t, resp.Body.Close()) }()
 			assert.Equal(t, tt.wantStatus, resp.StatusCode)
 		})
 	}

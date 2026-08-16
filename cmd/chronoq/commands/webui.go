@@ -77,7 +77,7 @@ func runWebUIStart(host, port, grpcAddr string, skipSSL bool) error {
 		logger.InfoWithFields("Starting ChronoQueue web-UI", "address", addr, "grpc", grpcAddr)
 		fmt.Printf("\n")
 		fmt.Printf("ChronoQueue web-UI is starting...\n")
-		fmt.Printf("Dashboard: %s://localhost:%s\n", server.URLScheme(), port)
+		fmt.Printf("Dashboard: %s://%s\n", server.URLScheme(), addr)
 		fmt.Printf("Connected to: %s\n", grpcAddr)
 		fmt.Printf("\n")
 		fmt.Printf("Press Ctrl+C to stop\n\n")

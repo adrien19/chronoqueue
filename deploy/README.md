@@ -250,8 +250,8 @@ Common across all storage backends:
 | `LOG_LEVEL` | `debug` | Log level (debug/info/warn/error) |
 | `LOG_FORMAT` | `text` | Log format (text/json) |
 | `ENABLE_ENCRYPTION` | `true` | Enable message encryption |
-| `CHRONOQUEUE_TLS_ENABLED` | `false` | Enable TLS for gRPC |
-| `METRICS_AUTH_ENABLED` | `false` | Require a dedicated metrics bearer token |
+| `CHRONOQUEUE_TLS_ENABLED` | `false` in development; `true` in production | Enable TLS for gRPC and HTTP |
+| `METRICS_AUTH_ENABLED` | `false` in development; `true` in production | Require a dedicated metrics bearer token |
 | `METRICS_BEARER_TOKEN` | _(empty)_ | Metrics bearer token; required with production metrics |
 
 ### PostgreSQL-specific
@@ -471,6 +471,7 @@ make deploy-all STORAGE=postgres
 
    ```yaml
    environment:
+     - METRICS_AUTH_ENABLED=true
      - METRICS_BEARER_TOKEN=${METRICS_BEARER_TOKEN}
      - CHRONOQUEUE_UI_AUTH_ENABLED=true
      - CHRONOQUEUE_UI_AUTH_USERNAME=${CHRONOQUEUE_UI_AUTH_USERNAME}
@@ -496,11 +497,20 @@ make deploy-all STORAGE=postgres
 
 4. **Use secrets management** instead of literal environment values:
 
-   ```yaml
-   secrets:
-     - encryption_key
-     - postgres_password
-   ```
+   Map every production credential to a mounted secret or an external secret-manager entry:
+
+   | Sensitive setting | Secret entry |
+   | --- | --- |
+   | `METRICS_BEARER_TOKEN` | `metrics_bearer_token` |
+   | `CHRONOQUEUE_UI_AUTH_USERNAME`, `CHRONOQUEUE_UI_AUTH_PASSWORD` | `ui_auth_username`, `ui_auth_password` |
+   | `API_KEYS`, client `CHRONOQUEUE_API_KEY` | `server_api_keys`, per-client API-key secret |
+   | `ENCRYPTION_KEY` or Vault credentials (`VAULT_TOKEN`/AppRole secret ID) | `encryption_key` or external Vault identity secret |
+   | `CERT_FILE`, `KEY_FILE`, `CA_CERT_FILE` | read-only server TLS certificate, key, and CA files |
+   | `CHRONOQUEUE_UI_TLS_CERT_FILE`, `CHRONOQUEUE_UI_TLS_KEY_FILE` | read-only UI TLS certificate and key files |
+   | `GATEWAY_CLIENT_CERT_FILE`, `GATEWAY_CLIENT_KEY_FILE` | read-only gateway mTLS certificate and key files |
+   | `POSTGRES_PASSWORD`, `POSTGRES_CLIENT_CERT`, `POSTGRES_CLIENT_KEY`, `POSTGRES_ROOT_CERT` | PostgreSQL password and read-only TLS files |
+
+   Inject environment-backed values through the deployment platform's secret integration and mount file-backed credentials read-only. Do not commit literal values to Compose files.
 
 5. **Set up AlertManager** for production alerts
 
