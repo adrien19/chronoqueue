@@ -20,7 +20,7 @@
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label class="mb-2 block text-sm font-medium text-zinc-200">Queue Type <span class="text-red-400">*</span></label>
-          <select class="cq-input w-full" name="type" id="queue_type" onchange="toggleExclusivityKey()">
+          <select class="cq-input w-full" name="type" id="queue_type">
             <option value="simple">Simple</option>
             <option value="exclusive">Exclusive</option>
           </select>
@@ -88,19 +88,4 @@
   </div>
 </section>
 
-<script>
-function toggleExclusivityKey() {
-  var type = document.getElementById('queue_type').value;
-  var section = document.getElementById('exclusivity_key_section');
-  var input = document.getElementById('exclusivity_key');
-  if (type === 'exclusive') {
-    section.classList.remove('hidden');
-    input.required = true;
-  } else {
-    section.classList.add('hidden');
-    input.required = false;
-    input.value = '';
-  }
-}
-</script>
 {{ end }}

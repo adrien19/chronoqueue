@@ -17,6 +17,11 @@ type KeyAdapter interface {
 	FetchKey() ([]byte, error)
 }
 
+type Config struct {
+	Enabled    bool
+	SourceType string
+}
+
 type EncryptionKeyManager struct {
 	Enabled      bool
 	adapter      KeyAdapter
@@ -29,10 +34,16 @@ type EncryptionKeyManager struct {
 }
 
 func NewEncryptionKeyManager(logger *log.Logger) (*EncryptionKeyManager, error) {
-	encryptionEnabled := envString("ENABLE_ENCRYPTION", "false")
-	logger.InfoWithFields("Checking encryption configuration", "ENABLE_ENCRYPTION", encryptionEnabled)
+	return NewEncryptionKeyManagerWithConfig(logger, Config{
+		Enabled:    envString("ENABLE_ENCRYPTION", "false") == "true",
+		SourceType: os.Getenv("ENCRYPTION_KEY_SOURCE_TYPE"),
+	})
+}
 
-	if encryptionEnabled != "true" {
+func NewEncryptionKeyManagerWithConfig(logger *log.Logger, config Config) (*EncryptionKeyManager, error) {
+	logger.InfoWithFields("Checking encryption configuration", "enabled", config.Enabled)
+
+	if !config.Enabled {
 		logger.Info("Encryption is DISABLED - returning disabled key manager")
 		return &EncryptionKeyManager{
 			Enabled:      false,
@@ -50,9 +61,8 @@ func NewEncryptionKeyManager(logger *log.Logger) (*EncryptionKeyManager, error) 
 
 	manager := &EncryptionKeyManager{}
 	var adapter KeyAdapter
-	sourceType := os.Getenv("ENCRYPTION_KEY_SOURCE_TYPE")
 
-	switch sourceType {
+	switch config.SourceType {
 	case "LOCAL":
 		adapter = adapters.NewLocalAdapter()
 	case "VAULT":
@@ -89,7 +99,7 @@ func NewEncryptionKeyManager(logger *log.Logger) (*EncryptionKeyManager, error) 
 	manager.logger.InfoWithFields(
 		"Encryption key manager initialized successfully",
 		"enabled", manager.Enabled,
-		"sourceType", sourceType,
+		"sourceType", config.SourceType,
 		"refreshDelayMinutes", manager.refreshDelay.Minutes(),
 	)
 	return manager, nil

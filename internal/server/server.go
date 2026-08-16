@@ -128,7 +128,7 @@ func (s *Server) printStartupInfo() {
 		fmt.Printf("ℹ SQLite database: %s\n", s.config.SQLiteDBPath)
 	case "postgres":
 		if s.config.PostgresDSN != "" {
-			fmt.Printf("ℹ Postgres DSN: %s\n", s.config.PostgresDSN)
+			fmt.Printf("ℹ Postgres connection: %s\n", safePostgresDSNSummary(s.config.PostgresDSN))
 		} else {
 			fmt.Printf(
 				"ℹ Postgres connection: %s:%d db=%s user=%s sslmode=%s\n",
@@ -145,7 +145,9 @@ func (s *Server) printStartupInfo() {
 	if s.config.IsDevelopment {
 		fmt.Printf("ℹ Available endpoints:\n")
 		fmt.Printf("  - Health: http://localhost%s/health\n", s.config.HTTPAddr)
-		fmt.Printf("  - Metrics: http://localhost%s/metrics\n", s.config.HTTPAddr)
+		if s.config.MetricsEnabled {
+			fmt.Printf("  - Metrics: http://localhost%s/metrics\n", s.config.HTTPAddr)
+		}
 		fmt.Printf("  - API Docs: http://localhost%s/docs/\n", s.config.HTTPAddr)
 	}
 
@@ -187,7 +189,10 @@ func (s *Server) initializeLogger() (*log.Logger, error) {
 
 // initializeEncryptionKeyManager creates the encryption key manager
 func (s *Server) initializeEncryptionKeyManager() (*keymanager.EncryptionKeyManager, error) {
-	km, err := keymanager.NewEncryptionKeyManager(s.logger)
+	km, err := keymanager.NewEncryptionKeyManagerWithConfig(s.logger, keymanager.Config{
+		Enabled:    s.config.EncryptionEnabled,
+		SourceType: s.config.EncryptionKeySourceType,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize encryption key manager: %w", err)
 	}
@@ -249,10 +254,20 @@ func (s *Server) startGRPCServer() error {
 	interceptors := []grpc.UnaryServerInterceptor{
 		gateway.RecoveryInterceptor(s.logger),
 		gateway.LoggingInterceptor(s.logger),
-		gateway.AuthInterceptor(s.logger),
+		gateway.AuthInterceptor(s.logger, s.config.AuthEnabled, s.config.APIKeys),
+	}
+	if s.config.RateLimitEnabled {
+		interceptors = append(interceptors, gateway.RateLimitingInterceptor(
+			s.logger,
+			s.config.RateLimitRequestsPerSecond,
+			s.config.RateLimitBurst,
+			s.config.RateLimitMaxBuckets,
+		))
+	}
+	interceptors = append(interceptors,
 		gateway.MetricsInterceptor(s.logger),
 		gateway.ValidationInterceptor(s.logger),
-	}
+	)
 
 	// Get TLS configuration
 	tlsConfig := s.getTLSConfig()
@@ -294,27 +309,23 @@ func (s *Server) startGRPCServer() error {
 
 // startHTTPGateway starts the HTTP gateway server
 func (s *Server) startHTTPGateway(ctx context.Context) error {
-	// Determine gateway TLS settings
-	// By default, use the same TLS setting as the server
 	gatewayUseTLS := s.config.GatewayUseTLS
-	if !s.config.GatewayUseTLS && s.config.EnableTLS {
-		// If not explicitly set, inherit from server TLS setting
-		gatewayUseTLS = s.config.EnableTLS
-	}
 
 	// For localhost connections in development mode, we can skip verification to avoid certificate issues
 	gatewayInsecure := s.config.GatewayInsecure
-	if gatewayUseTLS && !gatewayInsecure && s.config.IsDevelopment {
+	if gatewayUseTLS && !gatewayInsecure && s.config.IsDevelopment && s.config.CACertFile == "" {
 		// Auto-detect localhost and enable insecure mode only in development
 		if s.config.GRPCAddr == "localhost:9000" || s.config.GRPCAddr == "127.0.0.1:9000" || s.config.GRPCAddr == ":9000" {
 			gatewayInsecure = true
-			s.logger.Debug("Auto-enabling gateway TLS insecure mode for localhost in development")
 		}
 	} else if gatewayUseTLS && !gatewayInsecure && !s.config.IsDevelopment {
 		// In production, warn if localhost is detected but auto-insecure is not enabled
 		if s.config.GRPCAddr == "localhost:9000" || s.config.GRPCAddr == "127.0.0.1:9000" || s.config.GRPCAddr == ":9000" {
-			s.logger.Warn("Gateway TLS verification enabled for localhost in production - consider using --gateway-insecure if needed")
+			s.logger.Warn("Gateway TLS verification is enabled for localhost in production; ensure the certificate includes a localhost SAN")
 		}
+	}
+	if gatewayUseTLS && gatewayInsecure {
+		s.logger.Warn("SECURITY: gateway-to-gRPC certificate verification is disabled")
 	}
 
 	// Use the gateway helper function from gateway package
@@ -326,6 +337,8 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 		UseTLS:              gatewayUseTLS,
 		TLSInsecure:         gatewayInsecure,
 		ServerCertFile:      s.config.CACertFile, // Reuse CA cert for verification
+		ClientCertFile:      s.config.GatewayClientCertFile,
+		ClientKeyFile:       s.config.GatewayClientKeyFile,
 		EnableAPIDocs:       s.config.EnableAPIDocs,
 		APIDocsAllowOrigins: s.config.APIDocsAllowOrigins,
 	}
@@ -345,28 +358,56 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	httpMux.Handle("/health", gateway.HealthCheckHandler())
 
 	// Add metrics endpoint
-	httpMux.Handle("/metrics", gateway.MetricsHandler())
+	httpMux.Handle("/metrics", metricsHTTPHandler(s.config))
 
 	// Add API documentation endpoints (controlled by EnableAPIDocs config)
 	httpMux.Handle("/docs/", gateway.SwaggerUIHandler(gatewayConfig, s.logger))
 	httpMux.Handle("/docs/swagger.json", gateway.SwaggerSpecHandler(gatewayConfig, s.logger))
+	httpMux.Handle("/docs/assets/", gateway.SwaggerAssetHandler(gatewayConfig, s.logger))
 
 	// Wrap with metrics middleware
 	var handler http.Handler = httpMux
 	handler = metrics.HTTPMetricsMiddleware(handler)
+	handler = gateway.SecurityHeadersMiddleware(handler)
 
 	s.logger.InfoWithFields("Starting HTTP gateway", "addr", s.config.HTTPAddr)
 
-	server := &http.Server{
-		Addr:    s.config.HTTPAddr,
-		Handler: handler,
-	}
+	server := s.newHTTPServer(handler)
 
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		return fmt.Errorf("failed to serve HTTP: %w", err)
+	var serveErr error
+	if s.config.EnableTLS {
+		serveErr = server.ListenAndServeTLS(s.config.CertFile, s.config.KeyFile)
+	} else {
+		serveErr = server.ListenAndServe()
+	}
+	if serveErr != nil && serveErr != http.ErrServerClosed {
+		return fmt.Errorf("failed to serve HTTP: %w", serveErr)
 	}
 
 	return nil
+}
+
+func metricsHTTPHandler(config *Config) http.Handler {
+	if !config.MetricsEnabled {
+		return http.NotFoundHandler()
+	}
+	handler := gateway.MetricsHandler()
+	if config.MetricsAuthEnabled {
+		handler = gateway.BearerAuthMiddleware(config.MetricsBearerToken, handler)
+	}
+	return handler
+}
+
+func (s *Server) newHTTPServer(handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              s.config.HTTPAddr,
+		Handler:           handler,
+		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
+		ReadHeaderTimeout: s.config.HTTPReadHeaderTimeout,
+		ReadTimeout:       s.config.HTTPReadTimeout,
+		WriteTimeout:      s.config.HTTPWriteTimeout,
+		IdleTimeout:       s.config.HTTPIdleTimeout,
+	}
 }
 
 // getTLSConfig returns TLS configuration if enabled
@@ -385,6 +426,7 @@ func (s *Server) getTLSConfig() *tls.Config {
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		ClientAuth:   tls.NoClientCert,
+		MinVersion:   tls.VersionTLS12,
 	}
 
 	// Load CA certificate for mutual TLS if provided

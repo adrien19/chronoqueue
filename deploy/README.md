@@ -54,6 +54,8 @@ docker-compose -f docker-compose.sqlite.yaml up -d
 
 No external database needed - data stored in volume at `/data/chronoqueue.db`.
 
+The Compose files are local-development configurations. The Web UI is exposed only on the host loopback interface at <https://localhost:8081> and uses the certificate mounted from `${WORKSPACE_FOLDER}/certs`; that certificate must be trusted by the browser and valid for `localhost`. Replace the example certificate and credentials before adapting either file for production.
+
 ### 2. Start Monitoring Stack
 
 ```bash
@@ -78,7 +80,7 @@ Default Grafana credentials:
 ### 3. Access Services
 
 | Service | URL | Purpose |
-|---------|-----|---------|
+| --------- | ----- | --------- |
 | Grafana | <http://localhost:3000> | Metrics visualization |
 | Prometheus | <http://localhost:9090> | Metrics storage & queries |
 | ChronoQueue REST API | <http://localhost:8080> | HTTP API |
@@ -242,23 +244,25 @@ make deploy-status STORAGE=postgres  # Show service status
 Common across all storage backends:
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| ---------- | --------- | ------------- |
 | `SERVER_MODE` | `development` | Server mode (development/production) |
 | `STORAGE_TYPE` | varies | Storage backend (postgres/sqlite) |
 | `LOG_LEVEL` | `debug` | Log level (debug/info/warn/error) |
 | `LOG_FORMAT` | `text` | Log format (text/json) |
 | `ENABLE_ENCRYPTION` | `true` | Enable message encryption |
-| `CHRONOQUEUE_TLS_ENABLED` | `false` | Enable TLS for gRPC |
+| `CHRONOQUEUE_TLS_ENABLED` | `false` in development; `true` in production | Enable TLS for gRPC and HTTP |
+| `METRICS_AUTH_ENABLED` | `false` in development; `true` in production | Require a dedicated metrics bearer token |
+| `METRICS_BEARER_TOKEN` | _(empty)_ | Metrics bearer token; required with production metrics |
 
 ### PostgreSQL-specific
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| ---------- | --------- | ------------- |
 | `POSTGRES_HOST` | `postgres` | PostgreSQL hostname |
 | `POSTGRES_PORT` | `5432` | PostgreSQL port |
 | `POSTGRES_USER` | `chronoqueue` | PostgreSQL username |
 | `POSTGRES_PASSWORD` | `chronoqueue_dev_password` | PostgreSQL password |
-| `POSTGRES_DATABASE` | `chronoqueue` | Database name |
+| `POSTGRES_DB` | `chronoqueue` | Database name |
 | `POSTGRES_SSLMODE` | `disable` | SSL mode (disable/require/verify-full) |
 
 ### SQLite-specific
@@ -463,7 +467,22 @@ make deploy-all STORAGE=postgres
      - CHRONOQUEUE_TLS_ENABLED=true
    ```
 
-2. **Configure proper resource limits**:
+2. **Protect metrics and the Web UI**:
+
+   ```yaml
+   environment:
+     - METRICS_AUTH_ENABLED=true
+     - METRICS_BEARER_TOKEN=${METRICS_BEARER_TOKEN}
+     - CHRONOQUEUE_UI_AUTH_ENABLED=true
+     - CHRONOQUEUE_UI_AUTH_USERNAME=${CHRONOQUEUE_UI_AUTH_USERNAME}
+     - CHRONOQUEUE_UI_AUTH_PASSWORD=${CHRONOQUEUE_UI_AUTH_PASSWORD}
+     - CHRONOQUEUE_UI_TLS_CERT_FILE=/secrets/ui.crt
+     - CHRONOQUEUE_UI_TLS_KEY_FILE=/secrets/ui.key
+   ```
+
+   Configure Prometheus with `authorization.credentials_file` backed by the same metrics-token secret. Mount the UI certificate and key read-only. Non-loopback UI listeners are rejected unless both TLS files are valid. The example Compose files are local-only and publish the UI port on `127.0.0.1`.
+
+3. **Configure proper resource limits**:
 
    ```yaml
    deploy:
@@ -476,19 +495,28 @@ make deploy-all STORAGE=postgres
          memory: 2G
    ```
 
-3. **Use secrets management** instead of environment variables:
+4. **Use secrets management** instead of literal environment values:
 
-   ```yaml
-   secrets:
-     - encryption_key
-     - postgres_password
-   ```
+   Map every production credential to a mounted secret or an external secret-manager entry:
 
-4. **Set up AlertManager** for production alerts
+   | Sensitive setting | Secret entry |
+   | --- | --- |
+   | `METRICS_BEARER_TOKEN` | `metrics_bearer_token` |
+   | `CHRONOQUEUE_UI_AUTH_USERNAME`, `CHRONOQUEUE_UI_AUTH_PASSWORD` | `ui_auth_username`, `ui_auth_password` |
+   | `API_KEYS`, client `CHRONOQUEUE_API_KEY` | `server_api_keys`, per-client API-key secret |
+   | `ENCRYPTION_KEY` or Vault credentials (`VAULT_TOKEN`/AppRole secret ID) | `encryption_key` or external Vault identity secret |
+   | `CERT_FILE`, `KEY_FILE`, `CA_CERT_FILE` | read-only server TLS certificate, key, and CA files |
+   | `CHRONOQUEUE_UI_TLS_CERT_FILE`, `CHRONOQUEUE_UI_TLS_KEY_FILE` | read-only UI TLS certificate and key files |
+   | `GATEWAY_CLIENT_CERT_FILE`, `GATEWAY_CLIENT_KEY_FILE` | read-only gateway mTLS certificate and key files |
+   | `POSTGRES_PASSWORD`, `POSTGRES_CLIENT_CERT`, `POSTGRES_CLIENT_KEY`, `POSTGRES_ROOT_CERT` | PostgreSQL password and read-only TLS files |
 
-5. **Configure Grafana authentication** (OAuth, LDAP, etc.)
+   Inject environment-backed values through the deployment platform's secret integration and mount file-backed credentials read-only. Do not commit literal values to Compose files.
 
-6. **Use production-grade logging**:
+5. **Set up AlertManager** for production alerts
+
+6. **Configure Grafana authentication** (OAuth, LDAP, etc.)
+
+7. **Use production-grade logging**:
 
    ```yaml
    environment:

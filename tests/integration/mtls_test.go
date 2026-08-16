@@ -4,14 +4,15 @@
 package integration
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -144,13 +145,8 @@ func TestGRPCWithMTLS(t *testing.T) {
 	})
 }
 
-// TestHTTPGatewayWithTLS verifies that the HTTP gateway correctly uses TLS
-// to connect to the gRPC backend.
-//
-// Note: The HTTP gateway itself serves plain HTTP to clients. The TLS configuration
-// controls the internal connection from the gateway to the gRPC backend, not the
-// external HTTP interface. This is by design - if you need HTTPS for external clients,
-// use a reverse proxy (nginx, Envoy, etc.) in front of the gateway.
+// TestHTTPGatewayWithTLS verifies TLS on the public HTTP gateway and its connection
+// to the gRPC backend.
 func TestHTTPGatewayWithTLS(t *testing.T) {
 	t.Parallel()
 
@@ -161,41 +157,41 @@ func TestHTTPGatewayWithTLS(t *testing.T) {
 	env := helpers.SetupTestEnvironmentWithTLS(t, certs)
 
 	t.Run("HTTPGatewayAccess", func(t *testing.T) {
-		// Create HTTP client (gateway serves plain HTTP, not HTTPS)
 		httpClient := &http.Client{
-			Timeout: 10 * time.Second,
+			Transport: &http.Transport{TLSClientConfig: certs.LoadClientTLSConfig(t)},
+			Timeout:   10 * time.Second,
 		}
 
-		// Test health endpoint over HTTP
-		// Note: HTTPAddr will be "https://..." but we need to replace with http://
-		httpAddr := strings.Replace(env.HTTPAddr, "https://", "http://", 1)
-		resp, err := httpClient.Get(fmt.Sprintf("%s/health", httpAddr))
-		require.NoError(t, err, "Failed to access health endpoint over HTTP")
-		defer resp.Body.Close()
+		resp, err := httpClient.Get(fmt.Sprintf("%s/v1/queues", env.HTTPAddr))
+		require.NoError(t, err, "Failed to access proxied endpoint over HTTPS")
+		defer func() { assert.NoError(t, resp.Body.Close()) }()
 
-		assert.Equal(t, http.StatusOK, resp.StatusCode, "Health endpoint should return 200 OK")
+		assert.Equal(t, http.StatusOK, resp.StatusCode, "Proxied endpoint should return 200 OK")
+		require.NotNil(t, resp.TLS)
+		assert.GreaterOrEqual(t, resp.TLS.Version, uint16(tls.VersionTLS12))
 
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err, "Failed to read response body")
-		t.Logf("Health endpoint response: %s", string(body))
+		t.Logf("Proxied endpoint response: %s", string(body))
 
-		// The health endpoint is handled directly by the HTTP server, not proxied through gRPC.
-		// However, the fact that the container started successfully with TLS configuration
-		// proves that the gateway can initialize with TLS settings.
-		// The actual gRPC-to-HTTP gateway TLS connection is tested via direct gRPC calls
-		// in the TestGRPCWithMTLS tests.
-		t.Log("HTTP gateway is operational with TLS configuration")
+		legacyTLSConfig := certs.LoadClientTLSConfig(t)
+		legacyTLSConfig.MinVersion = tls.VersionTLS10
+		legacyTLSConfig.MaxVersion = tls.VersionTLS11
+		legacyClient := &http.Client{
+			Transport: &http.Transport{TLSClientConfig: legacyTLSConfig},
+			Timeout:   10 * time.Second,
+		}
+		legacyResp, err := legacyClient.Get(fmt.Sprintf("%s/v1/queues", env.HTTPAddr))
+		if legacyResp != nil {
+			defer func() { assert.NoError(t, legacyResp.Body.Close()) }()
+		}
+		assert.Error(t, err, "TLS 1.1 and older should be rejected")
 	})
 }
 
-// TestGatewayInternalTLSConnection verifies that the HTTP gateway correctly
-// establishes a TLS connection to the internal gRPC server.
-//
-// Note: This test is covered by TestHTTPGatewayWithTLS/CreateQueueViaHTTPGateway,
-// which creates a queue via the HTTP gateway, proving the gateway can communicate
-// with the gRPC backend using TLS.
-// We keep this as a simpler dedicated test for the internal connection.
-func TestGatewayInternalTLSConnection(t *testing.T) {
+// TestGatewayProxiedRequestWithMTLS verifies that the HTTP gateway presents its
+// client certificate when proxying to the mTLS-protected gRPC server.
+func TestGatewayProxiedRequestWithMTLS(t *testing.T) {
 	t.Parallel()
 
 	// Generate test certificates
@@ -205,28 +201,75 @@ func TestGatewayInternalTLSConnection(t *testing.T) {
 	env := helpers.SetupTestEnvironmentWithTLS(t, certs)
 
 	t.Run("GatewayUsesInternalTLS", func(t *testing.T) {
-		// Create HTTP client for gateway access
 		httpClient := &http.Client{
-			Timeout: 10 * time.Second,
+			Transport: &http.Transport{TLSClientConfig: certs.LoadClientTLSConfig(t)},
+			Timeout:   10 * time.Second,
 		}
 
-		// Access health endpoint - this is simpler than ListQueues
-		// and proves the gateway is working
-		httpAddr := strings.Replace(env.HTTPAddr, "https://", "http://", 1)
-		resp, err := httpClient.Get(fmt.Sprintf("%s/health", httpAddr))
-		require.NoError(t, err, "Failed to access health endpoint via HTTP gateway")
-		defer resp.Body.Close()
+		queueName := fmt.Sprintf("gateway-mtls-%d", time.Now().UnixNano())
+		requestBody := fmt.Sprintf(`{"name":%q,"metadata":{"type":"SIMPLE"}}`, queueName)
+		resp, err := httpClient.Post(
+			fmt.Sprintf("%s/v1/queues", env.HTTPAddr),
+			"application/json",
+			bytes.NewBufferString(requestBody),
+		)
+		require.NoError(t, err, "Failed to create queue through HTTP gateway")
+		defer func() { assert.NoError(t, resp.Body.Close()) }()
 
-		assert.Equal(t, http.StatusOK, resp.StatusCode, "Health endpoint should return 200 OK")
-
-		body, err := io.ReadAll(resp.Body)
-		require.NoError(t, err, "Failed to read response body")
-		t.Logf("Health endpoint response via gateway: %s", string(body))
-
-		// Health endpoint doesn't go through gRPC, so let's skip this test
-		// The TLS connection is already tested in the CreateQueueViaHTTPGateway test
-		t.Skip("Health endpoint doesn't go through gRPC gateway - TLS tested in CreateQueueViaHTTPGateway")
+		assert.Equal(t, http.StatusOK, resp.StatusCode, "Queue creation should return 200 OK")
+		var result struct {
+			Success bool `json:"success"`
+		}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+		assert.True(t, result.Success)
 	})
+}
+
+func TestGatewayRejectsUntrustedClientCertificate(t *testing.T) {
+	t.Parallel()
+
+	serverCerts := helpers.GenerateTestCertificates(t)
+	untrustedGatewayCerts := helpers.GenerateTestCertificates(t)
+	env := helpers.SetupTestEnvironmentWithTLSGatewayCredentials(
+		t,
+		serverCerts,
+		untrustedGatewayCerts.ClientCert,
+		untrustedGatewayCerts.ClientKey,
+	)
+
+	httpClient := &http.Client{
+		Transport: &http.Transport{TLSClientConfig: serverCerts.LoadClientTLSConfig(t)},
+		Timeout:   10 * time.Second,
+	}
+	resp, err := httpClient.Get(fmt.Sprintf("%s/v1/queues", env.HTTPAddr))
+	require.NoError(t, err, "Public HTTPS connection should succeed")
+	defer func() { assert.NoError(t, resp.Body.Close()) }()
+
+	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+}
+
+func TestGatewayRejectsUntrustedServerCertificate(t *testing.T) {
+	t.Parallel()
+
+	serverCerts := helpers.GenerateTestCertificates(t)
+	gatewayCerts := helpers.GenerateTestCertificates(t)
+	env := helpers.SetupTestEnvironmentWithTLSGatewayCertificates(
+		t,
+		serverCerts,
+		gatewayCerts.CACert,
+		serverCerts.ClientCert,
+		serverCerts.ClientKey,
+	)
+
+	httpClient := &http.Client{
+		Transport: &http.Transport{TLSClientConfig: serverCerts.LoadClientTLSConfig(t)},
+		Timeout:   10 * time.Second,
+	}
+	resp, err := httpClient.Get(fmt.Sprintf("%s/v1/queues", env.HTTPAddr))
+	require.NoError(t, err, "Public HTTPS connection should succeed")
+	defer func() { assert.NoError(t, resp.Body.Close()) }()
+
+	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 }
 
 // TestTLSCertificateValidation verifies proper certificate validation behavior.

@@ -12,6 +12,7 @@ import (
 )
 
 func TestGetClientOptions(t *testing.T) {
+	t.Setenv("CHRONOQUEUE_API_KEY", "")
 	tests := []struct {
 		name          string
 		setupFlags    func(*cobra.Command)
@@ -89,6 +90,7 @@ func TestGetClientOptions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := &cobra.Command{}
+			cmd.Flags().String("api-key", "", "")
 			tt.setupFlags(cmd)
 
 			opts, err := GetClientOptions(cmd)
@@ -102,6 +104,28 @@ func TestGetClientOptions(t *testing.T) {
 			assert.Equal(t, tt.expectedOpts, opts)
 		})
 	}
+}
+
+func TestGetClientOptionsAPIKeyEnvironmentFallback(t *testing.T) {
+	t.Setenv("CHRONOQUEUE_API_KEY", "environment-secret")
+	cmd := &cobra.Command{}
+	cmd.Flags().String("api-key", "", "")
+
+	opts, err := GetClientOptions(cmd)
+	require.NoError(t, err)
+	assert.Equal(t, "environment-secret", opts.APIKey)
+
+	require.NoError(t, cmd.Flags().Set("api-key", "flag-secret"))
+	opts, err = GetClientOptions(cmd)
+	require.NoError(t, err)
+	assert.Equal(t, "flag-secret", opts.APIKey)
+}
+
+func TestGetClientOptionsReturnsAPIKeyFlagError(t *testing.T) {
+	cmd := &cobra.Command{}
+	_, err := GetClientOptions(cmd)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "read --api-key")
 }
 
 func TestGetOutputFormat(t *testing.T) {

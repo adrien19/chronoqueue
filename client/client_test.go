@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
@@ -21,6 +22,38 @@ import (
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 )
+
+func TestAPIKeyUnaryClientInterceptor(t *testing.T) {
+	interceptor := apiKeyUnaryClientInterceptor("secret")
+
+	t.Run("successful invoker", func(t *testing.T) {
+		invoked := false
+		err := interceptor(context.Background(), "/test.Service/Method", nil, nil, nil, func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+			invoked = true
+			md, ok := metadata.FromOutgoingContext(ctx)
+			if !ok || !reflect.DeepEqual([]string{"secret"}, md.Get("api-key")) {
+				t.Fatalf("unexpected outgoing metadata: %v", md)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("interceptor returned an error: %v", err)
+		}
+		if !invoked {
+			t.Fatal("interceptor did not invoke the RPC")
+		}
+	})
+
+	t.Run("invoker error", func(t *testing.T) {
+		sentinelErr := errors.New("invoker failed")
+		err := interceptor(context.Background(), "/test.Service/Method", nil, nil, nil, func(context.Context, string, interface{}, interface{}, *grpc.ClientConn, ...grpc.CallOption) error {
+			return sentinelErr
+		})
+		if err != sentinelErr {
+			t.Fatalf("interceptor returned %v, want sentinel error", err)
+		}
+	})
+}
 
 type mockChronoQueueServer struct {
 	queueservice_pb.UnimplementedQueueServiceServer

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -17,6 +18,7 @@ import (
 // ClientOptions holds configuration for the ChronoQueue client
 type ClientOptions struct {
 	Server   string
+	APIKey   string
 	Insecure bool
 	CertFile string
 	KeyFile  string
@@ -28,6 +30,13 @@ type ClientOptions struct {
 // GetClientOptions extracts client options from cobra command flags
 func GetClientOptions(cmd *cobra.Command) (*ClientOptions, error) {
 	server, _ := cmd.Flags().GetString("server")
+	apiKey, err := cmd.Flags().GetString("api-key")
+	if err != nil {
+		return nil, fmt.Errorf("read --api-key: %w", err)
+	}
+	if apiKey == "" {
+		apiKey = os.Getenv("CHRONOQUEUE_API_KEY")
+	}
 	insecure, _ := cmd.Flags().GetBool("insecure")
 	certFile, _ := cmd.Flags().GetString("cert-file")
 	keyFile, _ := cmd.Flags().GetString("key-file")
@@ -37,6 +46,7 @@ func GetClientOptions(cmd *cobra.Command) (*ClientOptions, error) {
 
 	return &ClientOptions{
 		Server:   server,
+		APIKey:   apiKey,
 		Insecure: insecure,
 		CertFile: certFile,
 		KeyFile:  keyFile,
@@ -63,6 +73,7 @@ func GetOutputFormat(cmd *cobra.Command) outputs.OutputFormat {
 func CreateClient(opts *ClientOptions) (*client.ChronoQueueClient, error) {
 	// Create client options with default values
 	clientOpts := client.ClientOptions{
+		APIKey:              opts.APIKey,
 		MaxRetries:          client.DefaultMaxRetries,
 		InitialBackoff:      client.DefaultInitialBackoff,
 		MaxBackoff:          client.DefaultMaxBackoff,

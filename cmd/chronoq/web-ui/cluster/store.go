@@ -237,6 +237,7 @@ func (s *Store) ActiveClient() *client.ChronoQueueClient {
 	}
 	opts := client.ClientOptions{
 		MaxRetries: 3,
+		APIKey:     os.Getenv("CHRONOQUEUE_API_KEY"),
 	}
 	if !active.SkipSSLCheck {
 		opts.TLSCredentials = credentials.NewClientTLSFromCert(nil, "")

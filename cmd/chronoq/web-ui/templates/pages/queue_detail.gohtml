@@ -29,11 +29,11 @@
         </a>
         {{ end }}
         {{ if .Queue.IsDLQ }}
-        <form method="POST" action="/queues/{{ .Queue.Name }}/requeue-all" onsubmit="return confirm('Requeue all messages from DLQ back to {{ .Queue.SourceQueue }}?')">
+        <form method="POST" action="/queues/{{ .Queue.Name }}/requeue-all" data-confirm="Requeue all messages from DLQ back to {{ .Queue.SourceQueue }}?">
           <button class="cq-btn cq-btn-primary" type="submit">Requeue all</button>
         </form>
         {{ end }}
-        <form method="POST" action="/queues/{{ .Queue.Name }}/purge" onsubmit="return confirm('Purge ALL messages from this queue? This cannot be undone.')">
+        <form method="POST" action="/queues/{{ .Queue.Name }}/purge" data-confirm="Purge ALL messages from this queue? This cannot be undone.">
           <button class="cq-btn" type="submit">Purge</button>
         </form>
       </div>

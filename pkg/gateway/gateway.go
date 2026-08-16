@@ -2,10 +2,12 @@ package gateway
 
 import (
 	"context"
+	"crypto/subtle"
 	"crypto/tls"
 	"crypto/x509"
-	_ "embed"
+	"embed"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
@@ -23,6 +26,9 @@ import (
 
 //go:embed chronoqueue.swagger.json
 var swaggerSpec []byte
+
+//go:embed swagger-ui/*
+var swaggerUIAssets embed.FS
 
 // GatewayConfig holds configuration for the HTTP gateway
 type GatewayConfig struct {
@@ -35,6 +41,8 @@ type GatewayConfig struct {
 	UseTLS         bool   // Enable TLS for internal gateway→gRPC connection
 	TLSInsecure    bool   // Skip TLS verification (for localhost)
 	ServerCertFile string // Optional: CA cert to verify server certificate
+	ClientCertFile string // Optional: client certificate for mTLS
+	ClientKeyFile  string // Optional: client key for mTLS
 
 	// API Documentation Configuration
 	EnableAPIDocs       bool     // Enable API documentation endpoints (disabled by default in production)
@@ -48,12 +56,18 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{}),
 		runtime.WithErrorHandler(customErrorHandler(logger)),
 		runtime.WithForwardResponseOption(responseModifier),
+		runtime.WithIncomingHeaderMatcher(incomingHeaderMatcher),
+		runtime.WithMetadata(gatewayRequestMetadata),
 	)
 
 	// Set up gRPC client options
 	// Note: We don't use WithBlock() here because the connection is established lazily
 	// The first request will trigger the connection
 	var opts []grpc.DialOption
+
+	if (config.ClientCertFile == "") != (config.ClientKeyFile == "") {
+		return nil, fmt.Errorf("gateway client cert and key files must be specified together")
+	}
 
 	if config.UseTLS {
 		tlsConfig := &tls.Config{
@@ -74,6 +88,14 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 				return nil, fmt.Errorf("failed to parse server CA cert")
 			}
 			tlsConfig.RootCAs = caCertPool
+		}
+
+		if config.ClientCertFile != "" {
+			clientCert, err := tls.LoadX509KeyPair(config.ClientCertFile, config.ClientKeyFile)
+			if err != nil {
+				return nil, fmt.Errorf("load gateway client certificate: %w", err)
+			}
+			tlsConfig.Certificates = []tls.Certificate{clientCert}
 		}
 
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
@@ -105,6 +127,27 @@ func NewHTTPGateway(ctx context.Context, config GatewayConfig, logger *log.Logge
 	}
 
 	return mux, nil
+}
+
+func gatewayRequestMetadata(_ context.Context, r *http.Request) metadata.MD {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || host == "" {
+		host = r.RemoteAddr
+	}
+	if host == "" {
+		return nil
+	}
+	return metadata.Pairs(gatewayClientIDMetadataKey, signedGatewayClientID(host))
+}
+
+func incomingHeaderMatcher(key string) (string, bool) {
+	switch {
+	case strings.EqualFold(key, "api-key"):
+		return "api-key", true
+	case strings.EqualFold(key, "authorization"):
+		return "authorization", true
+	}
+	return runtime.DefaultHeaderMatcher(key)
 }
 
 // customErrorHandler provides custom error handling for the gateway
@@ -171,7 +214,7 @@ func corsHandler(handler http.Handler, allowedOrigins []string) http.Handler {
 		}
 
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization, X-CSRF-Token")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization, api-key, X-CSRF-Token")
 		w.Header().Set("Access-Control-Expose-Headers", "X-Worker-ID, X-ChronoQueue-Version, X-Attempt-ID")
 
 		// Handle preflight requests
@@ -220,6 +263,22 @@ func MetricsHandler() http.Handler {
 	return metricsRegistry.Handler()
 }
 
+// BearerAuthMiddleware requires a bearer token before serving a protected endpoint.
+func BearerAuthMiddleware(token string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		scheme, credential, found := strings.Cut(r.Header.Get("Authorization"), " ")
+		authorized := token != "" && found && strings.EqualFold(scheme, "Bearer") &&
+			len(credential) == len(token) && subtle.ConstantTimeCompare([]byte(credential), []byte(token)) == 1
+		if !authorized {
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("WWW-Authenticate", `Bearer realm="ChronoQueue metrics"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // SwaggerUIHandler serves the Swagger UI for API documentation
 func SwaggerUIHandler(config GatewayConfig, logger *log.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -251,53 +310,64 @@ func SwaggerUIHandler(config GatewayConfig, logger *log.Logger) http.Handler {
 <head>
     <meta charset="UTF-8">
     <title>ChronoQueue API Documentation</title>
-    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@3.52.5/swagger-ui.css" />
-    <style>
-        html {
-            box-sizing: border-box;
-            overflow: -moz-scrollbars-vertical;
-            overflow-y: scroll;
-        }
-        *, *:before, *:after {
-            box-sizing: inherit;
-        }
-        body {
-            margin:0;
-            background: #fafafa;
-        }
-    </style>
+    <link rel="stylesheet" type="text/css" href="/docs/assets/swagger-ui.css" />
+    <link rel="stylesheet" type="text/css" href="/docs/assets/chronoqueue.css" />
 </head>
 <body>
     <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@3.52.5/swagger-ui-bundle.js"></script>
-    <script src="https://unpkg.com/swagger-ui-dist@3.52.5/swagger-ui-standalone-preset.js"></script>
-    <script>
-        window.onload = function() {
-            const ui = SwaggerUIBundle({
-                url: '/docs/swagger.json',
-                dom_id: '#swagger-ui',
-                deepLinking: true,
-                presets: [
-                    SwaggerUIBundle.presets.apis,
-                    SwaggerUIStandalonePreset
-                ],
-                plugins: [
-                    SwaggerUIBundle.plugins.DownloadUrl
-                ],
-                layout: "StandaloneLayout",
-                docExpansion: "list",
-                defaultModelExpandDepth: 3,
-                defaultModelsExpandDepth: 1,
-                tryItOutEnabled: true
-            });
-        };
-    </script>
+    <script src="/docs/assets/swagger-ui-bundle.js"></script>
+    <script src="/docs/assets/swagger-ui-standalone-preset.js"></script>
+    <script src="/docs/assets/swagger-ui-init.js"></script>
 </body>
 </html>`
-			_, _ = fmt.Fprint(w, swaggerHTML)
+			if _, err := fmt.Fprint(w, swaggerHTML); err != nil {
+				logger.ErrorWithFields("Failed to write Swagger UI response", "error", err)
+			}
 		} else {
 			// Handle other paths under /docs/
 			http.NotFound(w, r)
+		}
+	})
+}
+
+// SwaggerAssetHandler serves the embedded Swagger UI assets.
+func SwaggerAssetHandler(config GatewayConfig, logger *log.Logger) http.Handler {
+	contentTypes := map[string]string{
+		"chronoqueue.css":                 "text/css; charset=utf-8",
+		"swagger-ui.css":                  "text/css; charset=utf-8",
+		"swagger-ui-bundle.js":            "text/javascript; charset=utf-8",
+		"swagger-ui-init.js":              "text/javascript; charset=utf-8",
+		"swagger-ui-standalone-preset.js": "text/javascript; charset=utf-8",
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !config.EnableAPIDocs {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		assetName := strings.TrimPrefix(r.URL.Path, "/docs/assets/")
+		contentType, ok := contentTypes[assetName]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		asset, err := swaggerUIAssets.ReadFile("swagger-ui/" + assetName)
+		if err != nil {
+			logger.ErrorWithFields("Failed to read embedded Swagger UI asset", "asset", assetName, "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		if r.Method == http.MethodHead {
+			return
+		}
+		if _, err := w.Write(asset); err != nil {
+			logger.ErrorWithFields("Failed to write Swagger UI asset", "asset", assetName, "error", err)
 		}
 	})
 }

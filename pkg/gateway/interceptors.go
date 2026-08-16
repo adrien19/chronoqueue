@@ -2,9 +2,17 @@ package gateway
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
+	"net"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -17,6 +25,47 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
 )
+
+type authenticatedPrincipalKey struct{}
+
+const gatewayClientIDMetadataKey = "chronoqueue-gateway-client-id"
+
+var gatewayClientIDSigningKey = func() [32]byte {
+	var key [32]byte
+	if _, err := rand.Read(key[:]); err != nil {
+		panic("generate gateway client identity signing key: " + err.Error())
+	}
+	return key
+}()
+
+func signedGatewayClientID(host string) string {
+	payload := "gateway:" + host
+	signature := hmac.New(sha256.New, gatewayClientIDSigningKey[:])
+	if _, err := signature.Write([]byte(payload)); err != nil {
+		panic("sign gateway client identity: " + err.Error())
+	}
+	return payload + ":" + hex.EncodeToString(signature.Sum(nil))
+}
+
+func verifiedGatewayClientID(value string) (string, bool) {
+	separator := strings.LastIndexByte(value, ':')
+	if separator <= len("gateway:") {
+		return "", false
+	}
+	payload := value[:separator]
+	providedSignature, err := hex.DecodeString(value[separator+1:])
+	if err != nil {
+		return "", false
+	}
+	expectedSignature := hmac.New(sha256.New, gatewayClientIDSigningKey[:])
+	if _, err := expectedSignature.Write([]byte(payload)); err != nil {
+		return "", false
+	}
+	if !hmac.Equal(providedSignature, expectedSignature.Sum(nil)) {
+		return "", false
+	}
+	return payload, true
+}
 
 // LoggingInterceptor logs all gRPC requests and responses
 func LoggingInterceptor(logger *log.Logger) grpc.UnaryServerInterceptor {
@@ -62,27 +111,40 @@ func LoggingInterceptor(logger *log.Logger) grpc.UnaryServerInterceptor {
 }
 
 // AuthInterceptor handles authentication and authorization
-func AuthInterceptor(logger *log.Logger) grpc.UnaryServerInterceptor {
+func AuthInterceptor(logger *log.Logger, enabled bool, validAPIKeys []string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		// Extract metadata from context
+		if !enabled {
+			return handler(ctx, req)
+		}
+
 		md, ok := metadata.FromIncomingContext(ctx)
 		if !ok {
-			logger.Warn("No metadata found in gRPC request")
+			return nil, status.Error(codes.Unauthenticated, "missing credentials")
 		}
 
-		// Check for API key or other authentication tokens
-		apiKeys := md.Get("api-key")
-		if len(apiKeys) == 0 {
-			// For now, we'll allow unauthenticated requests
-			// In production, you would validate the API key here
-			logger.Debug("No API key provided in request")
-		} else {
-			logger.DebugWithFields("API key provided", "key_length", len(apiKeys[0]))
-			// Validate API key here in production
+		credentials := append([]string(nil), md.Get("api-key")...)
+		for _, authorization := range md.Get("authorization") {
+			if scheme, token, found := strings.Cut(authorization, " "); found && strings.EqualFold(scheme, "bearer") {
+				credentials = append(credentials, token)
+			}
 		}
 
-		return handler(ctx, req)
+		for _, credential := range credentials {
+			for _, validAPIKey := range validAPIKeys {
+				if validAPIKey != "" && len(credential) == len(validAPIKey) && subtle.ConstantTimeCompare([]byte(credential), []byte(validAPIKey)) == 1 {
+					return handler(context.WithValue(ctx, authenticatedPrincipalKey{}, credentialPrincipal(credential)), req)
+				}
+			}
+		}
+
+		logger.WarnWithFields("gRPC authentication failed", "method", info.FullMethod)
+		return nil, status.Error(codes.Unauthenticated, "invalid credentials")
 	}
+}
+
+func credentialPrincipal(credential string) string {
+	digest := sha256.Sum256([]byte(credential))
+	return "api-key:" + hex.EncodeToString(digest[:])
 }
 
 // RecoveryInterceptor recovers from panics and returns appropriate errors
@@ -136,20 +198,101 @@ func MetricsInterceptor(logger *log.Logger) grpc.UnaryServerInterceptor {
 	}
 }
 
-// RateLimitingInterceptor implements basic rate limiting
-func RateLimitingInterceptor(logger *log.Logger, requestsPerSecond int) grpc.UnaryServerInterceptor {
-	// In a production system, you would use a more sophisticated rate limiter
-	// like golang.org/x/time/rate or a distributed rate limiter
+type clientBucket struct {
+	tokens   float64
+	updated  time.Time
+	lastSeen time.Time
+}
+
+type rateLimiter struct {
+	mu                sync.Mutex
+	requestsPerSecond float64
+	burst             float64
+	maxBuckets        int
+	buckets           map[string]*clientBucket
+	lastCleanup       time.Time
+	staleAfter        time.Duration
+}
+
+// CONSIDER(distributed-rate-limiting): Share quotas across replicas when deployments require global limits.
+func newRateLimiter(requestsPerSecond float64, burst, maxBuckets int) *rateLimiter {
+	now := time.Now()
+	return &rateLimiter{
+		requestsPerSecond: requestsPerSecond,
+		burst:             float64(burst),
+		maxBuckets:        maxBuckets,
+		buckets:           make(map[string]*clientBucket),
+		lastCleanup:       now,
+		staleAfter:        5 * time.Minute,
+	}
+}
+
+func (l *rateLimiter) allow(clientID string, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if now.Sub(l.lastCleanup) >= time.Minute {
+		for id, bucket := range l.buckets {
+			if now.Sub(bucket.lastSeen) >= l.staleAfter {
+				delete(l.buckets, id)
+			}
+		}
+		l.lastCleanup = now
+	}
+
+	bucket, ok := l.buckets[clientID]
+	if !ok {
+		if len(l.buckets) >= l.maxBuckets {
+			return false
+		}
+		bucket = &clientBucket{tokens: l.burst, updated: now}
+		l.buckets[clientID] = bucket
+	}
+
+	bucket.tokens += now.Sub(bucket.updated).Seconds() * l.requestsPerSecond
+	if bucket.tokens > l.burst {
+		bucket.tokens = l.burst
+	}
+	bucket.updated = now
+	bucket.lastSeen = now
+	if bucket.tokens < 1 {
+		return false
+	}
+	bucket.tokens--
+	return true
+}
+
+func rateLimitClientID(ctx context.Context) string {
+	if principal, ok := ctx.Value(authenticatedPrincipalKey{}).(string); ok && principal != "" {
+		return principal
+	}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if clientIDs := md.Get(gatewayClientIDMetadataKey); len(clientIDs) == 1 && clientIDs[0] != "" {
+			if clientID, valid := verifiedGatewayClientID(clientIDs[0]); valid {
+				return clientID
+			}
+		}
+	}
+	if p, ok := peer.FromContext(ctx); ok {
+		host, _, err := net.SplitHostPort(p.Addr.String())
+		if err == nil && host != "" {
+			return "peer:" + host
+		}
+		return "peer:" + p.Addr.String()
+	}
+	return "peer:unknown"
+}
+
+// RateLimitingInterceptor enforces a per-principal token bucket limit.
+func RateLimitingInterceptor(logger *log.Logger, requestsPerSecond float64, burst, maxBuckets int) grpc.UnaryServerInterceptor {
+	limiter := newRateLimiter(requestsPerSecond, burst, maxBuckets)
 
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		// Extract client identifier (IP, API key, etc.)
-		clientID := "default"
-		if p, ok := peer.FromContext(ctx); ok {
-			clientID = p.Addr.String()
+		clientID := rateLimitClientID(ctx)
+		if !limiter.allow(clientID, time.Now()) {
+			logger.WarnWithFields("gRPC rate limit exceeded", "client", clientID, "method", info.FullMethod)
+			return nil, status.Error(codes.ResourceExhausted, "rate limit exceeded")
 		}
-
-		// In production, implement actual rate limiting logic here
-		logger.DebugWithFields("Rate limit check", "client", clientID, "method", info.FullMethod)
 
 		return handler(ctx, req)
 	}

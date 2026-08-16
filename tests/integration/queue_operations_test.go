@@ -20,12 +20,16 @@ import (
 
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/adrien19/chronoqueue/tests/helpers"
 )
 
 // TestMain sets up shared test infrastructure for all tests in this package.
 // Containers are created once and reused, significantly speeding up test execution.
 func TestMain(m *testing.M) {
+	if err := os.Setenv("CHRONOQUEUE_API_KEY", helpers.TestAPIKey); err != nil {
+		log.NewLogger().Fatal("Failed to configure integration API key", "error", err)
+	}
 	os.Exit(helpers.RunWithSharedEnvironment(m))
 }
 

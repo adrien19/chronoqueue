@@ -1,6 +1,8 @@
 package server
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -33,15 +35,31 @@ func AddServerFlags(cmd *cobra.Command, config *Config) {
 	cmd.Flags().StringVar(&config.CACertFile, "ca-cert-file", config.CACertFile, "CA certificate file for mutual TLS (optional)")
 	cmd.Flags().BoolVar(&config.GatewayUseTLS, "gateway-use-tls", config.GatewayUseTLS, "Enable TLS for gateway→gRPC internal connection (default: inherits from --enable-tls)")
 	cmd.Flags().BoolVar(&config.GatewayInsecure, "gateway-insecure", config.GatewayInsecure, "Skip TLS verification for gateway→gRPC connection (auto-enabled for localhost)")
+	cmd.Flags().StringVar(&config.GatewayClientCertFile, "gateway-client-cert", config.GatewayClientCertFile, "Client certificate for gateway→gRPC mTLS")
+	cmd.Flags().StringVar(&config.GatewayClientKeyFile, "gateway-client-key", config.GatewayClientKeyFile, "Client key for gateway→gRPC mTLS")
 	cmd.Flags().BoolVar(&config.EnableCORS, "enable-cors", config.EnableCORS, "Enable CORS for HTTP gateway")
 	cmd.Flags().StringSliceVar(&config.AllowOrigins, "cors-origins", config.AllowOrigins, "Allowed CORS origins")
+	cmd.Flags().DurationVar(&config.HTTPReadHeaderTimeout, "http-read-header-timeout", config.HTTPReadHeaderTimeout, "HTTP gateway read header timeout")
+	cmd.Flags().DurationVar(&config.HTTPReadTimeout, "http-read-timeout", config.HTTPReadTimeout, "HTTP gateway read timeout")
+	cmd.Flags().DurationVar(&config.HTTPWriteTimeout, "http-write-timeout", config.HTTPWriteTimeout, "HTTP gateway write timeout")
+	cmd.Flags().DurationVar(&config.HTTPIdleTimeout, "http-idle-timeout", config.HTTPIdleTimeout, "HTTP gateway idle timeout")
+	cmd.Flags().BoolVar(&config.EncryptionEnabled, "enable-encryption", config.EncryptionEnabled, "Encrypt message and schedule payloads at rest")
+	cmd.Flags().StringVar(&config.EncryptionKeySourceType, "encryption-key-source", config.EncryptionKeySourceType, "Encryption key source (LOCAL or VAULT)")
+	cmd.Flags().BoolVar(&config.AllowLocalEncryptionKeyInProduction, "allow-local-encryption-key-in-production", config.AllowLocalEncryptionKeyInProduction, "Allow environment-based encryption keys in production")
+	cmd.Flags().BoolVar(&config.RateLimitEnabled, "rate-limit-enabled", config.RateLimitEnabled, "Enable per-principal gRPC rate limiting")
+	cmd.Flags().Float64Var(&config.RateLimitRequestsPerSecond, "rate-limit-requests-per-second", config.RateLimitRequestsPerSecond, "Sustained gRPC requests per second per principal")
+	cmd.Flags().IntVar(&config.RateLimitBurst, "rate-limit-burst", config.RateLimitBurst, "Maximum gRPC request burst per principal")
+	cmd.Flags().IntVar(&config.RateLimitMaxBuckets, "rate-limit-max-buckets", config.RateLimitMaxBuckets, "Maximum number of rate limit principals tracked in memory")
+	cmd.Flags().BoolVar(&config.MetricsEnabled, "metrics-enabled", config.MetricsEnabled, "Enable the Prometheus metrics endpoint")
+	cmd.Flags().BoolVar(&config.MetricsAuthEnabled, "metrics-auth-enabled", config.MetricsAuthEnabled, "Require bearer authentication for Prometheus metrics")
 	cmd.Flags().BoolVar(&config.EnableAPIDocs, "enable-api-docs", config.EnableAPIDocs, "Enable API documentation endpoints (disabled by default in production)")
 	cmd.Flags().StringSliceVar(&config.APIDocsAllowOrigins, "api-docs-cors-origins", config.APIDocsAllowOrigins, "Allowed CORS origins for API documentation (uses --cors-origins if not set)")
 }
 
 // ParseConfigFromFlags parses configuration from cobra command flags
-func ParseConfigFromFlags(cmd *cobra.Command) (*Config, error) {
-	config := DefaultConfig()
+func ParseConfigFromFlags(cmd *cobra.Command, baseConfig *Config) (*Config, error) {
+	configValue := *baseConfig
+	config := &configValue
 
 	if cmd.Flags().Changed("grpc-addr") {
 		config.GRPCAddr, _ = cmd.Flags().GetString("grpc-addr")
@@ -98,6 +116,9 @@ func ParseConfigFromFlags(cmd *cobra.Command) (*Config, error) {
 	}
 	if cmd.Flags().Changed("enable-tls") {
 		config.EnableTLS, _ = cmd.Flags().GetBool("enable-tls")
+		if !cmd.Flags().Changed("gateway-use-tls") {
+			config.GatewayUseTLS = config.EnableTLS
+		}
 	}
 	if cmd.Flags().Changed("cert-file") {
 		config.CertFile, _ = cmd.Flags().GetString("cert-file")
@@ -126,6 +147,20 @@ func ParseConfigFromFlags(cmd *cobra.Command) (*Config, error) {
 	if cmd.Flags().Changed("gateway-insecure") {
 		config.GatewayInsecure, _ = cmd.Flags().GetBool("gateway-insecure")
 	}
+	if cmd.Flags().Changed("gateway-client-cert") {
+		value, err := cmd.Flags().GetString("gateway-client-cert")
+		if err != nil {
+			return nil, fmt.Errorf("read --gateway-client-cert: %w", err)
+		}
+		config.GatewayClientCertFile = value
+	}
+	if cmd.Flags().Changed("gateway-client-key") {
+		value, err := cmd.Flags().GetString("gateway-client-key")
+		if err != nil {
+			return nil, fmt.Errorf("read --gateway-client-key: %w", err)
+		}
+		config.GatewayClientKeyFile = value
+	}
 	if cmd.Flags().Changed("postgres-client-cert") {
 		config.PostgresClientCertFile, _ = cmd.Flags().GetString("postgres-client-cert")
 	}
@@ -134,6 +169,97 @@ func ParseConfigFromFlags(cmd *cobra.Command) (*Config, error) {
 	}
 	if cmd.Flags().Changed("postgres-root-cert") {
 		config.PostgresRootCertFile, _ = cmd.Flags().GetString("postgres-root-cert")
+	}
+	if cmd.Flags().Changed("http-read-header-timeout") {
+		value, err := cmd.Flags().GetDuration("http-read-header-timeout")
+		if err != nil {
+			return nil, fmt.Errorf("read --http-read-header-timeout: %w", err)
+		}
+		config.HTTPReadHeaderTimeout = value
+	}
+	if cmd.Flags().Changed("http-read-timeout") {
+		value, err := cmd.Flags().GetDuration("http-read-timeout")
+		if err != nil {
+			return nil, fmt.Errorf("read --http-read-timeout: %w", err)
+		}
+		config.HTTPReadTimeout = value
+	}
+	if cmd.Flags().Changed("http-write-timeout") {
+		value, err := cmd.Flags().GetDuration("http-write-timeout")
+		if err != nil {
+			return nil, fmt.Errorf("read --http-write-timeout: %w", err)
+		}
+		config.HTTPWriteTimeout = value
+	}
+	if cmd.Flags().Changed("http-idle-timeout") {
+		value, err := cmd.Flags().GetDuration("http-idle-timeout")
+		if err != nil {
+			return nil, fmt.Errorf("read --http-idle-timeout: %w", err)
+		}
+		config.HTTPIdleTimeout = value
+	}
+	if cmd.Flags().Changed("enable-encryption") {
+		value, err := cmd.Flags().GetBool("enable-encryption")
+		if err != nil {
+			return nil, fmt.Errorf("read --enable-encryption: %w", err)
+		}
+		config.EncryptionEnabled = value
+	}
+	if cmd.Flags().Changed("encryption-key-source") {
+		value, err := cmd.Flags().GetString("encryption-key-source")
+		if err != nil {
+			return nil, fmt.Errorf("read --encryption-key-source: %w", err)
+		}
+		config.EncryptionKeySourceType = value
+	}
+	if cmd.Flags().Changed("allow-local-encryption-key-in-production") {
+		value, err := cmd.Flags().GetBool("allow-local-encryption-key-in-production")
+		if err != nil {
+			return nil, fmt.Errorf("read --allow-local-encryption-key-in-production: %w", err)
+		}
+		config.AllowLocalEncryptionKeyInProduction = value
+	}
+	if cmd.Flags().Changed("rate-limit-enabled") {
+		value, err := cmd.Flags().GetBool("rate-limit-enabled")
+		if err != nil {
+			return nil, fmt.Errorf("read --rate-limit-enabled: %w", err)
+		}
+		config.RateLimitEnabled = value
+	}
+	if cmd.Flags().Changed("rate-limit-requests-per-second") {
+		value, err := cmd.Flags().GetFloat64("rate-limit-requests-per-second")
+		if err != nil {
+			return nil, fmt.Errorf("read --rate-limit-requests-per-second: %w", err)
+		}
+		config.RateLimitRequestsPerSecond = value
+	}
+	if cmd.Flags().Changed("rate-limit-burst") {
+		value, err := cmd.Flags().GetInt("rate-limit-burst")
+		if err != nil {
+			return nil, fmt.Errorf("read --rate-limit-burst: %w", err)
+		}
+		config.RateLimitBurst = value
+	}
+	if cmd.Flags().Changed("rate-limit-max-buckets") {
+		value, err := cmd.Flags().GetInt("rate-limit-max-buckets")
+		if err != nil {
+			return nil, fmt.Errorf("read --rate-limit-max-buckets: %w", err)
+		}
+		config.RateLimitMaxBuckets = value
+	}
+	if cmd.Flags().Changed("metrics-enabled") {
+		value, err := cmd.Flags().GetBool("metrics-enabled")
+		if err != nil {
+			return nil, fmt.Errorf("read --metrics-enabled: %w", err)
+		}
+		config.MetricsEnabled = value
+	}
+	if cmd.Flags().Changed("metrics-auth-enabled") {
+		value, err := cmd.Flags().GetBool("metrics-auth-enabled")
+		if err != nil {
+			return nil, fmt.Errorf("read --metrics-auth-enabled: %w", err)
+		}
+		config.MetricsAuthEnabled = value
 	}
 
 	return config, config.Validate()

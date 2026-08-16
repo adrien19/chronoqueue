@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -147,6 +148,7 @@ const (
 )
 
 type ClientOptions struct {
+	APIKey                   string
 	MaxRetries               int
 	InitialBackoff           time.Duration
 	MaxBackoff               time.Duration
@@ -205,7 +207,7 @@ func NewChronoQueueClient(address string, opts ClientOptions) (*ChronoQueueClien
 		connector = DefaultServerConnector // Use default connector
 	}
 
-	service, conn, err := connector(address, opts)
+	service, conn, err := connector(address, client.opts)
 	if err != nil {
 		return nil, err
 	}
@@ -250,13 +252,17 @@ func DefaultServerConnector(address string, opts ClientOptions) (queueservice_pb
 		// ...
 		var conn *grpc.ClientConn
 		var err error
+		dialOptions := []grpc.DialOption{}
 		if opts.TLSCredentials != nil {
-			//nolint:staticcheck // Using Dial for immediate connection; will migrate to NewClient in future
-			conn, err = grpc.Dial(address, grpc.WithTransportCredentials(opts.TLSCredentials))
+			dialOptions = append(dialOptions, grpc.WithTransportCredentials(opts.TLSCredentials))
 		} else {
-			//nolint:staticcheck // Using Dial for immediate connection; will migrate to NewClient in future
-			conn, err = grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		}
+		if opts.APIKey != "" {
+			dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(apiKeyUnaryClientInterceptor(opts.APIKey)))
+		}
+		//nolint:staticcheck // Using Dial for immediate connection; will migrate to NewClient in future
+		conn, err = grpc.Dial(address, dialOptions...)
 
 		if err == nil {
 			// Connection successful, return the client
@@ -275,6 +281,13 @@ func DefaultServerConnector(address string, opts ClientOptions) (queueservice_pb
 		}
 	}
 	return nil, nil, errors.New("max retry count reached. cannot connect to server")
+}
+
+func apiKeyUnaryClientInterceptor(apiKey string) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		ctx = metadata.AppendToOutgoingContext(ctx, "api-key", apiKey)
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
 }
 
 func (client *ChronoQueueClient) recordAttemptInfo(messageID, attemptID, workerID string) {

@@ -43,6 +43,7 @@ Examples:
 	rootCmd.PersistentFlags().String("cert-file", "", "Path to client certificate file")
 	rootCmd.PersistentFlags().String("key-file", "", "Path to client private key file")
 	rootCmd.PersistentFlags().String("ca-file", "", "Path to CA certificate file")
+	rootCmd.PersistentFlags().String("api-key", "", "API key for server authentication")
 	rootCmd.PersistentFlags().String("output", "table", "Output format (table, json, yaml)")
 	rootCmd.PersistentFlags().Bool("verbose", false, "Enable verbose output")
 	rootCmd.PersistentFlags().Duration("timeout", 0, "Request timeout (0 for no timeout)")
@@ -91,7 +92,7 @@ Examples:
   chronoqueue server --dev --storage-type sqlite --sqlite-db-path ./chronoqueue.db
 
   # Production server with PostgreSQL
-  chronoqueue server --storage-type postgresql --postgresql-conn-string "user=postgres dbname=chronoqueue sslmode=disable"
+  API_KEYS=secret METRICS_BEARER_TOKEN=metrics-secret CERT_FILE=server.crt KEY_FILE=server.key POSTGRES_PASSWORD=secret ENCRYPTION_KEY_SOURCE_TYPE=VAULT chronoqueue server --production --storage-type postgres --postgres-sslmode verify-full --postgres-root-cert root.crt
 
   # Server with TLS enabled
   chronoqueue server --enable-tls --cert-file server.crt --key-file server.key`,
@@ -134,13 +135,11 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}
 
 	// Parse configuration from flags
-	parsedConfig, err := server.ParseConfigFromFlags(cmd)
+	parsedConfig, err := server.ParseConfigFromFlags(cmd, config)
 	if err != nil {
 		return fmt.Errorf("failed to parse configuration: %w", err)
 	}
 
-	// Merge the parsed config (preserving mode setting)
-	parsedConfig.IsDevelopment = config.IsDevelopment
 	config = parsedConfig
 
 	// Inject version information
