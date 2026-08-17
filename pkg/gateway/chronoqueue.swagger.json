@@ -6,7 +6,8 @@
   },
   "tags": [
     {
-      "name": "QueueService"
+      "name": "QueueService",
+      "description": "QueueService is the primary API for interacting with ChronoQueue.\n\nThis service provides:\n- Queue lifecycle management\n- Message posting and consumption\n- Scheduled task automation\n- Dead letter queue handling\n- Schema-based validation\n\nExample - Basic message flow:\n  1. CreateQueue: Set up a queue with retry/DLQ configuration\n  2. PostMessage: Add messages to the queue\n  3. GetNextMessage: Workers retrieve messages for processing\n  4. AcknowledgeMessage: Mark message as successfully processed\n     OR let lease expire → message returns to queue for retry\n  5. After max_attempts exhausted → message moves to DLQ\n\ngRPC vs REST:\n- gRPC: Preferred for high-throughput, low-latency scenarios\n- REST: Convenient for browser/curl access, debugging, simple integrations\n\nError handling:\n- Use gRPC status codes (InvalidArgument, NotFound, AlreadyExists, etc.)\n- Error details in status.Details() for validation errors\n\n==================== Queue Management Operations ===================="
     }
   ],
   "consumes": [
@@ -427,7 +428,7 @@
     "/v1/queues/{queueName}/messages/{messageId}:acknowledge": {
       "post": {
         "summary": "AcknowledgeMessage marks a message as successfully processed.",
-        "description": "Call this after successfully processing a message retrieved by GetNextMessage.\n\nEffects:\n- Message moves to COMPLETED state\n- Message removed from queue\n- Queue stats updated\n\nImportant: You must ACK within the lease_duration, or the message returns\nto PENDING and may be delivered to another worker.\n\nExample:\n  POST /v1/queues/order-processing/messages/msg-123:acknowledge\n\nReturns: Empty response\nErrors:\n  - NotFound: Message doesn't exist or already acknowledged\n  - DeadlineExceeded: Lease already expired",
+        "description": "Call this after successfully processing a message retrieved by GetNextMessage.\n\nEffects:\n- Message moves to COMPLETED state\n- Message removed from queue\n- Queue stats updated\n\nImportant: attempt_id and worker_id from GetNextMessage are required and\nmust identify the active, unexpired lease.\n\nExample:\n  POST /v1/queues/order-processing/messages/msg-123:acknowledge\n\nReturns: Empty response\nErrors:\n  - NotFound: Message doesn't exist or already acknowledged\n  - DeadlineExceeded: Lease already expired",
         "operationId": "QueueService_AcknowledgeMessage",
         "responses": {
           "200": {
@@ -523,7 +524,7 @@
     "/v1/queues/{queueName}/messages/{messageId}:renewLease": {
       "post": {
         "summary": "RenewMessageLease extends the processing time for a message.",
-        "description": "Use when:\n- Processing takes longer than expected\n- Long-running batch operations\n- External API calls with unpredictable latency\n\nCall periodically during processing to prevent lease expiration.\n\nExample pattern (heartbeat-style lease renewal):\n  msg := getNextMessage()\n  done := make(chan bool)\n\n  go func() {\n      ticker := time.NewTicker(leaseDuration / 2)\n      defer ticker.Stop()\n      for {\n          select {\n          case \u003c-ticker.C:\n              renewMessageLease(msg.MessageId)\n          case \u003c-done:\n              return\n          }\n      }\n  }()\n\n  processMessage(msg)\n  close(done)\n  acknowledgeMessage(msg.MessageId)\n\nReturns: Updated message with new lease expiration\nErrors:\n  - NotFound: Message doesn't exist or already completed\n  - FailedPrecondition: Message not in RUNNING state",
+        "description": "Use when:\n- Processing takes longer than expected\n- Long-running batch operations\n- External API calls with unpredictable latency\n\nCall periodically during processing to prevent lease expiration.\nattempt_id and worker_id from GetNextMessage are required and must identify\nthe active, unexpired lease.\n\nExample pattern (heartbeat-style lease renewal):\n  msg := getNextMessage()\n  done := make(chan bool)\n\n  go func() {\n      ticker := time.NewTicker(leaseDuration / 2)\n      defer ticker.Stop()\n      for {\n          select {\n          case \u003c-ticker.C:\n              renewMessageLease(msg.MessageId)\n          case \u003c-done:\n              return\n          }\n      }\n  }()\n\n  processMessage(msg)\n  close(done)\n  acknowledgeMessage(msg.MessageId)\n\nReturns: Updated message with new lease expiration\nErrors:\n  - NotFound: Message doesn't exist or already completed\n  - FailedPrecondition: Message not in RUNNING state",
         "operationId": "QueueService_RenewMessageLease",
         "responses": {
           "200": {
@@ -653,7 +654,7 @@
     "/v1/queues/{queueName}/messages:heartbeat": {
       "post": {
         "summary": "SendMessageHeartBeat indicates a worker is still processing a message.",
-        "description": "Alternative to RenewMessageLease with similar purpose but lighter weight.\nUseful for tracking worker health without extending lease.\n\nExample:\n  POST /v1/queues/order-processing/messages:heartbeat\n  {\n    \"message_ids\": [\"msg-123\", \"msg-456\"]\n  }\n\nReturns: Empty response",
+        "description": "Alternative to RenewMessageLease with similar purpose but lighter weight.\nUseful for tracking worker health without extending lease.\nattempt_id and worker_id from GetNextMessage are required and must identify\nthe active, unexpired lease.\n\nExample:\n  POST /v1/queues/order-processing/messages:heartbeat\n  {\n    \"message_ids\": [\"msg-123\", \"msg-456\"]\n  }\n\nReturns: Empty response",
         "operationId": "QueueService_SendMessageHeartBeat",
         "responses": {
           "200": {
@@ -1279,7 +1280,7 @@
         "QUEUE_NOT_FOUND"
       ],
       "default": "SUCCESS",
-      "title": "Error code for programmatic handling"
+      "description": "Error code for programmatic handling"
     },
     "MessageRetentionPolicyMode": {
       "type": "string",
@@ -1396,11 +1397,11 @@
         },
         "workerId": {
           "type": "string",
-          "title": "Optional stable identifier to consistently represent the same consumer"
+          "description": "Required worker identifier returned by GetNextMessage."
         },
         "attemptId": {
           "type": "string",
-          "title": "Attempt identifier to validate acknowledgment against current attempt"
+          "description": "Required attempt identifier returned by GetNextMessage."
         }
       },
       "title": "Acknowledge the message on the queue"
@@ -1465,6 +1466,14 @@
       "properties": {
         "leaseDuration": {
           "type": "string"
+        },
+        "workerId": {
+          "type": "string",
+          "description": "Required worker identifier returned by GetNextMessage."
+        },
+        "attemptId": {
+          "type": "string",
+          "description": "Required attempt identifier returned by GetNextMessage."
         }
       },
       "title": "Renew lease period of a message"
@@ -1490,11 +1499,11 @@
         },
         "workerId": {
           "type": "string",
-          "title": "Optional stable identifier to consistently represent the same consumer"
+          "description": "Required worker identifier returned by GetNextMessage."
         },
         "attemptId": {
           "type": "string",
-          "title": "Attempt identifier to validate heartbeat against current attempt"
+          "description": "Required attempt identifier returned by GetNextMessage."
         }
       },
       "title": "send a heartbeat to the queue"

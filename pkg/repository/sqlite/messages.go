@@ -25,6 +25,17 @@ func (s *Storage) generateID() string {
 	return hex.EncodeToString(b)
 }
 
+func requireOneOwnedMessage(result sql.Result) error {
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+	if rows != 1 {
+		return fmt.Errorf("message not found, lease expired, or ownership mismatch")
+	}
+	return nil
+}
+
 // calculateDeletion determines deletion behavior based on retention policy.
 // Returns whether to hard delete immediately and the deleted_at timestamp (if soft delete).
 func (s *Storage) calculateDeletion(policy *queuepb.MessageRetentionPolicy) (shouldHardDelete bool, deletedAtMs *int64) {
@@ -377,7 +388,7 @@ func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId s
 }
 
 // AcknowledgeMessage marks a message as completed
-func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, messageId string, attemptId string) error {
+func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error {
 	// Fetch queue metadata outside transaction to avoid connection pool contention
 	queueMeta, err := s.GetQueueMetadata(ctx, queueName)
 	if err != nil {
@@ -386,21 +397,18 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 	retentionPolicy := queueMeta.GetMessageRetentionPolicy()
 
 	err = s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
-		var oldState messagepb.Message_Metadata_State
-		err := tx.QueryRowContext(ctx, `SELECT state FROM cq_messages WHERE message_id = ?`, messageId).Scan(&oldState)
-		if err == sql.ErrNoRows {
-			return fmt.Errorf("message not found: %s", messageId)
-		}
-		if err != nil {
-			return fmt.Errorf("query message state: %w", err)
-		}
 		shouldDelete, deletedAt := s.calculateDeletion(retentionPolicy)
-
 		nowMs := s.nowMs()
 
 		if shouldDelete {
-			// Hard delete - must match attempt_id for idempotency
-			result, err := tx.ExecContext(ctx, `DELETE FROM cq_messages WHERE message_id = ? AND current_attempt_id = ?`, messageId, attemptId)
+			result, err := tx.ExecContext(ctx, `
+				DELETE FROM cq_messages
+				WHERE queue_name = ? AND message_id = ? AND state = ?
+				  AND current_attempt_id = ? AND current_worker_id = ?
+				  AND lease_expiry > ?
+				  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
+				  AND deleted_at IS NULL`,
+				queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs)
 			if err != nil {
 				return fmt.Errorf("delete message: %w", err)
 			}
@@ -413,7 +421,6 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 				return fmt.Errorf("message not found or attempt mismatch")
 			}
 		} else {
-			// Soft delete - must match attempt_id for idempotency
 			result, err := tx.ExecContext(ctx, `
 				UPDATE cq_messages 
 				SET state = ?,
@@ -424,13 +431,17 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 					lease_started_at = NULL,
 					lease_expiry = NULL,
 					updated_at = ?
-				WHERE message_id = ? AND current_attempt_id = ?`,
+				WHERE queue_name = ? AND message_id = ? AND state = ?
+				  AND current_attempt_id = ? AND current_worker_id = ?
+				  AND lease_expiry > ?
+				  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
+				  AND deleted_at IS NULL`,
 				messagepb.Message_Metadata_COMPLETED,
 				nowMs,
 				deletedAt,
 				nowMs,
-				messageId,
-				attemptId)
+				queueName, messageId, messagepb.Message_Metadata_RUNNING,
+				attemptId, workerId, nowMs, nowMs)
 			if err != nil {
 				return fmt.Errorf("soft delete message: %w", err)
 			}
@@ -444,7 +455,7 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 			}
 		}
 
-		return s.StateManager.UpdateCounters(ctx, tx, queueName, oldState, messagepb.Message_Metadata_COMPLETED)
+		return s.StateManager.UpdateCounters(ctx, tx, queueName, messagepb.Message_Metadata_RUNNING, messagepb.Message_Metadata_COMPLETED)
 	})
 
 	if err == nil {
@@ -455,7 +466,7 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 }
 
 // NackMessage marks a message as failed
-func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId string, attemptId string) error {
+func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error {
 	var movedToDLQ bool
 	var dlqName string
 
@@ -470,10 +481,18 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 		var messageBytes []byte
 		var oldState messagepb.Message_Metadata_State
 		var attemptsLeft int32
-		query := `SELECT metadata_pb, state, attempts_left FROM cq_messages WHERE message_id = ?`
-		err := tx.QueryRowContext(ctx, query, messageId).Scan(&messageBytes, &oldState, &attemptsLeft)
+		nowMs := s.nowMs()
+		query := `
+			SELECT metadata_pb, state, attempts_left
+			FROM cq_messages
+			WHERE queue_name = ? AND message_id = ? AND state = ?
+			  AND current_attempt_id = ? AND current_worker_id = ?
+			  AND lease_expiry > ?
+			  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
+			  AND deleted_at IS NULL`
+		err := tx.QueryRowContext(ctx, query, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs).Scan(&messageBytes, &oldState, &attemptsLeft)
 		if err == sql.ErrNoRows {
-			return fmt.Errorf("message not found: %s", messageId)
+			return fmt.Errorf("message not found, lease expired, or ownership mismatch")
 		}
 		if err != nil {
 			return fmt.Errorf("query message: %w", err)
@@ -488,13 +507,21 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 
 			shouldDelete, deletedAt := s.calculateDeletion(retentionPolicy)
 
-			nowMs := s.nowMs()
-
 			if shouldDelete {
-				deleteQuery := `DELETE FROM cq_messages WHERE message_id = ?`
-				_, err = tx.ExecContext(ctx, deleteQuery, messageId)
+				deleteQuery := `
+					DELETE FROM cq_messages
+					WHERE queue_name = ? AND message_id = ? AND state = ?
+					  AND current_attempt_id = ? AND current_worker_id = ?
+					  AND lease_expiry > ?
+					  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
+					  AND deleted_at IS NULL`
+				result, deleteErr := tx.ExecContext(ctx, deleteQuery, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs)
+				err = deleteErr
 				if err != nil {
 					return fmt.Errorf("delete errored message: %w", err)
+				}
+				if err := requireOneOwnedMessage(result); err != nil {
+					return err
 				}
 			} else {
 				updateQuery := `
@@ -512,19 +539,28 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 						last_heartbeat_at = NULL,
 						heartbeat_expiry = NULL,
 						updated_at = ?
-					WHERE message_id = ?
+					WHERE queue_name = ? AND message_id = ? AND state = ?
+					  AND current_attempt_id = ? AND current_worker_id = ?
+					  AND lease_expiry > ?
+					  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
+					  AND deleted_at IS NULL
 				`
-				_, err = tx.ExecContext(
+				result, updateErr := tx.ExecContext(
 					ctx, updateQuery,
 					newState,
 					newAttemptsLeft,
 					nowMs,
 					deletedAt,
 					nowMs,
-					messageId,
+					queueName, messageId, messagepb.Message_Metadata_RUNNING,
+					attemptId, workerId, nowMs, nowMs,
 				)
+				err = updateErr
 				if err != nil {
 					return fmt.Errorf("soft delete errored message: %w", err)
+				}
+				if err := requireOneOwnedMessage(result); err != nil {
+					return err
 				}
 			}
 		} else {
@@ -541,19 +577,19 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 					last_heartbeat_at = NULL,
 					heartbeat_expiry = NULL,
 					updated_at = ?
-				WHERE message_id = ? AND current_attempt_id = ?
+				WHERE queue_name = ? AND message_id = ? AND state = ?
+				  AND current_attempt_id = ? AND current_worker_id = ?
+				  AND lease_expiry > ?
+				  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
+				  AND deleted_at IS NULL
 			`
-			result, err := tx.ExecContext(ctx, updateQuery, newState, newAttemptsLeft, s.nowMs(), messageId, attemptId)
+			result, err := tx.ExecContext(ctx, updateQuery, newState, newAttemptsLeft, nowMs, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs)
 			if err != nil {
 				return fmt.Errorf("update message: %w", err)
 			}
 
-			rows, err := result.RowsAffected()
-			if err != nil {
-				return fmt.Errorf("get rows affected: %w", err)
-			}
-			if rows == 0 {
-				return fmt.Errorf("message not found or attempt mismatch")
+			if err := requireOneOwnedMessage(result); err != nil {
+				return err
 			}
 		}
 
@@ -693,30 +729,21 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 }
 
 // ExtendMessageLease extends the lease on a message
-func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, extensionMs int64) error {
+func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, workerId string, extensionMs int64) error {
 	return s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
-		// Resolve current attempt if not provided to avoid immediate mismatches.
-		if attemptId == "" {
-			var currentAttempt sql.NullString
-			err := tx.QueryRowContext(ctx, `SELECT current_attempt_id FROM cq_messages WHERE message_id = ?`, messageId).Scan(&currentAttempt)
-			if err == sql.ErrNoRows {
-				return fmt.Errorf("message not found or attempt mismatch")
-			}
-			if err != nil {
-				return fmt.Errorf("query current attempt: %w", err)
-			}
-			if !currentAttempt.Valid || currentAttempt.String == "" {
-				return fmt.Errorf("message not found or attempt mismatch")
-			}
-			attemptId = currentAttempt.String
-		}
-
-		// Get message metadata and lease usage for this attempt
 		var messageBytes []byte
 		var leaseExtensionUsed int64
 		var currentRenewalCount int32
-		query := `SELECT metadata_pb, lease_extension_used, lease_renewal_count FROM cq_messages WHERE message_id = ? AND current_attempt_id = ?`
-		err := tx.QueryRowContext(ctx, query, messageId, attemptId).Scan(&messageBytes, &leaseExtensionUsed, &currentRenewalCount)
+		nowMs := s.nowMs()
+		query := `
+			SELECT metadata_pb, lease_extension_used, lease_renewal_count
+			FROM cq_messages
+			WHERE queue_name = ? AND message_id = ? AND state = ?
+			  AND current_attempt_id = ? AND current_worker_id = ?
+			  AND lease_expiry > ?
+			  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
+			  AND deleted_at IS NULL`
+		err := tx.QueryRowContext(ctx, query, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs).Scan(&messageBytes, &leaseExtensionUsed, &currentRenewalCount)
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("message not found or attempt mismatch")
 		}
@@ -744,59 +771,62 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
 			return err
 		}
 
-		// Update message
 		updateQuery := `
 			UPDATE cq_messages
 			SET lease_expiry = ?,
 				lease_extension_used = ?,
 				lease_renewal_count = lease_renewal_count + 1,
 				updated_at = CURRENT_TIMESTAMP
-			WHERE message_id = ? AND current_attempt_id = ?
+			WHERE queue_name = ? AND message_id = ? AND state = ?
+			  AND current_attempt_id = ? AND current_worker_id = ?
+			  AND lease_expiry > ?
+			  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
+			  AND deleted_at IS NULL
 		`
-		_, err = tx.ExecContext(
+		result, err := tx.ExecContext(
 			ctx, updateQuery,
 			newLeaseRuntime.LeaseExpiry,
 			newLeaseRuntime.LeaseExtensionUsed,
-			messageId,
-			attemptId,
+			queueName, messageId, messagepb.Message_Metadata_RUNNING,
+			attemptId, workerId, nowMs, nowMs,
 		)
-		if err == nil {
-			metrics.IncrementLeaseRenewals(queueName, "success")
-		} else {
+		if err != nil {
 			metrics.IncrementLeaseRenewals(queueName, "failed")
+			return err
 		}
-		return err
+		if err := requireOneOwnedMessage(result); err != nil {
+			metrics.IncrementLeaseRenewals(queueName, "failed")
+			return err
+		}
+		metrics.IncrementLeaseRenewals(queueName, "success")
+		return nil
 	})
 }
 
 // HeartbeatMessage updates the heartbeat for a message
 // Returns the current message state and remaining lease time in milliseconds.
-func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string) (messagepb.Message_Metadata_State, int64, error) {
+func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) (messagepb.Message_Metadata_State, int64, error) {
 	var currentState messagepb.Message_Metadata_State
 	var remainingTimeMs int64
 
 	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		var messageBytes []byte
-		var currentAttempt sql.NullString
-		var leaseExpiry int64
 		var state messagepb.Message_Metadata_State
-		query := `SELECT metadata_pb, current_attempt_id, lease_expiry, state FROM cq_messages WHERE message_id = ?`
-		err := tx.QueryRowContext(ctx, query, messageId).Scan(&messageBytes, &currentAttempt, &leaseExpiry, &state)
+		nowMs := s.Clock.NowMs()
+		query := `
+			SELECT metadata_pb, state
+			FROM cq_messages
+			WHERE queue_name = ? AND message_id = ? AND state = ?
+			  AND current_attempt_id = ? AND current_worker_id = ?
+			  AND lease_expiry > ?
+			  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
+			  AND deleted_at IS NULL`
+		err := tx.QueryRowContext(ctx, query, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs).Scan(&messageBytes, &state)
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("message not found or attempt mismatch")
 		}
 		if err != nil {
 			return fmt.Errorf("query message: %w", err)
-		}
-
-		if !currentAttempt.Valid || currentAttempt.String == "" {
-			return fmt.Errorf("message not found or attempt mismatch")
-		}
-
-		if attemptId == "" {
-			attemptId = currentAttempt.String
-		} else if attemptId != currentAttempt.String {
-			return fmt.Errorf("message not found or attempt mismatch")
 		}
 
 		msg, err := s.Serializer.UnmarshalMessage(messageBytes)
@@ -812,7 +842,6 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 			}
 		}
 
-		nowMs := s.Clock.NowMs()
 		heartbeatExpiry := nowMs + heartbeatTimeoutMs
 		// Extend the lease when heartbeat is received
 		newLeaseExpiry := nowMs + heartbeatTimeoutMs
@@ -823,19 +852,19 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 				heartbeat_expiry = ?,
 				lease_expiry = ?,
 				updated_at = ?
-			WHERE message_id = ? AND current_attempt_id = ?
+			WHERE queue_name = ? AND message_id = ? AND state = ?
+			  AND current_attempt_id = ? AND current_worker_id = ?
+			  AND lease_expiry > ?
+			  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
+			  AND deleted_at IS NULL
 		`
-		result, err := tx.ExecContext(ctx, update, nowMs, heartbeatExpiry, newLeaseExpiry, nowMs, messageId, attemptId)
+		result, err := tx.ExecContext(ctx, update, nowMs, heartbeatExpiry, newLeaseExpiry, nowMs, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs)
 		if err != nil {
 			return fmt.Errorf("update heartbeat: %w", err)
 		}
 
-		rows, err := result.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("get rows affected: %w", err)
-		}
-		if rows == 0 {
-			return fmt.Errorf("message not found or attempt mismatch")
+		if err := requireOneOwnedMessage(result); err != nil {
+			return err
 		}
 
 		// Calculate remaining lease time based on the extended lease

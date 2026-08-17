@@ -745,19 +745,21 @@ func optionalString(val string) *string {
 //	    State: ERRORED,  // → routes to backend.NackMessage()
 //	})
 func (impl *implementation) AcknowledgeMessage(ctx context.Context, request *queueservicepb.AcknowledgeMessageRequest) (*queueservicepb.AcknowledgeMessageResponse, error) {
-	attemptId := ""
-	if request.AttemptId != nil {
-		attemptId = *request.AttemptId
+	if request == nil || request.GetQueueName() == "" || request.GetMessageId() == "" {
+		return nil, fmt.Errorf("queue name and message id are required")
+	}
+	if request.GetAttemptId() == "" || request.GetWorkerId() == "" {
+		return nil, fmt.Errorf("attempt id and worker id are required")
 	}
 
 	// Route to appropriate backend method based on requested state
 	switch request.State {
 	case messagepb.Message_Metadata_COMPLETED:
-		if err := impl.backend.AcknowledgeMessage(ctx, request.QueueName, request.MessageId, attemptId); err != nil {
+		if err := impl.backend.AcknowledgeMessage(ctx, request.QueueName, request.MessageId, request.GetAttemptId(), request.GetWorkerId()); err != nil {
 			return nil, err
 		}
 	case messagepb.Message_Metadata_ERRORED:
-		if err := impl.backend.NackMessage(ctx, request.QueueName, request.MessageId, attemptId); err != nil {
+		if err := impl.backend.NackMessage(ctx, request.QueueName, request.MessageId, request.GetAttemptId(), request.GetWorkerId()); err != nil {
 			return nil, err
 		}
 	default:
@@ -811,12 +813,14 @@ func (impl *implementation) CancelMessage(ctx context.Context, request *queueser
 
 // SendMessageHeartBeat updates the heartbeat for a message
 func (impl *implementation) SendMessageHeartBeat(ctx context.Context, request *queueservicepb.SendMessageHeartBeatRequest) (*queueservicepb.SendMessageHeartBeatResponse, error) {
-	attemptId := ""
-	if request.AttemptId != nil {
-		attemptId = *request.AttemptId
+	if request == nil || request.GetQueueName() == "" || request.GetMessageId() == "" {
+		return nil, fmt.Errorf("queue name and message id are required")
+	}
+	if request.GetAttemptId() == "" || request.GetWorkerId() == "" {
+		return nil, fmt.Errorf("attempt id and worker id are required")
 	}
 
-	state, remainingTimeMs, err := impl.backend.HeartbeatMessage(ctx, request.QueueName, request.MessageId, attemptId)
+	state, remainingTimeMs, err := impl.backend.HeartbeatMessage(ctx, request.QueueName, request.MessageId, request.GetAttemptId(), request.GetWorkerId())
 	if err != nil {
 		return nil, err
 	}
@@ -832,12 +836,19 @@ func (impl *implementation) SendMessageHeartBeat(ctx context.Context, request *q
 
 // RenewMessageLease extends the lease on a message
 func (impl *implementation) RenewMessageLease(ctx context.Context, request *queueservicepb.RenewMessageLeaseRequest) (*queueservicepb.RenewMessageLeaseResponse, error) {
+	if request == nil || request.GetQueueName() == "" || request.GetMessageId() == "" {
+		return nil, fmt.Errorf("queue name and message id are required")
+	}
+	if request.GetAttemptId() == "" || request.GetWorkerId() == "" {
+		return nil, fmt.Errorf("attempt id and worker id are required")
+	}
+
 	extensionMs := int64(0)
 	if request.LeaseDuration != nil {
 		extensionMs = request.LeaseDuration.AsDuration().Milliseconds()
 	}
 
-	if err := impl.backend.ExtendMessageLease(ctx, request.QueueName, request.MessageId, "", extensionMs); err != nil {
+	if err := impl.backend.ExtendMessageLease(ctx, request.QueueName, request.MessageId, request.GetAttemptId(), request.GetWorkerId(), extensionMs); err != nil {
 		return nil, err
 	}
 

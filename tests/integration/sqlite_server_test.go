@@ -77,6 +77,7 @@ func TestSQLiteServerIntegration(t *testing.T) {
 	})
 
 	var attemptID string
+	var workerID string
 	t.Run("GetMessage", func(t *testing.T) {
 		getResp, err := client.GetNextMessage(ctx, &queueservicepb.GetNextMessageRequest{
 			QueueName:     queueName,
@@ -89,6 +90,8 @@ func TestSQLiteServerIntegration(t *testing.T) {
 		assert.NotNil(t, getResp.GetMessage().GetMetadata().GetPayload())
 		attemptID = getResp.GetAttemptId()
 		require.NotEmpty(t, attemptID)
+		workerID = getResp.GetWorkerId()
+		require.NotEmpty(t, workerID)
 	})
 
 	t.Run("ListQueues", func(t *testing.T) {
@@ -123,6 +126,7 @@ func TestSQLiteServerIntegration(t *testing.T) {
 			MessageId: messageID,
 			State:     messagepb.Message_Metadata_COMPLETED,
 			AttemptId: &wrongAttemptID,
+			WorkerId:  &workerID,
 		})
 		require.Error(t, err)
 
@@ -136,6 +140,7 @@ func TestSQLiteServerIntegration(t *testing.T) {
 			State:     messagepb.Message_Metadata_COMPLETED,
 		}
 		ackReq.AttemptId = &attemptID
+		ackReq.WorkerId = &workerID
 
 		ackResp, err := client.AcknowledgeMessage(ctx, ackReq)
 		require.NoError(t, err)

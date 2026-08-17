@@ -433,6 +433,9 @@ func newMessageAckCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if attemptID == "" || workerID == "" {
+				return fmt.Errorf("--attempt-id and --worker-id are required")
+			}
 
 			state, err := client.ParseMessageState(stateStr)
 			if err != nil {
@@ -440,9 +443,7 @@ func newMessageAckCommand() *cobra.Command {
 			}
 
 			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
-				if attemptID != "" || workerID != "" {
-					client.SetAttemptInfo(messageID, attemptID, workerID)
-				}
+				client.SetAttemptInfo(messageID, attemptID, workerID)
 				resp, err := client.AcknowledgeMessage(cmd.Context(), queueName, messageID, state)
 				if err != nil {
 					return err
@@ -453,8 +454,8 @@ func newMessageAckCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().String("attempt-id", "", "Attempt ID returned by message get (required for Postgres)")
-	cmd.Flags().String("worker-id", "", "Worker ID returned by message get (required for Postgres)")
+	cmd.Flags().String("attempt-id", "", "Attempt ID returned by message get")
+	cmd.Flags().String("worker-id", "", "Worker ID returned by message get")
 
 	return cmd
 }
@@ -518,8 +519,20 @@ func newMessageRenewCommand() *cobra.Command {
 			queueName := args[0]
 			messageID := args[1]
 			leaseDuration := args[2]
+			attemptID, err := cmd.Flags().GetString("attempt-id")
+			if err != nil {
+				return err
+			}
+			workerID, err := cmd.Flags().GetString("worker-id")
+			if err != nil {
+				return err
+			}
+			if attemptID == "" || workerID == "" {
+				return fmt.Errorf("--attempt-id and --worker-id are required")
+			}
 
 			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
+				client.SetAttemptInfo(messageID, attemptID, workerID)
 				resp, err := client.RenewMessageLease(cmd.Context(), queueName, messageID, leaseDuration)
 				if err != nil {
 					return err
@@ -530,6 +543,8 @@ func newMessageRenewCommand() *cobra.Command {
 			})
 		},
 	}
+	cmd.Flags().String("attempt-id", "", "Attempt ID returned by message get")
+	cmd.Flags().String("worker-id", "", "Worker ID returned by message get")
 
 	return cmd
 }
@@ -544,8 +559,20 @@ func newMessageHeartbeatCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			queueName := args[0]
 			messageID := args[1]
+			attemptID, err := cmd.Flags().GetString("attempt-id")
+			if err != nil {
+				return err
+			}
+			workerID, err := cmd.Flags().GetString("worker-id")
+			if err != nil {
+				return err
+			}
+			if attemptID == "" || workerID == "" {
+				return fmt.Errorf("--attempt-id and --worker-id are required")
+			}
 
 			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
+				client.SetAttemptInfo(messageID, attemptID, workerID)
 				resp, err := client.SendMessageHeartbeat(cmd.Context(), queueName, messageID)
 				if err != nil {
 					return err
@@ -556,6 +583,8 @@ func newMessageHeartbeatCommand() *cobra.Command {
 			})
 		},
 	}
+	cmd.Flags().String("attempt-id", "", "Attempt ID returned by message get")
+	cmd.Flags().String("worker-id", "", "Worker ID returned by message get")
 
 	return cmd
 }

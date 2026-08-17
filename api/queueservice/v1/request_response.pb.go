@@ -750,9 +750,9 @@ type AcknowledgeMessageRequest struct {
 	QueueName string                     `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
 	MessageId string                     `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
 	State     v11.Message_Metadata_State `protobuf:"varint,3,opt,name=state,proto3,enum=chronoqueue.api.message.v1.Message_Metadata_State" json:"state,omitempty"`
-	// Optional stable identifier to consistently represent the same consumer
+	// Required worker identifier returned by GetNextMessage.
 	WorkerId *string `protobuf:"bytes,4,opt,name=worker_id,json=workerId,proto3,oneof" json:"worker_id,omitempty"`
-	// Attempt identifier to validate acknowledgment against current attempt
+	// Required attempt identifier returned by GetNextMessage.
 	AttemptId     *string `protobuf:"bytes,5,opt,name=attempt_id,json=attemptId,proto3,oneof" json:"attempt_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -979,6 +979,10 @@ type RenewMessageLeaseRequest struct {
 	QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
 	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
 	LeaseDuration *durationpb.Duration   `protobuf:"bytes,3,opt,name=lease_duration,json=leaseDuration,proto3" json:"lease_duration,omitempty"`
+	// Required worker identifier returned by GetNextMessage.
+	WorkerId *string `protobuf:"bytes,4,opt,name=worker_id,json=workerId,proto3,oneof" json:"worker_id,omitempty"`
+	// Required attempt identifier returned by GetNextMessage.
+	AttemptId     *string `protobuf:"bytes,5,opt,name=attempt_id,json=attemptId,proto3,oneof" json:"attempt_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1032,6 +1036,20 @@ func (x *RenewMessageLeaseRequest) GetLeaseDuration() *durationpb.Duration {
 		return x.LeaseDuration
 	}
 	return nil
+}
+
+func (x *RenewMessageLeaseRequest) GetWorkerId() string {
+	if x != nil && x.WorkerId != nil {
+		return *x.WorkerId
+	}
+	return ""
+}
+
+func (x *RenewMessageLeaseRequest) GetAttemptId() string {
+	if x != nil && x.AttemptId != nil {
+		return *x.AttemptId
+	}
+	return ""
 }
 
 type RenewMessageLeaseResponse struct {
@@ -1293,9 +1311,9 @@ type SendMessageHeartBeatRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	QueueName string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
 	MessageId string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
-	// Optional stable identifier to consistently represent the same consumer
+	// Required worker identifier returned by GetNextMessage.
 	WorkerId *string `protobuf:"bytes,3,opt,name=worker_id,json=workerId,proto3,oneof" json:"worker_id,omitempty"`
-	// Attempt identifier to validate heartbeat against current attempt
+	// Required attempt identifier returned by GetNextMessage.
 	AttemptId     *string `protobuf:"bytes,4,opt,name=attempt_id,json=attemptId,proto3,oneof" json:"attempt_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3838,13 +3856,19 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\x06reason\x18\x03 \x01(\tH\x00R\x06reason\x88\x01\x01B\t\n" +
 	"\a_reason\"1\n" +
 	"\x15CancelMessageResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x9a\x01\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xfd\x01\n" +
 	"\x18RenewMessageLeaseRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x02 \x01(\tR\tmessageId\x12@\n" +
-	"\x0elease_duration\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\rleaseDuration\"\xa7\x01\n" +
+	"\x0elease_duration\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\rleaseDuration\x12 \n" +
+	"\tworker_id\x18\x04 \x01(\tH\x00R\bworkerId\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"attempt_id\x18\x05 \x01(\tH\x01R\tattemptId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_worker_idB\r\n" +
+	"\v_attempt_id\"\xa7\x01\n" +
 	"\x19RenewMessageLeaseResponse\x12@\n" +
 	"\x0eremaining_time\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\rremainingTime\x12H\n" +
 	"\x05state\x18\x02 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\"\x8c\x02\n" +
@@ -4180,6 +4204,7 @@ func file_proto_queueservice_v1_request_response_proto_init() {
 	file_proto_queueservice_v1_request_response_proto_msgTypes[9].OneofWrappers = []any{}
 	file_proto_queueservice_v1_request_response_proto_msgTypes[10].OneofWrappers = []any{}
 	file_proto_queueservice_v1_request_response_proto_msgTypes[12].OneofWrappers = []any{}
+	file_proto_queueservice_v1_request_response_proto_msgTypes[14].OneofWrappers = []any{}
 	file_proto_queueservice_v1_request_response_proto_msgTypes[16].OneofWrappers = []any{}
 	file_proto_queueservice_v1_request_response_proto_msgTypes[20].OneofWrappers = []any{}
 	type x struct{}

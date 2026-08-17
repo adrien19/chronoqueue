@@ -134,11 +134,11 @@ func (b *stubBackend) ClaimMessage(ctx context.Context, queueName string, worker
 	return nil, nil
 }
 
-func (b *stubBackend) AcknowledgeMessage(ctx context.Context, queueName string, messageId string, attemptId string) error {
+func (b *stubBackend) AcknowledgeMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error {
 	return nil
 }
 
-func (b *stubBackend) NackMessage(ctx context.Context, queueName string, messageId string, attemptId string) error {
+func (b *stubBackend) NackMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error {
 	return nil
 }
 
@@ -147,11 +147,11 @@ func (b *stubBackend) CancelMessage(ctx context.Context, queueName string, messa
 	return b.cancelErr
 }
 
-func (b *stubBackend) HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string) (messagepb.Message_Metadata_State, int64, error) {
+func (b *stubBackend) HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) (messagepb.Message_Metadata_State, int64, error) {
 	return messagepb.Message_Metadata_RUNNING, 30000, nil
 }
 
-func (b *stubBackend) ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, extensionMs int64) error {
+func (b *stubBackend) ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, workerId string, extensionMs int64) error {
 	return nil
 }
 

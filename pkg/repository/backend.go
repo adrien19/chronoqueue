@@ -28,11 +28,11 @@ type BackendStorage interface {
 	EnqueueMessage(ctx context.Context, queueName string, message *messagepb.Message) error
 	EnqueueMessagesBulk(ctx context.Context, queueName string, messages []*messagepb.Message, transactionMode queueservicepb.PostMessagesBulkRequest_TransactionMode) ([]error, error)
 	ClaimMessage(ctx context.Context, queueName string, workerId string, attemptId string) (*messagepb.Message, error)
-	AcknowledgeMessage(ctx context.Context, queueName string, messageId string, attemptId string) error
+	AcknowledgeMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error
 	CancelMessage(ctx context.Context, queueName string, messageId string, reason string) error
-	NackMessage(ctx context.Context, queueName string, messageId string, attemptId string) error
-	HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string) (messagepb.Message_Metadata_State, int64, error)
-	ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, extensionMs int64) error
+	NackMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error
+	HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) (messagepb.Message_Metadata_State, int64, error)
+	ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, workerId string, extensionMs int64) error
 	PeekMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error)
 
 	// Schedule Operations

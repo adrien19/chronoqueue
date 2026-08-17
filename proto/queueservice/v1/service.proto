@@ -283,8 +283,8 @@ service QueueService {
     // - Message removed from queue
     // - Queue stats updated
     //
-    // Important: You must ACK within the lease_duration, or the message returns
-    // to PENDING and may be delivered to another worker.
+    // Important: attempt_id and worker_id from GetNextMessage are required and
+    // must identify the active, unexpired lease.
     //
     // Example:
     //   POST /v1/queues/order-processing/messages/msg-123:acknowledge
@@ -343,6 +343,8 @@ service QueueService {
     // - External API calls with unpredictable latency
     //
     // Call periodically during processing to prevent lease expiration.
+    // attempt_id and worker_id from GetNextMessage are required and must identify
+    // the active, unexpired lease.
     //
     // Example pattern (heartbeat-style lease renewal):
     //   msg := getNextMessage()
@@ -402,6 +404,8 @@ service QueueService {
     //
     // Alternative to RenewMessageLease with similar purpose but lighter weight.
     // Useful for tracking worker health without extending lease.
+    // attempt_id and worker_id from GetNextMessage are required and must identify
+    // the active, unexpired lease.
     //
     // Example:
     //   POST /v1/queues/order-processing/messages:heartbeat

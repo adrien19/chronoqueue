@@ -817,6 +817,19 @@ func (client *ChronoQueueClient) RenewMessageLease(ctx context.Context, queue st
 		return nil, err
 	}
 	req := &queueservice_pb.RenewMessageLeaseRequest{QueueName: queue, MessageId: messageId, LeaseDuration: leaseDurationpb}
+	info := client.getAttemptInfo(messageId)
+	workerID := info.workerID
+	if workerID == "" {
+		if widStr, ok := client.workerID.Load().(string); ok {
+			workerID = widStr
+		}
+	}
+	if info.attemptID != "" {
+		req.AttemptId = &info.attemptID
+	}
+	if workerID != "" {
+		req.WorkerId = &workerID
+	}
 	res, err := client.service.RenewMessageLease(ctx, req)
 	if err != nil {
 		return res, err
