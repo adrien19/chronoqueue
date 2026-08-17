@@ -39,7 +39,7 @@ func TestWorkerMutations_RequireActiveOwnership(t *testing.T) {
 	for name, mutate := range mutations {
 		t.Run(name, func(t *testing.T) {
 			require.NoError(t, storage.EnqueueMessage(ctx, "owned", reclaimTestMessage(name, 1, 1)))
-			claimed, err := storage.ClaimMessage(ctx, "owned", "worker", "attempt")
+			claimed, err := storage.ClaimMessage(ctx, "owned", "worker", "attempt", "")
 			require.NoError(t, err)
 			require.NotNil(t, claimed)
 
@@ -63,7 +63,7 @@ func TestWorkerMutations_OnlyOneConcurrentTerminalTransitionWins(t *testing.T) {
 	second := newReclaimTestStorage(t, ctx, path)
 	require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "owned", Metadata: &queuepb.QueueMetadata{}}))
 	require.NoError(t, first.EnqueueMessage(ctx, "owned", reclaimTestMessage("terminal", 1, 1)))
-	claimed, err := first.ClaimMessage(ctx, "owned", "worker", "attempt")
+	claimed, err := first.ClaimMessage(ctx, "owned", "worker", "attempt", "")
 	require.NoError(t, err)
 	require.NotNil(t, claimed)
 

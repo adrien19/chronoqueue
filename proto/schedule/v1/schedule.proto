@@ -58,6 +58,8 @@ message Schedule {
 
     // Metadata contains schedule configuration and execution state.
   message Metadata {
+    reserved 10;
+    reserved "exclusivity_key";
         // payload: Template payload for messages created by this schedule.
         // Each scheduled execution creates a new message with this payload.
         // You can include template variables that get resolved at execution time.
@@ -120,11 +122,6 @@ message Schedule {
         // updated_at: When this schedule was last modified.
         // Updates when pausing, resuming, or changing configuration.
     google.protobuf.Timestamp updated_at = 9;
-
-        // exclusivity_key: Ensures only one instance of this schedule runs.
-        // Useful in multi-region deployments to prevent duplicate executions.
-        // Leave empty if multiple instances can run concurrently.
-    string exclusivity_key = 10;
 
         // state_message: Human-readable status or error message.
         // Contains error details when state = ERRORED.

@@ -255,9 +255,10 @@ type QueueServiceClient interface {
 	// - If lease expires without ACK → message returns to PENDING for retry
 	//
 	// Concurrency:
-	// - Multiple workers can call simultaneously
-	// - Each worker gets a different message (no duplicates)
-	// - Use exclusivity_key for single-threaded processing of related messages
+	//   - Multiple workers can call simultaneously
+	//   - Each worker gets a different message (no duplicates)
+	//   - EXCLUSIVE queues require their configured exclusivity_key and allow one
+	//     RUNNING message until it is acknowledged, failed, or reclaimed
 	//
 	// Example worker loop:
 	//
@@ -1280,9 +1281,10 @@ type QueueServiceServer interface {
 	// - If lease expires without ACK → message returns to PENDING for retry
 	//
 	// Concurrency:
-	// - Multiple workers can call simultaneously
-	// - Each worker gets a different message (no duplicates)
-	// - Use exclusivity_key for single-threaded processing of related messages
+	//   - Multiple workers can call simultaneously
+	//   - Each worker gets a different message (no duplicates)
+	//   - EXCLUSIVE queues require their configured exclusivity_key and allow one
+	//     RUNNING message until it is acknowledged, failed, or reclaimed
 	//
 	// Example worker loop:
 	//

@@ -37,7 +37,7 @@ type QueueType int32
 
 const (
 	QueueType_SIMPLE    QueueType = 0 // Multiple workers can consume messages concurrently (default)
-	QueueType_EXCLUSIVE QueueType = 1 // Only one worker can consume from this queue at a time
+	QueueType_EXCLUSIVE QueueType = 1 // Only one message can hold a RUNNING lease in this queue at a time.
 )
 
 // Enum value maps for QueueType.
@@ -218,7 +218,7 @@ type QueueMetadata struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// type: Determines message consumption pattern.
 	// SIMPLE: Multiple workers process concurrently (most common).
-	// EXCLUSIVE: Single worker processes sequentially (ensures order).
+	// EXCLUSIVE: One RUNNING lease at a time; claims require exclusivity_key.
 	Type QueueType `protobuf:"varint,1,opt,name=type,proto3,enum=chronoqueue.api.queue.v1.QueueType" json:"type,omitempty"`
 	// default_max_attempts: Default retry count for messages without explicit max_attempts.
 	// Messages failing this many times move to the dead letter queue.
@@ -231,10 +231,10 @@ type QueueMetadata struct {
 	// Common values: 30s (quick tasks), 5m (standard), 30m (long-running).
 	// Balance between: too short = unnecessary retries, too long = slow failure detection.
 	LeaseDuration *durationpb.Duration `protobuf:"bytes,3,opt,name=lease_duration,json=leaseDuration,proto3" json:"lease_duration,omitempty"`
-	// exclusivity_key: For EXCLUSIVE queues, this key ensures single-consumer access.
-	// Only one worker with a matching exclusivity key can consume from this queue.
-	// Leave empty for non-exclusive queues.
-	// Use cases: ordered processing, singleton workers, distributed locks.
+	// exclusivity_key: Required for EXCLUSIVE queues and for every claim against them.
+	// While an exclusive message is RUNNING, other claims return no message. A new
+	// claim can succeed after ACK/NACK or after an expired lease is reclaimed.
+	// Leave empty for non-exclusive queues. This key is not an authentication secret.
 	ExclusivityKey string `protobuf:"bytes,4,opt,name=exclusivity_key,json=exclusivityKey,proto3" json:"exclusivity_key,omitempty"`
 	// dead_letter_queue_name: Name of the DLQ for messages that exhaust retries.
 	// Messages that fail after max_attempts are moved here for investigation.

@@ -605,10 +605,11 @@ func (x *PostMessagesBulkResponse) GetResults() []*PostMessagesBulkResponse_Mess
 
 // Get the next message on the queue
 type GetNextMessageRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	QueueName      string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
-	LeaseDuration  *durationpb.Duration   `protobuf:"bytes,2,opt,name=lease_duration,json=leaseDuration,proto3" json:"lease_duration,omitempty"`
-	ExclusivityKey string                 `protobuf:"bytes,3,opt,name=exclusivity_key,json=exclusivityKey,proto3" json:"exclusivity_key,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
+	LeaseDuration *durationpb.Duration   `protobuf:"bytes,2,opt,name=lease_duration,json=leaseDuration,proto3" json:"lease_duration,omitempty"`
+	// Required for EXCLUSIVE queues; must match the queue's configured key.
+	ExclusivityKey string `protobuf:"bytes,3,opt,name=exclusivity_key,json=exclusivityKey,proto3" json:"exclusivity_key,omitempty"`
 	// Optional stable identifier for the worker/consumer. If absent, server may generate one.
 	WorkerId *string `protobuf:"bytes,4,opt,name=worker_id,json=workerId,proto3,oneof" json:"worker_id,omitempty"`
 	// Attempt identifier to validate lease against current attempt

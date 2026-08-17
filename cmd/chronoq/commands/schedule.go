@@ -69,11 +69,6 @@ func newScheduleCreateCommand() *cobra.Command {
 				return err
 			}
 
-			exclusivityKey, err := cmd.Flags().GetString("exclusivity-key")
-			if err != nil {
-				return err
-			}
-
 			maxMessages, err := cmd.Flags().GetInt64("max-messages")
 			if err != nil {
 				return err
@@ -125,10 +120,9 @@ func newScheduleCreateCommand() *cobra.Command {
 
 			// Use the client to create the schedule
 			scheduleOpts := client.ScheduleOptions{
-				QueueName:      queueName,
-				ExclusivityKey: exclusivityKey,
-				MaxMessages:    maxMessages,
-				LeaseDuration:  leaseDuration,
+				QueueName:     queueName,
+				MaxMessages:   maxMessages,
+				LeaseDuration: leaseDuration,
 				Payload: client.Payload{
 					Data:     dataStruct,
 					Metadata: metadataMap,
@@ -168,7 +162,6 @@ func newScheduleCreateCommand() *cobra.Command {
 	cmd.Flags().StringP("id", "i", "", "Schedule ID (auto-generated if not provided)")
 	cmd.Flags().StringP("cron", "c", "", "Cron expression for the schedule")
 	cmd.Flags().StringP("calendar", "", "", "Calendar schedule configuration as JSON")
-	cmd.Flags().StringP("exclusivity-key", "k", "", "Exclusivity key for exclusive queues")
 	cmd.Flags().StringP("metadata", "d", "", "Message metadata as JSON")
 	cmd.Flags().Int64P("max-messages", "m", 1, "Maximum number of messages to send per schedule run")
 	cmd.Flags().StringP("lease-duration", "l", "30s", "Lease duration for the scheduled messages in seconds")

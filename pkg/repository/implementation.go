@@ -210,6 +210,9 @@ func (impl *implementation) Close() error {
 
 // CreateQueue creates a new queue
 func (impl *implementation) CreateQueue(ctx context.Context, request *queueservicepb.CreateQueueRequest) (*queueservicepb.CreateQueueResponse, error) {
+	if request == nil {
+		return nil, fmt.Errorf("create queue request is required")
+	}
 	metadata := request.Metadata
 	if metadata == nil {
 		metadata = &queuepb.QueueMetadata{}
@@ -221,6 +224,9 @@ func (impl *implementation) CreateQueue(ctx context.Context, request *queueservi
 			BaseLease:    durationpb.New(30 * time.Second),
 			MaxExtension: durationpb.New(5 * time.Minute),
 		}
+	}
+	if err := repositorycommon.ValidateQueueExclusivity(metadata); err != nil {
+		return nil, err
 	}
 
 	queue := &queuepb.Queue{
@@ -679,7 +685,7 @@ func (impl *implementation) GetQueueMessage(ctx context.Context, request *queues
 		attemptId = *request.AttemptId
 	}
 
-	message, err := impl.backend.ClaimMessage(ctx, request.QueueName, workerId, attemptId)
+	message, err := impl.backend.ClaimMessage(ctx, request.QueueName, workerId, attemptId, request.GetExclusivityKey())
 	if err != nil {
 		return nil, err
 	}

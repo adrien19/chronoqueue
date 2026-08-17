@@ -613,7 +613,7 @@
     "/v1/queues/{queueName}/messages:getNext": {
       "post": {
         "summary": "GetNextMessage retrieves the next available message for processing.",
-        "description": "This is the primary worker API. Call in a loop to continuously process messages.\n\nBehavior:\n- Returns highest priority PENDING message\n- Message moves to RUNNING state\n- Lease timer starts (worker has lease_duration to process)\n- If lease expires without ACK → message returns to PENDING for retry\n\nConcurrency:\n- Multiple workers can call simultaneously\n- Each worker gets a different message (no duplicates)\n- Use exclusivity_key for single-threaded processing of related messages\n\nExample worker loop:\n  for {\n      resp := client.GetNextMessage(ctx, \u0026GetNextMessageRequest{\n          QueueName: \"order-processing\",\n          LeaseDuration: durationpb.New(5 * time.Minute),\n      })\n      if resp.Message == nil {\n          time.Sleep(1 * time.Second)  // No messages available\n          continue\n      }\n\n      err := processMessage(resp.Message)\n      if err != nil {\n          // Let lease expire → automatic retry\n          continue\n      }\n\n      client.AcknowledgeMessage(ctx, \u0026AcknowledgeMessageRequest{\n          QueueName: \"order-processing\",\n          MessageId: resp.Message.MessageId,\n      })\n  }\n\nReturns: Message (or empty if no messages available)\nErrors:\n  - NotFound: Queue doesn't exist",
+        "description": "This is the primary worker API. Call in a loop to continuously process messages.\n\nBehavior:\n- Returns highest priority PENDING message\n- Message moves to RUNNING state\n- Lease timer starts (worker has lease_duration to process)\n- If lease expires without ACK → message returns to PENDING for retry\n\nConcurrency:\n- Multiple workers can call simultaneously\n- Each worker gets a different message (no duplicates)\n- EXCLUSIVE queues require their configured exclusivity_key and allow one\n  RUNNING message until it is acknowledged, failed, or reclaimed\n\nExample worker loop:\n  for {\n      resp := client.GetNextMessage(ctx, \u0026GetNextMessageRequest{\n          QueueName: \"order-processing\",\n          LeaseDuration: durationpb.New(5 * time.Minute),\n      })\n      if resp.Message == nil {\n          time.Sleep(1 * time.Second)  // No messages available\n          continue\n      }\n\n      err := processMessage(resp.Message)\n      if err != nil {\n          // Let lease expire → automatic retry\n          continue\n      }\n\n      client.AcknowledgeMessage(ctx, \u0026AcknowledgeMessageRequest{\n          QueueName: \"order-processing\",\n          MessageId: resp.Message.MessageId,\n      })\n  }\n\nReturns: Message (or empty if no messages available)\nErrors:\n  - NotFound: Queue doesn't exist",
         "operationId": "QueueService_GetNextMessage",
         "responses": {
           "200": {
@@ -1423,7 +1423,8 @@
           "type": "string"
         },
         "exclusivityKey": {
-          "type": "string"
+          "type": "string",
+          "description": "Required for EXCLUSIVE queues; must match the queue's configured key."
         },
         "workerId": {
           "type": "string",
@@ -2391,7 +2392,7 @@
       "properties": {
         "type": {
           "$ref": "#/definitions/v1QueueType",
-          "description": "type: Determines message consumption pattern.\nSIMPLE: Multiple workers process concurrently (most common).\nEXCLUSIVE: Single worker processes sequentially (ensures order)."
+          "description": "type: Determines message consumption pattern.\nSIMPLE: Multiple workers process concurrently (most common).\nEXCLUSIVE: One RUNNING lease at a time; claims require exclusivity_key."
         },
         "defaultMaxAttempts": {
           "type": "integer",
@@ -2404,7 +2405,7 @@
         },
         "exclusivityKey": {
           "type": "string",
-          "description": "exclusivity_key: For EXCLUSIVE queues, this key ensures single-consumer access.\nOnly one worker with a matching exclusivity key can consume from this queue.\nLeave empty for non-exclusive queues.\nUse cases: ordered processing, singleton workers, distributed locks."
+          "description": "exclusivity_key: Required for EXCLUSIVE queues and for every claim against them.\nWhile an exclusive message is RUNNING, other claims return no message. A new\nclaim can succeed after ACK/NACK or after an expired lease is reclaimed.\nLeave empty for non-exclusive queues. This key is not an authentication secret."
         },
         "deadLetterQueueName": {
           "type": "string",
@@ -2456,7 +2457,7 @@
         "EXCLUSIVE"
       ],
       "default": "SIMPLE",
-      "description": "QueueType defines the message consumption pattern.\n\nChoose based on your use case:\n- SIMPLE: Most common. Multiple workers can consume in parallel.\n- EXCLUSIVE: Single-consumer queues for ordered processing or exclusive access.\n\n - SIMPLE: Multiple workers can consume messages concurrently (default)\n - EXCLUSIVE: Only one worker can consume from this queue at a time"
+      "description": "QueueType defines the message consumption pattern.\n\nChoose based on your use case:\n- SIMPLE: Most common. Multiple workers can consume in parallel.\n- EXCLUSIVE: Single-consumer queues for ordered processing or exclusive access.\n\n - SIMPLE: Multiple workers can consume messages concurrently (default)\n - EXCLUSIVE: Only one message can hold a RUNNING lease in this queue at a time."
     },
     "v1RegisterSchemaRequest": {
       "type": "object",
@@ -2658,10 +2659,6 @@
           "type": "string",
           "format": "date-time",
           "description": "updated_at: When this schedule was last modified.\nUpdates when pausing, resuming, or changing configuration."
-        },
-        "exclusivityKey": {
-          "type": "string",
-          "description": "exclusivity_key: Ensures only one instance of this schedule runs.\nUseful in multi-region deployments to prevent duplicate executions.\nLeave empty if multiple instances can run concurrently."
         },
         "stateMessage": {
           "type": "string",

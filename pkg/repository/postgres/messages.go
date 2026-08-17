@@ -216,7 +216,7 @@ func (s *Storage) enqueueMessageInTx(ctx context.Context, tx *sql.Tx, queueName 
 }
 
 // ClaimMessage claims the next available message from a queue.
-func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId string, attemptId string) (*messagepb.Message, error) {
+func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId string, attemptId string, exclusivityKey string) (*messagepb.Message, error) {
 	start := time.Now()
 	defer func() {
 		metrics.ObserveMessageClaimLatency(queueName, time.Since(start))
@@ -230,6 +230,10 @@ func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId s
 	if queueMeta == nil {
 		queueMeta = &queuepb.QueueMetadata{}
 	}
+	if err := repositorycommon.ValidateClaimExclusivity(queueMeta, exclusivityKey); err != nil {
+		return nil, err
+	}
+	isExclusive := queueMeta.GetType() == queuepb.QueueType_EXCLUSIVE
 
 	if attemptId == "" {
 		attemptId = s.generateID()
@@ -258,6 +262,25 @@ func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId s
 	var message *messagepb.Message
 
 	err = s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+		if isExclusive {
+			var lockedQueue string
+			if err := tx.QueryRowContext(ctx, s.ph(`SELECT name FROM cq_queues WHERE name = ? FOR UPDATE`), queueName).Scan(&lockedQueue); err != nil {
+				return fmt.Errorf("lock exclusive queue: %w", err)
+			}
+
+			var hasActiveLease bool
+			if err := tx.QueryRowContext(ctx, s.ph(`
+				SELECT EXISTS (
+					SELECT 1 FROM cq_messages
+					WHERE queue_name = ? AND state = ? AND deleted_at IS NULL
+				)`), queueName, messagepb.Message_Metadata_RUNNING).Scan(&hasActiveLease); err != nil {
+				return fmt.Errorf("check exclusive queue lease: %w", err)
+			}
+			if hasActiveLease {
+				return nil
+			}
+		}
+
 		ph1 := s.Dialect.Placeholder(1)
 		ph2 := s.Dialect.Placeholder(2)
 		ph3 := s.Dialect.Placeholder(3)

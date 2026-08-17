@@ -137,6 +137,9 @@ func (*mockChronoQueueServer) GetNextMessage(ctx context.Context, req *queueserv
 	if req.GetQueueName() == "emptyQueue" {
 		return &queueservice_pb.GetNextMessageResponse{}, nil
 	}
+	if req.GetQueueName() == "exclusiveQueue" && req.GetExclusivityKey() != "orders" {
+		return &queueservice_pb.GetNextMessageResponse{}, status.Error(codes.InvalidArgument, "exclusivity key mismatch")
+	}
 	return &queueservice_pb.GetNextMessageResponse{
 		Message: &message_pb.Message{
 			MessageId: "test_message",
@@ -964,6 +967,7 @@ func TestChronoQueueClient_GetNextMessage(t *testing.T) {
 		queue           string
 		leaseDuration   string
 		enableHeartbeat bool
+		exclusivityKey  string
 	}
 	tests := []struct {
 		name    string
@@ -979,6 +983,23 @@ func TestChronoQueueClient_GetNextMessage(t *testing.T) {
 				queue:           "validQueue",
 				leaseDuration:   "4s",
 				enableHeartbeat: false,
+			},
+			want: &queueservice_pb.GetNextMessageResponse{
+				Message: &message_pb.Message{
+					MessageId: "test_message",
+					Metadata:  &message_pb.Message_Metadata{},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Exclusive Queue",
+			args: args{
+				ctx:             context.Background(),
+				queue:           "exclusiveQueue",
+				leaseDuration:   "4s",
+				enableHeartbeat: false,
+				exclusivityKey:  "orders",
 			},
 			want: &queueservice_pb.GetNextMessageResponse{
 				Message: &message_pb.Message{
@@ -1022,7 +1043,7 @@ func TestChronoQueueClient_GetNextMessage(t *testing.T) {
 			}
 			defer client.Close()
 
-			got, err := client.GetNextMessage(tt.args.ctx, tt.args.queue, tt.args.leaseDuration, tt.args.enableHeartbeat)
+			got, err := client.GetNextMessage(tt.args.ctx, tt.args.queue, tt.args.leaseDuration, tt.args.enableHeartbeat, tt.args.exclusivityKey)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ChronoQueueClient.GetNextMessage() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -31,7 +31,7 @@ func TestReclaimExpiredMessage_UsesAuthoritativeAttemptsAndFencesAttempt(t *test
 	require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
 	require.NoError(t, first.EnqueueMessage(ctx, queueName, reclaimTestMessage("finite", 2, 2)))
 
-	claimed, err := first.ClaimMessage(ctx, queueName, "worker-1", "attempt-1")
+	claimed, err := first.ClaimMessage(ctx, queueName, "worker-1", "attempt-1", "")
 	require.NoError(t, err)
 	require.NotNil(t, claimed)
 	require.EqualValues(t, 2, claimed.GetMetadata().GetAttemptsLeft())
@@ -69,7 +69,7 @@ func TestReclaimExpiredMessage_UsesAuthoritativeAttemptsAndFencesAttempt(t *test
 	}
 	require.Equal(t, 1, successes)
 
-	claimed, err = first.ClaimMessage(ctx, queueName, "worker-2", "attempt-2")
+	claimed, err = first.ClaimMessage(ctx, queueName, "worker-2", "attempt-2", "")
 	require.NoError(t, err)
 	require.NotNil(t, claimed)
 	require.EqualValues(t, 1, claimed.GetMetadata().GetAttemptsLeft())
@@ -94,7 +94,7 @@ func TestReclaimExpiredMessage_PreservesInfiniteRetries(t *testing.T) {
 	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
 	require.NoError(t, storage.EnqueueMessage(ctx, queueName, reclaimTestMessage("infinite", -1, -1)))
 
-	claimed, err := storage.ClaimMessage(ctx, queueName, "worker", "attempt")
+	claimed, err := storage.ClaimMessage(ctx, queueName, "worker", "attempt", "")
 	require.NoError(t, err)
 	require.NotNil(t, claimed)
 	expireReclaimTestMessage(t, ctx, storage, claimed.GetMessageId())

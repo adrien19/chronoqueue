@@ -377,13 +377,17 @@ func newMessageGetCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			exclusivityKey, err := cmd.Flags().GetString("exclusivity-key")
+			if err != nil {
+				return err
+			}
 			enableHeartbeat, err := cmd.Flags().GetBool("enable-heartbeat")
 			if err != nil {
 				return err
 			}
 
 			return WithClient(cmd, func(client *client.ChronoQueueClient) error {
-				resp, err := client.GetNextMessage(cmd.Context(), queueName, leaseDuration, enableHeartbeat)
+				resp, err := client.GetNextMessage(cmd.Context(), queueName, leaseDuration, enableHeartbeat, exclusivityKey)
 				if err != nil {
 					return err
 				}

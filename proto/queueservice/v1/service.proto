@@ -239,7 +239,8 @@ service QueueService {
     // Concurrency:
     // - Multiple workers can call simultaneously
     // - Each worker gets a different message (no duplicates)
-    // - Use exclusivity_key for single-threaded processing of related messages
+    // - EXCLUSIVE queues require their configured exclusivity_key and allow one
+    //   RUNNING message until it is acknowledged, failed, or reclaimed
     //
     // Example worker loop:
     //   for {

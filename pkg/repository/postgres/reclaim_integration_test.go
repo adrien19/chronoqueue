@@ -44,7 +44,7 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 	require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
 	require.NoError(t, first.EnqueueMessage(ctx, queueName, postgresReclaimTestMessage("finite", 2, 2)))
 
-	claimed, err := first.ClaimMessage(ctx, queueName, "worker-1", "attempt-1")
+	claimed, err := first.ClaimMessage(ctx, queueName, "worker-1", "attempt-1", "")
 	require.NoError(t, err)
 	require.NotNil(t, claimed)
 	require.EqualValues(t, 2, claimed.GetMetadata().GetAttemptsLeft())
@@ -81,7 +81,7 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 	}
 	require.Equal(t, 1, successes)
 
-	claimed, err = first.ClaimMessage(ctx, queueName, "worker-2", "attempt-2")
+	claimed, err = first.ClaimMessage(ctx, queueName, "worker-2", "attempt-2", "")
 	require.NoError(t, err)
 	require.NotNil(t, claimed)
 	require.EqualValues(t, 1, claimed.GetMetadata().GetAttemptsLeft())
@@ -138,7 +138,7 @@ func TestWorkerMutations_RequireActiveOwnershipAcrossPostgresInstances(t *testin
 	for name, mutate := range mutations {
 		t.Run(name, func(t *testing.T) {
 			require.NoError(t, first.EnqueueMessage(ctx, "owned", postgresReclaimTestMessage(name, 1, 1)))
-			claimed, err := first.ClaimMessage(ctx, "owned", "worker", "attempt")
+			claimed, err := first.ClaimMessage(ctx, "owned", "worker", "attempt", "")
 			require.NoError(t, err)
 			require.NotNil(t, claimed)
 			require.Error(t, mutate(ctx, first, "other", "attempt", "worker"))
@@ -154,7 +154,7 @@ func TestWorkerMutations_RequireActiveOwnershipAcrossPostgresInstances(t *testin
 	}
 
 	require.NoError(t, first.EnqueueMessage(ctx, "owned", postgresReclaimTestMessage("terminal", 1, 1)))
-	claimed, err := first.ClaimMessage(ctx, "owned", "worker", "terminal-attempt")
+	claimed, err := first.ClaimMessage(ctx, "owned", "worker", "terminal-attempt", "")
 	require.NoError(t, err)
 	require.NotNil(t, claimed)
 	start := make(chan struct{})

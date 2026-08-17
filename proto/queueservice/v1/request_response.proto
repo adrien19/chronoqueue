@@ -150,6 +150,7 @@ message PostMessagesBulkResponse {
 message GetNextMessageRequest{
   string                   queue_name      = 1;
   google.protobuf.Duration lease_duration  = 2;
+    // Required for EXCLUSIVE queues; must match the queue's configured key.
   string                   exclusivity_key = 3;
     // Optional stable identifier for the worker/consumer. If absent, server may generate one.
   optional string worker_id = 4;
