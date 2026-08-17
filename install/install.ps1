@@ -33,8 +33,8 @@ $ErrorActionPreference = "Stop"
 $GithubOrg   = "adrien19"
 $GithubRepo  = "chronoqueue"
 $BinaryName  = "chronoqueue.exe"
-$ReleasesUrl = "https://github.com/$GithubOrg/$GithubRepo/releases"
-$ApiUrl      = "https://api.github.com/repos/$GithubOrg/$GithubRepo/releases/latest"
+$ReleasesUrl = if ($Env:CHRONOQUEUE_RELEASES_URL) { $Env:CHRONOQUEUE_RELEASES_URL } else { "https://github.com/$GithubOrg/$GithubRepo/releases" }
+$ApiUrl      = if ($Env:CHRONOQUEUE_API_URL) { $Env:CHRONOQUEUE_API_URL } else { "https://api.github.com/repos/$GithubOrg/$GithubRepo/releases/latest" }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -49,6 +49,53 @@ function Write-Warn([string]$Message) {
 function Exit-Error([string]$Message) {
     Write-Host "ERROR $Message" -ForegroundColor Red
     exit 1
+}
+
+function Assert-SemanticVersion([string]$Value) {
+    if ($Value -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$') {
+        Exit-Error "Invalid version '$Value'. Expected a semantic version such as 2.0.0 or 2.0.0-rc.1."
+    }
+}
+
+function Get-MetadataValue([string]$MetadataFile, [string]$Field) {
+    $prefix = "${Field}="
+    $line = Get-Content -Path $MetadataFile | Where-Object { $_.StartsWith($prefix) } | Select-Object -First 1
+    if ($null -eq $line) {
+        return ""
+    }
+    return $line.Substring($prefix.Length)
+}
+
+function Test-ReleaseMetadata([string]$BinaryPath, [string]$MetadataFile, [string]$RequestedVersion) {
+    $releaseVersion = Get-MetadataValue -MetadataFile $MetadataFile -Field "version"
+    $releaseCommit = Get-MetadataValue -MetadataFile $MetadataFile -Field "commit"
+    $releaseBuildDate = Get-MetadataValue -MetadataFile $MetadataFile -Field "build_date"
+
+    if ($releaseVersion -ne "v$RequestedVersion") {
+        Exit-Error "Release metadata version '$releaseVersion' does not match requested version 'v$RequestedVersion'."
+    }
+    if ($releaseCommit -notmatch '^[0-9a-fA-F]{40}$') {
+        Exit-Error "Release metadata contains an invalid commit '$releaseCommit'."
+    }
+    if ([string]::IsNullOrWhiteSpace($releaseBuildDate)) {
+        Exit-Error "Release metadata does not contain a build date."
+    }
+
+    $output = (& $BinaryPath --version | Out-String)
+    if ($LASTEXITCODE -ne 0) {
+        Exit-Error "Installed binary failed its version check."
+    }
+    if (-not $output.Contains("ChronoQueue v$RequestedVersion")) {
+        Exit-Error "Installed binary does not report version 'v$RequestedVersion'."
+    }
+    if (-not $output.Contains("Git Commit: $releaseCommit")) {
+        Exit-Error "Installed binary commit does not match the release metadata."
+    }
+    if (-not $output.Contains("Built:      $releaseBuildDate")) {
+        Exit-Error "Installed binary build date does not match the release metadata."
+    }
+
+    Write-Step "Release metadata verified (commit $($releaseCommit.Substring(0, 12)))."
 }
 
 # ── Resolve latest version from GitHub API ────────────────────────────────────
@@ -95,6 +142,7 @@ function Install-ChronoQueue {
         Write-Step "Determining latest chronoqueue version..."
         $ver = Get-LatestVersion
     }
+    Assert-SemanticVersion -Value $ver
     Write-Step "Installing chronoqueue v$ver"
 
     # ── Architecture (Windows releases only ship amd64) ───────────────────────
@@ -153,6 +201,13 @@ function Install-ChronoQueue {
         if (-not (Test-Path $binaryPath)) {
             Exit-Error "Binary '$binaryInArchive' not found in archive."
         }
+
+        $metadataInArchive = "${binaryInArchive}.release"
+        $metadataPath = Join-Path $extractDir $metadataInArchive
+        if (-not (Test-Path $metadataPath)) {
+            Exit-Error "Release metadata '$metadataInArchive' not found in archive."
+        }
+        Test-ReleaseMetadata -BinaryPath $binaryPath -MetadataFile $metadataPath -RequestedVersion $ver
 
         # ── Install ───────────────────────────────────────────────────────────
         if (-not (Test-Path $InstallDir)) {

@@ -21,8 +21,8 @@ set -euo pipefail
 GITHUB_ORG="adrien19"
 GITHUB_REPO="chronoqueue"
 BINARY_NAME="chronoqueue"
-RELEASES_URL="https://github.com/${GITHUB_ORG}/${GITHUB_REPO}/releases"
-API_URL="https://api.github.com/repos/${GITHUB_ORG}/${GITHUB_REPO}/releases/latest"
+RELEASES_URL="${CHRONOQUEUE_RELEASES_URL:-https://github.com/${GITHUB_ORG}/${GITHUB_REPO}/releases}"
+API_URL="${CHRONOQUEUE_API_URL:-https://api.github.com/repos/${GITHUB_ORG}/${GITHUB_REPO}/releases/latest}"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -30,10 +30,59 @@ say() { printf "\033[1;32m==>\033[0m %s\n" "$*"; }
 warn() { printf "\033[1;33mWARN\033[0m %s\n" "$*" >&2; }
 err() { printf "\033[1;31mERROR\033[0m %s\n" "$*" >&2; exit 1; }
 
+INSTALL_TMP_DIR=""
+cleanup() {
+    if [[ -n "${INSTALL_TMP_DIR:-}" ]] && [[ -d "${INSTALL_TMP_DIR}" ]]; then
+        rm -rf -- "${INSTALL_TMP_DIR}"
+    fi
+}
+trap cleanup EXIT
+
 need_cmd() {
     if ! command -v "$1" >/dev/null 2>&1; then
         err "Required command not found: '$1'. Please install it and retry."
     fi
+}
+
+validate_version() {
+    local version="$1"
+    if [[ ! "${version}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$ ]]; then
+        err "Invalid version '${version}'. Expected a semantic version such as 2.0.0 or 2.0.0-rc.1."
+    fi
+}
+
+metadata_value() {
+    local metadata_file="$1"
+    local field="$2"
+    awk -F= -v field="${field}" '$1 == field { sub(/^[^=]*=/, ""); print; exit }' "${metadata_file}"
+}
+
+verify_release_metadata() {
+    local binary="$1"
+    local metadata_file="$2"
+    local requested_version="$3"
+    local release_version release_commit release_build_date output
+
+    release_version="$(metadata_value "${metadata_file}" version)"
+    release_commit="$(metadata_value "${metadata_file}" commit)"
+    release_build_date="$(metadata_value "${metadata_file}" build_date)"
+
+    [[ "${release_version}" == "v${requested_version}" ]] \
+        || err "Release metadata version '${release_version}' does not match requested version 'v${requested_version}'."
+    [[ "${release_commit}" =~ ^[0-9a-fA-F]{40}$ ]] \
+        || err "Release metadata contains an invalid commit '${release_commit}'."
+    [[ -n "${release_build_date}" ]] \
+        || err "Release metadata does not contain a build date."
+
+    output="$("${binary}" --version)" || err "Installed binary failed its version check."
+    grep -Fq -- "ChronoQueue v${requested_version}" <<<"${output}" \
+        || err "Installed binary does not report version 'v${requested_version}'."
+    grep -Fq -- "Git Commit: ${release_commit}" <<<"${output}" \
+        || err "Installed binary commit does not match the release metadata."
+    grep -Fq -- "Built:      ${release_build_date}" <<<"${output}" \
+        || err "Installed binary build date does not match the release metadata."
+
+    say "Release metadata verified (commit ${release_commit:0:12})."
 }
 
 # ── Detect OS ─────────────────────────────────────────────────────────────────
@@ -126,6 +175,7 @@ main() {
         say "Determining latest ${BINARY_NAME} version..."
         version="$(latest_version)"
     fi
+    validate_version "${version}"
     say "Installing ${BINARY_NAME} v${version}"
 
     # ── Target platform ──────────────────────────────────────────────────────
@@ -144,7 +194,7 @@ main() {
     # ── Temporary work dir (cleaned up on exit) ───────────────────────────────
     local tmp_dir
     tmp_dir="$(mktemp -d)"
-    trap 'rm -rf "${tmp_dir}"' EXIT
+    INSTALL_TMP_DIR="${tmp_dir}"
 
     # ── Download ──────────────────────────────────────────────────────────────
     say "Downloading ${archive_name}..."
@@ -167,6 +217,15 @@ main() {
         err "Binary '${binary_in_archive}' not found in archive."
     fi
     chmod +x "${tmp_dir}/${binary_in_archive}"
+
+    local metadata_in_archive="${binary_in_archive}.release"
+    if [[ ! -f "${tmp_dir}/${metadata_in_archive}" ]]; then
+        err "Release metadata '${metadata_in_archive}' not found in archive."
+    fi
+    verify_release_metadata \
+        "${tmp_dir}/${binary_in_archive}" \
+        "${tmp_dir}/${metadata_in_archive}" \
+        "${version}"
 
     # ── Install ───────────────────────────────────────────────────────────────
     # Determine whether sudo is needed:

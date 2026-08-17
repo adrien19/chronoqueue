@@ -2,7 +2,7 @@
 # Pure Go build - no CGO, fully static binary, cross-platform compatible
 # For SQLite support, use Dockerfile.sqlite instead
 
-FROM golang:1.26.5-alpine3.24 as builder
+FROM golang:1.26.5-alpine3.24 AS builder
 
 # Set working directory
 WORKDIR /build
@@ -23,10 +23,16 @@ COPY main.go ./
 ARG VERSION=1.0.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
 
 # Build static binary (no CGO, fully portable)
 # Production backends: Postgres, Redis - no SQLite
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+RUN target_os="${TARGETOS:-$(go env GOOS)}" && \
+    target_arch="${TARGETARCH:-$(go env GOARCH)}" && \
+    if [ "$target_arch" = "arm" ]; then export GOARM="${TARGETVARIANT#v}"; fi && \
+    CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" go build \
     -ldflags="-w -s -X 'github.com/adrien19/chronoqueue/pkg/version.Version=${VERSION}' \
     -X 'github.com/adrien19/chronoqueue/pkg/version.GitCommit=${GIT_COMMIT}' \
     -X 'github.com/adrien19/chronoqueue/pkg/version.BuildDate=${BUILD_DATE}'" \

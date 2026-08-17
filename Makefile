@@ -211,6 +211,7 @@ test: check-gotestsum
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json \
 			--format pkgname-and-test-fails \
 			-- \
+				-tags=test_dep \
 				./pkg/... ./internal/... ./cmd/... ./client/...\
 				$(COVERAGE_OPTS)
 
@@ -224,7 +225,7 @@ test-sqlite: check-gotestsum
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit_sqlite.json \
 			--format pkgname-and-test-fails \
 			-- \
-				-tags=sqlite \
+				-tags="test_dep sqlite" \
 				./pkg/... ./internal/... ./cmd/... ./client/... \
 				$(COVERAGE_OPTS)
 
@@ -239,6 +240,8 @@ ci-test: check-gotestsum
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_unit.xml \
 			--format standard-verbose \
 			-- \
+				-tags=test_dep \
+				-count=1 \
 				-coverprofile=coverage.out \
 				-covermode=atomic \
 				./pkg/... ./internal/... ./cmd/... ./client/...
@@ -254,7 +257,8 @@ ci-test-sqlite: check-gotestsum
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_unit_sqlite.xml \
 			--format standard-verbose \
 			-- \
-				-tags=sqlite \
+				-tags="test_dep sqlite" \
+				-count=1 \
 				-coverprofile=coverage_sqlite.out \
 				-covermode=atomic \
 				./pkg/... ./internal/... ./cmd/... ./client/...
@@ -318,8 +322,9 @@ test-integration: check-gotestsum build-test-image
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format pkgname-and-test-fails \
 			-- \
+				-tags="test_dep integration" \
 				-timeout 30m \
-				./tests/integration/... \
+				./tests/integration/... ./pkg/repository/postgres \
 				$(COVERAGE_OPTS)
 
 ################################################################################
@@ -341,9 +346,11 @@ ci-test-integration: check-gotestsum build-test-image
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_integration.xml \
 			--format standard-verbose \
 			-- \
+				-tags="test_dep integration" \
+				-count=1 \
 				-timeout 30m \
 				-v \
-				./tests/integration/...
+				./tests/integration/... ./pkg/repository/postgres
 
 ################################################################################
 # Target: test-e2e                                                             #
@@ -356,6 +363,7 @@ test-e2e: check-gotestsum
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json \
 			--format pkgname-and-test-fails \
 			-- \
+				-tags=test_dep \
 				-timeout 45m \
 				./tests/e2e/... \
 				$(COVERAGE_OPTS)
@@ -372,6 +380,8 @@ ci-test-e2e: check-gotestsum
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml \
 			--format standard-verbose \
 			-- \
+				-tags=test_dep \
+				-count=1 \
 				-timeout 45m \
 				./tests/e2e/...
 
@@ -386,6 +396,18 @@ test-all: test test-integration test-e2e
 ################################################################################
 .PHONY: ci-test-all
 ci-test-all: ci-test ci-test-integration ci-test-e2e
+
+################################################################################
+# Target: ci-test-migrations                                                   #
+################################################################################
+.PHONY: ci-test-migrations
+ci-test-migrations:
+	CGO_ENABLED=1 go test -tags="test_dep sqlite" ./pkg/repository/sqlite -run '^TestSchemaMigration_' -count=1
+	CGO_ENABLED=1 go test -tags="test_dep integration" ./pkg/repository/postgres -run '^TestSchemaMigration_' -count=1
+
+.PHONY: test-install-script
+test-install-script:
+	bash install/install_test.sh
 
 ################################################################################
 # Target: check-linter                                                         #

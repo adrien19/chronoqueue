@@ -79,7 +79,7 @@ powershell -Command "iwr -useb https://raw.githubusercontent.com/adrien19/chrono
 The scripts automatically:
 
 - Download the latest release (or specified version)
-- Verify checksums for security
+- Verify archive checksums and confirm the installed binary reports the requested release tag, commit, and build date
 - Install the binary to your PATH
 - Work on Linux, macOS, and Windows
 

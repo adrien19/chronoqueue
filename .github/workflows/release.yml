@@ -2,12 +2,11 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*.*.*"
+    tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g., v1.0.0)"
+        description: "Existing release tag (for example, v2.0.0-rc.1)"
         required: true
         type: string
 
@@ -20,317 +19,401 @@ env:
   GO_VERSION: "1.26.5"
   DOCKER_REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  GOFLAGS: -tags=test_dep
 
 jobs:
   prepare-release:
-    name: Prepare Release
+    name: Validate Tag & Prepare Notes
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      image_tag: ${{ steps.release.outputs.image_tag }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+      build_date: ${{ steps.release.outputs.build_date }}
+      commit: ${{ steps.release.outputs.commit }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Determine version
-        id: version
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref }}
+      - name: Validate release identity
+        id: release
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.version }}
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            VERSION="${GITHUB_REF#refs/tags/}"
-          fi
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "Version: ${VERSION}"
-
-      - name: Generate changelog
-        id: changelog
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then TAG="${REQUESTED_TAG}"; else TAG="${GITHUB_REF#refs/tags/}"; fi
+          SEMVER='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$'
+          [[ "${TAG}" =~ ${SEMVER} ]] || { echo "::error::Release tag '${TAG}' is not valid SemVer with a v prefix."; exit 1; }
+          git rev-parse --verify "refs/tags/${TAG}" >/dev/null
+          TAG_COMMIT="$(git rev-list -n 1 "${TAG}")"
+          HEAD_COMMIT="$(git rev-parse HEAD)"
+          [[ "${TAG_COMMIT}" == "${HEAD_COMMIT}" ]] || { echo "::error::Checked-out commit ${HEAD_COMMIT} does not match tag ${TAG} at ${TAG_COMMIT}."; exit 1; }
+          if [[ "${GITHUB_EVENT_NAME}" == push ]]; then [[ "${TAG_COMMIT}" == "${GITHUB_SHA}" ]] || { echo "::error::Tag ${TAG} does not match event commit ${GITHUB_SHA}."; exit 1; }; fi
+          VERSION="${TAG#v}"
+          IMAGE_TAG="${VERSION//+/-}"
+          BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          PRERELEASE=false; [[ "${VERSION}" == *-* ]] && PRERELEASE=true
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "image_tag=${IMAGE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${PRERELEASE}" >> "${GITHUB_OUTPUT}"
+          echo "build_date=${BUILD_DATE}" >> "${GITHUB_OUTPUT}"
+          echo "commit=${TAG_COMMIT}" >> "${GITHUB_OUTPUT}"
+      - name: Generate release notes
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
         run: |
-          # Get the previous tag
-          PREVIOUS_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
-
-          if [ -z "$PREVIOUS_TAG" ]; then
-            echo "First release - no previous tag found"
-            echo "## Initial Release 🎉" > CHANGELOG.md
+          set -euo pipefail
+          PREVIOUS_TAG="$(git tag --sort=-version:refname --merged HEAD | grep -Fxv "${TAG}" | head -1 || true)"
+          if [[ -z "${PREVIOUS_TAG}" ]]; then
+            printf '## Initial release\n' > CHANGELOG.md
           else
-            echo "Generating changelog from $PREVIOUS_TAG to ${{ steps.version.outputs.version }}"
-            {
-              echo "## What's Changed in ${{ steps.version.outputs.version }}"
-              echo ""
-              git log ${PREVIOUS_TAG}..${{ steps.version.outputs.version }} --pretty=format:"- %s (%h)" --reverse
-              echo ""
-              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...${{ steps.version.outputs.version }}"
-            } > CHANGELOG.md
+            { printf "## What's Changed in %s\n\n" "${TAG}"; git log "${PREVIOUS_TAG}..HEAD" --pretty=format:'- %s (%h)' --reverse; printf '\n\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' "${GITHUB_REPOSITORY}" "${PREVIOUS_TAG}" "${TAG}"; } > CHANGELOG.md
           fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: CHANGELOG.md
+          if-no-files-found: error
 
-          cat CHANGELOG.md
+  create-draft:
+    name: Create Draft Release
+    runs-on: ubuntu-latest
+    needs: [prepare-release, verify-release-binaries, verify-windows-installer, verify-staging-image, container-vulnerability-scan, generate-sbom]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.tag }}
+          name: Release ${{ needs.prepare-release.outputs.tag }}
+          body_path: CHANGELOG.md
+          draft: true
+          prerelease: ${{ needs.prepare-release.outputs.prerelease == 'true' }}
 
-  create-release:
-    name: Create GitHub Release
+  code-quality:
+    name: Code Quality
     runs-on: ubuntu-latest
     needs: [prepare-release]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+      - uses: actions/setup-go@v5
+        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+      - run: make check-linter
+      - run: make ci-lint
+      - name: Verify formatting and modules
+        run: make format && git diff --exit-code
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.prepare-release.outputs.version }}
-          name: Release ${{ needs.prepare-release.outputs.version }}
-          body_path: CHANGELOG.md
-          draft: false
-          prerelease: ${{ contains(needs.prepare-release.outputs.version, 'rc') || contains(needs.prepare-release.outputs.version, 'beta') || contains(needs.prepare-release.outputs.version, 'alpha') }}
-          generate_release_notes: true
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: [prepare-release]
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+      - uses: actions/setup-go@v5
+        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+      - run: make ci-test
+
+  sqlite-tests:
+    name: SQLite Tests
+    runs-on: ubuntu-latest
+    needs: [prepare-release]
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+      - uses: actions/setup-go@v5
+        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+      - run: make ci-test-sqlite
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [prepare-release]
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+      - uses: actions/setup-go@v5
+        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+      - run: make ci-test-integration
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [prepare-release]
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+      - uses: actions/setup-go@v5
+        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+      - run: make ci-test-e2e
+
+  migration-tests:
+    name: Migration Tests
+    runs-on: ubuntu-latest
+    needs: [prepare-release]
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+      - uses: actions/setup-go@v5
+        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+      - run: make ci-test-migrations
+
+  vulnerability-scan:
+    name: Go Vulnerability Scan
+    runs-on: ubuntu-latest
+    needs: [prepare-release]
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+      - uses: actions/setup-go@v5
+        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...
+
+  release-gates:
+    name: Release Gates
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [code-quality, unit-tests, sqlite-tests, integration-tests, e2e-tests, migration-tests, vulnerability-scan]
+    steps:
+      - name: Require every release gate
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          if [[ "${RESULTS}" == *failure* || "${RESULTS}" == *cancelled* || "${RESULTS}" == *skipped* ]]; then echo "Release gates did not all succeed: ${RESULTS}"; exit 1; fi
 
   build-release-binaries:
-    name: Build Release Binaries
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
     runs-on: ubuntu-latest
-    needs: [prepare-release, create-release]
+    needs: [prepare-release, release-gates]
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: linux
-            goarch: arm
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
-
+          - {goos: linux, goarch: amd64}
+          - {goos: linux, goarch: arm64}
+          - {goos: linux, goarch: arm}
+          - {goos: darwin, goarch: amd64}
+          - {goos: darwin, goarch: arm64}
+          - {goos: windows, goarch: amd64}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Build binary
+      - uses: actions/checkout@v4
+        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+      - uses: actions/setup-go@v5
+        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+      - name: Build and inspect artifact
+        env:
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+          BUILD_DATE: ${{ needs.prepare-release.outputs.build_date }}
+          COMMIT: ${{ needs.prepare-release.outputs.commit }}
+          TARGET_OS: ${{ matrix.goos }}
+          TARGET_ARCH: ${{ matrix.goarch }}
         run: |
+          set -euo pipefail
           mkdir -p dist
-          BINARY_NAME="chronoqueue-${{ needs.prepare-release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}"
-          if [ "${{ matrix.goos }}" == "windows" ]; then
-            BINARY_NAME="${BINARY_NAME}.exe"
-          fi
-
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 \
-            go build -v -trimpath \
-            -ldflags="-s -w -X main.version=${{ needs.prepare-release.outputs.version }} -X main.commit=${{ github.sha }} -X main.buildDate=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-            -o dist/${BINARY_NAME} \
-            .
-
-          # Create checksums
-          cd dist
-          sha256sum ${BINARY_NAME} > ${BINARY_NAME}.sha256
-
-          # Create archive
-          if [ "${{ matrix.goos }}" != "windows" ]; then
-            tar -czf ${BINARY_NAME}.tar.gz ${BINARY_NAME}
-            sha256sum ${BINARY_NAME}.tar.gz > ${BINARY_NAME}.tar.gz.sha256
+          BINARY_NAME="chronoqueue-${TAG}-${TARGET_OS}-${TARGET_ARCH}"; [[ "${TARGET_OS}" == windows ]] && BINARY_NAME="${BINARY_NAME}.exe"
+          LDFLAGS="-s -w -X github.com/adrien19/chronoqueue/pkg/version.Version=${VERSION} -X github.com/adrien19/chronoqueue/pkg/version.GitCommit=${COMMIT} -X github.com/adrien19/chronoqueue/pkg/version.BuildDate=${BUILD_DATE}"
+          GOOS="${TARGET_OS}" GOARCH="${TARGET_ARCH}" CGO_ENABLED=0 go build -trimpath -ldflags="${LDFLAGS}" -o "dist/${BINARY_NAME}" .
+          strings "dist/${BINARY_NAME}" | grep -Fx -- "${VERSION}"
+          strings "dist/${BINARY_NAME}" | grep -Fx -- "${COMMIT}"
+          strings "dist/${BINARY_NAME}" | grep -Fx -- "${BUILD_DATE}"
+          printf 'version=%s\ncommit=%s\nbuild_date=%s\n' "${TAG}" "${COMMIT}" "${BUILD_DATE}" > "dist/${BINARY_NAME}.release"
+          if [[ "${TARGET_OS}" == windows ]]; then
+            (cd dist && zip "${BINARY_NAME}.zip" "${BINARY_NAME}" "${BINARY_NAME}.release" && sha256sum "${BINARY_NAME}.zip" > "${BINARY_NAME}.zip.sha256")
           else
-            # Use zip for Windows (install if not available)
-            if ! command -v zip &> /dev/null; then
-              sudo apt-get update && sudo apt-get install -y zip
-            fi
-            zip ${BINARY_NAME}.zip ${BINARY_NAME}
-            sha256sum ${BINARY_NAME}.zip > ${BINARY_NAME}.zip.sha256
+            tar -C dist -czf "dist/${BINARY_NAME}.tar.gz" "${BINARY_NAME}" "${BINARY_NAME}.release"
+            (cd dist && sha256sum "${BINARY_NAME}.tar.gz" > "${BINARY_NAME}.tar.gz.sha256")
           fi
-
-      - name: Upload Release Assets
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ needs.prepare-release.outputs.version }}
-          files: |
-            ./dist/*.tar.gz
-            ./dist/*.tar.gz.sha256
-            ./dist/*.zip
-            ./dist/*.zip.sha256
+          name: release-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+            dist/*.zip
+            dist/*.zip.sha256
+          if-no-files-found: error
 
-  build-release-docker:
-    name: Build & Push Release Docker Images
+  build-staging-image:
+    name: Build Staging Container
     runs-on: ubuntu-latest
-    needs: [prepare-release, create-release]
-
+    needs: [prepare-release, release-gates]
+    outputs:
+      staging_image: ${{ steps.image.outputs.name }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.DOCKER_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}},value=${{ needs.prepare-release.outputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.prepare-release.outputs.version }}
-            type=semver,pattern={{major}},value=${{ needs.prepare-release.outputs.version }}
-            type=raw,value=latest
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      - uses: actions/checkout@v4
+        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with: {registry: "${{ env.DOCKER_REGISTRY }}", username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+      - id: image
+        run: echo "name=${DOCKER_REGISTRY}/${IMAGE_NAME}:release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
+      - uses: docker/build-push-action@v6
         with:
           context: .
           file: ./images/Dockerfile
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          provenance: false
+          tags: ${{ steps.image.outputs.name }}
+          provenance: true
+          sbom: true
           build-args: |
             VERSION=${{ needs.prepare-release.outputs.version }}
-            GIT_COMMIT=${{ github.sha }}
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            GIT_COMMIT=${{ needs.prepare-release.outputs.commit }}
+            BUILD_DATE=${{ needs.prepare-release.outputs.build_date }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.prepare-release.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.prepare-release.outputs.commit }}
+            org.opencontainers.image.created=${{ needs.prepare-release.outputs.build_date }}
+
+  verify-release-binaries:
+    name: Verify Binaries & Unix Installer
+    runs-on: ubuntu-latest
+    needs: [prepare-release, build-release-binaries]
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+      - uses: actions/download-artifact@v4
+        with: {pattern: "release-*", path: artifacts, merge-multiple: true}
+      - name: Verify every archive
+        env:
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+          BUILD_DATE: ${{ needs.prepare-release.outputs.build_date }}
+          COMMIT: ${{ needs.prepare-release.outputs.commit }}
+        run: |
+          set -euo pipefail
+          find artifacts -name '*.sha256' -print0 | while IFS= read -r -d '' checksum; do (cd "$(dirname "${checksum}")" && sha256sum -c "$(basename "${checksum}")"); done
+          for archive in artifacts/*.tar.gz; do
+            temp_dir="$(mktemp -d)"; tar -xzf "${archive}" -C "${temp_dir}"; metadata="$(find "${temp_dir}" -name '*.release' -type f -print -quit)"
+            grep -Fx "version=${TAG}" "${metadata}"; grep -Fx "commit=${COMMIT}" "${metadata}"; grep -Fx "build_date=${BUILD_DATE}" "${metadata}"; rm -rf "${temp_dir}"
+          done
+          temp_dir="$(mktemp -d)"; tar -xzf "artifacts/chronoqueue-${TAG}-linux-amd64.tar.gz" -C "${temp_dir}"
+          output="$("${temp_dir}/chronoqueue-${TAG}-linux-amd64" --version)"
+          grep -Fq "ChronoQueue v${VERSION}" <<<"${output}"; grep -Fq "Git Commit: ${COMMIT}" <<<"${output}"; grep -Fq "Built:      ${BUILD_DATE}" <<<"${output}"
+      - name: Exercise Unix installer against built release
+        env:
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          release_root="$(mktemp -d)"; install_dir="$(mktemp -d)"; mkdir -p "${release_root}/download/${TAG}"
+          cp "artifacts/chronoqueue-${TAG}-linux-amd64.tar.gz"* "${release_root}/download/${TAG}/"
+          CHRONOQUEUE_RELEASES_URL="file://${release_root}" CHRONOQUEUE_INSTALL_DIR="${install_dir}" bash install/install.sh "${VERSION}"
+          "${install_dir}/chronoqueue" --version
+
+  verify-staging-image:
+    name: Verify Container
+    runs-on: ubuntu-latest
+    needs: [prepare-release, build-staging-image]
+    steps:
+      - uses: docker/login-action@v3
+        with: {registry: "${{ env.DOCKER_REGISTRY }}", username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+      - name: Assert container metadata
+        env:
+          IMAGE: ${{ needs.build-staging-image.outputs.staging_image }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+          BUILD_DATE: ${{ needs.prepare-release.outputs.build_date }}
+          COMMIT: ${{ needs.prepare-release.outputs.commit }}
+        run: |
+          set -euo pipefail
+          docker pull "${IMAGE}"; output="$(docker run --rm "${IMAGE}" --version)"
+          grep -Fq "ChronoQueue v${VERSION}" <<<"${output}"; grep -Fq "Git Commit: ${COMMIT}" <<<"${output}"; grep -Fq "Built:      ${BUILD_DATE}" <<<"${output}"
+
+  container-vulnerability-scan:
+    name: Container Vulnerability Scan
+    runs-on: ubuntu-latest
+    needs: [build-staging-image]
+    steps:
+      - uses: aquasecurity/trivy-action@master
+        with: {image-ref: "${{ needs.build-staging-image.outputs.staging_image }}", format: table, exit-code: "1", severity: "HIGH,CRITICAL", ignore-unfixed: true}
 
   generate-sbom:
     name: Generate SBOM
     runs-on: ubuntu-latest
-    needs: [prepare-release, build-release-docker]
+    needs: [prepare-release, build-staging-image]
     steps:
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - uses: anchore/sbom-action@v0
         with:
-          registry: ${{ env.DOCKER_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Determine image tag
-        id: image-tag
-        run: |
-          # Strip 'v' prefix from version for image tag
-          VERSION="${{ needs.prepare-release.outputs.version }}"
-          IMAGE_TAG="${VERSION#v}"
-          echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
-          echo "Image tag: ${IMAGE_TAG}"
-
-      - name: Wait for image to be available
-        run: |
-          IMAGE_FULL="${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image-tag.outputs.tag }}"
-
-          echo "Waiting for image to be available in registry..."
-          echo "Expected image: ${IMAGE_FULL}"
-
-          # Retry pulling the image with backoff
-          MAX_ATTEMPTS=5
-          ATTEMPT=1
-          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Checking if image is available..."
-
-            if docker pull "${IMAGE_FULL}"; then
-              echo "✅ Image found and pulled successfully!"
-              break
-            fi
-
-            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-              WAIT_TIME=$((10 * ATTEMPT))  # Exponential backoff: 10s, 20s, 30s, 40s, 50s
-              echo "Image not yet available. Waiting ${WAIT_TIME} seconds before retry..."
-              sleep $WAIT_TIME
-            else
-              echo "❌ Image not found after $MAX_ATTEMPTS attempts."
-              exit 1
-            fi
-
-            ATTEMPT=$((ATTEMPT + 1))
-          done
-
-      - name: Generate SBOM for release
-        uses: anchore/sbom-action@v0
-        with:
-          image: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image-tag.outputs.tag }}
+          image: ${{ needs.build-staging-image.outputs.staging_image }}
           format: spdx-json
-          output-file: sbom-${{ needs.prepare-release.outputs.version }}.spdx.json
-          registry-username: ${{ github.actor }}
-          registry-password: ${{ secrets.GITHUB_TOKEN }}
-          upload-artifact: true
-          upload-release-assets: false
+          output-file: sbom-${{ needs.prepare-release.outputs.tag }}.spdx.json
+          upload-artifact: false
+      - uses: actions/upload-artifact@v4
+        with: {name: release-sbom, path: "sbom-${{ needs.prepare-release.outputs.tag }}.spdx.json", if-no-files-found: error}
 
-      - name: Upload SBOM as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom
-          path: sbom-${{ needs.prepare-release.outputs.version }}.spdx.json
-          retention-days: 90
-
-      - name: Upload SBOM to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.prepare-release.outputs.version }}
-          files: sbom-${{ needs.prepare-release.outputs.version }}.spdx.json
-
-  release-verification:
-    name: Verify Release
-    runs-on: ubuntu-latest
-    needs:
-      [
-        prepare-release,
-        build-release-binaries,
-        build-release-docker,
-        generate-sbom,
-      ]
+  verify-windows-installer:
+    name: Verify Windows Installer
+    runs-on: windows-latest
+    needs: [prepare-release, build-release-binaries]
     steps:
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.DOCKER_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify Docker image
+      - uses: actions/checkout@v4
+        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+      - uses: actions/download-artifact@v4
+        with: {name: release-windows-amd64, path: artifacts}
+      - name: Serve artifact and run installer
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
         run: |
-          # Strip 'v' prefix from version for image tag
-          VERSION="${{ needs.prepare-release.outputs.version }}"
-          IMAGE_TAG="${VERSION#v}"
+          $releaseRoot = Join-Path $env:RUNNER_TEMP "chronoqueue-release"
+          $downloadDir = Join-Path $releaseRoot "download/$env:TAG"
+          $installDir = Join-Path $env:RUNNER_TEMP "chronoqueue-install"
+          New-Item -ItemType Directory -Force -Path $downloadDir | Out-Null
+          Copy-Item "artifacts/*" $downloadDir
+          $server = Start-Process python -ArgumentList "-m", "http.server", "8765", "--directory", $releaseRoot -PassThru
+          try {
+            Start-Sleep -Seconds 1
+            $env:CHRONOQUEUE_RELEASES_URL = "http://127.0.0.1:8765"
+            & ./install/install.ps1 -Version $env:VERSION -InstallDir $installDir
+            & (Join-Path $installDir "chronoqueue.exe") --version
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally { Stop-Process -Id $server.Id -Force }
 
-          docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}
-          docker images | grep chronoqueue
-
-      - name: Test Docker image
+  publish-release:
+    name: Publish Verified Release
+    runs-on: ubuntu-latest
+    needs: [prepare-release, create-draft, build-staging-image, verify-release-binaries, verify-windows-installer, verify-staging-image, container-vulnerability-scan, generate-sbom]
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {pattern: "release-*", path: release-assets, merge-multiple: true}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with: {registry: "${{ env.DOCKER_REGISTRY }}", username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+      - name: Promote tested container manifest
+        env:
+          STAGING_IMAGE: ${{ needs.build-staging-image.outputs.staging_image }}
+          IMAGE_TAG: ${{ needs.prepare-release.outputs.image_tag }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+          PRERELEASE: ${{ needs.prepare-release.outputs.prerelease }}
         run: |
-          # Strip 'v' prefix from version for image tag
-          VERSION="${{ needs.prepare-release.outputs.version }}"
-          IMAGE_TAG="${VERSION#v}"
-
-          docker run --rm ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG} --version || true
-
-      - name: Release Summary
+          set -euo pipefail
+          IMAGE="${DOCKER_REGISTRY}/${IMAGE_NAME}"; docker buildx imagetools create --tag "${IMAGE}:${IMAGE_TAG}" "${STAGING_IMAGE}"
+          if [[ "${PRERELEASE}" == false && "${VERSION}" != *+* ]]; then IFS=. read -r major minor patch <<<"${VERSION}"; docker buildx imagetools create --tag "${IMAGE}:${major}.${minor}" --tag "${IMAGE}:${major}" --tag "${IMAGE}:latest" "${STAGING_IMAGE}"; fi
+      - name: Upload assets and publish draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+          PRERELEASE: ${{ needs.prepare-release.outputs.prerelease }}
         run: |
-          # Strip 'v' prefix from version for image tag
-          VERSION="${{ needs.prepare-release.outputs.version }}"
-          IMAGE_TAG="${VERSION#v}"
-
-          echo "## Release ${{ needs.prepare-release.outputs.version }} Published! 🚀" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Docker Images" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Binaries" >> $GITHUB_STEP_SUMMARY
-          echo "Available for:" >> $GITHUB_STEP_SUMMARY
-          echo "- Linux (amd64, arm64, arm)" >> $GITHUB_STEP_SUMMARY
-          echo "- macOS (amd64, arm64)" >> $GITHUB_STEP_SUMMARY
-          echo "- Windows (amd64)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📦 View release: https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          set -euo pipefail
+          mapfile -t assets < <(find release-assets -type f \( -name '*.tar.gz' -o -name '*.sha256' -o -name '*.zip' -o -name '*.spdx.json' \) -print)
+          gh release upload "${TAG}" "${assets[@]}" --clobber
+          if [[ "${PRERELEASE}" == true ]]; then gh release edit "${TAG}" --draft=false --prerelease; else gh release edit "${TAG}" --draft=false --prerelease=false; fi
+      - name: Release summary
+        env:
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+          IMAGE_TAG: ${{ needs.prepare-release.outputs.image_tag }}
+          PRERELEASE: ${{ needs.prepare-release.outputs.prerelease }}
+        run: |
+          echo "## Release ${TAG} published" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- Container: \`${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}\`" >> "${GITHUB_STEP_SUMMARY}"
+          if [[ "${PRERELEASE}" == false ]]; then echo '- Stable aliases, including `latest`, were promoted.' >> "${GITHUB_STEP_SUMMARY}"; else echo '- Prerelease: stable aliases and `latest` were not changed.' >> "${GITHUB_STEP_SUMMARY}"; fi
