@@ -21,7 +21,7 @@ func NewVaultAdapter() *VaultAdapter {
 	}
 }
 
-func (v *VaultAdapter) FetchKey() ([]byte, error) {
+func (v *VaultAdapter) FetchKeys() (*KeySet, error) {
 	config := vaultapi.DefaultConfig()
 	config.Address = v.vaultEndpoint
 
@@ -60,12 +60,43 @@ func (v *VaultAdapter) FetchKey() ([]byte, error) {
 		return nil, errors.New("no secret data returned")
 	}
 
-	key, ok := secret.Data["key"].(string)
+	return vaultKeySet(secret.Data)
+}
+
+func vaultKeySet(data map[string]interface{}) (*KeySet, error) {
+	if nested, ok := data["data"].(map[string]interface{}); ok {
+		data = nested
+	}
+
+	key, ok := data["key"].(string)
 	if !ok {
 		return nil, errors.New("encryption key is not present or not a string")
 	}
 
-	return []byte(key), nil
+	keySet := &KeySet{CurrentKey: []byte(key)}
+	previousKeys, exists := data["previous_keys"]
+	if !exists {
+		return keySet, nil
+	}
+
+	switch values := previousKeys.(type) {
+	case []interface{}:
+		for _, value := range values {
+			previousKey, ok := value.(string)
+			if !ok {
+				return nil, errors.New("previous encryption key is not a string")
+			}
+			keySet.HistoricalKeys = append(keySet.HistoricalKeys, []byte(previousKey))
+		}
+	case []string:
+		for _, previousKey := range values {
+			keySet.HistoricalKeys = append(keySet.HistoricalKeys, []byte(previousKey))
+		}
+	default:
+		return nil, errors.New("previous encryption keys are not an array")
+	}
+
+	return keySet, nil
 }
 
 // Environment Variables:

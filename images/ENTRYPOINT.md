@@ -87,6 +87,9 @@ The `entrypoint.sh` script provides a flexible way to start the ChronoQueue serv
 | ---------- | ------------- | --------- |
 | `ENABLE_ENCRYPTION` | Encrypt message and schedule payloads | `false` in development; `true` in production |
 | `ENCRYPTION_KEY_SOURCE_TYPE` | Encryption key source | _(required when encryption is enabled)_ |
+| `ENCRYPTION_KEY` | Active key for the `LOCAL` source | _(required for `LOCAL`)_ |
+| `ENCRYPTION_PREVIOUS_KEYS` | JSON array of historical `LOCAL` keys retained for reads | `[]` |
+| `KEY_REFRESH_DURATION_IN_MINUTES` | Provider key-set refresh interval | `60` |
 | `ALLOW_LOCAL_ENCRYPTION_KEY_IN_PRODUCTION` | Explicitly allow an environment-based local key in production | `false` |
 | `RATE_LIMIT_ENABLED` | Enable per-principal request limiting | `false` in development; `true` in production |
 | `RATE_LIMIT_REQUESTS_PER_SECOND` | Sustained requests per second per principal | `100` |
@@ -188,6 +191,8 @@ docker run -d \
 ```
 
 Create `/path/to/vault-token.env` with a single `VAULT_TOKEN=...` entry and restrict it to the deployment account. Docker reads the credential from that protected file, so the token is not included in the command line. The PostgreSQL root CA must validate the server certificate, whose DNS names must include the configured `POSTGRES_HOST` (`postgres-prod` above).
+
+Before changing an encryption key, follow the [rotation and rollback procedure](../ENCRYPTION_KEY_ROTATION.md). Vault key sets contain the active `key` and a `previous_keys` array; removing a key while stored payloads still reference it makes those payloads unreadable.
 
 ### Docker Compose
 

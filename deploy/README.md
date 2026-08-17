@@ -250,6 +250,9 @@ Common across all storage backends:
 | `LOG_LEVEL` | `debug` | Log level (debug/info/warn/error) |
 | `LOG_FORMAT` | `text` | Log format (text/json) |
 | `ENABLE_ENCRYPTION` | `true` | Enable message encryption |
+| `ENCRYPTION_KEY_SOURCE_TYPE` | `LOCAL` in the example Compose files | Encryption key provider (`LOCAL` or `VAULT`) |
+| `ENCRYPTION_PREVIOUS_KEYS` | `[]` | JSON array of historical keys for the `LOCAL` provider |
+| `KEY_REFRESH_DURATION_IN_MINUTES` | `60` | Encryption key-set refresh interval |
 | `CHRONOQUEUE_TLS_ENABLED` | `false` in development; `true` in production | Enable TLS for gRPC and HTTP |
 | `METRICS_AUTH_ENABLED` | `false` in development; `true` in production | Require a dedicated metrics bearer token |
 | `METRICS_BEARER_TOKEN` | _(empty)_ | Metrics bearer token; required with production metrics |
@@ -504,7 +507,7 @@ make deploy-all STORAGE=postgres
    | `METRICS_BEARER_TOKEN` | `metrics_bearer_token` |
    | `CHRONOQUEUE_UI_AUTH_USERNAME`, `CHRONOQUEUE_UI_AUTH_PASSWORD` | `ui_auth_username`, `ui_auth_password` |
    | `API_KEYS`, client `CHRONOQUEUE_API_KEY` | `server_api_keys`, per-client API-key secret |
-   | `ENCRYPTION_KEY` or Vault credentials (`VAULT_TOKEN`/AppRole secret ID) | `encryption_key` or external Vault identity secret |
+   | `ENCRYPTION_KEY`, `ENCRYPTION_PREVIOUS_KEYS`, or Vault credentials (`VAULT_TOKEN`/AppRole secret ID) | active/historical encryption keys or external Vault identity secret; see the [rotation procedure](../ENCRYPTION_KEY_ROTATION.md) |
    | `CERT_FILE`, `KEY_FILE`, `CA_CERT_FILE` | read-only server TLS certificate, key, and CA files |
    | `CHRONOQUEUE_UI_TLS_CERT_FILE`, `CHRONOQUEUE_UI_TLS_KEY_FILE` | read-only UI TLS certificate and key files |
    | `GATEWAY_CLIENT_CERT_FILE`, `GATEWAY_CLIENT_KEY_FILE` | read-only gateway mTLS certificate and key files |

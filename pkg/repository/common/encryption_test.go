@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -42,6 +43,7 @@ func TestEncryptDecryptMessagePayload_RoundTrip(t *testing.T) {
 	assert.Nil(t, encrypted.Metadata.Payload.GetData())
 	assert.Contains(t, encrypted.Metadata.Payload.GetMetadata(), "encryptedPayload")
 	assert.Contains(t, encrypted.Metadata.Payload.GetMetadata(), "nonce")
+	assert.Contains(t, encrypted.Metadata.Payload.GetMetadata(), "encryptionKeyId")
 
 	require.NoError(t, DecryptMessagePayload(encrypted, keyManager))
 
@@ -51,6 +53,62 @@ func TestEncryptDecryptMessagePayload_RoundTrip(t *testing.T) {
 	assert.Equal(t, "demo-task", decryptedPayload.Metadata["task"].GetStringValue())
 	require.NotNil(t, decryptedPayload.Data)
 	assert.Equal(t, "order-456", decryptedPayload.Data.Fields["order_id"].GetStringValue())
+}
+
+func TestEncryptDecryptMessagePayload_AcrossKeyRotation(t *testing.T) {
+	oldManager := newTestKeyManagerWithKeys(t, "0123456789abcdef", nil)
+	oldMessage := &messagepb.Message{
+		MessageId: "before-rotation",
+		Metadata: &messagepb.Message_Metadata{
+			Payload: buildTestPayload(t, "old-key", "demo-task"),
+		},
+	}
+	require.NoError(t, EncryptMessagePayload(oldMessage, oldManager))
+	oldKeyID := oldMessage.GetMetadata().GetPayload().GetMetadata()["encryptionKeyId"].GetStringValue()
+	require.NotEmpty(t, oldKeyID)
+
+	newManager := newTestKeyManagerWithKeys(t, "abcdef0123456789", []string{"0123456789abcdef"})
+	require.NoError(t, DecryptMessagePayload(oldMessage, newManager))
+	assert.Equal(t, "old-key", oldMessage.GetMetadata().GetPayload().GetMetadata()["user_id"].GetStringValue())
+
+	newMessage := &messagepb.Message{
+		MessageId: "after-rotation",
+		Metadata: &messagepb.Message_Metadata{
+			Payload: buildTestPayload(t, "new-key", "demo-task"),
+		},
+	}
+	require.NoError(t, EncryptMessagePayload(newMessage, newManager))
+	newKeyID := newMessage.GetMetadata().GetPayload().GetMetadata()["encryptionKeyId"].GetStringValue()
+	assert.NotEqual(t, oldKeyID, newKeyID)
+	require.NoError(t, DecryptMessagePayload(newMessage, oldManager))
+	assert.Equal(t, "new-key", newMessage.GetMetadata().GetPayload().GetMetadata()["user_id"].GetStringValue())
+}
+
+func TestDecryptMessagePayload_LegacyEnvelopeUsesHistoricalKeys(t *testing.T) {
+	oldManager := newTestKeyManagerWithKeys(t, "0123456789abcdef", nil)
+	message := &messagepb.Message{
+		Metadata: &messagepb.Message_Metadata{Payload: buildTestPayload(t, "legacy", "demo-task")},
+	}
+	require.NoError(t, EncryptMessagePayload(message, oldManager))
+	delete(message.GetMetadata().GetPayload().GetMetadata(), "encryptionKeyId")
+
+	newManager := newTestKeyManagerWithKeys(t, "abcdef0123456789", []string{"0123456789abcdef"})
+	require.NoError(t, DecryptMessagePayload(message, newManager))
+	assert.Equal(t, "legacy", message.GetMetadata().GetPayload().GetMetadata()["user_id"].GetStringValue())
+}
+
+func TestDecryptMessagePayload_ReportsMissingHistoricalKey(t *testing.T) {
+	oldManager := newTestKeyManagerWithKeys(t, "0123456789abcdef", nil)
+	message := &messagepb.Message{
+		Metadata: &messagepb.Message_Metadata{Payload: buildTestPayload(t, "missing", "demo-task")},
+	}
+	require.NoError(t, EncryptMessagePayload(message, oldManager))
+	keyID := message.GetMetadata().GetPayload().GetMetadata()["encryptionKeyId"].GetStringValue()
+
+	newManager := newTestKeyManagerWithKeys(t, "abcdef0123456789", nil)
+	err := DecryptMessagePayload(message, newManager)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), keyID)
 }
 
 func TestEncryptMessagePayload_KeyManagerDisabled(t *testing.T) {
@@ -92,7 +150,7 @@ func TestDecryptMessagePayload_Unencrypted_NoChange(t *testing.T) {
 }
 
 func TestEncryptDecryptSchedulePayload_RoundTrip(t *testing.T) {
-	keyManager := newTestKeyManager(t)
+	keyManager := newTestKeyManagerWithKeys(t, "0123456789abcdef", nil)
 
 	schedule := &schedulepb.Schedule{
 		ScheduleId: "sched-enc-1",
@@ -106,6 +164,7 @@ func TestEncryptDecryptSchedulePayload_RoundTrip(t *testing.T) {
 	assert.Contains(t, schedule.Metadata.Payload.GetMetadata(), "encryptedPayload")
 	assert.Nil(t, schedule.Metadata.Payload.GetData())
 
+	keyManager = newTestKeyManagerWithKeys(t, "abcdef0123456789", []string{"0123456789abcdef"})
 	require.NoError(t, DecryptSchedulePayload(schedule, keyManager))
 	payload := schedule.GetMetadata().GetPayload()
 	require.NotNil(t, payload)
@@ -116,10 +175,22 @@ func TestEncryptDecryptSchedulePayload_RoundTrip(t *testing.T) {
 
 func newTestKeyManager(t *testing.T) *keymanager.EncryptionKeyManager {
 	t.Helper()
+	return newTestKeyManagerWithKeys(t, "0123456789abcdef", nil)
+}
+
+func newTestKeyManagerWithKeys(t *testing.T, current string, previous []string) *keymanager.EncryptionKeyManager {
+	t.Helper()
 
 	t.Setenv("ENABLE_ENCRYPTION", "true")
 	t.Setenv("ENCRYPTION_KEY_SOURCE_TYPE", "LOCAL")
-	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef")
+	t.Setenv("ENCRYPTION_KEY", current)
+	if previous == nil {
+		t.Setenv("ENCRYPTION_PREVIOUS_KEYS", "")
+	} else {
+		previousJSON, err := json.Marshal(previous)
+		require.NoError(t, err)
+		t.Setenv("ENCRYPTION_PREVIOUS_KEYS", string(previousJSON))
+	}
 	t.Setenv("KEY_REFRESH_DURATION_IN_MINUTES", "60")
 
 	logger := log.NewLogger()
