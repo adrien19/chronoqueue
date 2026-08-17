@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
+	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
 )
 
 // This file implements the ReclaimableBackend interface from pkg/repository/sql/background.
@@ -19,7 +20,7 @@ import (
 func (s *Storage) FindExpiredMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error) {
 	nowMs := s.Clock.NowMs()
 	query := s.ph(`
-        SELECT metadata_pb
+		SELECT metadata_pb, state, attempts_left, max_attempts, current_attempt_id
         FROM cq_messages
 				WHERE queue_name = ? AND state = ?
 					AND (
@@ -39,7 +40,11 @@ func (s *Storage) FindExpiredMessages(ctx context.Context, queueName string, lim
 	var messages []*messagepb.Message
 	for rows.Next() {
 		var messageBytes []byte
-		if err := rows.Scan(&messageBytes); err != nil {
+		var state messagepb.Message_Metadata_State
+		var attemptsLeft int32
+		var maxAttempts int32
+		var currentAttemptID sql.NullString
+		if err := rows.Scan(&messageBytes, &state, &attemptsLeft, &maxAttempts, &currentAttemptID); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 
@@ -47,6 +52,15 @@ func (s *Storage) FindExpiredMessages(ctx context.Context, queueName string, lim
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal message: %w", err)
 		}
+		repositorycommon.ApplyRuntimeMetadata(msg, repositorycommon.RuntimeMetadata{
+			State:               state,
+			AttemptsLeft:        attemptsLeft,
+			HasAttemptsLeft:     true,
+			MaxAttempts:         maxAttempts,
+			HasMaxAttempts:      true,
+			CurrentAttemptID:    currentAttemptID.String,
+			HasCurrentAttemptID: currentAttemptID.Valid,
+		})
 
 		messages = append(messages, msg)
 	}
@@ -57,17 +71,13 @@ func (s *Storage) FindExpiredMessages(ctx context.Context, queueName string, lim
 // ReclaimExpiredMessage moves an expired message back to pending or DLQ.
 // Implements: ReclaimableBackend.ReclaimExpiredMessage
 func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, message *messagepb.Message) error {
-	return s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
-		newState := messagepb.Message_Metadata_PENDING
-		newAttemptsLeft := message.GetMetadata().GetAttemptsLeft() - 1
-		if newAttemptsLeft <= 0 {
-			newState = messagepb.Message_Metadata_ERRORED
-		}
-
+	var newState messagepb.Message_Metadata_State
+	var newAttemptsLeft int32
+	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		updateQuery := s.ph(`
             UPDATE cq_messages
-            SET state = ?,
-                attempts_left = ?,
+            SET state = CASE WHEN max_attempts = -1 OR attempts_left > 1 THEN ?::integer ELSE ?::integer END,
+                attempts_left = CASE WHEN max_attempts = -1 THEN -1 ELSE attempts_left - 1 END,
                 current_attempt_id = NULL,
                 current_worker_id = NULL,
                 lease_started_at = NULL,
@@ -77,13 +87,45 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
                 last_heartbeat_at = NULL,
                 heartbeat_expiry = NULL,
                 updated_at = ?
-            WHERE message_id = ?
+			WHERE queue_name = ?
+			  AND message_id = ?
+			  AND state = ?
+			  AND current_attempt_id = ?
+			  AND (
+				lease_expiry <= ?
+				OR (heartbeat_expiry IS NOT NULL AND heartbeat_expiry > 0 AND heartbeat_expiry <= ?)
+			  )
+			  AND deleted_at IS NULL
+			RETURNING state, attempts_left
         `)
-		_, err := tx.ExecContext(ctx, updateQuery, newState, newAttemptsLeft, s.nowMs(), message.GetMessageId())
+		nowMs := s.nowMs()
+		err := tx.QueryRowContext(
+			ctx,
+			updateQuery,
+			messagepb.Message_Metadata_PENDING,
+			messagepb.Message_Metadata_ERRORED,
+			nowMs,
+			queueName,
+			message.GetMessageId(),
+			messagepb.Message_Metadata_RUNNING,
+			message.GetMetadata().GetCurrentAttempt().GetAttemptId(),
+			nowMs,
+			nowMs,
+		).Scan(&newState, &newAttemptsLeft)
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("message is no longer expired")
+		}
 		if err != nil {
 			return fmt.Errorf("update message: %w", err)
 		}
 
-		return s.StateManager.UpdateCounters(ctx, tx, queueName, message.GetMetadata().GetState(), newState)
+		return s.StateManager.UpdateCounters(ctx, tx, queueName, messagepb.Message_Metadata_RUNNING, newState)
 	})
+	if err != nil {
+		return err
+	}
+
+	message.Metadata.State = newState
+	message.Metadata.AttemptsLeft = newAttemptsLeft
+	return nil
 }

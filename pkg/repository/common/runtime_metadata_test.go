@@ -22,6 +22,10 @@ func TestApplyRuntimeMetadata_UpdatesStateAndAttemptRuntime(t *testing.T) {
 
 	ApplyRuntimeMetadata(msg, RuntimeMetadata{
 		State:                   messagepb.Message_Metadata_RUNNING,
+		AttemptsLeft:            2,
+		HasAttemptsLeft:         true,
+		MaxAttempts:             4,
+		HasMaxAttempts:          true,
 		CurrentAttemptID:        "attempt-1",
 		HasCurrentAttemptID:     true,
 		CurrentWorkerID:         "worker-A",
@@ -42,6 +46,12 @@ func TestApplyRuntimeMetadata_UpdatesStateAndAttemptRuntime(t *testing.T) {
 
 	if got := msg.GetMetadata().GetState(); got != messagepb.Message_Metadata_RUNNING {
 		t.Fatalf("expected state RUNNING, got %v", got)
+	}
+	if got := msg.GetMetadata().GetAttemptsLeft(); got != 2 {
+		t.Fatalf("expected 2 attempts left, got %d", got)
+	}
+	if got := msg.GetMetadata().GetMaxAttempts(); got != 4 {
+		t.Fatalf("expected 4 max attempts, got %d", got)
 	}
 
 	attempt := msg.GetMetadata().GetCurrentAttempt()

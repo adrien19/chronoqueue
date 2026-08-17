@@ -254,7 +254,7 @@ func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId s
 		ph5 := s.Dialect.Placeholder(5)
 
 		strictQuery := fmt.Sprintf(`
-            SELECT id, message_id, metadata_pb, state
+			SELECT id, message_id, metadata_pb, state, attempts_left
             FROM cq_messages
             WHERE queue_name = %s AND state = %s AND (scheduled_at IS NULL OR scheduled_at <= %s)
               AND deleted_at IS NULL
@@ -264,7 +264,7 @@ func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId s
         `, ph1, ph2, ph3)
 
 		weightedQuery := fmt.Sprintf(`
-            SELECT id, message_id, metadata_pb, state
+			SELECT id, message_id, metadata_pb, state, attempts_left
             FROM cq_messages
             WHERE queue_name = %s AND state = %s AND (scheduled_at IS NULL OR scheduled_at <= %s)
               AND priority BETWEEN %s AND %s
@@ -279,6 +279,7 @@ func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId s
 		var messageId string
 		var messageBytes []byte
 		var oldState messagepb.Message_Metadata_State
+		var attemptsLeft int32
 
 		query := strictQuery
 		args := []interface{}{queueName, messagepb.Message_Metadata_PENDING, nowMs}
@@ -289,11 +290,11 @@ func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId s
 			args = append(args, minPriority, maxPriority)
 		}
 
-		err := tx.QueryRowContext(ctx, query, args...).Scan(&id, &messageId, &messageBytes, &oldState)
+		err := tx.QueryRowContext(ctx, query, args...).Scan(&id, &messageId, &messageBytes, &oldState, &attemptsLeft)
 		if err == sql.ErrNoRows && useWeighted {
 			query = strictQuery
 			args = args[:3]
-			err = tx.QueryRowContext(ctx, query, args...).Scan(&id, &messageId, &messageBytes, &oldState)
+			err = tx.QueryRowContext(ctx, query, args...).Scan(&id, &messageId, &messageBytes, &oldState, &attemptsLeft)
 		}
 		if err == sql.ErrNoRows {
 			return nil
@@ -351,6 +352,7 @@ func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId s
 			msg.Metadata = &messagepb.Message_Metadata{}
 		}
 		msg.Metadata.State = messagepb.Message_Metadata_RUNNING
+		msg.Metadata.AttemptsLeft = attemptsLeft
 		if msg.Metadata.CurrentAttempt == nil {
 			msg.Metadata.CurrentAttempt = &messagepb.Message_Metadata_AttemptRuntime{}
 		}
@@ -849,6 +851,8 @@ func (s *Storage) PeekMessages(ctx context.Context, queueName string, limit int3
 	query := s.ph(`
 	SELECT metadata_pb,
 	       state,
+	       attempts_left,
+	       max_attempts,
 	       current_attempt_id,
 	       current_worker_id,
 	       lease_started_at,
@@ -874,6 +878,8 @@ func (s *Storage) PeekMessages(ctx context.Context, queueName string, limit int3
 	for rows.Next() {
 		var messageBytes []byte
 		var stateInt int32
+		var attemptsLeft int32
+		var maxAttempts int32
 		var currentAttemptID sql.NullString
 		var currentWorkerID sql.NullString
 		var leaseStartedAt sql.NullInt64
@@ -886,6 +892,8 @@ func (s *Storage) PeekMessages(ctx context.Context, queueName string, limit int3
 		if err := rows.Scan(
 			&messageBytes,
 			&stateInt,
+			&attemptsLeft,
+			&maxAttempts,
 			&currentAttemptID,
 			&currentWorkerID,
 			&leaseStartedAt,
@@ -909,6 +917,10 @@ func (s *Storage) PeekMessages(ctx context.Context, queueName string, limit int3
 
 		repositorycommon.ApplyRuntimeMetadata(msg, repositorycommon.RuntimeMetadata{
 			State:                   messagepb.Message_Metadata_State(stateInt),
+			AttemptsLeft:            attemptsLeft,
+			HasAttemptsLeft:         true,
+			MaxAttempts:             maxAttempts,
+			HasMaxAttempts:          true,
 			CurrentAttemptID:        currentAttemptID.String,
 			HasCurrentAttemptID:     currentAttemptID.Valid,
 			CurrentWorkerID:         currentWorkerID.String,
