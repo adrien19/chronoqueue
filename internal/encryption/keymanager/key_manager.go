@@ -1,7 +1,10 @@
 package keymanager
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"sync"
@@ -14,7 +17,7 @@ import (
 const defaultRefreshDuration = 1 * time.Hour
 
 type KeyAdapter interface {
-	FetchKey() ([]byte, error)
+	FetchKeys() (*adapters.KeySet, error)
 }
 
 type Config struct {
@@ -26,9 +29,11 @@ type EncryptionKeyManager struct {
 	Enabled      bool
 	adapter      KeyAdapter
 	refreshDelay time.Duration
+	refreshMu    sync.Mutex
 	cache        struct {
 		sync.RWMutex
-		key []byte
+		currentID string
+		keys      map[string][]byte
 	}
 	logger *log.Logger
 }
@@ -51,7 +56,8 @@ func NewEncryptionKeyManagerWithConfig(logger *log.Logger, config Config) (*Encr
 			refreshDelay: 0,
 			cache: struct {
 				sync.RWMutex
-				key []byte
+				currentID string
+				keys      map[string][]byte
 			}{},
 			logger: nil,
 		}, nil
@@ -106,27 +112,96 @@ func NewEncryptionKeyManagerWithConfig(logger *log.Logger, config Config) (*Encr
 }
 
 func (m *EncryptionKeyManager) GetEncryptionKey() ([]byte, error) {
+	_, key, err := m.GetCurrentEncryptionKey()
+	return key, err
+}
+
+func (m *EncryptionKeyManager) GetCurrentEncryptionKey() (string, []byte, error) {
 	m.cache.RLock()
 	defer m.cache.RUnlock()
 
-	return m.cache.key, nil
+	key, ok := m.cache.keys[m.cache.currentID]
+	if !ok {
+		return "", nil, errors.New("current encryption key is not available")
+	}
+	return m.cache.currentID, append([]byte(nil), key...), nil
+}
+
+func (m *EncryptionKeyManager) GetDecryptionKeys(keyID string) ([][]byte, error) {
+	keys := m.cachedDecryptionKeys(keyID)
+	if len(keys) > 0 || keyID == "" {
+		return keys, nil
+	}
+
+	if err := m.refreshKey(); err != nil {
+		return nil, fmt.Errorf("refresh encryption keys: %w", err)
+	}
+	keys = m.cachedDecryptionKeys(keyID)
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("encryption key %q is not available", keyID)
+	}
+	return keys, nil
+}
+
+func (m *EncryptionKeyManager) cachedDecryptionKeys(keyID string) [][]byte {
+	m.cache.RLock()
+	defer m.cache.RUnlock()
+
+	if keyID != "" {
+		key, ok := m.cache.keys[keyID]
+		if !ok {
+			return nil
+		}
+		return [][]byte{append([]byte(nil), key...)}
+	}
+
+	keys := make([][]byte, 0, len(m.cache.keys))
+	if current, ok := m.cache.keys[m.cache.currentID]; ok {
+		keys = append(keys, append([]byte(nil), current...))
+	}
+	for id, key := range m.cache.keys {
+		if id != m.cache.currentID {
+			keys = append(keys, append([]byte(nil), key...))
+		}
+	}
+	return keys
 }
 
 func (m *EncryptionKeyManager) refreshKey() error {
-	key, err := m.adapter.FetchKey()
+	m.refreshMu.Lock()
+	defer m.refreshMu.Unlock()
+
+	keySet, err := m.adapter.FetchKeys()
 	if err != nil {
 		return err
 	}
-	keySize := len(key)
-	if keySize != 16 && keySize != 24 && keySize != 32 {
-		m.logger.FatalWithFields("Invalid encryption key size", "bytes", keySize)
+	if keySet == nil {
+		return errors.New("encryption key source returned no key set")
 	}
 
+	keys := make(map[string][]byte, len(keySet.HistoricalKeys)+1)
+	allKeys := append([][]byte{keySet.CurrentKey}, keySet.HistoricalKeys...)
+	for _, key := range allKeys {
+		keySize := len(key)
+		if keySize != 16 && keySize != 24 && keySize != 32 {
+			return fmt.Errorf("invalid encryption key size: %d bytes", keySize)
+		}
+		id := encryptionKeyID(key)
+		keys[id] = append([]byte(nil), key...)
+	}
+	currentID := encryptionKeyID(keySet.CurrentKey)
+
 	m.cache.Lock()
-	m.cache.key = key
+	m.cache.currentID = currentID
+	m.cache.keys = keys
 	m.cache.Unlock()
 
 	return nil
+}
+
+func encryptionKeyID(key []byte) string {
+	sum := sha256.Sum256(key)
+	return hex.EncodeToString(sum[:])
 }
 
 func (m *EncryptionKeyManager) keyRefresher() {

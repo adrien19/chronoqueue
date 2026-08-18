@@ -14,6 +14,11 @@ import (
 type RuntimeMetadata struct {
 	State messagepb.Message_Metadata_State
 
+	AttemptsLeft    int32
+	HasAttemptsLeft bool
+	MaxAttempts     int32
+	HasMaxAttempts  bool
+
 	CurrentAttemptID    string
 	HasCurrentAttemptID bool
 	CurrentWorkerID     string
@@ -47,6 +52,12 @@ func ApplyRuntimeMetadata(msg *messagepb.Message, runtime RuntimeMetadata) {
 	}
 
 	msg.Metadata.State = runtime.State
+	if runtime.HasAttemptsLeft {
+		msg.Metadata.AttemptsLeft = runtime.AttemptsLeft
+	}
+	if runtime.HasMaxAttempts {
+		msg.Metadata.MaxAttempts = runtime.MaxAttempts
+	}
 
 	if runtime.HasLeaseExpiryMs {
 		msg.Metadata.LeaseExpiry = runtime.LeaseExpiryMs

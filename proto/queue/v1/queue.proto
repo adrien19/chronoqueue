@@ -19,8 +19,8 @@ option go_package = "github.com/adrien19/chronoqueue/api/queue/v1;queue";
 // - EXCLUSIVE: Single-consumer queues for ordered processing or exclusive access.
 enum QueueType {
   SIMPLE    = 0; // Multiple workers can consume messages concurrently (default)
-  EXCLUSIVE = 1; // Only one worker can consume from this queue at a time
-                    // Use for: ordered processing, singleton workers, exclusive locks
+  EXCLUSIVE = 1; // Only one message can hold a RUNNING lease in this queue at a time.
+                    // Claims require the queue's configured exclusivity key.
 }
 
 // QueueMetadata defines the configuration and behavior of a queue.
@@ -50,7 +50,7 @@ message QueueMetadata {
 
     // type: Determines message consumption pattern.
     // SIMPLE: Multiple workers process concurrently (most common).
-    // EXCLUSIVE: Single worker processes sequentially (ensures order).
+    // EXCLUSIVE: One RUNNING lease at a time; claims require exclusivity_key.
   QueueType type = 1;
 
     // default_max_attempts: Default retry count for messages without explicit max_attempts.
@@ -66,10 +66,10 @@ message QueueMetadata {
     // Balance between: too short = unnecessary retries, too long = slow failure detection.
   google.protobuf.Duration lease_duration = 3;
 
-    // exclusivity_key: For EXCLUSIVE queues, this key ensures single-consumer access.
-    // Only one worker with a matching exclusivity key can consume from this queue.
-    // Leave empty for non-exclusive queues.
-    // Use cases: ordered processing, singleton workers, distributed locks.
+    // exclusivity_key: Required for EXCLUSIVE queues and for every claim against them.
+    // While an exclusive message is RUNNING, other claims return no message. A new
+    // claim can succeed after ACK/NACK or after an expired lease is reclaimed.
+    // Leave empty for non-exclusive queues. This key is not an authentication secret.
   string exclusivity_key = 4;
 
     // dead_letter_queue_name: Name of the DLQ for messages that exhaust retries.

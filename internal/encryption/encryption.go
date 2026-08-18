@@ -12,26 +12,26 @@ import (
 )
 
 // Encryption utility function
-func EncryptPayload(payload []byte, keyManager *keymanager.EncryptionKeyManager) (string, string, error) {
-	encryptionKey, err := keyManager.GetEncryptionKey()
+func EncryptPayload(payload []byte, keyManager *keymanager.EncryptionKeyManager) (string, string, string, error) {
+	keyID, encryptionKey, err := keyManager.GetCurrentEncryptionKey()
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	block, err := aes.NewCipher(encryptionKey)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	// Generate a new nonce for each encryption
 	nonce := make([]byte, 12)
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	ciphertext := aesgcm.Seal(nil, nonce, payload, nil)
@@ -40,22 +40,12 @@ func EncryptPayload(payload []byte, keyManager *keymanager.EncryptionKeyManager)
 	base64Ciphertext := base64.StdEncoding.EncodeToString(ciphertext)
 	base64Nonce := base64.StdEncoding.EncodeToString(nonce)
 
-	return base64Ciphertext, base64Nonce, nil
+	return base64Ciphertext, base64Nonce, keyID, nil
 }
 
 // Decryption utility function
-func DecryptPayload(base64Ciphertext string, base64Nonce string, keyManager *keymanager.EncryptionKeyManager) ([]byte, error) {
-	encryptionKey, err := keyManager.GetEncryptionKey()
-	if err != nil {
-		return nil, err
-	}
-
-	block, err := aes.NewCipher(encryptionKey)
-	if err != nil {
-		return nil, err
-	}
-
-	aesgcm, err := cipher.NewGCM(block)
+func DecryptPayload(base64Ciphertext string, base64Nonce string, keyID string, keyManager *keymanager.EncryptionKeyManager) ([]byte, error) {
+	encryptionKeys, err := keyManager.GetDecryptionKeys(keyID)
 	if err != nil {
 		return nil, err
 	}
@@ -71,10 +61,23 @@ func DecryptPayload(base64Ciphertext string, base64Nonce string, keyManager *key
 		return nil, errors.New("failed to decode nonce from base64")
 	}
 
-	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return nil, err
+	for _, encryptionKey := range encryptionKeys {
+		block, err := aes.NewCipher(encryptionKey)
+		if err != nil {
+			return nil, err
+		}
+		aesgcm, err := cipher.NewGCM(block)
+		if err != nil {
+			return nil, err
+		}
+		if len(nonce) != aesgcm.NonceSize() {
+			return nil, errors.New("invalid nonce length for AES-GCM decryption")
+		}
+		plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
+		if err == nil {
+			return plaintext, nil
+		}
 	}
 
-	return plaintext, nil
+	return nil, errors.New("unable to decrypt payload with available encryption keys")
 }

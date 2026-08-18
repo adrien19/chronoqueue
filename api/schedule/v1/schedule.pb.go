@@ -1989,10 +1989,6 @@ type Schedule_Metadata struct {
 	// updated_at: When this schedule was last modified.
 	// Updates when pausing, resuming, or changing configuration.
 	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	// exclusivity_key: Ensures only one instance of this schedule runs.
-	// Useful in multi-region deployments to prevent duplicate executions.
-	// Leave empty if multiple instances can run concurrently.
-	ExclusivityKey string `protobuf:"bytes,10,opt,name=exclusivity_key,json=exclusivityKey,proto3" json:"exclusivity_key,omitempty"`
 	// state_message: Human-readable status or error message.
 	// Contains error details when state = ERRORED.
 	// Example: "Failed to post message: queue 'reports' not found"
@@ -2137,13 +2133,6 @@ func (x *Schedule_Metadata) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *Schedule_Metadata) GetExclusivityKey() string {
-	if x != nil {
-		return x.ExclusivityKey
-	}
-	return ""
-}
-
 func (x *Schedule_Metadata) GetStateMessage() string {
 	if x != nil {
 		return x.StateMessage
@@ -2230,11 +2219,11 @@ var File_proto_schedule_v1_schedule_proto protoreflect.FileDescriptor
 
 const file_proto_schedule_v1_schedule_proto_rawDesc = "" +
 	"\n" +
-	" proto/schedule/v1/schedule.proto\x12\x1bchronoqueue.api.schedule.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cproto/common/v1/common.proto\x1a\x1eproto/message/v1/message.proto\"\xd7\b\n" +
+	" proto/schedule/v1/schedule.proto\x12\x1bchronoqueue.api.schedule.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cproto/common/v1/common.proto\x1a\x1eproto/message/v1/message.proto\"\xc5\b\n" +
 	"\bSchedule\x12\x1f\n" +
 	"\vschedule_id\x18\x01 \x01(\tR\n" +
 	"scheduleId\x12J\n" +
-	"\bmetadata\x18\x02 \x01(\v2..chronoqueue.api.schedule.v1.Schedule.MetadataR\bmetadata\x1a\xdd\a\n" +
+	"\bmetadata\x18\x02 \x01(\v2..chronoqueue.api.schedule.v1.Schedule.MetadataR\bmetadata\x1a\xcb\a\n" +
 	"\bMetadata\x12<\n" +
 	"\apayload\x18\x01 \x01(\v2\".chronoqueue.api.common.v1.PayloadR\apayload\x12J\n" +
 	"\x05state\x18\x02 \x01(\x0e24.chronoqueue.api.schedule.v1.Schedule.Metadata.StateR\x05state\x12%\n" +
@@ -2249,9 +2238,7 @@ const file_proto_schedule_v1_schedule_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12'\n" +
-	"\x0fexclusivity_key\x18\n" +
-	" \x01(\tR\x0eexclusivityKey\x12#\n" +
+	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12#\n" +
 	"\rstate_message\x18\v \x01(\tR\fstateMessage\x12\x1a\n" +
 	"\bpriority\x18\f \x01(\x03R\bpriority\x12(\n" +
 	"\x10has_max_messages\x18\r \x01(\bR\x0ehasMaxMessages\x12!\n" +
@@ -2265,7 +2252,8 @@ const file_proto_schedule_v1_schedule_proto_rawDesc = "" +
 	"\aERRORED\x10\x02\x12\n" +
 	"\n" +
 	"\x06PAUSED\x10\x03B\x11\n" +
-	"\x0fschedule_config\"\xd7\x02\n" +
+	"\x0fschedule_configJ\x04\b\n" +
+	"\x10\vR\x0fexclusivity_key\"\xd7\x02\n" +
 	"\x0fScheduleHistory\x12?\n" +
 	"\bmessages\x18\x01 \x03(\v2#.chronoqueue.api.message.v1.MessageR\bmessages\x12\x1f\n" +
 	"\vschedule_id\x18\x02 \x01(\tR\n" +

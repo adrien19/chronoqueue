@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
@@ -44,8 +45,17 @@ type cancelledCall struct {
 	reason    string
 }
 
+type claimCall struct {
+	queueName      string
+	workerId       string
+	attemptId      string
+	exclusivityKey string
+}
+
 type stubBackend struct {
 	queueMetadata *queuepb.QueueMetadata
+	createdQueues []*queuepb.Queue
+	claims        []claimCall
 	enqueued      []enqueuedCall
 	enqueueErr    error
 	enqueueErrs   []error // per-message errors for bulk operations
@@ -85,8 +95,13 @@ func (e *stubEngine) GetHolidays(ctx context.Context, businessCalendar *schedule
 }
 
 // BackendStorage impl stubs
-func (b *stubBackend) Close() error                                                { return nil }
-func (b *stubBackend) CreateQueue(ctx context.Context, queue *queuepb.Queue) error { return nil }
+func (b *stubBackend) Close() error { return nil }
+
+func (b *stubBackend) CreateQueue(ctx context.Context, queue *queuepb.Queue) error {
+	b.createdQueues = append(b.createdQueues, queue)
+	return nil
+}
+
 func (b *stubBackend) GetQueue(ctx context.Context, name string) (*queuepb.Queue, error) {
 	return &queuepb.Queue{Name: name, Metadata: b.queueMetadata}, nil
 }
@@ -130,15 +145,16 @@ func (b *stubBackend) EnqueueMessagesBulk(ctx context.Context, queueName string,
 	return errors, b.enqueueTxErr
 }
 
-func (b *stubBackend) ClaimMessage(ctx context.Context, queueName string, workerId string, attemptId string) (*messagepb.Message, error) {
+func (b *stubBackend) ClaimMessage(ctx context.Context, queueName string, workerId string, attemptId string, exclusivityKey string) (*messagepb.Message, error) {
+	b.claims = append(b.claims, claimCall{queueName: queueName, workerId: workerId, attemptId: attemptId, exclusivityKey: exclusivityKey})
 	return nil, nil
 }
 
-func (b *stubBackend) AcknowledgeMessage(ctx context.Context, queueName string, messageId string, attemptId string) error {
+func (b *stubBackend) AcknowledgeMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error {
 	return nil
 }
 
-func (b *stubBackend) NackMessage(ctx context.Context, queueName string, messageId string, attemptId string) error {
+func (b *stubBackend) NackMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error {
 	return nil
 }
 
@@ -147,11 +163,11 @@ func (b *stubBackend) CancelMessage(ctx context.Context, queueName string, messa
 	return b.cancelErr
 }
 
-func (b *stubBackend) HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string) (messagepb.Message_Metadata_State, int64, error) {
+func (b *stubBackend) HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) (messagepb.Message_Metadata_State, int64, error) {
 	return messagepb.Message_Metadata_RUNNING, 30000, nil
 }
 
-func (b *stubBackend) ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, extensionMs int64) error {
+func (b *stubBackend) ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, workerId string, extensionMs int64) error {
 	return nil
 }
 
@@ -193,6 +209,46 @@ func (b *stubBackend) DeleteDLQMessage(ctx context.Context, dlqName string, mess
 	return nil
 }
 func (b *stubBackend) PurgeDLQ(ctx context.Context, dlqName string) (int64, error) { return 0, nil }
+
+func TestCreateQueue_RequiresExclusiveKey(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend}
+
+	_, err := impl.CreateQueue(context.Background(), &queueservicepb.CreateQueueRequest{
+		Name: "exclusive",
+		Metadata: &queuepb.QueueMetadata{
+			Type: queuepb.QueueType_EXCLUSIVE,
+		},
+	})
+	require.Error(t, err)
+	require.Empty(t, backend.createdQueues)
+
+	_, err = impl.CreateQueue(context.Background(), &queueservicepb.CreateQueueRequest{
+		Name: "exclusive",
+		Metadata: &queuepb.QueueMetadata{
+			Type:           queuepb.QueueType_EXCLUSIVE,
+			ExclusivityKey: "orders",
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, backend.createdQueues, 1)
+}
+
+func TestGetQueueMessage_ForwardsExclusivityKey(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend}
+	workerID := "worker"
+	attemptID := "attempt"
+
+	_, err := impl.GetQueueMessage(context.Background(), &queueservicepb.GetNextMessageRequest{
+		QueueName:      "exclusive",
+		WorkerId:       &workerID,
+		AttemptId:      &attemptID,
+		ExclusivityKey: "orders",
+	})
+	require.NoError(t, err)
+	require.Equal(t, []claimCall{{queueName: "exclusive", workerId: workerID, attemptId: attemptID, exclusivityKey: "orders"}}, backend.claims)
+}
 
 func TestCreateQueueMessage_ValidatorNil(t *testing.T) {
 	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 2}}

@@ -283,6 +283,7 @@ func TestConcurrency_Acknowledge_Idempotency(t *testing.T) {
 	require.NotNil(t, resp.Message.Metadata.CurrentAttempt, "CurrentAttempt should not be nil")
 
 	attemptID := resp.Message.Metadata.CurrentAttempt.AttemptId
+	workerID = resp.GetWorkerId()
 
 	// Spawn 20 goroutines to acknowledge the same message concurrently
 	numWorkers := 20
@@ -296,10 +297,12 @@ func TestConcurrency_Acknowledge_Idempotency(t *testing.T) {
 			defer wg.Done()
 
 			attemptPtr := attemptID
+			workerPtr := workerID
 			_, err := client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
 				QueueName: queueName,
 				MessageId: msgID,
 				AttemptId: &attemptPtr,
+				WorkerId:  &workerPtr,
 				State:     message_pb.Message_Metadata_COMPLETED,
 			})
 			if err != nil {

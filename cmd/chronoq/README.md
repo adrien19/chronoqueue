@@ -220,7 +220,6 @@ chronoqueue schedule create <queue-name> <message-data> [flags]
 Flags:
   -i, --id string                  Schedule ID (auto-generated if not provided)
   -c, --cron string                Cron expression for the schedule (required)
-  -k, --exclusivity-key string     Exclusivity key for exclusive queues
   -d, --metadata string            Message metadata as JSON
   -a, --max-attempts int32         Maximum attempts for scheduled messages
   -l, --lease-duration string      Lease duration for scheduled messages (default: 30s)
@@ -369,11 +368,15 @@ chronoqueue schedule resume daily-reports --insecure --server 0.0.0.0:9000
 
 ### Exclusive Queue Workflow
 
+An exclusive queue permits one `RUNNING` message at a time. Every claim must
+provide the queue's configured key; another claim can succeed after ACK/NACK or
+after an expired lease is reclaimed.
+
 ```bash
 # 1. Create exclusive queue
 chronoqueue queue create exclusive-work \
     --type exclusive \
-    --exclusivity-key worker-1 \
+    --exclusivity-key exclusive-work-key \
     --insecure --server 0.0.0.0:9000
 
 # 2. Post message to exclusive queue
@@ -382,7 +385,7 @@ chronoqueue message post exclusive-work "Exclusive task" \
 
 # 3. Get message with correct exclusivity key
 chronoqueue message get exclusive-work \
-    --exclusivity-key worker-1 \
+    --exclusivity-key exclusive-work-key \
     --insecure --server 0.0.0.0:9000
 ```
 

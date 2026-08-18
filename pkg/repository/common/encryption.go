@@ -92,7 +92,7 @@ func encryptPayload(payload *commonpb.Payload, keyManager *keymanager.Encryption
 		return nil, fmt.Errorf("marshal payload for encryption: %w", err)
 	}
 
-	encryptedPayload, nonce, err := encryption.EncryptPayload(payloadBytes, keyManager)
+	encryptedPayload, nonce, keyID, err := encryption.EncryptPayload(payloadBytes, keyManager)
 	if err != nil {
 		return nil, fmt.Errorf("encrypt payload: %w", err)
 	}
@@ -105,6 +105,7 @@ func encryptPayload(payload *commonpb.Payload, keyManager *keymanager.Encryption
 		Metadata: map[string]*structpb.Value{
 			"encryptedPayload": structpb.NewStringValue(encryptedPayload),
 			"nonce":            structpb.NewStringValue(nonce),
+			"encryptionKeyId":  structpb.NewStringValue(keyID),
 		},
 	}, nil
 }
@@ -124,6 +125,7 @@ func decryptPayload(payload *commonpb.Payload, keyManager *keymanager.Encryption
 
 	encryptedPayload := encryptedValue.GetStringValue()
 	nonce := nonceValue.GetStringValue()
+	keyID := metadata["encryptionKeyId"].GetStringValue()
 
 	if encryptedPayload == "" || nonce == "" {
 		return nil, fmt.Errorf("decrypt payload: missing ciphertext or nonce")
@@ -133,7 +135,7 @@ func decryptPayload(payload *commonpb.Payload, keyManager *keymanager.Encryption
 		return nil, fmt.Errorf("decrypt payload: encryption key manager disabled")
 	}
 
-	decryptedBytes, err := encryption.DecryptPayload(encryptedPayload, nonce, keyManager)
+	decryptedBytes, err := encryption.DecryptPayload(encryptedPayload, nonce, keyID, keyManager)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt payload: %w", err)
 	}

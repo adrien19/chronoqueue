@@ -255,9 +255,10 @@ type QueueServiceClient interface {
 	// - If lease expires without ACK → message returns to PENDING for retry
 	//
 	// Concurrency:
-	// - Multiple workers can call simultaneously
-	// - Each worker gets a different message (no duplicates)
-	// - Use exclusivity_key for single-threaded processing of related messages
+	//   - Multiple workers can call simultaneously
+	//   - Each worker gets a different message (no duplicates)
+	//   - EXCLUSIVE queues require their configured exclusivity_key and allow one
+	//     RUNNING message until it is acknowledged, failed, or reclaimed
 	//
 	// Example worker loop:
 	//
@@ -296,8 +297,8 @@ type QueueServiceClient interface {
 	// - Message removed from queue
 	// - Queue stats updated
 	//
-	// Important: You must ACK within the lease_duration, or the message returns
-	// to PENDING and may be delivered to another worker.
+	// Important: attempt_id and worker_id from GetNextMessage are required and
+	// must identify the active, unexpired lease.
 	//
 	// Example:
 	//
@@ -347,6 +348,8 @@ type QueueServiceClient interface {
 	// - External API calls with unpredictable latency
 	//
 	// Call periodically during processing to prevent lease expiration.
+	// attempt_id and worker_id from GetNextMessage are required and must identify
+	// the active, unexpired lease.
 	//
 	// Example pattern (heartbeat-style lease renewal):
 	//
@@ -397,6 +400,8 @@ type QueueServiceClient interface {
 	//
 	// Alternative to RenewMessageLease with similar purpose but lighter weight.
 	// Useful for tracking worker health without extending lease.
+	// attempt_id and worker_id from GetNextMessage are required and must identify
+	// the active, unexpired lease.
 	//
 	// Example:
 	//
@@ -1276,9 +1281,10 @@ type QueueServiceServer interface {
 	// - If lease expires without ACK → message returns to PENDING for retry
 	//
 	// Concurrency:
-	// - Multiple workers can call simultaneously
-	// - Each worker gets a different message (no duplicates)
-	// - Use exclusivity_key for single-threaded processing of related messages
+	//   - Multiple workers can call simultaneously
+	//   - Each worker gets a different message (no duplicates)
+	//   - EXCLUSIVE queues require their configured exclusivity_key and allow one
+	//     RUNNING message until it is acknowledged, failed, or reclaimed
 	//
 	// Example worker loop:
 	//
@@ -1317,8 +1323,8 @@ type QueueServiceServer interface {
 	// - Message removed from queue
 	// - Queue stats updated
 	//
-	// Important: You must ACK within the lease_duration, or the message returns
-	// to PENDING and may be delivered to another worker.
+	// Important: attempt_id and worker_id from GetNextMessage are required and
+	// must identify the active, unexpired lease.
 	//
 	// Example:
 	//
@@ -1368,6 +1374,8 @@ type QueueServiceServer interface {
 	// - External API calls with unpredictable latency
 	//
 	// Call periodically during processing to prevent lease expiration.
+	// attempt_id and worker_id from GetNextMessage are required and must identify
+	// the active, unexpired lease.
 	//
 	// Example pattern (heartbeat-style lease renewal):
 	//
@@ -1418,6 +1426,8 @@ type QueueServiceServer interface {
 	//
 	// Alternative to RenewMessageLease with similar purpose but lighter weight.
 	// Useful for tracking worker health without extending lease.
+	// attempt_id and worker_id from GetNextMessage are required and must identify
+	// the active, unexpired lease.
 	//
 	// Example:
 	//

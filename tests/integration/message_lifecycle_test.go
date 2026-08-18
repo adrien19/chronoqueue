@@ -463,12 +463,16 @@ func TestMessageLifecycle_RenewMessageLease(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, getResp.Message)
+	attemptID := getResp.GetAttemptId()
+	workerID := getResp.GetWorkerId()
 
 	// Act - Renew lease
 	renewResp, err := client.RenewMessageLease(ctx, &queueservice_pb.RenewMessageLeaseRequest{
 		QueueName:     queueName,
 		MessageId:     getResp.Message.MessageId,
 		LeaseDuration: durationpb.New(45 * time.Second),
+		AttemptId:     &attemptID,
+		WorkerId:      &workerID,
 	})
 
 	// Assert

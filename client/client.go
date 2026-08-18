@@ -79,7 +79,6 @@ type (
 		CronSchedule     string                        `json:"cronSchedule,omitempty"`
 		CalendarSchedule *schedule_pb.CalendarSchedule `json:"calendarSchedule,omitempty"` // New: for calendar-based scheduling
 		QueueName        string                        `json:"queueName,omitempty"`
-		ExclusivityKey   string                        `json:"exclusivityKey,omitempty"`
 		MaxMessages      int64                         `json:"maxMessages,omitempty"`
 		LeaseDuration    string                        `json:"leaseDuration,omitempty"`
 	}
@@ -693,8 +692,12 @@ func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName
 	}
 }
 
-// GetNextMessage returns next message on a queue
-func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue string, leaseDuration string, enableHeartbeat bool) (*queueservice_pb.GetNextMessageResponse, error) {
+// GetNextMessage claims the next available message. Pass the configured key as
+// exclusivityKey when claiming from an EXCLUSIVE queue.
+func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue string, leaseDuration string, enableHeartbeat bool, exclusivityKey ...string) (*queueservice_pb.GetNextMessageResponse, error) {
+	if len(exclusivityKey) > 1 {
+		return nil, fmt.Errorf("at most one exclusivity key may be provided")
+	}
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	if cancel != nil {
 		defer cancel()
@@ -705,6 +708,9 @@ func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue strin
 		return nil, err
 	}
 	req := &queueservice_pb.GetNextMessageRequest{QueueName: queue, LeaseDuration: leaseDurationpb}
+	if len(exclusivityKey) > 0 {
+		req.ExclusivityKey = exclusivityKey[0]
+	}
 	widVal := client.workerID.Load()
 	if widStr, ok := widVal.(string); ok && widStr != "" {
 		wid := widStr
@@ -817,6 +823,19 @@ func (client *ChronoQueueClient) RenewMessageLease(ctx context.Context, queue st
 		return nil, err
 	}
 	req := &queueservice_pb.RenewMessageLeaseRequest{QueueName: queue, MessageId: messageId, LeaseDuration: leaseDurationpb}
+	info := client.getAttemptInfo(messageId)
+	workerID := info.workerID
+	if workerID == "" {
+		if widStr, ok := client.workerID.Load().(string); ok {
+			workerID = widStr
+		}
+	}
+	if info.attemptID != "" {
+		req.AttemptId = &info.attemptID
+	}
+	if workerID != "" {
+		req.WorkerId = &workerID
+	}
 	res, err := client.service.RenewMessageLease(ctx, req)
 	if err != nil {
 		return res, err
@@ -968,7 +987,6 @@ func (client *ChronoQueueClient) CreateSchedule(ctx context.Context, scheduleId 
 		},
 		State:          schedule_pb.Schedule_Metadata_State(scheduleOptions.State),
 		QueueName:      scheduleOptions.QueueName,
-		ExclusivityKey: scheduleOptions.ExclusivityKey,
 		HasMaxMessages: scheduleOptions.MaxMessages > 0,
 		MaxMessages:    scheduleOptions.MaxMessages,
 		LeaseDuration:  leaseDurationpb,

@@ -133,6 +133,7 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 			MessageId: getResp.Message.MessageId,
 			State:     message_pb.Message_Metadata_COMPLETED,
 			AttemptId: getResp.AttemptId,
+			WorkerId:  getResp.WorkerId,
 		})
 		require.NoError(t, err, "Failed to acknowledge message")
 		successfulCount++
@@ -209,6 +210,7 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 						MessageId: getResp.Message.MessageId,
 						State:     message_pb.Message_Metadata_COMPLETED,
 						AttemptId: getResp.AttemptId,
+						WorkerId:  getResp.WorkerId,
 					})
 					require.NoError(t, err)
 					t.Log("✓ Requeued message processed successfully")
@@ -510,6 +512,7 @@ func TestE2E_MultiTenantIsolation(t *testing.T) {
 				MessageId: getResp.Message.MessageId,
 				State:     message_pb.Message_Metadata_COMPLETED,
 				AttemptId: getResp.AttemptId,
+				WorkerId:  getResp.WorkerId,
 			})
 			require.NoError(t, err, "Failed to acknowledge message from Tenant A queue")
 		}

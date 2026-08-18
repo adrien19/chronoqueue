@@ -71,7 +71,7 @@ func TestBulkPosting_AllOrNothing_Success(t *testing.T) {
 					Data:        payload,
 					ContentType: "application/json",
 				},
-				Priority: 5,
+				Priority: 4,
 			},
 		}
 	}
@@ -157,7 +157,7 @@ func TestBulkPosting_BestEffort_PartialSuccess(t *testing.T) {
 					Data:        payload,
 					ContentType: "application/json",
 				},
-				Priority: 5,
+				Priority: 4,
 			},
 		}
 	}
@@ -226,7 +226,7 @@ func TestBulkPosting_ExceedsBatchLimit(t *testing.T) {
 					Data:        payload,
 					ContentType: "application/json",
 				},
-				Priority: 5,
+				Priority: 4,
 			},
 		}
 	}
@@ -313,7 +313,7 @@ func TestBulkPosting_LargeBatch(t *testing.T) {
 					Data:        payload,
 					ContentType: "application/json",
 				},
-				Priority: 5,
+				Priority: 4,
 			},
 		}
 	}
@@ -369,7 +369,7 @@ func TestBulkPosting_PriorityPreservation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create messages with different priorities
-	priorities := []int64{1, 5, 10, 3, 7}
+	priorities := []int64{0, 1, 2, 3, 4}
 	messages := make([]*message_pb.Message, len(priorities))
 
 	for i, priority := range priorities {
@@ -404,8 +404,8 @@ func TestBulkPosting_PriorityPreservation(t *testing.T) {
 	// Wait for messages to be processed
 	helpers.WaitForMessageTransition(t)
 
-	// Retrieve messages - should be in priority order (10, 7, 5, 3, 1)
-	expectedOrder := []int64{10, 7, 5, 3, 1}
+	// Retrieve messages - should be in descending priority order
+	expectedOrder := []int64{4, 3, 2, 1, 0}
 	for i, expectedPriority := range expectedOrder {
 		msg, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
 			QueueName: queueName,
@@ -440,7 +440,7 @@ func TestBulkPosting_QueueNotFound(t *testing.T) {
 					Data:        payload,
 					ContentType: "application/json",
 				},
-				Priority: 5,
+				Priority: 4,
 			},
 		},
 	}
