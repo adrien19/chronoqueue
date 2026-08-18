@@ -87,3 +87,26 @@ func TestExclusiveQueue_SerializesClaimsAndRecoversAfterReclaim(t *testing.T) {
 	require.NotNil(t, next)
 	require.NotEqual(t, reclaimed.GetMessageId(), next.GetMessageId())
 }
+
+func TestExclusiveQueue_IgnoresExpiredRunningLease(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "exclusive-expired.db"))
+	queueName := "exclusive-expired"
+	key := "orders"
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{
+		Type: queuepb.QueueType_EXCLUSIVE, ExclusivityKey: key,
+	}}))
+	for _, messageID := range []string{"first", "second"} {
+		require.NoError(t, storage.EnqueueMessage(ctx, queueName, reclaimTestMessage(messageID, 2, 2)))
+	}
+
+	first, err := storage.ClaimMessage(ctx, queueName, "worker-1", "attempt-1", key)
+	require.NoError(t, err)
+	require.NotNil(t, first)
+	expireReclaimTestMessage(t, ctx, storage, first.GetMessageId())
+
+	second, err := storage.ClaimMessage(ctx, queueName, "worker-2", "attempt-2", key)
+	require.NoError(t, err)
+	require.NotNil(t, second)
+	require.NotEqual(t, first.GetMessageId(), second.GetMessageId())
+}

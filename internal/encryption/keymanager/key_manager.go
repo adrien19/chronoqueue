@@ -192,11 +192,6 @@ func (m *EncryptionKeyManager) refreshKey() error {
 	currentID := encryptionKeyID(keySet.CurrentKey)
 
 	m.cache.Lock()
-	for id, key := range m.cache.keys {
-		if _, exists := keys[id]; !exists {
-			keys[id] = key
-		}
-	}
 	m.cache.currentID = currentID
 	m.cache.keys = keys
 	m.cache.Unlock()

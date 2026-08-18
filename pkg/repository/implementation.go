@@ -741,6 +741,8 @@ func optionalString(val string) *string {
 //	AcknowledgeMessage(ctx, &AcknowledgeMessageRequest{
 //	    QueueName: "orders",
 //	    MessageId: "msg-123",
+//	    AttemptId: "attempt-123",
+//	    WorkerId: "worker-123",
 //	    State: COMPLETED,  // → routes to backend.AcknowledgeMessage()
 //	})
 //
@@ -748,6 +750,8 @@ func optionalString(val string) *string {
 //	AcknowledgeMessage(ctx, &AcknowledgeMessageRequest{
 //	    QueueName: "orders",
 //	    MessageId: "msg-123",
+//	    AttemptId: "attempt-123",
+//	    WorkerId: "worker-123",
 //	    State: ERRORED,  // → routes to backend.NackMessage()
 //	})
 func (impl *implementation) AcknowledgeMessage(ctx context.Context, request *queueservicepb.AcknowledgeMessageRequest) (*queueservicepb.AcknowledgeMessageResponse, error) {

@@ -73,6 +73,7 @@ func (s *Storage) FindExpiredMessages(ctx context.Context, queueName string, lim
 func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, message *messagepb.Message) error {
 	var newState messagepb.Message_Metadata_State
 	var newAttemptsLeft int32
+	attemptID := message.GetMetadata().GetCurrentAttempt().GetAttemptId()
 	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		updateQuery := s.ph(`
             UPDATE cq_messages
@@ -90,7 +91,7 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 			WHERE queue_name = ?
 			  AND message_id = ?
 			  AND state = ?
-			  AND current_attempt_id = ?
+			  AND ((? = '' AND current_attempt_id IS NULL) OR (? <> '' AND current_attempt_id = ?))
 			  AND (
 				lease_expiry <= ?
 				OR (heartbeat_expiry IS NOT NULL AND heartbeat_expiry > 0 AND heartbeat_expiry <= ?)
@@ -108,7 +109,9 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 			queueName,
 			message.GetMessageId(),
 			messagepb.Message_Metadata_RUNNING,
-			message.GetMetadata().GetCurrentAttempt().GetAttemptId(),
+			attemptID,
+			attemptID,
+			attemptID,
 			nowMs,
 			nowMs,
 		).Scan(&newState, &newAttemptsLeft)
@@ -125,7 +128,9 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 		return err
 	}
 
-	message.Metadata.State = newState
-	message.Metadata.AttemptsLeft = newAttemptsLeft
+	if message.GetMetadata() != nil {
+		message.Metadata.State = newState
+		message.Metadata.AttemptsLeft = newAttemptsLeft
+	}
 	return nil
 }

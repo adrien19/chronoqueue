@@ -101,3 +101,39 @@ func TestExclusiveQueue_SerializesClaimsAcrossPostgresInstancesAndRecoversAfterR
 	require.NotNil(t, next)
 	require.NotEqual(t, reclaimed.GetMessageId(), next.GetMessageId())
 }
+
+func TestExclusiveQueue_IgnoresExpiredRunningLease(t *testing.T) {
+	ctx := context.Background()
+	container, err := postgrescontainer.Run(
+		ctx,
+		"postgres:17-alpine",
+		postgrescontainer.WithDatabase("chronoqueue"),
+		postgrescontainer.WithUsername("chronoqueue"),
+		postgrescontainer.WithPassword("chronoqueue"),
+		postgrescontainer.BasicWaitStrategies(),
+		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, container.Terminate(ctx)) })
+	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+	storage := newPostgresReclaimTestStorage(t, ctx, dsn)
+	queueName := "exclusive-expired"
+	key := "orders"
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{
+		Type: queuepb.QueueType_EXCLUSIVE, ExclusivityKey: key,
+	}}))
+	for _, messageID := range []string{"first", "second"} {
+		require.NoError(t, storage.EnqueueMessage(ctx, queueName, postgresReclaimTestMessage(messageID, 2, 2)))
+	}
+
+	first, err := storage.ClaimMessage(ctx, queueName, "worker-1", "attempt-1", key)
+	require.NoError(t, err)
+	require.NotNil(t, first)
+	expirePostgresReclaimTestMessage(t, ctx, storage, first.GetMessageId())
+
+	second, err := storage.ClaimMessage(ctx, queueName, "worker-2", "attempt-2", key)
+	require.NoError(t, err)
+	require.NotNil(t, second)
+	require.NotEqual(t, first.GetMessageId(), second.GetMessageId())
+}

@@ -50,12 +50,12 @@ func TestNewEncryptionKeyManagerWithConfig(t *testing.T) {
 	})
 }
 
-func TestEncryptionKeyManager_RefreshesUnknownKeyAndRetainsObservedKeys(t *testing.T) {
+func TestEncryptionKeyManager_RefreshesUnknownKeyAndUsesHistoricalKeys(t *testing.T) {
 	oldKey := []byte("0123456789abcdef")
 	newKey := []byte("abcdef0123456789")
 	adapter := &rotatingKeyAdapter{keySets: []*adapters.KeySet{
 		{CurrentKey: oldKey},
-		{CurrentKey: newKey},
+		{CurrentKey: newKey, HistoricalKeys: [][]byte{oldKey}},
 	}}
 	manager := &EncryptionKeyManager{Enabled: true, adapter: adapter, logger: log.NewLogger()}
 	require.NoError(t, manager.refreshKey())
@@ -79,6 +79,22 @@ func TestEncryptionKeyManager_RefreshesUnknownKeyAndRetainsObservedKeys(t *testi
 	require.NoError(t, err)
 	require.Len(t, keys, 1)
 	assert.Equal(t, oldKey, keys[0])
+}
+
+func TestEncryptionKeyManager_RefreshRemovesOmittedKeys(t *testing.T) {
+	oldKey := []byte("0123456789abcdef")
+	newKey := []byte("abcdef0123456789")
+	adapter := &rotatingKeyAdapter{keySets: []*adapters.KeySet{
+		{CurrentKey: oldKey},
+		{CurrentKey: newKey},
+	}}
+	manager := &EncryptionKeyManager{Enabled: true, adapter: adapter, logger: log.NewLogger()}
+	require.NoError(t, manager.refreshKey())
+	require.NoError(t, manager.refreshKey())
+
+	keys, err := manager.GetDecryptionKeys(encryptionKeyID(oldKey))
+	require.ErrorContains(t, err, "is not available")
+	assert.Nil(t, keys)
 }
 
 func TestEncryptionKeyManager_RejectsInvalidHistoricalKey(t *testing.T) {

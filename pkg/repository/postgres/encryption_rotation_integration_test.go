@@ -65,12 +65,51 @@ func TestEncryptionKeyRotation_PreservesPostgresMessagesAcrossRestart(t *testing
 	assert.Equal(t, "after", newMessage.GetMetadata().GetPayload().GetMetadata()["version"].GetStringValue())
 }
 
+func TestEncryptionKeyRotation_PostgresRestartWithoutHistoricalKeyFailsClaim(t *testing.T) {
+	ctx := context.Background()
+	container, err := postgrescontainer.Run(
+		ctx,
+		"postgres:17-alpine",
+		postgrescontainer.WithDatabase("chronoqueue"),
+		postgrescontainer.WithUsername("chronoqueue"),
+		postgrescontainer.WithPassword("chronoqueue"),
+		postgrescontainer.BasicWaitStrategies(),
+		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, container.Terminate(ctx)) })
+	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+	logger := log.NewLogger()
+
+	oldManager := newPostgresRotationKeyManager(t, logger, "0123456789abcdef", nil)
+	oldStorage, err := NewStorage(ctx, &Config{Conn: ConnectionConfig{DSN: dsn}, Logger: logger, KeyManager: oldManager})
+	require.NoError(t, err)
+	queueName := "encrypted-missing-key"
+	require.NoError(t, oldStorage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
+	require.NoError(t, oldStorage.EnqueueMessage(ctx, queueName, postgresRotationMessage("old", "before")))
+	require.NoError(t, oldStorage.Close())
+
+	currentManager := newPostgresRotationKeyManager(t, logger, "abcdef0123456789", nil)
+	currentStorage, err := NewStorage(ctx, &Config{Conn: ConnectionConfig{DSN: dsn}, Logger: logger, KeyManager: currentManager})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, currentStorage.Close()) })
+
+	message, err := currentStorage.ClaimMessage(ctx, queueName, "worker", "attempt", "")
+	require.ErrorContains(t, err, "decrypt message payload")
+	require.ErrorContains(t, err, "is not available")
+	assert.Nil(t, message)
+}
+
 func newPostgresRotationKeyManager(t *testing.T, logger *log.Logger, current string, previous []string) *keymanager.EncryptionKeyManager {
 	t.Helper()
 	t.Setenv("ENCRYPTION_KEY", current)
-	previousJSON, err := json.Marshal(previous)
-	require.NoError(t, err)
-	t.Setenv("ENCRYPTION_PREVIOUS_KEYS", string(previousJSON))
+	t.Setenv("ENCRYPTION_PREVIOUS_KEYS", "")
+	if previous != nil {
+		previousJSON, err := json.Marshal(previous)
+		require.NoError(t, err)
+		t.Setenv("ENCRYPTION_PREVIOUS_KEYS", string(previousJSON))
+	}
 	manager, err := keymanager.NewEncryptionKeyManagerWithConfig(logger, keymanager.Config{Enabled: true, SourceType: "LOCAL"})
 	require.NoError(t, err)
 	return manager

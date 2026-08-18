@@ -271,11 +271,12 @@ func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId s
 			}
 
 			var hasActiveLease bool
+			nowMs := s.Clock.NowMs()
 			if err := tx.QueryRowContext(ctx, `
 				SELECT EXISTS (
 					SELECT 1 FROM cq_messages
-					WHERE queue_name = ? AND state = ? AND deleted_at IS NULL
-				)`, queueName, messagepb.Message_Metadata_RUNNING).Scan(&hasActiveLease); err != nil {
+					WHERE queue_name = ? AND state = ? AND lease_expiry > ? AND deleted_at IS NULL
+				)`, queueName, messagepb.Message_Metadata_RUNNING, nowMs).Scan(&hasActiveLease); err != nil {
 				return fmt.Errorf("check exclusive queue lease: %w", err)
 			}
 			if hasActiveLease {

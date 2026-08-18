@@ -70,6 +70,9 @@ func DecryptPayload(base64Ciphertext string, base64Nonce string, keyID string, k
 		if err != nil {
 			return nil, err
 		}
+		if len(nonce) != aesgcm.NonceSize() {
+			return nil, errors.New("invalid nonce length for AES-GCM decryption")
+		}
 		plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
 		if err == nil {
 			return plaintext, nil

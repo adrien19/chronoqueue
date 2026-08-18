@@ -96,6 +96,21 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 	require.Len(t, peeked, 1)
 	assert.Equal(t, messagepb.Message_Metadata_ERRORED, peeked[0].GetMetadata().GetState())
 	assert.EqualValues(t, 0, peeked[0].GetMetadata().GetAttemptsLeft())
+
+	require.NoError(t, first.EnqueueMessage(ctx, queueName, postgresReclaimTestMessage("legacy-null-attempt", 2, 2)))
+	claimed, err = first.ClaimMessage(ctx, queueName, "legacy-worker", "legacy-attempt", "")
+	require.NoError(t, err)
+	require.NotNil(t, claimed)
+	_, err = first.DB.ExecContext(ctx, `UPDATE cq_messages SET lease_expiry = 0, current_attempt_id = NULL WHERE message_id = $1`, claimed.GetMessageId())
+	require.NoError(t, err)
+
+	legacyMessage := &messagepb.Message{MessageId: claimed.GetMessageId()}
+	require.NoError(t, first.ReclaimExpiredMessage(ctx, queueName, legacyMessage))
+	var state messagepb.Message_Metadata_State
+	var attemptsLeft int32
+	require.NoError(t, first.DB.QueryRowContext(ctx, `SELECT state, attempts_left FROM cq_messages WHERE message_id = $1`, claimed.GetMessageId()).Scan(&state, &attemptsLeft))
+	assert.Equal(t, messagepb.Message_Metadata_PENDING, state)
+	assert.EqualValues(t, 1, attemptsLeft)
 }
 
 func TestWorkerMutations_RequireActiveOwnershipAcrossPostgresInstances(t *testing.T) {

@@ -358,6 +358,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-staging-image]
     steps:
+      - uses: docker/login-action@v3
+        with:
+          {
+            registry: "${{ env.DOCKER_REGISTRY }}",
+            username: "${{ github.actor }}",
+            password: "${{ secrets.GITHUB_TOKEN }}",
+          }
       - uses: aquasecurity/trivy-action@master
         with:
           {
@@ -373,6 +380,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [prepare-release, build-staging-image]
     steps:
+      - uses: docker/login-action@v3
+        with:
+          {
+            registry: "${{ env.DOCKER_REGISTRY }}",
+            username: "${{ github.actor }}",
+            password: "${{ secrets.GITHUB_TOKEN }}",
+          }
       - uses: anchore/sbom-action@v0
         with:
           image: ${{ needs.build-staging-image.outputs.staging_image }}

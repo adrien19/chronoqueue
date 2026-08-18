@@ -52,12 +52,39 @@ func TestEncryptionKeyRotation_PreservesSQLiteMessagesAcrossRestart(t *testing.T
 	assert.Equal(t, "after", newMessage.GetMetadata().GetPayload().GetMetadata()["version"].GetStringValue())
 }
 
+func TestEncryptionKeyRotation_SQLiteRestartWithoutHistoricalKeyFailsClaim(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "encryption-missing-key.db")
+	logger := log.NewLogger()
+
+	oldManager := newSQLiteRotationKeyManager(t, logger, "0123456789abcdef", nil)
+	oldStorage, err := NewStorage(ctx, &Config{Path: path, Logger: logger, KeyManager: oldManager})
+	require.NoError(t, err)
+	queueName := "encrypted-missing-key"
+	require.NoError(t, oldStorage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
+	require.NoError(t, oldStorage.EnqueueMessage(ctx, queueName, sqliteRotationMessage("old", "before")))
+	require.NoError(t, oldStorage.Close())
+
+	currentManager := newSQLiteRotationKeyManager(t, logger, "abcdef0123456789", nil)
+	currentStorage, err := NewStorage(ctx, &Config{Path: path, Logger: logger, KeyManager: currentManager})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, currentStorage.Close()) })
+
+	message, err := currentStorage.ClaimMessage(ctx, queueName, "worker", "attempt", "")
+	require.ErrorContains(t, err, "decrypt message payload")
+	require.ErrorContains(t, err, "is not available")
+	assert.Nil(t, message)
+}
+
 func newSQLiteRotationKeyManager(t *testing.T, logger *log.Logger, current string, previous []string) *keymanager.EncryptionKeyManager {
 	t.Helper()
 	t.Setenv("ENCRYPTION_KEY", current)
-	previousJSON, err := json.Marshal(previous)
-	require.NoError(t, err)
-	t.Setenv("ENCRYPTION_PREVIOUS_KEYS", string(previousJSON))
+	t.Setenv("ENCRYPTION_PREVIOUS_KEYS", "")
+	if previous != nil {
+		previousJSON, err := json.Marshal(previous)
+		require.NoError(t, err)
+		t.Setenv("ENCRYPTION_PREVIOUS_KEYS", string(previousJSON))
+	}
 	manager, err := keymanager.NewEncryptionKeyManagerWithConfig(logger, keymanager.Config{Enabled: true, SourceType: "LOCAL"})
 	require.NoError(t, err)
 	return manager
