@@ -10,6 +10,21 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/log"
 )
 
+func TestDecryptPayload_DecryptsWithValidNonce(t *testing.T) {
+	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef")
+	t.Setenv("ENCRYPTION_PREVIOUS_KEYS", "")
+	manager, err := keymanager.NewEncryptionKeyManagerWithConfig(log.NewLogger(), keymanager.Config{Enabled: true, SourceType: "LOCAL"})
+	require.NoError(t, err)
+
+	payload := []byte("chronoqueue payload")
+	ciphertext, nonce, keyID, err := EncryptPayload(payload, manager)
+	require.NoError(t, err)
+
+	plaintext, err := DecryptPayload(ciphertext, nonce, keyID, manager)
+	require.NoError(t, err)
+	require.Equal(t, payload, plaintext)
+}
+
 func TestDecryptPayload_RejectsInvalidNonceLength(t *testing.T) {
 	t.Setenv("ENCRYPTION_KEY", "0123456789abcdef")
 	t.Setenv("ENCRYPTION_PREVIOUS_KEYS", "")
