@@ -33,6 +33,9 @@ func (l *LocalAdapter) FetchKeys() (*KeySet, error) {
 	if err := json.Unmarshal([]byte(history), &previousKeys); err != nil {
 		return nil, fmt.Errorf("parse ENCRYPTION_PREVIOUS_KEYS: %w", err)
 	}
+	if previousKeys == nil {
+		return nil, errors.New("ENCRYPTION_PREVIOUS_KEYS must be a JSON array")
+	}
 	for _, previousKey := range previousKeys {
 		keySet.HistoricalKeys = append(keySet.HistoricalKeys, []byte(previousKey))
 	}

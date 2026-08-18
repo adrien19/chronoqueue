@@ -1010,6 +1010,18 @@ func TestChronoQueueClient_GetNextMessage(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "Exclusive Queue Rejects Invalid Key",
+			args: args{
+				ctx:             context.Background(),
+				queue:           "exclusiveQueue",
+				leaseDuration:   "4s",
+				enableHeartbeat: false,
+				exclusivityKey:  "wrong-key",
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
 			name: "No Message Available",
 			args: args{
 				ctx:             context.Background(),

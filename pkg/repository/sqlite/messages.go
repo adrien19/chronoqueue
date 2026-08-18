@@ -266,8 +266,12 @@ func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId s
 			if err != nil {
 				return fmt.Errorf("lock exclusive queue: %w", err)
 			}
-			if err := requireOneOwnedMessage(result); err != nil {
+			rows, err := result.RowsAffected()
+			if err != nil {
 				return fmt.Errorf("lock exclusive queue: %w", err)
+			}
+			if rows != 1 {
+				return fmt.Errorf("lock exclusive queue: queue %q not found", queueName)
 			}
 
 			var hasActiveLease bool

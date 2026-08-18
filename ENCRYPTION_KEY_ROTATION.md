@@ -18,7 +18,7 @@ For `VAULT`, the secret at `VAULT_SECRET_PATH` must contain the same logical key
 ```json
 {
   "key": "abcdef0123456789",
-  "previous_keys": ["0123456789abcdef"]
+  "previous_keys": '["0123456789abcdef"]'
 }
 ```
 
