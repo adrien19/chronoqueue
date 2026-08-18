@@ -10,13 +10,18 @@ version="2.0.0-rc.1"
 tag="v${version}"
 commit="0123456789abcdef0123456789abcdef01234567"
 build_date="2026-08-17T12:34:56Z"
+case "$(uname -s)" in
+    Linux) os="linux" ;;
+    Darwin) os="darwin" ;;
+    *) echo "unsupported test operating system: $(uname -s)" >&2; exit 1 ;;
+esac
 case "$(uname -m)" in
     x86_64) arch="amd64" ;;
     aarch64 | arm64) arch="arm64" ;;
     armv7* | armhf) arch="arm" ;;
     *) echo "unsupported test architecture: $(uname -m)" >&2; exit 1 ;;
 esac
-binary_name="chronoqueue-${tag}-linux-${arch}"
+binary_name="chronoqueue-${tag}-${os}-${arch}"
 release_dir="${test_root}/releases/download/${tag}"
 staging_dir="${test_root}/staging"
 install_dir="${test_root}/install"

@@ -66,7 +66,7 @@ jobs:
           TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
-          PREVIOUS_TAG="$(git tag --sort=-version:refname --merged HEAD | grep -Fxv "${TAG}" | head -1 || true)"
+          PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
           if [[ -z "${PREVIOUS_TAG}" ]]; then
             printf '## Initial release\n' > CHANGELOG.md
           else
@@ -81,7 +81,15 @@ jobs:
   create-draft:
     name: Create Draft Release
     runs-on: ubuntu-latest
-    needs: [prepare-release, verify-release-binaries, verify-windows-installer, verify-staging-image, container-vulnerability-scan, generate-sbom]
+    needs:
+      [
+        prepare-release,
+        verify-release-binaries,
+        verify-windows-installer,
+        verify-staging-image,
+        container-vulnerability-scan,
+        generate-sbom,
+      ]
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -100,9 +108,9 @@ jobs:
     needs: [prepare-release]
     steps:
       - uses: actions/checkout@v4
-        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+        with: { ref: "${{ needs.prepare-release.outputs.commit }}" }
       - uses: actions/setup-go@v5
-        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+        with: { go-version: "${{ env.GO_VERSION }}", cache: true }
       - run: make check-linter
       - run: make ci-lint
       - name: Verify formatting and modules
@@ -114,9 +122,9 @@ jobs:
     needs: [prepare-release]
     steps:
       - uses: actions/checkout@v4
-        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+        with: { ref: "${{ needs.prepare-release.outputs.commit }}" }
       - uses: actions/setup-go@v5
-        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+        with: { go-version: "${{ env.GO_VERSION }}", cache: true }
       - run: make ci-test
 
   sqlite-tests:
@@ -125,9 +133,9 @@ jobs:
     needs: [prepare-release]
     steps:
       - uses: actions/checkout@v4
-        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+        with: { ref: "${{ needs.prepare-release.outputs.commit }}" }
       - uses: actions/setup-go@v5
-        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+        with: { go-version: "${{ env.GO_VERSION }}", cache: true }
       - run: make ci-test-sqlite
 
   integration-tests:
@@ -136,9 +144,9 @@ jobs:
     needs: [prepare-release]
     steps:
       - uses: actions/checkout@v4
-        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+        with: { ref: "${{ needs.prepare-release.outputs.commit }}" }
       - uses: actions/setup-go@v5
-        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+        with: { go-version: "${{ env.GO_VERSION }}", cache: true }
       - run: make ci-test-integration
 
   e2e-tests:
@@ -147,9 +155,9 @@ jobs:
     needs: [prepare-release]
     steps:
       - uses: actions/checkout@v4
-        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+        with: { ref: "${{ needs.prepare-release.outputs.commit }}" }
       - uses: actions/setup-go@v5
-        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+        with: { go-version: "${{ env.GO_VERSION }}", cache: true }
       - run: make ci-test-e2e
 
   migration-tests:
@@ -158,9 +166,9 @@ jobs:
     needs: [prepare-release]
     steps:
       - uses: actions/checkout@v4
-        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+        with: { ref: "${{ needs.prepare-release.outputs.commit }}" }
       - uses: actions/setup-go@v5
-        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+        with: { go-version: "${{ env.GO_VERSION }}", cache: true }
       - run: make ci-test-migrations
 
   vulnerability-scan:
@@ -169,16 +177,25 @@ jobs:
     needs: [prepare-release]
     steps:
       - uses: actions/checkout@v4
-        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+        with: { ref: "${{ needs.prepare-release.outputs.commit }}" }
       - uses: actions/setup-go@v5
-        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+        with: { go-version: "${{ env.GO_VERSION }}", cache: true }
       - run: go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...
 
   release-gates:
     name: Release Gates
     runs-on: ubuntu-latest
     if: always()
-    needs: [code-quality, unit-tests, sqlite-tests, integration-tests, e2e-tests, migration-tests, vulnerability-scan]
+    needs:
+      [
+        code-quality,
+        unit-tests,
+        sqlite-tests,
+        integration-tests,
+        e2e-tests,
+        migration-tests,
+        vulnerability-scan,
+      ]
     steps:
       - name: Require every release gate
         env:
@@ -194,17 +211,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {goos: linux, goarch: amd64}
-          - {goos: linux, goarch: arm64}
-          - {goos: linux, goarch: arm}
-          - {goos: darwin, goarch: amd64}
-          - {goos: darwin, goarch: arm64}
-          - {goos: windows, goarch: amd64}
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: linux, goarch: arm }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
     steps:
       - uses: actions/checkout@v4
-        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+        with: { ref: "${{ needs.prepare-release.outputs.commit }}" }
       - uses: actions/setup-go@v5
-        with: {go-version: "${{ env.GO_VERSION }}", cache: true}
+        with: { go-version: "${{ env.GO_VERSION }}", cache: true }
       - name: Build and inspect artifact
         env:
           VERSION: ${{ needs.prepare-release.outputs.version }}
@@ -247,11 +264,16 @@ jobs:
       staging_image: ${{ steps.image.outputs.name }}
     steps:
       - uses: actions/checkout@v4
-        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+        with: { ref: "${{ needs.prepare-release.outputs.commit }}" }
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
-        with: {registry: "${{ env.DOCKER_REGISTRY }}", username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+        with:
+          {
+            registry: "${{ env.DOCKER_REGISTRY }}",
+            username: "${{ github.actor }}",
+            password: "${{ secrets.GITHUB_TOKEN }}",
+          }
       - id: image
         run: echo "name=${DOCKER_REGISTRY}/${IMAGE_NAME}:release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
       - uses: docker/build-push-action@v6
@@ -278,9 +300,9 @@ jobs:
     needs: [prepare-release, build-release-binaries]
     steps:
       - uses: actions/checkout@v4
-        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+        with: { ref: "${{ needs.prepare-release.outputs.commit }}" }
       - uses: actions/download-artifact@v4
-        with: {pattern: "release-*", path: artifacts, merge-multiple: true}
+        with: { pattern: "release-*", path: artifacts, merge-multiple: true }
       - name: Verify every archive
         env:
           VERSION: ${{ needs.prepare-release.outputs.version }}
@@ -314,7 +336,12 @@ jobs:
     needs: [prepare-release, build-staging-image]
     steps:
       - uses: docker/login-action@v3
-        with: {registry: "${{ env.DOCKER_REGISTRY }}", username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+        with:
+          {
+            registry: "${{ env.DOCKER_REGISTRY }}",
+            username: "${{ github.actor }}",
+            password: "${{ secrets.GITHUB_TOKEN }}",
+          }
       - name: Assert container metadata
         env:
           IMAGE: ${{ needs.build-staging-image.outputs.staging_image }}
@@ -332,7 +359,14 @@ jobs:
     needs: [build-staging-image]
     steps:
       - uses: aquasecurity/trivy-action@master
-        with: {image-ref: "${{ needs.build-staging-image.outputs.staging_image }}", format: table, exit-code: "1", severity: "HIGH,CRITICAL", ignore-unfixed: true}
+        with:
+          {
+            image-ref: "${{ needs.build-staging-image.outputs.staging_image }}",
+            format: table,
+            exit-code: "1",
+            severity: "HIGH,CRITICAL",
+            ignore-unfixed: true,
+          }
 
   generate-sbom:
     name: Generate SBOM
@@ -346,7 +380,12 @@ jobs:
           output-file: sbom-${{ needs.prepare-release.outputs.tag }}.spdx.json
           upload-artifact: false
       - uses: actions/upload-artifact@v4
-        with: {name: release-sbom, path: "sbom-${{ needs.prepare-release.outputs.tag }}.spdx.json", if-no-files-found: error}
+        with:
+          {
+            name: release-sbom,
+            path: "sbom-${{ needs.prepare-release.outputs.tag }}.spdx.json",
+            if-no-files-found: error,
+          }
 
   verify-windows-installer:
     name: Verify Windows Installer
@@ -354,9 +393,9 @@ jobs:
     needs: [prepare-release, build-release-binaries]
     steps:
       - uses: actions/checkout@v4
-        with: {ref: "${{ needs.prepare-release.outputs.commit }}"}
+        with: { ref: "${{ needs.prepare-release.outputs.commit }}" }
       - uses: actions/download-artifact@v4
-        with: {name: release-windows-amd64, path: artifacts}
+        with: { name: release-windows-amd64, path: artifacts }
       - name: Serve artifact and run installer
         shell: pwsh
         env:
@@ -380,13 +419,29 @@ jobs:
   publish-release:
     name: Publish Verified Release
     runs-on: ubuntu-latest
-    needs: [prepare-release, create-draft, build-staging-image, verify-release-binaries, verify-windows-installer, verify-staging-image, container-vulnerability-scan, generate-sbom]
+    needs:
+      [
+        prepare-release,
+        create-draft,
+        build-staging-image,
+        verify-release-binaries,
+        verify-windows-installer,
+        verify-staging-image,
+        container-vulnerability-scan,
+        generate-sbom,
+      ]
     steps:
       - uses: actions/download-artifact@v4
-        with: {pattern: "release-*", path: release-assets, merge-multiple: true}
+        with:
+          { pattern: "release-*", path: release-assets, merge-multiple: true }
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
-        with: {registry: "${{ env.DOCKER_REGISTRY }}", username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+        with:
+          {
+            registry: "${{ env.DOCKER_REGISTRY }}",
+            username: "${{ github.actor }}",
+            password: "${{ secrets.GITHUB_TOKEN }}",
+          }
       - name: Promote tested container manifest
         env:
           STAGING_IMAGE: ${{ needs.build-staging-image.outputs.staging_image }}
@@ -400,6 +455,7 @@ jobs:
       - name: Upload assets and publish draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.prepare-release.outputs.tag }}
           PRERELEASE: ${{ needs.prepare-release.outputs.prerelease }}
         run: |
