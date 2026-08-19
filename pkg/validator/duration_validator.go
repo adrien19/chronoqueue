@@ -62,6 +62,15 @@ func (v *DurationValidator) Validate(ctx context.Context, msg *message_pb.Messag
 	}
 
 	// Validate lease duration after defaults applied
+	if err := msg.Metadata.LeaseDuration.CheckValid(); err != nil {
+		result.Valid = false
+		result.Errors = append(result.Errors, NewValidationError(
+			"metadata.lease_duration",
+			schema_pb.ErrorCode_INVALID_FORMAT,
+			"Lease duration is invalid",
+		))
+		return result
+	}
 	leaseDuration := msg.Metadata.LeaseDuration.AsDuration()
 	if leaseDuration < MinLeaseDuration {
 		result.Valid = false

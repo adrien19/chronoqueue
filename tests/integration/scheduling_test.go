@@ -20,6 +20,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
@@ -361,6 +363,8 @@ func TestScheduling_PauseAndResumeSchedule(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, createResp.Success)
+	_, err = client.CreateSchedule(ctx, &queueservice_pb.CreateScheduleRequest{Schedule: schedule})
+	assert.Equal(t, codes.AlreadyExists, status.Code(err))
 
 	// Act - Pause schedule
 	pauseResp, err := client.PauseSchedule(ctx, &queueservice_pb.PauseScheduleRequest{
@@ -379,6 +383,8 @@ func TestScheduling_PauseAndResumeSchedule(t *testing.T) {
 	// Assert resume
 	require.NoError(t, err, "Resume should succeed")
 	assert.True(t, resumeResp.Success, "Resume response should indicate success")
+	_, err = client.ResumeSchedule(ctx, &queueservice_pb.ResumeScheduleRequest{ScheduleId: scheduleID})
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
 // TestScheduling_DeleteSchedule validates schedule deletion
@@ -444,9 +450,7 @@ func TestScheduling_DeleteSchedule(t *testing.T) {
 	_, err = client.GetSchedule(ctx, &queueservice_pb.GetScheduleRequest{
 		ScheduleId: scheduleID,
 	})
-	if err != nil {
-		t.Logf("Expected: Schedule not found after deletion: %v", err)
-	}
+	assert.Equal(t, codes.NotFound, status.Code(err))
 }
 
 // TestScheduling_ListSchedules validates listing all schedules

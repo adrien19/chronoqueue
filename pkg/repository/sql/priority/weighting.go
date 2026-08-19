@@ -47,6 +47,7 @@ func NewPriorityWeightCalculator(base *repositorysql.BaseSQL) *PriorityWeightCal
 func (p *PriorityWeightCalculator) CalculateWeights(ctx context.Context, queueName string, queueMeta *queuepb.QueueMetadata) (map[string]int32, error) {
 	cfg := queueMeta.GetPriorityConfig()
 	nowMs := p.clock.NowMs()
+	useAgeBoost := cfg != nil && (cfg.GetPolicy() == queuepb.FairnessPolicy_AGING || cfg.GetPolicy() == queuepb.FairnessPolicy_HYBRID)
 
 	ageThreshold := defaultAgeThreshold
 	if cfg != nil && cfg.GetAgeBoostThreshold() != nil {
@@ -83,7 +84,7 @@ func (p *PriorityWeightCalculator) CalculateWeights(ctx context.Context, queueNa
 		hasMessages = true
 		weight := baseWeight
 
-		if ageThreshold > 0 {
+		if useAgeBoost && ageThreshold > 0 {
 			ageMs := nowMs - createdAt
 			if ageMs >= ageThreshold.Milliseconds() {
 				weight *= boostMultiplier

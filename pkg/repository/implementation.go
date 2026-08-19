@@ -16,6 +16,7 @@ import (
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/calendar"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
 	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
@@ -211,24 +212,37 @@ func (impl *implementation) Close() error {
 // CreateQueue creates a new queue
 func (impl *implementation) CreateQueue(ctx context.Context, request *queueservicepb.CreateQueueRequest) (*queueservicepb.CreateQueueResponse, error) {
 	if request == nil {
-		return nil, fmt.Errorf("create queue request is required")
+		return nil, domainerror.New(domainerror.InvalidArgument, "create queue request is required", nil)
 	}
-	metadata := request.Metadata
-	if metadata == nil {
+	var metadata *queuepb.QueueMetadata
+	if request.GetMetadata() == nil {
 		metadata = &queuepb.QueueMetadata{}
+	} else {
+		metadata = proto.Clone(request.GetMetadata()).(*queuepb.QueueMetadata)
 	}
 
-	// Set default lease policy if not provided
+	baseLease := metadata.GetLeaseDuration()
+	if baseLease == nil {
+		baseLease = durationpb.New(30 * time.Second)
+	}
 	if metadata.LeasePolicy == nil {
 		metadata.LeasePolicy = &commonpb.LeasePolicy{
-			BaseLease:    durationpb.New(30 * time.Second),
+			BaseLease:    baseLease,
 			MaxExtension: durationpb.New(5 * time.Minute),
 		}
+	} else if metadata.LeasePolicy.BaseLease == nil {
+		metadata.LeasePolicy.BaseLease = baseLease
 	}
-	if err := repositorycommon.ValidateQueueExclusivity(metadata); err != nil {
-		return nil, err
+	if metadata.DefaultMaxAttempts == 0 {
+		metadata.DefaultMaxAttempts = validator.DefaultMaxRetryAttempts
 	}
-
+	if err := validator.ValidateQueue(request.GetName(), metadata); err != nil {
+		var configErr *validator.ConfigurationError
+		if errors.As(err, &configErr) {
+			return nil, domainerror.InvalidWithFields(err.Error(), []domainerror.FieldViolation{{Field: configErr.Field, Description: configErr.Message}}, err)
+		}
+		return nil, domainerror.New(domainerror.InvalidArgument, err.Error(), err)
+	}
 	queue := &queuepb.Queue{
 		Name:     request.Name,
 		Metadata: metadata,
@@ -257,6 +271,9 @@ func (impl *implementation) GetQueueMetadata(ctx context.Context, queueName stri
 
 // DeleteQueue deletes a queue
 func (impl *implementation) DeleteQueue(ctx context.Context, request *queueservicepb.DeleteQueueRequest) (*queueservicepb.DeleteQueueResponse, error) {
+	if request == nil || request.GetName() == "" {
+		return nil, domainerror.New(domainerror.InvalidArgument, "queue name is required", nil)
+	}
 	if err := impl.backend.DeleteQueue(ctx, request.Name); err != nil {
 		return nil, err
 	}
@@ -281,7 +298,7 @@ func (impl *implementation) ListQueues(ctx context.Context, request *queueservic
 // GetQueueState returns the current state of a queue
 func (impl *implementation) GetQueueState(ctx context.Context, request *queueservicepb.GetQueueStateRequest) (*queueservicepb.GetQueueStateResponse, error) {
 	if request == nil || request.GetQueueName() == "" {
-		return nil, fmt.Errorf("queue name is required")
+		return nil, domainerror.New(domainerror.InvalidArgument, "queue name is required", nil)
 	}
 
 	baseSQL := impl.getSQLBackend()
@@ -398,21 +415,38 @@ func (impl *implementation) findEarliestDeadline(ctx context.Context, baseSQL *r
 // CreateQueueMessage posts a message to a queue
 func (impl *implementation) CreateQueueMessage(ctx context.Context, request *queueservicepb.PostMessageRequest, v validator.Validator) (*queueservicepb.PostMessageResponse, error) {
 	if request == nil || request.GetMessage() == nil {
-		return nil, fmt.Errorf("message is required")
+		return nil, domainerror.New(domainerror.InvalidArgument, "message is required", nil)
 	}
 
 	queueName := request.GetQueueName()
+	if queueName == "" {
+		return nil, domainerror.New(domainerror.InvalidArgument, "queue name is required", nil)
+	}
 	message := request.GetMessage()
 
 	// Get queue metadata to inherit defaults
 	queueMetadata, err := impl.backend.GetQueueMetadata(ctx, queueName)
 	if err != nil {
-		return nil, fmt.Errorf("get queue metadata: %w", err)
+		return nil, domainerror.PrefixMessage(err, "get queue metadata")
 	}
 
 	// Ensure message has metadata
 	if message.Metadata == nil {
 		message.Metadata = &messagepb.Message_Metadata{}
+	}
+	if v != nil {
+		validationResult := v.Validate(ctx, message)
+		if !validationResult.Valid {
+			errorDetails := "Message validation failed:"
+			fieldViolations := make([]domainerror.FieldViolation, 0, len(validationResult.Errors))
+			for _, valErr := range validationResult.Errors {
+				errorDetails += fmt.Sprintf("\n  - %s: %s", valErr.Field, valErr.Message)
+				fieldViolations = append(fieldViolations, domainerror.FieldViolation{Field: valErr.Field, Description: valErr.Message})
+			}
+			metrics.IncrementValidationFailures(queueName, "message_validation")
+			return nil, domainerror.InvalidWithFields(errorDetails, fieldViolations, nil)
+		}
+		metrics.IncrementMessagesValidated(queueName)
 	}
 
 	// Messages with a future scheduled_time enter INVISIBLE and are promoted to PENDING
@@ -444,20 +478,10 @@ func (impl *implementation) CreateQueueMessage(ctx context.Context, request *que
 		message.Metadata.LeasePolicy = queueMetadata.GetLeasePolicy()
 	}
 
-	if v != nil {
-		validationResult := v.Validate(ctx, message)
-		if !validationResult.Valid {
-			errorDetails := "Message validation failed:"
-			for _, valErr := range validationResult.Errors {
-				errorDetails += fmt.Sprintf("\n  - %s: %s", valErr.Field, valErr.Message)
-			}
-			metrics.IncrementValidationFailures(queueName, "schema_mismatch")
-			return nil, fmt.Errorf("%s", errorDetails)
-		}
-		metrics.IncrementMessagesValidated(queueName)
-	}
-
 	if err := impl.backend.EnqueueMessage(ctx, queueName, message); err != nil {
+		if errors.Is(err, repositorycommon.ErrDuplicateMessageID) {
+			return nil, domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("message %q already exists", message.GetMessageId()), err)
+		}
 		return nil, err
 	}
 
@@ -469,25 +493,31 @@ func (impl *implementation) CreateQueueMessage(ctx context.Context, request *que
 // CreateQueueMessagesBulk posts multiple messages to a queue in a single operation
 func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request *queueservicepb.PostMessagesBulkRequest, v validator.Validator) (*queueservicepb.PostMessagesBulkResponse, error) {
 	if request == nil {
-		return nil, fmt.Errorf("request is required")
+		return nil, domainerror.New(domainerror.InvalidArgument, "request is required", nil)
 	}
 
 	queueName := request.GetQueueName()
+	if queueName == "" {
+		return nil, domainerror.New(domainerror.InvalidArgument, "queue name is required", nil)
+	}
 	messages := request.GetMessages()
 	transactionMode := request.GetTransactionMode()
+	if _, ok := queueservicepb.PostMessagesBulkRequest_TransactionMode_name[int32(transactionMode)]; !ok {
+		return nil, domainerror.New(domainerror.InvalidArgument, fmt.Sprintf("invalid transaction mode: %d", transactionMode), nil)
+	}
 
 	// Validate request limits
 	if len(messages) == 0 {
-		return nil, fmt.Errorf("no messages provided")
+		return nil, domainerror.New(domainerror.InvalidArgument, "no messages provided", nil)
 	}
 	if len(messages) > 1000 {
-		return nil, fmt.Errorf("too many messages: %d (max 1000)", len(messages))
+		return nil, domainerror.New(domainerror.InvalidArgument, fmt.Sprintf("too many messages: %d (max 1000)", len(messages)), nil)
 	}
 
 	// Get queue metadata to inherit defaults
 	queueMetadata, err := impl.backend.GetQueueMetadata(ctx, queueName)
 	if err != nil {
-		return nil, fmt.Errorf("get queue metadata: %w", err)
+		return nil, domainerror.PrefixMessage(err, "get queue metadata")
 	}
 
 	// Pre-process and validate all messages
@@ -496,7 +526,7 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 		if message == nil {
 			err := fmt.Errorf("message[%d] is required", i)
 			if transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
-				return nil, err
+				return nil, domainerror.New(domainerror.FailedPrecondition, err.Error(), err)
 			}
 			validationErrors[i] = err
 			continue
@@ -504,6 +534,27 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 		// Ensure message has metadata
 		if message.Metadata == nil {
 			message.Metadata = &messagepb.Message_Metadata{}
+		}
+
+		if v != nil {
+			validationResult := v.Validate(ctx, message)
+			if !validationResult.Valid {
+				metrics.IncrementValidationFailures(queueName, "message_validation")
+				if transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
+					errorDetails := fmt.Sprintf("Message[%d] validation failed:", i)
+					for _, valErr := range validationResult.Errors {
+						errorDetails += fmt.Sprintf("\n  - %s: %s", valErr.Field, valErr.Message)
+					}
+					return nil, domainerror.New(domainerror.FailedPrecondition, errorDetails, nil)
+				}
+				errorDetails := "validation failed:"
+				for _, valErr := range validationResult.Errors {
+					errorDetails += fmt.Sprintf(" %s: %s;", valErr.Field, valErr.Message)
+				}
+				validationErrors[i] = fmt.Errorf("%s", errorDetails)
+			} else {
+				metrics.IncrementMessagesValidated(queueName)
+			}
 		}
 
 		// Messages with a future scheduled_time enter INVISIBLE; the background
@@ -535,30 +586,6 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 			message.Metadata.LeasePolicy = queueMetadata.GetLeasePolicy()
 		}
 
-		// Schema validation
-		if v != nil {
-			validationResult := v.Validate(ctx, message)
-			if !validationResult.Valid {
-				metrics.IncrementValidationFailures(queueName, "schema_mismatch")
-
-				// In ALL_OR_NOTHING mode, fail fast on first validation error
-				if transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
-					errorDetails := fmt.Sprintf("Message[%d] validation failed:", i)
-					for _, valErr := range validationResult.Errors {
-						errorDetails += fmt.Sprintf("\n  - %s: %s", valErr.Field, valErr.Message)
-					}
-					return nil, fmt.Errorf("%s", errorDetails)
-				}
-				// Record validation error for this message
-				errorDetails := "validation failed:"
-				for _, valErr := range validationResult.Errors {
-					errorDetails += fmt.Sprintf(" %s: %s;", valErr.Field, valErr.Message)
-				}
-				validationErrors[i] = fmt.Errorf("%s", errorDetails)
-			} else {
-				metrics.IncrementMessagesValidated(queueName)
-			}
-		}
 	}
 
 	// Enforce max payload size after enrichment (applied to all submitted messages,
@@ -569,7 +596,8 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 		totalSize += proto.Size(msg)
 	}
 	if totalSize > maxPayloadBytes {
-		return nil, fmt.Errorf("total payload size %d bytes exceeds 1MB limit", totalSize)
+		message := fmt.Sprintf("total payload size %d bytes exceeds 1MB limit", totalSize)
+		return nil, domainerror.New(domainerror.InvalidArgument, message, nil)
 	}
 
 	// Filter out messages that failed validation
@@ -626,10 +654,11 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 		if messageErrors[j] != nil {
 			result.Success = false
 			result.ErrorCode = queueservicepb.PostMessagesBulkResponse_MessagePostResult_INTERNAL_ERROR
-			result.Error = messageErrors[j].Error()
+			result.Error = "internal server error"
 
 			if errors.Is(messageErrors[j], repositorycommon.ErrDuplicateMessageID) {
 				result.ErrorCode = queueservicepb.PostMessagesBulkResponse_MessagePostResult_DUPLICATE_MESSAGE_ID
+				result.Error = "message id already exists"
 			}
 		} else {
 			result.Success = true
@@ -647,8 +676,6 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 		successStatus = failedCount == 0
 	case queueservicepb.PostMessagesBulkRequest_BEST_EFFORT:
 		successStatus = successCount > 0
-	default:
-		return nil, fmt.Errorf("invalid transaction mode: %v", transactionMode)
 	}
 	response := &queueservicepb.PostMessagesBulkResponse{
 		Success:         successStatus,
@@ -675,17 +702,17 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 // GetQueueMessage retrieves the next available message from a queue
 func (impl *implementation) GetQueueMessage(ctx context.Context, request *queueservicepb.GetNextMessageRequest) (*queueservicepb.GetNextMessageResponse, error) {
 	if request == nil || request.GetQueueName() == "" {
-		return nil, fmt.Errorf("queue name is required")
+		return nil, domainerror.New(domainerror.InvalidArgument, "queue name is required", nil)
 	}
 
 	leaseDuration := time.Duration(0)
 	if request.GetLeaseDuration() != nil {
 		if err := request.GetLeaseDuration().CheckValid(); err != nil {
-			return nil, fmt.Errorf("invalid lease duration: %w", err)
+			return nil, domainerror.New(domainerror.InvalidArgument, "invalid lease duration", err)
 		}
 		leaseDuration = request.GetLeaseDuration().AsDuration()
 		if leaseDuration <= 0 {
-			return nil, fmt.Errorf("lease duration must be greater than zero")
+			return nil, domainerror.New(domainerror.InvalidArgument, "lease duration must be greater than zero", nil)
 		}
 	}
 
@@ -769,10 +796,10 @@ func optionalString(val string) *string {
 //	})
 func (impl *implementation) AcknowledgeMessage(ctx context.Context, request *queueservicepb.AcknowledgeMessageRequest) (*queueservicepb.AcknowledgeMessageResponse, error) {
 	if request == nil || request.GetQueueName() == "" || request.GetMessageId() == "" {
-		return nil, fmt.Errorf("queue name and message id are required")
+		return nil, domainerror.New(domainerror.InvalidArgument, "queue name and message id are required", nil)
 	}
 	if request.GetAttemptId() == "" || request.GetWorkerId() == "" {
-		return nil, fmt.Errorf("attempt id and worker id are required")
+		return nil, domainerror.New(domainerror.InvalidArgument, "attempt id and worker id are required", nil)
 	}
 
 	// Route to appropriate backend method based on requested state
@@ -786,7 +813,8 @@ func (impl *implementation) AcknowledgeMessage(ctx context.Context, request *que
 			return nil, err
 		}
 	default:
-		return nil, fmt.Errorf("invalid acknowledgment state: %v (must be COMPLETED or ERRORED)", request.State)
+		message := fmt.Sprintf("invalid acknowledgment state: %v (must be COMPLETED or ERRORED)", request.State)
+		return nil, domainerror.New(domainerror.InvalidArgument, message, nil)
 	}
 
 	return &queueservicepb.AcknowledgeMessageResponse{
@@ -818,7 +846,7 @@ func (impl *implementation) AcknowledgeMessage(ctx context.Context, request *que
 //	})
 func (impl *implementation) CancelMessage(ctx context.Context, request *queueservicepb.CancelMessageRequest) (*queueservicepb.CancelMessageResponse, error) {
 	if request == nil || request.GetQueueName() == "" || request.GetMessageId() == "" {
-		return nil, fmt.Errorf("queue name and message id are required")
+		return nil, domainerror.New(domainerror.InvalidArgument, "queue name and message id are required", nil)
 	}
 	reason := ""
 	if request.Reason != nil {
@@ -837,10 +865,10 @@ func (impl *implementation) CancelMessage(ctx context.Context, request *queueser
 // SendMessageHeartBeat updates the heartbeat for a message
 func (impl *implementation) SendMessageHeartBeat(ctx context.Context, request *queueservicepb.SendMessageHeartBeatRequest) (*queueservicepb.SendMessageHeartBeatResponse, error) {
 	if request == nil || request.GetQueueName() == "" || request.GetMessageId() == "" {
-		return nil, fmt.Errorf("queue name and message id are required")
+		return nil, domainerror.New(domainerror.InvalidArgument, "queue name and message id are required", nil)
 	}
 	if request.GetAttemptId() == "" || request.GetWorkerId() == "" {
-		return nil, fmt.Errorf("attempt id and worker id are required")
+		return nil, domainerror.New(domainerror.InvalidArgument, "attempt id and worker id are required", nil)
 	}
 
 	state, remainingTimeMs, err := impl.backend.HeartbeatMessage(ctx, request.QueueName, request.MessageId, request.GetAttemptId(), request.GetWorkerId())
@@ -860,15 +888,21 @@ func (impl *implementation) SendMessageHeartBeat(ctx context.Context, request *q
 // RenewMessageLease extends the lease on a message
 func (impl *implementation) RenewMessageLease(ctx context.Context, request *queueservicepb.RenewMessageLeaseRequest) (*queueservicepb.RenewMessageLeaseResponse, error) {
 	if request == nil || request.GetQueueName() == "" || request.GetMessageId() == "" {
-		return nil, fmt.Errorf("queue name and message id are required")
+		return nil, domainerror.New(domainerror.InvalidArgument, "queue name and message id are required", nil)
 	}
 	if request.GetAttemptId() == "" || request.GetWorkerId() == "" {
-		return nil, fmt.Errorf("attempt id and worker id are required")
+		return nil, domainerror.New(domainerror.InvalidArgument, "attempt id and worker id are required", nil)
 	}
 
 	extensionMs := int64(0)
 	if request.LeaseDuration != nil {
+		if err := request.LeaseDuration.CheckValid(); err != nil {
+			return nil, domainerror.New(domainerror.InvalidArgument, "invalid lease duration", err)
+		}
 		extensionMs = request.LeaseDuration.AsDuration().Milliseconds()
+		if extensionMs <= 0 {
+			return nil, domainerror.New(domainerror.InvalidArgument, "lease duration must be greater than zero", nil)
+		}
 	}
 
 	if err := impl.backend.ExtendMessageLease(ctx, request.QueueName, request.MessageId, request.GetAttemptId(), request.GetWorkerId(), extensionMs); err != nil {
@@ -889,16 +923,20 @@ func (impl *implementation) RenewMessageLease(ctx context.Context, request *queu
 // PeekQueueMessages retrieves messages without claiming them
 func (impl *implementation) PeekQueueMessages(ctx context.Context, request *queueservicepb.PeekQueueMessagesRequest) (*queueservicepb.PeekQueueMessagesResponse, error) {
 	if request == nil || request.GetQueueName() == "" {
-		return nil, fmt.Errorf("queue name is required")
+		return nil, domainerror.New(domainerror.InvalidArgument, "queue name is required", nil)
+	}
+	if request.GetLimit() < 0 || request.GetLimit() > int64(^uint32(0)>>1) {
+		return nil, domainerror.New(domainerror.InvalidArgument, "limit must be between 0 and 2147483647", nil)
 	}
 
 	var priorityRange *repositorysql.PriorityRange
 	if requestedRange := request.GetPriorityRange(); requestedRange != nil {
 		if requestedRange.GetMin() < validator.DefaultMinPriority || requestedRange.GetMax() > validator.DefaultMaxPriority {
-			return nil, fmt.Errorf("priority range must be between %d and %d", validator.DefaultMinPriority, validator.DefaultMaxPriority)
+			message := fmt.Sprintf("priority range must be between %d and %d", validator.DefaultMinPriority, validator.DefaultMaxPriority)
+			return nil, domainerror.New(domainerror.InvalidArgument, message, nil)
 		}
 		if requestedRange.GetMin() > requestedRange.GetMax() {
-			return nil, fmt.Errorf("priority range minimum must not exceed maximum")
+			return nil, domainerror.New(domainerror.InvalidArgument, "priority range minimum must not exceed maximum", nil)
 		}
 		priorityRange = &repositorysql.PriorityRange{Min: requestedRange.GetMin(), Max: requestedRange.GetMax()}
 	}
@@ -914,15 +952,15 @@ func (impl *implementation) PeekQueueMessages(ctx context.Context, request *queu
 
 // CreateSchedule creates a new schedule
 func (impl *implementation) CreateSchedule(ctx context.Context, request *queueservicepb.CreateScheduleRequest) (*queueservicepb.CreateScheduleResponse, error) {
-	if request.Schedule == nil {
-		return nil, fmt.Errorf("schedule is required")
+	if request == nil || request.GetSchedule() == nil {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schedule is required", nil)
 	}
 
 	// Pre-compute next_run for calendar schedules so the background processor can pick them up.
 	if meta := request.Schedule.GetMetadata(); meta != nil {
 		if meta.GetCalendarSchedule() != nil && meta.GetNextRun() == nil {
 			if err := impl.calendarEngine.ValidateSchedule(ctx, meta.GetCalendarSchedule()); err != nil {
-				return nil, fmt.Errorf("validate calendar schedule: %w", err)
+				return nil, domainerror.New(domainerror.InvalidArgument, "calendar schedule is invalid", err)
 			}
 
 			nextRun, err := impl.calendarEngine.CalculateNextRun(ctx, meta.GetCalendarSchedule(), time.Now())
@@ -950,6 +988,9 @@ func (impl *implementation) CreateSchedule(ctx context.Context, request *queuese
 
 // DeleteSchedule deletes a schedule
 func (impl *implementation) DeleteSchedule(ctx context.Context, request *queueservicepb.DeleteScheduleRequest) (*queueservicepb.DeleteScheduleResponse, error) {
+	if request == nil || request.GetScheduleId() == "" {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schedule id is required", nil)
+	}
 	if err := impl.backend.DeleteSchedule(ctx, request.ScheduleId); err != nil {
 		return nil, err
 	}
@@ -961,6 +1002,9 @@ func (impl *implementation) DeleteSchedule(ctx context.Context, request *queuese
 
 // GetSchedule retrieves a schedule by ID
 func (impl *implementation) GetSchedule(ctx context.Context, request *queueservicepb.GetScheduleRequest) (*queueservicepb.GetScheduleResponse, error) {
+	if request == nil || request.GetScheduleId() == "" {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schedule id is required", nil)
+	}
 	schedule, err := impl.backend.GetSchedule(ctx, request.ScheduleId)
 	if err != nil {
 		return nil, err
@@ -981,6 +1025,12 @@ func (impl *implementation) ListSchedules(ctx context.Context, request *queueser
 
 // GetScheduleHistory retrieves execution history for a schedule
 func (impl *implementation) GetScheduleHistory(ctx context.Context, request *queueservicepb.GetScheduleHistoryRequest) (*queueservicepb.GetScheduleHistoryResponse, error) {
+	if request == nil || request.GetScheduleId() == "" {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schedule id is required", nil)
+	}
+	if request.GetLimit() < 0 {
+		return nil, domainerror.New(domainerror.InvalidArgument, "limit must be >= 0", nil)
+	}
 	history, err := impl.backend.GetScheduleHistory(ctx, request.ScheduleId, request.Limit)
 	if err != nil {
 		return nil, err
@@ -993,6 +1043,9 @@ func (impl *implementation) GetScheduleHistory(ctx context.Context, request *que
 
 // PauseSchedule pauses a schedule
 func (impl *implementation) PauseSchedule(ctx context.Context, request *queueservicepb.PauseScheduleRequest) (*queueservicepb.PauseScheduleResponse, error) {
+	if request == nil || request.GetScheduleId() == "" {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schedule id is required", nil)
+	}
 	if err := impl.backend.PauseSchedule(ctx, request.ScheduleId); err != nil {
 		return nil, err
 	}
@@ -1004,6 +1057,9 @@ func (impl *implementation) PauseSchedule(ctx context.Context, request *queueser
 
 // ResumeSchedule resumes a paused schedule
 func (impl *implementation) ResumeSchedule(ctx context.Context, request *queueservicepb.ResumeScheduleRequest) (*queueservicepb.ResumeScheduleResponse, error) {
+	if request == nil || request.GetScheduleId() == "" {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schedule id is required", nil)
+	}
 	if err := impl.backend.ResumeSchedule(ctx, request.ScheduleId); err != nil {
 		return nil, err
 	}
@@ -1016,7 +1072,7 @@ func (impl *implementation) ResumeSchedule(ctx context.Context, request *queuese
 // ValidateCalendarSchedule validates a calendar schedule
 func (impl *implementation) ValidateCalendarSchedule(ctx context.Context, calendarSchedule *schedulepb.CalendarSchedule) error {
 	if calendarSchedule == nil {
-		return fmt.Errorf("calendar schedule is nil")
+		return domainerror.New(domainerror.InvalidArgument, "calendar schedule is required", nil)
 	}
 
 	// Use the calendar engine to validate the schedule
@@ -1027,7 +1083,7 @@ func (impl *implementation) ValidateCalendarSchedule(ctx context.Context, calend
 func (impl *implementation) GetCalendarSchedulePreview(ctx context.Context, calendarSchedule *schedulepb.CalendarSchedule, count int) (*queueservicepb.PreviewCalendarScheduleResponse, error) {
 	// Validate input
 	if calendarSchedule == nil {
-		return nil, fmt.Errorf("preview failed: calendar schedule cannot be nil")
+		return nil, domainerror.New(domainerror.InvalidArgument, "preview failed: calendar schedule cannot be nil", nil)
 	}
 
 	// Generate preview from now

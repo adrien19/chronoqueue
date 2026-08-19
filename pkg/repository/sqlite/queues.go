@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 )
 
 // CreateQueue creates a new queue
@@ -18,6 +19,9 @@ func (s *Storage) CreateQueue(ctx context.Context, queue *queuepb.Queue) error {
 	query := `INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
 	_, err = s.DB.ExecContext(ctx, query, queue.Name, queueBytes)
 	if err != nil {
+		if isUniqueConstraintError(err) {
+			return domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("queue %q already exists", queue.Name), err)
+		}
 		return fmt.Errorf("insert queue: %w", err)
 	}
 
@@ -30,7 +34,7 @@ func (s *Storage) GetQueue(ctx context.Context, name string) (*queuepb.Queue, er
 	var queueBytes []byte
 	err := s.DB.QueryRowContext(ctx, query, name).Scan(&queueBytes)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("queue not found: %s", name)
+		return nil, domainerror.New(domainerror.NotFound, fmt.Sprintf("queue %q not found", name), err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query queue: %w", err)
@@ -98,7 +102,7 @@ func (s *Storage) DeleteQueue(ctx context.Context, name string) error {
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("queue not found: %s", name)
+		return domainerror.New(domainerror.NotFound, fmt.Sprintf("queue %q not found", name), nil)
 	}
 
 	return nil

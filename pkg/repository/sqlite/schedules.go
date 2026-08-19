@@ -10,6 +10,7 @@ import (
 
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
 )
 
@@ -55,6 +56,9 @@ func (s *Storage) CreateSchedule(ctx context.Context, schedule *schedulepb.Sched
 	query := `INSERT INTO cq_schedules (id, queue_name, metadata_pb, state, cron_schedule, next_run, last_run, execution_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err = s.DB.ExecContext(ctx, query, schedule.GetScheduleId(), schedule.GetMetadata().GetQueueName(), scheduleBytes, schedule.GetMetadata().GetState(), cronExpr, nextRunMs, lastRunMs, 0, now, now)
 	if err != nil {
+		if isUniqueConstraintError(err) {
+			return domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("schedule %q already exists", schedule.GetScheduleId()), err)
+		}
 		return fmt.Errorf("insert schedule: %w", err)
 	}
 
@@ -67,7 +71,7 @@ func (s *Storage) GetSchedule(ctx context.Context, scheduleId string) (*schedule
 	var scheduleBytes []byte
 	err := s.DB.QueryRowContext(ctx, query, scheduleId).Scan(&scheduleBytes)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("schedule not found: %s", scheduleId)
+		return nil, domainerror.New(domainerror.NotFound, fmt.Sprintf("schedule %q not found", scheduleId), err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query schedule: %w", err)
@@ -162,7 +166,7 @@ func (s *Storage) DeleteSchedule(ctx context.Context, scheduleId string) error {
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("schedule not found: %s", scheduleId)
+		return domainerror.New(domainerror.NotFound, fmt.Sprintf("schedule %q not found", scheduleId), nil)
 	}
 
 	return nil
@@ -177,7 +181,7 @@ func (s *Storage) PauseSchedule(ctx context.Context, scheduleId string) error {
 		query := `SELECT metadata_pb, state FROM cq_schedules WHERE id = ?`
 		err := tx.QueryRowContext(ctx, query, scheduleId).Scan(&scheduleBytes, &currentState)
 		if err == sql.ErrNoRows {
-			return fmt.Errorf("schedule not found: %s", scheduleId)
+			return domainerror.New(domainerror.NotFound, fmt.Sprintf("schedule %q not found", scheduleId), err)
 		}
 		if err != nil {
 			return fmt.Errorf("query schedule: %w", err)
@@ -213,7 +217,7 @@ func (s *Storage) PauseSchedule(ctx context.Context, scheduleId string) error {
 			return fmt.Errorf("get rows affected: %w", err)
 		}
 		if rows == 0 {
-			return fmt.Errorf("schedule not found: %s", scheduleId)
+			return domainerror.New(domainerror.NotFound, fmt.Sprintf("schedule %q not found", scheduleId), nil)
 		}
 
 		return nil
@@ -229,10 +233,13 @@ func (s *Storage) ResumeSchedule(ctx context.Context, scheduleId string) error {
 		query := `SELECT metadata_pb, state FROM cq_schedules WHERE id = ?`
 		err := tx.QueryRowContext(ctx, query, scheduleId).Scan(&scheduleBytes, &currentState)
 		if err == sql.ErrNoRows {
-			return fmt.Errorf("schedule not found: %s", scheduleId)
+			return domainerror.New(domainerror.NotFound, fmt.Sprintf("schedule %q not found", scheduleId), err)
 		}
 		if err != nil {
 			return fmt.Errorf("query schedule: %w", err)
+		}
+		if schedulepb.Schedule_Metadata_State(currentState) != schedulepb.Schedule_Metadata_PAUSED {
+			return domainerror.New(domainerror.FailedPrecondition, "schedule is not paused", nil)
 		}
 
 		// Unmarshal schedule to update metadata
@@ -265,7 +272,7 @@ func (s *Storage) ResumeSchedule(ctx context.Context, scheduleId string) error {
 			return fmt.Errorf("get rows affected: %w", err)
 		}
 		if rows == 0 {
-			return fmt.Errorf("schedule not found: %s", scheduleId)
+			return domainerror.New(domainerror.NotFound, fmt.Sprintf("schedule %q not found", scheduleId), nil)
 		}
 
 		return nil

@@ -1030,9 +1030,8 @@ func TestCreateQueueMessagesBulk_BackendInternalError(t *testing.T) {
 		t.Fatalf("expected INTERNAL_ERROR for msg-2, got %v", resp.Results[1].ErrorCode)
 	}
 
-	if !strings.Contains(resp.Results[1].Error, "database connection lost") {
-		t.Fatalf("expected error message to contain backend error")
-	}
+	require.Equal(t, "internal server error", resp.Results[1].Error)
+	require.NotContains(t, resp.Results[1].Error, "database connection lost")
 }
 
 func TestCreateQueueMessagesBulk_DuplicateMessageID(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	schema_pb "github.com/adrien19/chronoqueue/api/schema/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/log"
 )
 
@@ -65,7 +66,7 @@ func (r *PostgresRegistry) initSchema(ctx context.Context) error {
 // Register registers a new schema or creates a new version.
 func (r *PostgresRegistry) Register(ctx context.Context, schema *schema_pb.Schema) (SchemaMetadata, error) {
 	if err := validateSchemaContent(schema.Content); err != nil {
-		return SchemaMetadata{}, fmt.Errorf("invalid schema content: %w", err)
+		return SchemaMetadata{}, domainerror.New(domainerror.InvalidArgument, "invalid schema content", err)
 	}
 
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -164,7 +165,7 @@ func (r *PostgresRegistry) Get(ctx context.Context, schemaID string, version int
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("schema not found: %s version %d", schemaID, version)
+		return nil, domainerror.New(domainerror.NotFound, fmt.Sprintf("schema not found: %s version %d", schemaID, version), err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get schema: %w", err)
@@ -200,7 +201,7 @@ func (r *PostgresRegistry) GetLatest(ctx context.Context, schemaID string) (*sch
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("schema not found: %s", schemaID)
+		return nil, domainerror.New(domainerror.NotFound, fmt.Sprintf("schema %q not found", schemaID), err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest schema: %w", err)
@@ -293,7 +294,7 @@ func (r *PostgresRegistry) Deactivate(ctx context.Context, schemaID string, vers
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("schema not found: %s version %d", schemaID, version)
+		return domainerror.New(domainerror.NotFound, fmt.Sprintf("schema not found: %s version %d", schemaID, version), nil)
 	}
 
 	r.logger.InfoWithFields("Schema deactivated", "schemaId", schemaID, "version", version)

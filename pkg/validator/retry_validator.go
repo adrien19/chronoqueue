@@ -89,7 +89,7 @@ func (v *RetryValidator) Validate(ctx context.Context, msg *message_pb.Message) 
 		}
 	} else {
 		// For finite retries, validate attempts_left
-		if attemptsLeft < 0 && attemptsLeft != InfiniteRetries {
+		if attemptsLeft < 0 {
 			result.Valid = false
 			result.Errors = append(result.Errors, NewValidationError(
 				"metadata.attempts_left",

@@ -51,7 +51,7 @@ func TestCalculateWeightsWithAgeBoost(t *testing.T) {
 
 	meta := &queuepb.QueueMetadata{
 		PriorityConfig: &queuepb.PriorityConfig{
-			Policy:             queuepb.FairnessPolicy_WEIGHTED,
+			Policy:             queuepb.FairnessPolicy_HYBRID,
 			PriorityWeights:    map[int32]int32{4: 10, 2: 5, 0: 1},
 			AgeBoostThreshold:  durationpb.New(15 * time.Minute),
 			AgeBoostMultiplier: 3,
@@ -79,6 +79,24 @@ func TestCalculateWeightsNoMessages(t *testing.T) {
 	weights, err := calc.CalculateWeights(context.Background(), "jobs", meta)
 	require.NoError(t, err)
 	require.Empty(t, weights)
+}
+
+func TestCalculateWeightsWeightedPolicyDoesNotApplyAgeBoost(t *testing.T) {
+	now := time.Now().UnixMilli()
+	calc := &PriorityWeightCalculator{
+		clock: repositorysql.NewClock(),
+		AgeFetcher: func(_ context.Context, _ string, _ string, _ int64) (int64, bool, error) {
+			return now - time.Hour.Milliseconds(), true, nil
+		},
+	}
+	meta := &queuepb.QueueMetadata{PriorityConfig: &queuepb.PriorityConfig{
+		Policy:          queuepb.FairnessPolicy_WEIGHTED,
+		PriorityWeights: map[int32]int32{4: 10, 2: 5, 0: 1},
+	}}
+
+	weights, err := calc.CalculateWeights(context.Background(), "orders", meta)
+	require.NoError(t, err)
+	require.Equal(t, map[string]int32{"high": 10, "medium": 5, "low": 1}, weights)
 }
 
 func TestSelectPriorityLevelSingleWeight(t *testing.T) {

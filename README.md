@@ -233,6 +233,7 @@ For complete documentation and setup guides, visit the [TypeScript SDK repositor
 Documentation currently lives alongside the relevant components:
 
 - Start the HTTP gateway with `--dev` or `--enable-api-docs` and open `/docs/` for the embedded Swagger UI, or inspect the generated [OpenAPI specification](./pkg/gateway/chronoqueue.swagger.json).
+- See the [API validation and error contract](./API_VALIDATION.md) for queue/message configuration rules and gRPC-to-HTTP error mappings.
 - See the [deployment guide](./deploy/README.md), [monitoring guide](./monitoring/README.md), [test guide](./tests/README.md), and [examples](./examples/README.md).
 - The protobuf service contract is defined in [`proto/queueservice/v1/service.proto`](./proto/queueservice/v1/service.proto).
 

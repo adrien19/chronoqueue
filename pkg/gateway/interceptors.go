@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
 )
@@ -45,6 +46,18 @@ func signedGatewayClientID(host string) string {
 		panic("sign gateway client identity: " + err.Error())
 	}
 	return payload + ":" + hex.EncodeToString(signature.Sum(nil))
+}
+
+// ErrorContractInterceptor converts application errors at the transport boundary.
+func ErrorContractInterceptor(logger *log.Logger) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		resp, err := handler(ctx, req)
+		mappedErr := domainerror.ToGRPC(err)
+		if err != nil && status.Code(mappedErr) == codes.Internal {
+			logger.ErrorWithFields("Unclassified application error", "method", info.FullMethod, "error", err)
+		}
+		return resp, mappedErr
+	}
 }
 
 func verifiedGatewayClientID(value string) (string, bool) {
@@ -367,7 +380,7 @@ func ClientCertMiddleware(next http.Handler) http.Handler {
 }
 
 // customVerifyPeerCertificate performs additional certificate validation
-func customVerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+func customVerifyPeerCertificate(verifiedChains [][]*x509.Certificate) error {
 	if len(verifiedChains) == 0 || len(verifiedChains[0]) == 0 {
 		return errors.New("could not obtain client certificate")
 	}
@@ -427,7 +440,7 @@ func VerifyPeerCertificateInterceptor(ctx context.Context, req interface{}, info
 		return nil, status.Error(codes.Unauthenticated, "could not obtain client certificate")
 	}
 
-	err := customVerifyPeerCertificate(nil, tlsAuth.State.VerifiedChains)
+	err := customVerifyPeerCertificate(tlsAuth.State.VerifiedChains)
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, err.Error())
 	}

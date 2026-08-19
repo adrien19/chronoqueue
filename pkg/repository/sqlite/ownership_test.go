@@ -9,9 +9,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 )
 
 func TestWorkerMutations_RequireActiveOwnership(t *testing.T) {
@@ -43,11 +46,11 @@ func TestWorkerMutations_RequireActiveOwnership(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, claimed)
 
-			require.Error(t, mutate(ctx, storage, "other", "attempt", "worker"))
-			require.Error(t, mutate(ctx, storage, "owned", "stale-attempt", "worker"))
-			require.Error(t, mutate(ctx, storage, "owned", "attempt", "stale-worker"))
+			require.Equal(t, codes.NotFound, status.Code(domainerror.ToGRPC(mutate(ctx, storage, "other", "attempt", "worker"))))
+			require.Equal(t, codes.FailedPrecondition, status.Code(domainerror.ToGRPC(mutate(ctx, storage, "owned", "stale-attempt", "worker"))))
+			require.Equal(t, codes.FailedPrecondition, status.Code(domainerror.ToGRPC(mutate(ctx, storage, "owned", "attempt", "stale-worker"))))
 			expireReclaimTestMessage(t, ctx, storage, name)
-			require.Error(t, mutate(ctx, storage, "owned", "attempt", "worker"))
+			require.Equal(t, codes.DeadlineExceeded, status.Code(domainerror.ToGRPC(mutate(ctx, storage, "owned", "attempt", "worker"))))
 
 			var state messagepb.Message_Metadata_State
 			require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT state FROM cq_messages WHERE message_id = ?`, name).Scan(&state))

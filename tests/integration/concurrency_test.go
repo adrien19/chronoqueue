@@ -395,10 +395,15 @@ func TestConcurrency_LeaseExpiry_ConcurrentReclaim(t *testing.T) {
 	// Wait for leases to expire before starting reclaim attempts.
 	time.Sleep(3 * time.Second)
 
-	// Spawn 30 workers to reclaim expired messages concurrently
+	// Spawn 30 workers to reclaim expired messages concurrently.
 	numWorkers := 30
 	var wg sync.WaitGroup
 	claimedMessages := make(chan string, numWorkers)
+	ackErrors := make(chan error, numWorkers)
+	attemptCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	var claimedMu sync.Mutex
+	claimedCount := 0
 
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
@@ -407,10 +412,7 @@ func TestConcurrency_LeaseExpiry_ConcurrentReclaim(t *testing.T) {
 		go func(id string) {
 			defer wg.Done()
 
-			deadline := time.Now().Add(20 * time.Second)
-			attemptCtx, cancel := context.WithDeadline(ctx, deadline)
-			defer cancel()
-			for time.Now().Before(deadline) {
+			for attemptCtx.Err() == nil {
 				workerPtr := id
 				resp, err := client.GetNextMessage(attemptCtx, &queueservice_pb.GetNextMessageRequest{
 					QueueName: queueName,
@@ -418,7 +420,26 @@ func TestConcurrency_LeaseExpiry_ConcurrentReclaim(t *testing.T) {
 				})
 
 				if err == nil && resp.Message != nil {
+					attemptID := resp.Message.GetMetadata().GetCurrentAttempt().GetAttemptId()
+					workerID := resp.GetWorkerId()
+					_, err = client.AcknowledgeMessage(attemptCtx, &queueservice_pb.AcknowledgeMessageRequest{
+						QueueName: queueName,
+						MessageId: resp.Message.GetMessageId(),
+						AttemptId: &attemptID,
+						WorkerId:  &workerID,
+						State:     message_pb.Message_Metadata_COMPLETED,
+					})
+					if err != nil {
+						ackErrors <- err
+						return
+					}
 					claimedMessages <- resp.Message.MessageId
+					claimedMu.Lock()
+					claimedCount++
+					if claimedCount == numMessages {
+						cancel()
+					}
+					claimedMu.Unlock()
 					return
 				}
 
@@ -429,6 +450,10 @@ func TestConcurrency_LeaseExpiry_ConcurrentReclaim(t *testing.T) {
 
 	wg.Wait()
 	close(claimedMessages)
+	close(ackErrors)
+	for err := range ackErrors {
+		require.NoError(t, err)
+	}
 
 	// Verify messages were reclaimed
 	reclaimed := make(map[string]int)
@@ -440,15 +465,5 @@ func TestConcurrency_LeaseExpiry_ConcurrentReclaim(t *testing.T) {
 	for msgID, count := range reclaimed {
 		assert.Equal(t, 1, count, "Message %s should be reclaimed exactly once, got %d", msgID, count)
 	}
-
-	finalState, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{QueueName: queueName})
-	require.NoError(t, err)
-
-	errored := finalState.GetStateCounts()["ERRORED"]
-	if len(reclaimed) == 0 && int(errored) != numMessages {
-		t.Skip("No reclaim observed and messages are not yet terminal; skipping to avoid environment-timing flake")
-	}
-
-	require.Equal(t, numMessages, len(reclaimed)+int(errored),
-		"each message must be reclaimed exactly once or move to ERRORED")
+	require.Len(t, reclaimed, numMessages, "all expired messages should be reclaimed")
 }

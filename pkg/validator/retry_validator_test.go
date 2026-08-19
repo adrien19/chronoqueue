@@ -109,6 +109,13 @@ func TestRetryValidator_ValidationRules(t *testing.T) {
 			errorField:    "metadata.attempts_left",
 		},
 		{
+			name:          "Invalid: infinite attempts_left with finite max_attempts",
+			maxAttempts:   5,
+			attemptsLeft:  InfiniteRetries,
+			shouldBeValid: false,
+			errorField:    "metadata.attempts_left",
+		},
+		{
 			name:          "Invalid: negative attempts_left (not infinite)",
 			maxAttempts:   5,
 			attemptsLeft:  -2,

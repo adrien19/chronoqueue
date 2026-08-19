@@ -11,6 +11,7 @@ import (
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
 	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
 	repositorysql "github.com/adrien19/chronoqueue/pkg/repository/sql"
@@ -26,15 +27,42 @@ func (s *Storage) generateID() string {
 	return hex.EncodeToString(b)
 }
 
-func requireOneOwnedMessage(result sql.Result) error {
+func (s *Storage) requireOneOwnedMessage(ctx context.Context, tx *sql.Tx, result sql.Result, queueName string, messageId string, attemptId string, workerId string, nowMs int64) error {
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rows != 1 {
-		return fmt.Errorf("message not found, lease expired, or ownership mismatch")
+		return s.classifyOwnedMessageFailure(ctx, tx, queueName, messageId, attemptId, workerId, nowMs)
 	}
 	return nil
+}
+
+func (s *Storage) classifyOwnedMessageFailure(ctx context.Context, tx *sql.Tx, queueName string, messageId string, attemptId string, workerId string, nowMs int64) error {
+	var state messagepb.Message_Metadata_State
+	var currentAttemptID, currentWorkerID sql.NullString
+	var leaseExpiry, heartbeatExpiry sql.NullInt64
+	err := tx.QueryRowContext(ctx, s.ph(`
+		SELECT state, current_attempt_id, current_worker_id, lease_expiry, heartbeat_expiry
+		FROM cq_messages
+		WHERE queue_name = ? AND message_id = ? AND deleted_at IS NULL`), queueName, messageId).
+		Scan(&state, &currentAttemptID, &currentWorkerID, &leaseExpiry, &heartbeatExpiry)
+	if err == sql.ErrNoRows {
+		return domainerror.New(domainerror.NotFound, fmt.Sprintf("message %q not found", messageId), err)
+	}
+	if err != nil {
+		return fmt.Errorf("classify message ownership: %w", err)
+	}
+	if state != messagepb.Message_Metadata_RUNNING {
+		return domainerror.New(domainerror.FailedPrecondition, "message is not running", nil)
+	}
+	if !currentAttemptID.Valid || !currentWorkerID.Valid || currentAttemptID.String != attemptId || currentWorkerID.String != workerId {
+		return domainerror.New(domainerror.FailedPrecondition, "message is owned by another attempt", nil)
+	}
+	if !leaseExpiry.Valid || leaseExpiry.Int64 <= nowMs || (heartbeatExpiry.Valid && heartbeatExpiry.Int64 > 0 && heartbeatExpiry.Int64 <= nowMs) {
+		return domainerror.New(domainerror.DeadlineExceeded, "message lease has expired", nil)
+	}
+	return domainerror.New(domainerror.FailedPrecondition, "message state changed during the operation", nil)
 }
 
 // calculateDeletion determines deletion behavior based on retention policy.
@@ -237,7 +265,7 @@ func (s *Storage) ClaimMessageWithLeaseDuration(ctx context.Context, queueName s
 		queueMeta = &queuepb.QueueMetadata{}
 	}
 	if err := repositorycommon.ValidateClaimExclusivity(queueMeta, exclusivityKey); err != nil {
-		return nil, err
+		return nil, domainerror.New(domainerror.InvalidArgument, err.Error(), err)
 	}
 	isExclusive := queueMeta.GetType() == queuepb.QueueType_EXCLUSIVE
 
@@ -455,7 +483,7 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 				return fmt.Errorf("get rows affected: %w", err)
 			}
 			if rows == 0 {
-				return fmt.Errorf("message not found or attempt mismatch")
+				return s.classifyOwnedMessageFailure(ctx, tx, queueName, messageId, attemptId, workerId, nowMs)
 			}
 		} else {
 			result, err := tx.ExecContext(ctx, s.ph(`
@@ -488,7 +516,7 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 				return fmt.Errorf("get rows affected: %w", err)
 			}
 			if rows == 0 {
-				return fmt.Errorf("message not found or attempt mismatch")
+				return s.classifyOwnedMessageFailure(ctx, tx, queueName, messageId, attemptId, workerId, nowMs)
 			}
 		}
 
@@ -531,7 +559,7 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 			FOR UPDATE`)
 		err := tx.QueryRowContext(ctx, query, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs).Scan(&messageBytes, &oldState, &attemptsLeft)
 		if err == sql.ErrNoRows {
-			return fmt.Errorf("message not found, lease expired, or ownership mismatch")
+			return s.classifyOwnedMessageFailure(ctx, tx, queueName, messageId, attemptId, workerId, nowMs)
 		}
 		if err != nil {
 			return fmt.Errorf("query message: %w", err)
@@ -559,7 +587,7 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 				if err != nil {
 					return fmt.Errorf("delete errored message: %w", err)
 				}
-				if err := requireOneOwnedMessage(result); err != nil {
+				if err := s.requireOneOwnedMessage(ctx, tx, result, queueName, messageId, attemptId, workerId, nowMs); err != nil {
 					return err
 				}
 			} else {
@@ -598,7 +626,7 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 				if err != nil {
 					return fmt.Errorf("soft delete errored message: %w", err)
 				}
-				if err := requireOneOwnedMessage(result); err != nil {
+				if err := s.requireOneOwnedMessage(ctx, tx, result, queueName, messageId, attemptId, workerId, nowMs); err != nil {
 					return err
 				}
 			}
@@ -627,7 +655,7 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 				return fmt.Errorf("update message: %w", err)
 			}
 
-			if err := requireOneOwnedMessage(result); err != nil {
+			if err := s.requireOneOwnedMessage(ctx, tx, result, queueName, messageId, attemptId, workerId, nowMs); err != nil {
 				return err
 			}
 		}
@@ -667,7 +695,7 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 		query := s.ph(`SELECT state FROM cq_messages WHERE message_id = ? AND queue_name = ?`)
 		err := tx.QueryRowContext(ctx, query, messageId, queueName).Scan(&currentState)
 		if err == sql.ErrNoRows {
-			return fmt.Errorf("message not found: %s", messageId)
+			return domainerror.New(domainerror.NotFound, fmt.Sprintf("message %q not found", messageId), err)
 		}
 		if err != nil {
 			return fmt.Errorf("query message: %w", err)
@@ -675,7 +703,7 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 
 		// Only allow cancellation of INVISIBLE or PENDING messages
 		if currentState != messagepb.Message_Metadata_INVISIBLE && currentState != messagepb.Message_Metadata_PENDING {
-			return fmt.Errorf("cannot cancel message in state %s (only INVISIBLE or PENDING messages can be cancelled)", currentState)
+			return domainerror.New(domainerror.FailedPrecondition, fmt.Sprintf("message cannot be canceled in state %s", currentState), nil)
 		}
 
 		// Calculate deletion behavior based on retention policy
@@ -696,7 +724,7 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 				return fmt.Errorf("get rows affected: %w", err)
 			}
 			if rows == 0 {
-				return fmt.Errorf("message not found or state changed")
+				return domainerror.New(domainerror.FailedPrecondition, "message state changed during cancellation", nil)
 			}
 		} else {
 			// Soft delete - mark as CANCELED and set deleted_at, verify state hasn't changed
@@ -740,7 +768,7 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 				return fmt.Errorf("get rows affected: %w", err)
 			}
 			if rows == 0 {
-				return fmt.Errorf("message not found or state changed")
+				return domainerror.New(domainerror.FailedPrecondition, "message state changed during cancellation", nil)
 			}
 		}
 
@@ -782,7 +810,7 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
 			FOR UPDATE`)
 		err := tx.QueryRowContext(ctx, query, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs).Scan(&messageBytes, &leaseExtensionUsed, &currentRenewalCount)
 		if err == sql.ErrNoRows {
-			return fmt.Errorf("message not found or attempt mismatch")
+			return s.classifyOwnedMessageFailure(ctx, tx, queueName, messageId, attemptId, workerId, nowMs)
 		}
 		if err != nil {
 			return fmt.Errorf("query message: %w", err)
@@ -798,13 +826,14 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
 		if leasePolicy != nil && leasePolicy.MaxRenewals > 0 {
 			if currentRenewalCount >= leasePolicy.MaxRenewals {
 				metrics.IncrementLeaseRenewals(queueName, "denied_max_renewals")
-				return fmt.Errorf("lease renewal limit reached: %d/%d renewals used", currentRenewalCount, leasePolicy.MaxRenewals)
+				message := fmt.Sprintf("lease renewal limit reached: %d/%d renewals used", currentRenewalCount, leasePolicy.MaxRenewals)
+				return domainerror.New(domainerror.FailedPrecondition, message, nil)
 			}
 		}
 
 		newLeaseRuntime, err := s.LeaseRuntime.ExtendLease(leasePolicy, leaseExtensionUsed, extensionMs)
 		if err != nil {
-			return err
+			return domainerror.New(domainerror.FailedPrecondition, "maximum lease extension reached", err)
 		}
 
 		updateQuery := s.ph(`
@@ -831,7 +860,7 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
 			metrics.IncrementLeaseRenewals(queueName, "failed")
 			return err
 		}
-		if err := requireOneOwnedMessage(result); err != nil {
+		if err := s.requireOneOwnedMessage(ctx, tx, result, queueName, messageId, attemptId, workerId, nowMs); err != nil {
 			metrics.IncrementLeaseRenewals(queueName, "failed")
 			return err
 		}
@@ -861,7 +890,7 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 			FOR UPDATE`)
 		err := tx.QueryRowContext(ctx, query, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs).Scan(&messageBytes, &state)
 		if err == sql.ErrNoRows {
-			return fmt.Errorf("message not found or attempt mismatch")
+			return s.classifyOwnedMessageFailure(ctx, tx, queueName, messageId, attemptId, workerId, nowMs)
 		}
 		if err != nil {
 			return fmt.Errorf("query message: %w", err)
@@ -901,7 +930,7 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 			return fmt.Errorf("update heartbeat: %w", err)
 		}
 
-		if err := requireOneOwnedMessage(result); err != nil {
+		if err := s.requireOneOwnedMessage(ctx, tx, result, queueName, messageId, attemptId, workerId, nowMs); err != nil {
 			return err
 		}
 
