@@ -212,12 +212,12 @@ func TestQueueOperations_DuplicateQueueCreation_Error(t *testing.T) {
 	}
 }
 
-// TestQueueOperations_ListQueues_Pagination validates queue listing with multiple queues.
+// TestQueueOperations_ListQueues_Prefix validates queue listing by name prefix.
 //
 // Test Scenario: TC-Q-007 from TESTING_GUIDE.md
 // Data: 10+ queues created
 // Expected: All queues returned with correct metadata
-func TestQueueOperations_ListQueues_Pagination(t *testing.T) {
+func TestQueueOperations_ListQueues_Prefix(t *testing.T) {
 	// Note: Not parallel - creates many queues
 
 	// Arrange
@@ -231,10 +231,11 @@ func TestQueueOperations_ListQueues_Pagination(t *testing.T) {
 
 	const numQueues = 15
 	createdQueues := make([]string, numQueues)
+	prefix := helpers.GenerateUniqueQueueName(t, "list-prefix") + "-"
 
 	// Create multiple queues
 	for i := 0; i < numQueues; i++ {
-		queueName := fmt.Sprintf("test-queue-%d", i)
+		queueName := fmt.Sprintf("%s%d", prefix, i)
 		createdQueues[i] = queueName
 
 		_, err := client.CreateQueue(ctx, &queueservice_pb.CreateQueueRequest{
@@ -247,11 +248,11 @@ func TestQueueOperations_ListQueues_Pagination(t *testing.T) {
 	}
 
 	// Act
-	listResp, err := client.ListQueues(ctx, &queueservice_pb.ListQueuesRequest{})
+	listResp, err := client.ListQueues(ctx, &queueservice_pb.ListQueuesRequest{Prefix: prefix})
 
 	// Assert
 	require.NoError(t, err, "List queues should succeed")
-	assert.GreaterOrEqual(t, len(listResp.Queues), numQueues, "Should return all created queues")
+	require.Len(t, listResp.Queues, numQueues, "Should return only queues with the requested prefix")
 
 	queueNames := extractQueueNames(listResp.Queues)
 	for _, queueName := range createdQueues {

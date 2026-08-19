@@ -2,6 +2,7 @@ package sql
 
 import (
 	"fmt"
+	"time"
 
 	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
 )
@@ -32,10 +33,15 @@ type LeaseRuntime struct {
 // CalculateLeaseRuntime computes all lease-related timestamps from a lease policy.
 // This is called when a message transitions to RUNNING state.
 func (lrc *LeaseRuntimeCalculator) CalculateLeaseRuntime(policy *commonpb.LeasePolicy) *LeaseRuntime {
+	return lrc.CalculateLeaseRuntimeWithDuration(policy, policy.GetBaseLease().AsDuration())
+}
+
+// CalculateLeaseRuntimeWithDuration computes lease timestamps with a per-claim duration.
+func (lrc *LeaseRuntimeCalculator) CalculateLeaseRuntimeWithDuration(policy *commonpb.LeasePolicy, leaseDuration time.Duration) *LeaseRuntime {
 	nowMs := lrc.clock.NowMs()
 
 	// Convert duration protobuf to milliseconds
-	baseLeaseDurationMs := policy.GetBaseLease().AsDuration().Milliseconds()
+	baseLeaseDurationMs := leaseDuration.Milliseconds()
 	heartbeatTimeoutMs := int64(0)
 	if policy.GetHeartbeatTimeout() != nil {
 		heartbeatTimeoutMs = policy.GetHeartbeatTimeout().AsDuration().Milliseconds()

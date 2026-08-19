@@ -13,6 +13,7 @@ import (
 	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
 	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
+	repositorysql "github.com/adrien19/chronoqueue/pkg/repository/sql"
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/priority"
 )
 
@@ -217,6 +218,11 @@ func (s *Storage) enqueueMessageInTx(ctx context.Context, tx *sql.Tx, queueName 
 
 // ClaimMessage claims the next available message from a queue.
 func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId string, attemptId string, exclusivityKey string) (*messagepb.Message, error) {
+	return s.ClaimMessageWithLeaseDuration(ctx, queueName, workerId, attemptId, exclusivityKey, 0)
+}
+
+// ClaimMessageWithLeaseDuration claims the next available message with an optional lease override.
+func (s *Storage) ClaimMessageWithLeaseDuration(ctx context.Context, queueName string, workerId string, attemptId string, exclusivityKey string, leaseDuration time.Duration) (*messagepb.Message, error) {
 	start := time.Now()
 	defer func() {
 		metrics.ObserveMessageClaimLatency(queueName, time.Since(start))
@@ -351,7 +357,12 @@ func (s *Storage) ClaimMessage(ctx context.Context, queueName string, workerId s
 		if leasePolicy == nil {
 			return fmt.Errorf("message has no lease policy")
 		}
-		leaseRuntime := s.LeaseRuntime.CalculateLeaseRuntime(leasePolicy)
+		var leaseRuntime *repositorysql.LeaseRuntime
+		if leaseDuration > 0 {
+			leaseRuntime = s.LeaseRuntime.CalculateLeaseRuntimeWithDuration(leasePolicy, leaseDuration)
+		} else {
+			leaseRuntime = s.LeaseRuntime.CalculateLeaseRuntime(leasePolicy)
+		}
 
 		updateQuery := s.ph(`
             UPDATE cq_messages
@@ -906,8 +917,13 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 
 // PeekMessages retrieves messages without claiming them.
 func (s *Storage) PeekMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error) {
+	return s.PeekMessagesWithPriorityRange(ctx, queueName, limit, nil)
+}
+
+// PeekMessagesWithPriorityRange retrieves messages within an optional inclusive priority range.
+func (s *Storage) PeekMessagesWithPriorityRange(ctx context.Context, queueName string, limit int32, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error) {
 	nowMs := s.Clock.NowMs()
-	query := s.ph(`
+	query := `
 	SELECT metadata_pb,
 	       state,
 	       attempts_left,
@@ -923,11 +939,19 @@ func (s *Storage) PeekMessages(ctx context.Context, queueName string, limit int3
         FROM cq_messages
         WHERE queue_name = ?
           AND (deleted_at IS NULL OR deleted_at > ?)
+	`
+	args := []any{queueName, nowMs}
+	if priorityRange != nil {
+		query += ` AND priority BETWEEN ? AND ?`
+		args = append(args, priorityRange.Min, priorityRange.Max)
+	}
+	query += `
         ORDER BY priority DESC, id ASC
         LIMIT ?
-    `)
+	`
+	args = append(args, limit)
 
-	rows, err := s.DB.QueryContext(ctx, query, queueName, nowMs, limit)
+	rows, err := s.DB.QueryContext(ctx, s.ph(query), args...)
 	if err != nil {
 		return nil, fmt.Errorf("query messages: %w", err)
 	}

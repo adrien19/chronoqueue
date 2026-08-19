@@ -15,6 +15,7 @@ package integration
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -476,8 +477,9 @@ func TestScheduling_ListSchedules(t *testing.T) {
 
 	// Create multiple schedules
 	scheduleIDs := make([]string, 3)
+	prefix := queueName + "-schedule-"
 	for i := 0; i < 3; i++ {
-		scheduleID := helpers.GenerateUniqueMessageID(t)
+		scheduleID := fmt.Sprintf("%s%d", prefix, i)
 		scheduleIDs[i] = scheduleID
 
 		payload := &common_pb.Payload{
@@ -502,14 +504,14 @@ func TestScheduling_ListSchedules(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Act - List schedules (API may not support queue name filter, just list all)
-	listResp, err := client.ListSchedules(ctx, &queueservice_pb.ListSchedulesRequest{})
+	listResp, err := client.ListSchedules(ctx, &queueservice_pb.ListSchedulesRequest{Prefix: prefix})
 
 	// Assert
 	require.NoError(t, err, "List schedules should succeed")
-	// Note: ListSchedules may not filter by queue name, and other tests may have created schedules
-	// So we just verify the call succeeds
-	assert.NotNil(t, listResp, "Should return a response")
+	require.Len(t, listResp.GetSchedules(), len(scheduleIDs))
+	for _, listed := range listResp.GetSchedules() {
+		assert.Contains(t, scheduleIDs, listed.GetScheduleId())
+	}
 
 	t.Logf("Found %d schedules total", len(listResp.Schedules))
 }

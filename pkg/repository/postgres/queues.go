@@ -55,8 +55,13 @@ func (s *Storage) GetQueueMetadata(ctx context.Context, name string) (*queuepb.Q
 
 // ListQueues returns all queues.
 func (s *Storage) ListQueues(ctx context.Context) ([]*queuepb.Queue, error) {
-	query := `SELECT metadata_pb FROM cq_queues ORDER BY name`
-	rows, err := s.DB.QueryContext(ctx, query)
+	return s.ListQueuesWithPrefix(ctx, "")
+}
+
+// ListQueuesWithPrefix returns queues whose names start with prefix.
+func (s *Storage) ListQueuesWithPrefix(ctx context.Context, prefix string) ([]*queuepb.Queue, error) {
+	query := `SELECT metadata_pb FROM cq_queues WHERE STRPOS(name, $1) = 1 ORDER BY name`
+	rows, err := s.DB.QueryContext(ctx, query, prefix)
 	if err != nil {
 		return nil, fmt.Errorf("query queues: %w", err)
 	}

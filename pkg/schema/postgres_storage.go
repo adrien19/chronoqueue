@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	schema_pb "github.com/adrien19/chronoqueue/api/schema/v1"
@@ -212,24 +213,38 @@ func (r *PostgresRegistry) GetLatest(ctx context.Context, schemaID string) (*sch
 
 // List lists all active schemas (latest version of each).
 func (r *PostgresRegistry) List(ctx context.Context) ([]*schema_pb.Schema, error) {
+	result, err := r.ListWithOptions(ctx, ListOptions{Limit: math.MaxInt32, ActiveOnly: true})
+	return result.Schemas, err
+}
+
+// ListWithOptions lists the latest schema matching the requested filters.
+func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOptions) (ListResult, error) {
 	rows, err := r.db.QueryContext(ctx, `
-        SELECT s.schema_id, s.version, s.name, s.description, s.content,
-               s.content_type, s.is_active, s.created_at, s.updated_at
-        FROM cq_schemas s
-        INNER JOIN (
-            SELECT schema_id, MAX(version) AS max_version
-            FROM cq_schemas
-            WHERE is_active = TRUE
-            GROUP BY schema_id
-        ) latest ON s.schema_id = latest.schema_id AND s.version = latest.max_version
-        ORDER BY s.schema_id
-    `)
+		WITH ranked AS (
+			SELECT s.*, ROW_NUMBER() OVER (PARTITION BY schema_id ORDER BY version DESC) AS row_number
+			FROM cq_schemas s
+			WHERE STRPOS(schema_id, $2) = 1
+		), latest AS (
+			SELECT * FROM ranked WHERE row_number = 1
+		)
+		SELECT schema_id, version, name, description, content, content_type,
+		       is_active, created_at, updated_at, COUNT(*) OVER ()
+		FROM latest
+		WHERE ($1 = FALSE OR is_active = TRUE)
+		ORDER BY schema_id
+		LIMIT $3
+	`, options.ActiveOnly, options.Prefix, options.Limit)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list schemas: %w", err)
+		return ListResult{}, fmt.Errorf("failed to list schemas: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			r.logger.DPanic("failed to close schema list rows: ", closeErr)
+		}
+	}()
 
 	var schemas []*schema_pb.Schema
+	var totalCount int32
 	for rows.Next() {
 		var schema schema_pb.Schema
 		var isActive bool
@@ -244,6 +259,7 @@ func (r *PostgresRegistry) List(ctx context.Context) ([]*schema_pb.Schema, error
 			&isActive,
 			&schema.CreatedAt,
 			&schema.UpdatedAt,
+			&totalCount,
 		); err != nil {
 			r.logger.ErrorWithFields("Failed to scan schema", "error", err)
 			continue
@@ -254,10 +270,10 @@ func (r *PostgresRegistry) List(ctx context.Context) ([]*schema_pb.Schema, error
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating schemas: %w", err)
+		return ListResult{}, fmt.Errorf("error iterating schemas: %w", err)
 	}
 
-	return schemas, nil
+	return ListResult{Schemas: schemas, TotalCount: totalCount}, nil
 }
 
 // Deactivate marks a schema version as inactive.

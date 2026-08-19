@@ -14,6 +14,7 @@ package integration
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -172,14 +173,14 @@ func TestSchemaRegistry_ListSchemas(t *testing.T) {
 	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
-	// Register multiple schemas
+	prefix := "list-filter-" + helpers.GenerateRandomID(6) + "-"
 	schemas := []struct {
 		id      string
 		fixture string
 	}{
-		{"order-list-" + helpers.GenerateRandomID(4), "order_schema.json"},
-		{"event-list-" + helpers.GenerateRandomID(4), "event_schema.json"},
-		{"notif-list-" + helpers.GenerateRandomID(4), "notification_schema.json"},
+		{prefix + "order", "order_schema.json"},
+		{prefix + "event", "event_schema.json"},
+		{prefix + "notification", "notification_schema.json"},
 	}
 
 	for _, s := range schemas {
@@ -192,16 +193,43 @@ func TestSchemaRegistry_ListSchemas(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
+	decoySchemaID := "decoy-" + prefix + "embedded"
+	_, err := client.RegisterSchema(ctx, &queueservice_pb.RegisterSchemaRequest{
+		SchemaId:    decoySchemaID,
+		Name:        decoySchemaID,
+		Description: "Contains the filter text outside the prefix position",
+		Content:     helpers.LoadJSONSchema(t, "order_schema.json"),
+	})
+	require.NoError(t, err)
 
-	// Act
-	listResp, err := client.ListSchemas(ctx, &queueservice_pb.ListSchemasRequest{})
-
-	// Assert
+	listResp, err := client.ListSchemas(ctx, &queueservice_pb.ListSchemasRequest{Prefix: prefix, Limit: 2, ActiveOnly: true})
 	require.NoError(t, err, "List schemas should succeed")
-	assert.GreaterOrEqual(t, len(listResp.Schemas), len(schemas),
-		"Should return at least the schemas we registered")
+	assert.Len(t, listResp.GetSchemas(), 2)
+	assert.Equal(t, int32(3), listResp.GetTotalCount())
+	for _, listed := range listResp.GetSchemas() {
+		assert.True(t, strings.HasPrefix(listed.GetSchemaId(), prefix))
+		assert.True(t, listed.GetIsActive())
+	}
 
-	t.Logf("Listed %d schemas", len(listResp.Schemas))
+	_, err = client.ListSchemas(ctx, &queueservice_pb.ListSchemasRequest{Limit: -1})
+	require.ErrorContains(t, err, "limit must not be negative")
+
+	_, err = client.DeleteSchema(ctx, &queueservice_pb.DeleteSchemaRequest{SchemaId: schemas[0].id, Version: 1})
+	require.NoError(t, err)
+
+	active, err := client.ListSchemas(ctx, &queueservice_pb.ListSchemasRequest{Prefix: prefix, ActiveOnly: true})
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), active.GetTotalCount())
+
+	all, err := client.ListSchemas(ctx, &queueservice_pb.ListSchemasRequest{Prefix: prefix})
+	require.NoError(t, err)
+	assert.Equal(t, int32(3), all.GetTotalCount())
+	assert.Len(t, all.GetSchemas(), 3)
+	for _, listed := range all.GetSchemas() {
+		assert.NotEqual(t, decoySchemaID, listed.GetSchemaId())
+	}
+
+	t.Logf("Listed %d of %d matching schemas", len(listResp.Schemas), listResp.TotalCount)
 }
 
 // TestSchemaRegistry_DeleteSchema validates schema deletion

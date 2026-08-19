@@ -252,6 +252,58 @@ func TestSQLiteRegistry_List(t *testing.T) {
 		assert.False(t, schemaIDs["schema2"]) // Deactivated
 		assert.True(t, schemaIDs["schema3"])
 	})
+
+	t.Run("ListWithOptions", func(t *testing.T) {
+		limited, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "schema", Limit: 1})
+		require.NoError(t, err)
+		assert.Len(t, limited.Schemas, 1)
+		assert.Equal(t, int32(3), limited.TotalCount)
+
+		inactive, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "schema2", Limit: 100})
+		require.NoError(t, err)
+		require.Len(t, inactive.Schemas, 1)
+		assert.False(t, inactive.Schemas[0].GetIsActive())
+		assert.Equal(t, int32(1), inactive.TotalCount)
+
+		activeOnly, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "schema2", Limit: 100, ActiveOnly: true})
+		require.NoError(t, err)
+		assert.Empty(t, activeOnly.Schemas)
+		assert.Zero(t, activeOnly.TotalCount)
+
+		literalPrefix, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "%", Limit: 100})
+		require.NoError(t, err)
+		assert.Empty(t, literalPrefix.Schemas)
+		assert.Zero(t, literalPrefix.TotalCount)
+	})
+}
+
+func TestSQLiteRegistry_ListWithOptions_ActiveOnlyExcludesInactiveLatestVersion(t *testing.T) {
+	registry, cleanup := setupTestSQLiteRegistry(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	schemaID := "latest-inactive"
+	for _, name := range []string{"version 1", "version 2"} {
+		_, err := registry.Register(ctx, &schema_pb.Schema{
+			SchemaId: schemaID,
+			Name:     name,
+			Content:  `{"type":"object","properties":{"field":{"type":"string"}}}`,
+		})
+		require.NoError(t, err)
+	}
+	require.NoError(t, registry.Deactivate(ctx, schemaID, 2))
+
+	activeOnly, err := registry.ListWithOptions(ctx, ListOptions{Prefix: schemaID, Limit: 100, ActiveOnly: true})
+	require.NoError(t, err)
+	assert.Empty(t, activeOnly.Schemas)
+	assert.Zero(t, activeOnly.TotalCount)
+
+	all, err := registry.ListWithOptions(ctx, ListOptions{Prefix: schemaID, Limit: 100})
+	require.NoError(t, err)
+	require.Len(t, all.Schemas, 1)
+	assert.Equal(t, int32(2), all.Schemas[0].GetVersion())
+	assert.False(t, all.Schemas[0].GetIsActive())
+	assert.Equal(t, int32(1), all.TotalCount)
 }
 
 func TestSQLiteRegistry_Deactivate(t *testing.T) {

@@ -502,14 +502,26 @@ func (s *ChronoQueueServer) GetSchema(ctx context.Context, req *queueservice_pb.
 func (s *ChronoQueueServer) ListSchemas(ctx context.Context, req *queueservice_pb.ListSchemasRequest) (*queueservice_pb.ListSchemasResponse, error) {
 	s.logger.Info("ListSchemas called")
 
-	resp, err := s.schemaRegistry.List(ctx)
+	limit := req.GetLimit()
+	if limit < 0 {
+		return nil, fmt.Errorf("schema list limit must not be negative")
+	}
+	if limit == 0 {
+		limit = 100
+	}
+
+	result, err := s.schemaRegistry.ListWithOptions(ctx, schema.ListOptions{
+		Prefix:     req.GetPrefix(),
+		Limit:      limit,
+		ActiveOnly: req.GetActiveOnly(),
+	})
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to list schemas", "error", err)
 		return nil, fmt.Errorf("failed to list schemas: %w", err)
 	}
 
-	schemasInfo := make([]*queueservice_pb.SchemaInfo, 0, len(resp))
-	for _, schema := range resp {
+	schemasInfo := make([]*queueservice_pb.SchemaInfo, 0, len(result.Schemas))
+	for _, schema := range result.Schemas {
 		schemasInfo = append(schemasInfo, &queueservice_pb.SchemaInfo{
 			Name:          schema.Name,
 			SchemaId:      schema.SchemaId,
@@ -520,7 +532,8 @@ func (s *ChronoQueueServer) ListSchemas(ctx context.Context, req *queueservice_p
 	}
 
 	return &queueservice_pb.ListSchemasResponse{
-		Schemas: schemasInfo,
+		Schemas:    schemasInfo,
+		TotalCount: result.TotalCount,
 	}, nil
 }
 

@@ -105,7 +105,10 @@ func (s *Storage) ListSchedules(ctx context.Context, queueName string) ([]*sched
 		return nil, fmt.Errorf("query schedules: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
+	return s.scanSchedules(rows)
+}
 
+func (s *Storage) scanSchedules(rows *sql.Rows) ([]*schedulepb.Schedule, error) {
 	var schedules []*schedulepb.Schedule
 	for rows.Next() {
 		var scheduleBytes []byte
@@ -126,6 +129,24 @@ func (s *Storage) ListSchedules(ctx context.Context, queueName string) ([]*sched
 	}
 
 	return schedules, rows.Err()
+}
+
+// ListSchedulesWithPrefix returns schedules whose IDs start with prefix.
+func (s *Storage) ListSchedulesWithPrefix(ctx context.Context, prefix string) ([]*schedulepb.Schedule, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT metadata_pb FROM cq_schedules WHERE STRPOS(id, $1) = 1 ORDER BY id`, prefix)
+	if err != nil {
+		return nil, fmt.Errorf("query schedules: %w", err)
+	}
+
+	schedules, scanErr := s.scanSchedules(rows)
+	closeErr := rows.Close()
+	if scanErr != nil {
+		return nil, scanErr
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close schedule rows: %w", closeErr)
+	}
+	return schedules, nil
 }
 
 // DeleteSchedule deletes a schedule.

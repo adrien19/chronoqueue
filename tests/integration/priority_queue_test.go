@@ -330,16 +330,11 @@ func TestPriorityQueue_PeekWithPriorityRange(t *testing.T) {
 	// Assert
 	require.NoError(t, err, "Peek with priority range should succeed")
 
-	// Should return messages with priority 2, 3, and 4 (within range 2-4)
-	// However, peek might return all messages if range filtering is not implemented
-	// Just verify that any returned messages have the correct priority if filter is working
-	if len(peekResp.Messages) <= 3 {
-		// Range filtering is working
-		for _, msg := range peekResp.Messages {
-			priority := msg.Metadata.Priority
-			assert.GreaterOrEqual(t, priority, int64(2), "Priority should be >= 2")
-			assert.LessOrEqual(t, priority, int64(4), "Priority should be <= 4")
-		}
+	require.Len(t, peekResp.Messages, 3)
+	for _, msg := range peekResp.Messages {
+		priority := msg.Metadata.Priority
+		assert.GreaterOrEqual(t, priority, int64(2), "Priority should be >= 2")
+		assert.LessOrEqual(t, priority, int64(4), "Priority should be <= 4")
 	}
 
 	t.Logf("Peeked %d messages in priority range 2-4", len(peekResp.Messages))

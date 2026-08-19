@@ -271,13 +271,11 @@ func (impl *implementation) DeleteQueue(ctx context.Context, request *queueservi
 
 // ListQueues lists all queues
 func (impl *implementation) ListQueues(ctx context.Context, request *queueservicepb.ListQueuesRequest) (*queueservicepb.ListQueuesResponse, error) {
-	queues, err := impl.backend.ListQueues(ctx)
+	queues, err := impl.backend.ListQueuesWithPrefix(ctx, request.GetPrefix())
 	if err != nil {
 		return nil, err
 	}
-	return &queueservicepb.ListQueuesResponse{
-		Queues: queues,
-	}, nil
+	return &queueservicepb.ListQueuesResponse{Queues: queues}, nil
 }
 
 // GetQueueState returns the current state of a queue
@@ -676,6 +674,21 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 
 // GetQueueMessage retrieves the next available message from a queue
 func (impl *implementation) GetQueueMessage(ctx context.Context, request *queueservicepb.GetNextMessageRequest) (*queueservicepb.GetNextMessageResponse, error) {
+	if request == nil || request.GetQueueName() == "" {
+		return nil, fmt.Errorf("queue name is required")
+	}
+
+	leaseDuration := time.Duration(0)
+	if request.GetLeaseDuration() != nil {
+		if err := request.GetLeaseDuration().CheckValid(); err != nil {
+			return nil, fmt.Errorf("invalid lease duration: %w", err)
+		}
+		leaseDuration = request.GetLeaseDuration().AsDuration()
+		if leaseDuration <= 0 {
+			return nil, fmt.Errorf("lease duration must be greater than zero")
+		}
+	}
+
 	workerId := ""
 	if request.WorkerId != nil {
 		workerId = *request.WorkerId
@@ -685,7 +698,7 @@ func (impl *implementation) GetQueueMessage(ctx context.Context, request *queues
 		attemptId = *request.AttemptId
 	}
 
-	message, err := impl.backend.ClaimMessage(ctx, request.QueueName, workerId, attemptId, request.GetExclusivityKey())
+	message, err := impl.backend.ClaimMessageWithLeaseDuration(ctx, request.QueueName, workerId, attemptId, request.GetExclusivityKey(), leaseDuration)
 	if err != nil {
 		return nil, err
 	}
@@ -875,7 +888,22 @@ func (impl *implementation) RenewMessageLease(ctx context.Context, request *queu
 
 // PeekQueueMessages retrieves messages without claiming them
 func (impl *implementation) PeekQueueMessages(ctx context.Context, request *queueservicepb.PeekQueueMessagesRequest) (*queueservicepb.PeekQueueMessagesResponse, error) {
-	messages, err := impl.backend.PeekMessages(ctx, request.QueueName, int32(request.Limit))
+	if request == nil || request.GetQueueName() == "" {
+		return nil, fmt.Errorf("queue name is required")
+	}
+
+	var priorityRange *repositorysql.PriorityRange
+	if requestedRange := request.GetPriorityRange(); requestedRange != nil {
+		if requestedRange.GetMin() < validator.DefaultMinPriority || requestedRange.GetMax() > validator.DefaultMaxPriority {
+			return nil, fmt.Errorf("priority range must be between %d and %d", validator.DefaultMinPriority, validator.DefaultMaxPriority)
+		}
+		if requestedRange.GetMin() > requestedRange.GetMax() {
+			return nil, fmt.Errorf("priority range minimum must not exceed maximum")
+		}
+		priorityRange = &repositorysql.PriorityRange{Min: requestedRange.GetMin(), Max: requestedRange.GetMax()}
+	}
+
+	messages, err := impl.backend.PeekMessagesWithPriorityRange(ctx, request.QueueName, int32(request.Limit), priorityRange)
 	if err != nil {
 		return nil, err
 	}
@@ -944,15 +972,11 @@ func (impl *implementation) GetSchedule(ctx context.Context, request *queueservi
 
 // ListSchedules lists schedules for a queue
 func (impl *implementation) ListSchedules(ctx context.Context, request *queueservicepb.ListSchedulesRequest) (*queueservicepb.ListSchedulesResponse, error) {
-	// TODO: The low-level storage expects queueName but the gRPC API uses prefix
-	// For now, pass empty string to list all schedules
-	schedules, err := impl.backend.ListSchedules(ctx, "")
+	schedules, err := impl.backend.ListSchedulesWithPrefix(ctx, request.GetPrefix())
 	if err != nil {
 		return nil, err
 	}
-	return &queueservicepb.ListSchedulesResponse{
-		Schedules: schedules,
-	}, nil
+	return &queueservicepb.ListSchedulesResponse{Schedules: schedules}, nil
 }
 
 // GetScheduleHistory retrieves execution history for a schedule

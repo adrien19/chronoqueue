@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
@@ -17,6 +18,7 @@ import (
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/pkg/calendar"
 	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
+	repositorysql "github.com/adrien19/chronoqueue/pkg/repository/sql"
 	"github.com/adrien19/chronoqueue/pkg/validator"
 )
 
@@ -50,18 +52,30 @@ type claimCall struct {
 	workerId       string
 	attemptId      string
 	exclusivityKey string
+	leaseDuration  time.Duration
+}
+
+type peekCall struct {
+	queueName     string
+	limit         int32
+	priorityRange *repositorysql.PriorityRange
 }
 
 type stubBackend struct {
-	queueMetadata *queuepb.QueueMetadata
-	createdQueues []*queuepb.Queue
-	claims        []claimCall
-	enqueued      []enqueuedCall
-	enqueueErr    error
-	enqueueErrs   []error // per-message errors for bulk operations
-	enqueueTxErr  error   // transaction-level error for bulk operations
-	cancelled     []cancelledCall
-	cancelErr     error
+	queueMetadata  *queuepb.QueueMetadata
+	createdQueues  []*queuepb.Queue
+	claims         []claimCall
+	peekCalls      []peekCall
+	queues         []*queuepb.Queue
+	schedules      []*schedulepb.Schedule
+	queuePrefix    string
+	schedulePrefix string
+	enqueued       []enqueuedCall
+	enqueueErr     error
+	enqueueErrs    []error // per-message errors for bulk operations
+	enqueueTxErr   error   // transaction-level error for bulk operations
+	cancelled      []cancelledCall
+	cancelErr      error
 }
 
 type stubEngine struct {
@@ -112,8 +126,12 @@ func (b *stubBackend) GetQueueMetadata(ctx context.Context, name string) (*queue
 	}
 	return &queuepb.QueueMetadata{}, nil
 }
-func (b *stubBackend) ListQueues(ctx context.Context) ([]*queuepb.Queue, error) { return nil, nil }
-func (b *stubBackend) DeleteQueue(ctx context.Context, name string) error       { return nil }
+
+func (b *stubBackend) ListQueuesWithPrefix(ctx context.Context, prefix string) ([]*queuepb.Queue, error) {
+	b.queuePrefix = prefix
+	return b.queues, nil
+}
+func (b *stubBackend) DeleteQueue(ctx context.Context, name string) error { return nil }
 func (b *stubBackend) EnqueueMessage(ctx context.Context, queueName string, message *messagepb.Message) error {
 	b.enqueued = append(b.enqueued, enqueuedCall{queue: queueName, message: message})
 	return b.enqueueErr
@@ -145,8 +163,8 @@ func (b *stubBackend) EnqueueMessagesBulk(ctx context.Context, queueName string,
 	return errors, b.enqueueTxErr
 }
 
-func (b *stubBackend) ClaimMessage(ctx context.Context, queueName string, workerId string, attemptId string, exclusivityKey string) (*messagepb.Message, error) {
-	b.claims = append(b.claims, claimCall{queueName: queueName, workerId: workerId, attemptId: attemptId, exclusivityKey: exclusivityKey})
+func (b *stubBackend) ClaimMessageWithLeaseDuration(ctx context.Context, queueName string, workerId string, attemptId string, exclusivityKey string, leaseDuration time.Duration) (*messagepb.Message, error) {
+	b.claims = append(b.claims, claimCall{queueName: queueName, workerId: workerId, attemptId: attemptId, exclusivityKey: exclusivityKey, leaseDuration: leaseDuration})
 	return nil, nil
 }
 
@@ -171,7 +189,8 @@ func (b *stubBackend) ExtendMessageLease(ctx context.Context, queueName string, 
 	return nil
 }
 
-func (b *stubBackend) PeekMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error) {
+func (b *stubBackend) PeekMessagesWithPriorityRange(ctx context.Context, queueName string, limit int32, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error) {
+	b.peekCalls = append(b.peekCalls, peekCall{queueName: queueName, limit: limit, priorityRange: priorityRange})
 	return nil, nil
 }
 
@@ -184,7 +203,12 @@ func (b *stubBackend) GetSchedule(ctx context.Context, scheduleId string) (*sche
 }
 
 func (b *stubBackend) ListSchedules(ctx context.Context, queueName string) ([]*schedulepb.Schedule, error) {
-	return nil, nil
+	return b.schedules, nil
+}
+
+func (b *stubBackend) ListSchedulesWithPrefix(ctx context.Context, prefix string) ([]*schedulepb.Schedule, error) {
+	b.schedulePrefix = prefix
+	return b.schedules, nil
 }
 func (b *stubBackend) DeleteSchedule(ctx context.Context, scheduleId string) error { return nil }
 func (b *stubBackend) PauseSchedule(ctx context.Context, scheduleId string) error  { return nil }
@@ -248,6 +272,117 @@ func TestGetQueueMessage_ForwardsExclusivityKey(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []claimCall{{queueName: "exclusive", workerId: workerID, attemptId: attemptID, exclusivityKey: "orders"}}, backend.claims)
+}
+
+func TestGetQueueMessage_LeaseDuration(t *testing.T) {
+	tests := []struct {
+		name          string
+		leaseDuration *durationpb.Duration
+		wantDuration  time.Duration
+		wantError     string
+	}{
+		{name: "request override", leaseDuration: durationpb.New(45 * time.Second), wantDuration: 45 * time.Second},
+		{name: "queue default", leaseDuration: nil, wantDuration: 0},
+		{name: "zero duration", leaseDuration: durationpb.New(0), wantError: "greater than zero"},
+		{name: "negative duration", leaseDuration: durationpb.New(-time.Second), wantError: "greater than zero"},
+		{name: "invalid protobuf duration", leaseDuration: &durationpb.Duration{Seconds: 315576000001}, wantError: "invalid lease duration"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			backend := &stubBackend{}
+			impl := &implementation{backend: backend}
+			_, err := impl.GetQueueMessage(context.Background(), &queueservicepb.GetNextMessageRequest{
+				QueueName: "queue", LeaseDuration: tt.leaseDuration,
+			})
+			if tt.wantError != "" {
+				require.ErrorContains(t, err, tt.wantError)
+				require.Empty(t, backend.claims)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, backend.claims, 1)
+			require.Equal(t, tt.wantDuration, backend.claims[0].leaseDuration)
+		})
+	}
+}
+
+func TestPeekQueueMessages_PriorityRange(t *testing.T) {
+	tests := []struct {
+		name      string
+		rangeReq  *queueservicepb.PeekQueueMessagesRequest_PriorityRange
+		wantRange *repositorysql.PriorityRange
+		wantError string
+	}{
+		{name: "filtered", rangeReq: &queueservicepb.PeekQueueMessagesRequest_PriorityRange{Min: 2, Max: 4}, wantRange: &repositorysql.PriorityRange{Min: 2, Max: 4}},
+		{name: "full boundary", rangeReq: &queueservicepb.PeekQueueMessagesRequest_PriorityRange{Min: 0, Max: 4}, wantRange: &repositorysql.PriorityRange{Min: 0, Max: 4}},
+		{name: "unfiltered"},
+		{name: "minimum exceeds maximum", rangeReq: &queueservicepb.PeekQueueMessagesRequest_PriorityRange{Min: 3, Max: 2}, wantError: "minimum must not exceed maximum"},
+		{name: "below minimum", rangeReq: &queueservicepb.PeekQueueMessagesRequest_PriorityRange{Min: -1, Max: 2}, wantError: "between 0 and 4"},
+		{name: "above maximum", rangeReq: &queueservicepb.PeekQueueMessagesRequest_PriorityRange{Min: 2, Max: 5}, wantError: "between 0 and 4"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			backend := &stubBackend{}
+			impl := &implementation{backend: backend}
+			_, err := impl.PeekQueueMessages(context.Background(), &queueservicepb.PeekQueueMessagesRequest{
+				QueueName: "queue", Limit: 10, PriorityRange: tt.rangeReq,
+			})
+			if tt.wantError != "" {
+				require.ErrorContains(t, err, tt.wantError)
+				require.Empty(t, backend.peekCalls)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, backend.peekCalls, 1)
+			require.Equal(t, tt.wantRange, backend.peekCalls[0].priorityRange)
+		})
+	}
+}
+
+func TestListQueues_FiltersByPrefix(t *testing.T) {
+	backend := &stubBackend{queues: []*queuepb.Queue{{Name: "orders-eu"}, {Name: "orders-us"}}}
+	impl := &implementation{backend: backend}
+
+	filtered, err := impl.ListQueues(context.Background(), &queueservicepb.ListQueuesRequest{Prefix: "orders-"})
+	require.NoError(t, err)
+	require.Equal(t, "orders-", backend.queuePrefix)
+	require.Equal(t, []string{"orders-eu", "orders-us"}, []string{filtered.Queues[0].GetName(), filtered.Queues[1].GetName()})
+
+	backend.queues = []*queuepb.Queue{{Name: "orders-eu"}, {Name: "orders-us"}, {Name: "payments"}}
+	all, err := impl.ListQueues(context.Background(), &queueservicepb.ListQueuesRequest{})
+	require.NoError(t, err)
+	require.Empty(t, backend.queuePrefix)
+	require.Len(t, all.GetQueues(), 3)
+
+	backend.queues = nil
+	none, err := impl.ListQueues(context.Background(), &queueservicepb.ListQueuesRequest{Prefix: "missing"})
+	require.NoError(t, err)
+	require.Equal(t, "missing", backend.queuePrefix)
+	require.Empty(t, none.GetQueues())
+}
+
+func TestListSchedules_FiltersByPrefix(t *testing.T) {
+	backend := &stubBackend{schedules: []*schedulepb.Schedule{{ScheduleId: "billing-daily"}, {ScheduleId: "billing-monthly"}}}
+	impl := &implementation{backend: backend}
+
+	filtered, err := impl.ListSchedules(context.Background(), &queueservicepb.ListSchedulesRequest{Prefix: "billing-"})
+	require.NoError(t, err)
+	require.Equal(t, "billing-", backend.schedulePrefix)
+	require.Equal(t, []string{"billing-daily", "billing-monthly"}, []string{filtered.Schedules[0].GetScheduleId(), filtered.Schedules[1].GetScheduleId()})
+
+	backend.schedules = []*schedulepb.Schedule{{ScheduleId: "billing-daily"}, {ScheduleId: "billing-monthly"}, {ScheduleId: "cleanup"}}
+	all, err := impl.ListSchedules(context.Background(), &queueservicepb.ListSchedulesRequest{})
+	require.NoError(t, err)
+	require.Empty(t, backend.schedulePrefix)
+	require.Len(t, all.GetSchedules(), 3)
+
+	backend.schedules = nil
+	none, err := impl.ListSchedules(context.Background(), &queueservicepb.ListSchedulesRequest{Prefix: "missing"})
+	require.NoError(t, err)
+	require.Equal(t, "missing", backend.schedulePrefix)
+	require.Empty(t, none.GetSchedules())
 }
 
 func TestCreateQueueMessage_ValidatorNil(t *testing.T) {

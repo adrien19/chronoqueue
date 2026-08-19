@@ -20,6 +20,7 @@ type Registry interface {
 
 	// List lists all active schemas
 	List(ctx context.Context) ([]*schema_pb.Schema, error)
+	ListWithOptions(ctx context.Context, options ListOptions) (ListResult, error)
 
 	// Deactivate marks a schema version as inactive
 	Deactivate(ctx context.Context, schemaID string, version int32) error
@@ -29,6 +30,17 @@ type Registry interface {
 
 	// IsCompatible checks if a new schema content is compatible with existing versions
 	IsCompatible(ctx context.Context, schemaID string, newContent string) (bool, error)
+}
+
+type ListOptions struct {
+	Prefix     string
+	Limit      int32
+	ActiveOnly bool
+}
+
+type ListResult struct {
+	Schemas    []*schema_pb.Schema
+	TotalCount int32
 }
 
 // SchemaMetadata contains metadata about a schema
