@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/robfig/cron/v3"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -955,14 +956,49 @@ func (impl *implementation) CreateSchedule(ctx context.Context, request *queuese
 	if request == nil || request.GetSchedule() == nil {
 		return nil, domainerror.New(domainerror.InvalidArgument, "schedule is required", nil)
 	}
+	if request.Schedule.GetScheduleId() == "" {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schedule id is required", nil)
+	}
+	meta := request.Schedule.GetMetadata()
+	if meta == nil {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schedule metadata is required", nil)
+	}
+	if meta.GetQueueName() == "" {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schedule queue name is required", nil)
+	}
+	if meta.GetScheduleConfig() == nil {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schedule configuration is required", nil)
+	}
+	if meta.GetPriority() < validator.DefaultMinPriority || meta.GetPriority() > validator.DefaultMaxPriority {
+		return nil, domainerror.New(domainerror.InvalidArgument, fmt.Sprintf("schedule priority must be between %d and %d", validator.DefaultMinPriority, validator.DefaultMaxPriority), nil)
+	}
+	if meta.GetHasMaxMessages() && meta.GetMaxMessages() <= 0 {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schedule max messages must be greater than zero when enabled", nil)
+	}
+	if meta.GetLeaseDuration() != nil {
+		if err := meta.GetLeaseDuration().CheckValid(); err != nil || meta.GetLeaseDuration().AsDuration() <= 0 {
+			return nil, domainerror.New(domainerror.InvalidArgument, "schedule lease duration must be greater than zero", err)
+		}
+	}
+	switch config := meta.GetScheduleConfig().(type) {
+	case *schedulepb.Schedule_Metadata_CronSchedule:
+		if _, err := cron.ParseStandard(config.CronSchedule); err != nil {
+			return nil, domainerror.New(domainerror.InvalidArgument, "cron schedule is invalid", err)
+		}
+	case *schedulepb.Schedule_Metadata_CalendarSchedule:
+		if config.CalendarSchedule == nil {
+			return nil, domainerror.New(domainerror.InvalidArgument, "calendar schedule is required", nil)
+		}
+	default:
+		return nil, domainerror.New(domainerror.InvalidArgument, "schedule configuration is invalid", nil)
+	}
 
 	// Pre-compute next_run for calendar schedules so the background processor can pick them up.
-	if meta := request.Schedule.GetMetadata(); meta != nil {
-		if meta.GetCalendarSchedule() != nil && meta.GetNextRun() == nil {
-			if err := impl.calendarEngine.ValidateSchedule(ctx, meta.GetCalendarSchedule()); err != nil {
-				return nil, domainerror.New(domainerror.InvalidArgument, "calendar schedule is invalid", err)
-			}
-
+	if meta.GetCalendarSchedule() != nil {
+		if err := impl.calendarEngine.ValidateSchedule(ctx, meta.GetCalendarSchedule()); err != nil {
+			return nil, domainerror.New(domainerror.InvalidArgument, "calendar schedule is invalid", err)
+		}
+		if meta.GetNextRun() == nil {
 			nextRun, err := impl.calendarEngine.CalculateNextRun(ctx, meta.GetCalendarSchedule(), time.Now())
 			if err != nil {
 				return nil, fmt.Errorf("calculate next run: %w", err)

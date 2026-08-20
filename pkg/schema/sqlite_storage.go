@@ -83,16 +83,6 @@ func (s *SQLiteRegistry) Register(ctx context.Context, schema *schema_pb.Schema)
 	}
 	defer tx.Rollback()
 
-	// Get or create version number
-	if schema.Version == 0 {
-		// Auto-increment version
-		latestVersion, err := s.getLatestVersionTx(ctx, tx, schema.SchemaId)
-		if err != nil {
-			return SchemaMetadata{}, fmt.Errorf("failed to get latest version: %w", err)
-		}
-		schema.Version = latestVersion + 1
-	}
-
 	// Set timestamps
 	now := time.Now().UnixMilli()
 	if schema.CreatedAt == 0 {
@@ -106,31 +96,45 @@ func (s *SQLiteRegistry) Register(ctx context.Context, schema *schema_pb.Schema)
 		schema.ContentType = "json-schema"
 	}
 
-	// Insert schema
-	_, err = tx.ExecContext(
-		ctx, `
+	var insertResult sql.Result
+	if schema.Version == 0 {
+		err = tx.QueryRowContext(ctx, `
+		INSERT INTO cq_schemas (
+			schema_id, version, name, description, content,
+			content_type, is_active, created_at, updated_at
+		) SELECT ?, COALESCE(MAX(version), 0) + 1, ?, ?, ?, ?, ?, ?, ?
+		FROM cq_schemas WHERE schema_id = ?
+		RETURNING version
+	`, schema.SchemaId, schema.Name, schema.Description, schema.Content, schema.ContentType, 1,
+			schema.CreatedAt, schema.UpdatedAt, schema.SchemaId).Scan(&schema.Version)
+	} else {
+		insertResult, err = tx.ExecContext(ctx, `
 		INSERT INTO cq_schemas (
 			schema_id, version, name, description, content, 
 			content_type, is_active, created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(schema_id, version) DO UPDATE SET
-			name = excluded.name,
-			description = excluded.description,
-			content = excluded.content,
-			content_type = excluded.content_type,
-			is_active = excluded.is_active,
-			updated_at = excluded.updated_at
+		ON CONFLICT(schema_id, version) DO NOTHING
 	`,
-		schema.SchemaId,
-		schema.Version,
-		schema.Name,
-		schema.Description,
-		schema.Content,
-		schema.ContentType,
-		1, // is_active = true
-		schema.CreatedAt,
-		schema.UpdatedAt,
-	)
+			schema.SchemaId,
+			schema.Version,
+			schema.Name,
+			schema.Description,
+			schema.Content,
+			schema.ContentType,
+			1, // is_active = true
+			schema.CreatedAt,
+			schema.UpdatedAt,
+		)
+		if err == nil {
+			rowsAffected, rowsErr := insertResult.RowsAffected()
+			if rowsErr != nil {
+				return SchemaMetadata{}, fmt.Errorf("failed to get inserted schema row count: %w", rowsErr)
+			}
+			if rowsAffected == 0 {
+				return SchemaMetadata{}, domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("schema already exists: %s version %d", schema.SchemaId, schema.Version), nil)
+			}
+		}
+	}
 	if err != nil {
 		return SchemaMetadata{}, fmt.Errorf("failed to insert schema: %w", err)
 	}
@@ -239,14 +243,18 @@ func (s *SQLiteRegistry) List(ctx context.Context) ([]*schema_pb.Schema, error) 
 func (s *SQLiteRegistry) ListWithOptions(ctx context.Context, options ListOptions) (ListResult, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		WITH ranked AS (
-			SELECT s.*, ROW_NUMBER() OVER (PARTITION BY schema_id ORDER BY version DESC) AS row_number
+			SELECT s.*, ROW_NUMBER() OVER (PARTITION BY schema_id ORDER BY version DESC) AS row_number,
+			       COUNT(*) OVER (PARTITION BY schema_id) AS version_count,
+			       MIN(created_at) OVER (PARTITION BY schema_id) AS first_created_at,
+			       MAX(updated_at) OVER (PARTITION BY schema_id) AS last_updated_at
 			FROM cq_schemas s
 			WHERE instr(schema_id, ?) = 1
 		), latest AS (
 			SELECT * FROM ranked WHERE row_number = 1
 		)
 		SELECT schema_id, version, name, description, content, content_type,
-		       is_active, created_at, updated_at, COUNT(*) OVER ()
+		       is_active, created_at, updated_at, version_count, first_created_at,
+		       last_updated_at, COUNT(*) OVER ()
 		FROM latest
 		WHERE (? = 0 OR is_active = 1)
 		ORDER BY schema_id
@@ -263,9 +271,13 @@ func (s *SQLiteRegistry) ListWithOptions(ctx context.Context, options ListOption
 
 	var schemas []*schema_pb.Schema
 	var totalCount int32
+	metadata := make(map[string]SchemaMetadata)
 	for rows.Next() {
 		var schema schema_pb.Schema
 		var isActive int
+		var versionCount int32
+		var firstCreatedAt int64
+		var lastUpdatedAt int64
 
 		err := rows.Scan(
 			&schema.SchemaId,
@@ -277,6 +289,9 @@ func (s *SQLiteRegistry) ListWithOptions(ctx context.Context, options ListOption
 			&isActive,
 			&schema.CreatedAt,
 			&schema.UpdatedAt,
+			&versionCount,
+			&firstCreatedAt,
+			&lastUpdatedAt,
 			&totalCount,
 		)
 		if err != nil {
@@ -286,37 +301,43 @@ func (s *SQLiteRegistry) ListWithOptions(ctx context.Context, options ListOption
 
 		schema.IsActive = isActive == 1
 		schemas = append(schemas, &schema)
+		metadata[schema.SchemaId] = SchemaMetadata{SchemaID: schema.SchemaId, LatestVersion: schema.Version, TotalVersions: versionCount, CreatedAt: time.UnixMilli(firstCreatedAt), UpdatedAt: time.UnixMilli(lastUpdatedAt)}
 	}
 
 	if err := rows.Err(); err != nil {
 		return ListResult{}, fmt.Errorf("error iterating schemas: %w", err)
 	}
 
-	return ListResult{Schemas: schemas, TotalCount: totalCount}, nil
+	return ListResult{Schemas: schemas, TotalCount: totalCount, Metadata: metadata}, nil
 }
 
 // Deactivate marks a schema version as inactive
-func (s *SQLiteRegistry) Deactivate(ctx context.Context, schemaID string, version int32) error {
-	result, err := s.db.ExecContext(ctx, `
+func (s *SQLiteRegistry) Deactivate(ctx context.Context, schemaID string, version int32) (int32, error) {
+	query := `
 		UPDATE cq_schemas
 		SET is_active = 0, updated_at = ?
-		WHERE schema_id = ? AND version = ?
-	`, time.Now().UnixMilli(), schemaID, version)
+		WHERE schema_id = ? AND is_active = 1`
+	args := []interface{}{time.Now().UnixMilli(), schemaID}
+	if version != 0 {
+		query += ` AND version = ?`
+		args = append(args, version)
+	}
+	result, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("failed to deactivate schema: %w", err)
+		return 0, fmt.Errorf("failed to deactivate schema: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return domainerror.New(domainerror.NotFound, fmt.Sprintf("schema not found: %s version %d", schemaID, version), nil)
+		return 0, domainerror.New(domainerror.NotFound, fmt.Sprintf("active schema not found: %s version %d", schemaID, version), nil)
 	}
 
 	s.logger.InfoWithFields("Schema deactivated", "schemaId", schemaID, "version", version)
-	return nil
+	return int32(rowsAffected), nil
 }
 
 // Validate validates a JSON payload against a schema
@@ -333,7 +354,9 @@ func (s *SQLiteRegistry) Validate(ctx context.Context, schemaID string, version 
 
 	if err != nil {
 		return &schema_pb.ValidationResult{
-			Valid: false,
+			Valid:         false,
+			SchemaId:      schemaID,
+			SchemaVersion: version,
 			Errors: []*schema_pb.ValidationError{
 				{
 					Field:     "schema",
@@ -359,7 +382,7 @@ func (s *SQLiteRegistry) Validate(ctx context.Context, schemaID string, version 
 		}, nil
 	}
 
-	result.SchemaId = schemaID
+	result.SchemaId = schema.SchemaId
 	result.SchemaVersion = schema.Version
 	result.ValidatedAt = time.Now().UnixMilli()
 

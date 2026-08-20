@@ -93,7 +93,7 @@ const (
 	CalendarSchedule_DAILY         CalendarSchedule_ScheduleType = 2 // Executes daily (every day, weekdays only, etc.)
 	CalendarSchedule_YEARLY        CalendarSchedule_ScheduleType = 3 // Executes yearly (birthdays, anniversaries, annual reports)
 	CalendarSchedule_BUSINESS_DAYS CalendarSchedule_ScheduleType = 4 // Executes on business days (respects holidays/weekends)
-	CalendarSchedule_CUSTOM        CalendarSchedule_ScheduleType = 5 // Custom logic via expression language
+	CalendarSchedule_CUSTOM        CalendarSchedule_ScheduleType = 5 // Reserved for wire compatibility; not supported by the v2 server
 )
 
 // Enum value maps for CalendarSchedule_ScheduleType.
@@ -764,7 +764,7 @@ type CalendarRule_BusinessDays struct {
 }
 
 type CalendarRule_Custom struct {
-	Custom *CustomRule `protobuf:"bytes,6,opt,name=custom,proto3,oneof"` // For CUSTOM schedules
+	Custom *CustomRule `protobuf:"bytes,6,opt,name=custom,proto3,oneof"` // Reserved for wire compatibility; not supported by the v2 server
 }
 
 func (*CalendarRule_Monthly) isCalendarRule_Rule() {}
@@ -1196,27 +1196,15 @@ func (x *BusinessDaysRule) GetDayOffset() int32 {
 	return 0
 }
 
-// CustomRule allows complex scheduling logic via custom expressions.
-// Useful when built-in rules don't support your use case.
-//
-// Example - Last business day of each quarter:
-//
-//	{
-//	  expression: "last_business_day_of_quarter",
-//	  rule_type: "business_calendar_expression",
-//	  parameters: {"calendar_id": "us-holidays", "quarters": "1,2,3,4"}
-//	}
+// CustomRule is reserved for wire compatibility.
+// The v2 server rejects custom expression rules because it has no custom-rule processors.
 type CustomRule struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// expression: Custom scheduling expression.
-	// Format depends on rule_type. See ChronoQueue documentation for supported expressions.
+	// expression: Reserved custom scheduling expression.
 	Expression string `protobuf:"bytes,1,opt,name=expression,proto3" json:"expression,omitempty"`
-	// rule_type: Identifies which custom rule processor to use.
-	// Built-in types: "business_calendar_expression", "lua_expression"
-	// Extensible via server plugins.
+	// rule_type: Reserved custom rule processor identifier.
 	RuleType string `protobuf:"bytes,2,opt,name=rule_type,json=ruleType,proto3" json:"rule_type,omitempty"`
-	// parameters: Additional configuration for the rule processor.
-	// Contents depend on rule_type.
+	// parameters: Reserved custom rule parameters.
 	Parameters    map[string]string `protobuf:"bytes,3,rep,name=parameters,proto3" json:"parameters,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1995,7 +1983,7 @@ type Schedule_Metadata struct {
 	StateMessage string `protobuf:"bytes,11,opt,name=state_message,json=stateMessage,proto3" json:"state_message,omitempty"`
 	// priority: Priority for messages created by this schedule.
 	// Inherited by posted messages unless message specifies otherwise.
-	// Common values: 5 (high), 2 (normal), 0 (low).
+	// Values: 4 (high), 2 (normal), 0 (low).
 	Priority int64 `protobuf:"varint,12,opt,name=priority,proto3" json:"priority,omitempty"`
 	// has_max_messages: If true, enforces max_messages limit.
 	// Safety feature to prevent runaway schedules.

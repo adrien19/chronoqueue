@@ -200,7 +200,7 @@ func (s *Storage) enqueueMessageInTx(ctx context.Context, tx *sql.Tx, queueName 
 			message_id, queue_name, state, attempts_left, max_attempts,
 			priority, scheduled_at, metadata_pb, created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		ON CONFLICT(message_id) DO NOTHING
+		ON CONFLICT(queue_name, message_id) DO NOTHING
 	`
 
 	// Extract scheduled time in milliseconds if present
@@ -715,8 +715,8 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 
 		if shouldDelete {
 			// Hard delete immediately - verify state hasn't changed
-			deleteQuery := `DELETE FROM cq_messages WHERE message_id = ? AND state IN (?, ?)`
-			result, err := tx.ExecContext(ctx, deleteQuery, messageId, messagepb.Message_Metadata_INVISIBLE, messagepb.Message_Metadata_PENDING)
+			deleteQuery := `DELETE FROM cq_messages WHERE message_id = ? AND queue_name = ? AND state IN (?, ?)`
+			result, err := tx.ExecContext(ctx, deleteQuery, messageId, queueName, messagepb.Message_Metadata_INVISIBLE, messagepb.Message_Metadata_PENDING)
 			if err != nil {
 				return fmt.Errorf("delete cancelled message: %w", err)
 			}
@@ -748,7 +748,7 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 					last_heartbeat_at = NULL,
 					heartbeat_expiry = NULL,
 					updated_at = ?
-				WHERE message_id = ? AND state IN (?, ?)
+				WHERE message_id = ? AND queue_name = ? AND state IN (?, ?)
 			`
 			result, err := tx.ExecContext(
 				ctx, updateQuery,
@@ -758,6 +758,7 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 				reasonPtr,
 				nowMs,
 				messageId,
+				queueName,
 				messagepb.Message_Metadata_INVISIBLE,
 				messagepb.Message_Metadata_PENDING,
 			)

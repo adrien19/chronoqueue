@@ -25,7 +25,7 @@ The capabilities below are available in the current release. Items marked **Evol
 | Priority processing | ✅ Implemented | Numeric priorities with FIFO ordering at the same priority, plus configurable strict, weighted, and age-boosted selection. |
 | Execution supervision | ✅ Implemented | Server-owned leases, attempt IDs, heartbeats, lease renewal, timeout reclaim, and stale-worker protection. |
 | Retries and dead-letter queues | ✅ Implemented | Configurable attempt limits, lease-timeout retries, automatic DLQ creation, inspection, requeue, delete, purge, and statistics. |
-| Scheduling | 🧪 Evolving | Delayed messages and recurring cron or timezone-aware calendar schedules, including validation, previews, history, pause, and resume. Custom calendar-expression support is partial. |
+| Scheduling | 🧪 Evolving | Delayed messages and recurring cron or timezone-aware calendar schedules, including validation, previews, history, pause, and resume. Custom expression rules are reserved and rejected by the v2 server. |
 | Payload schemas | ✅ Implemented | Versioned JSON Schema registration, queue-level enforcement, validation, listing, and deletion. |
 | Message retention | ✅ Implemented | Delete-on-ack, time-based retention, or indefinite retention with background cleanup. |
 | Storage | ✅ Implemented | PostgreSQL and SQLite backends with schema migrations. PostgreSQL is the recommended backend; SQLite is intended for local and smaller deployments. |

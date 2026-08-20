@@ -464,15 +464,15 @@ message SchemaInfo {
   bool   is_active      = 8;
 }
 
-// Delete a schema or specific version
+// Deactivate a schema or specific version. Inactive schemas remain available by ID and version.
 message DeleteSchemaRequest {
   string schema_id = 1; // Schema identifier
-  int32  version   = 2; // Schema version (0 = delete all versions)
+  int32  version   = 2; // Schema version (0 = deactivate all versions)
 }
 
 message DeleteSchemaResponse {
   bool  success          = 1;
-  int32 versions_deleted = 2; // Number of versions deleted
+  int32 versions_deleted = 2; // Number of versions deactivated
 }
 
 // Validate a payload against a schema

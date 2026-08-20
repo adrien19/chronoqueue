@@ -1077,8 +1077,8 @@
         ]
       },
       "post": {
-        "summary": "RegisterSchema creates or updates a message validation schema.",
-        "description": "Use for:\n- Enforcing message structure\n- API contract validation\n- Data quality checks\n- Type safety\n\nSchema versioning:\n- Each schema has a schema_id and version number\n- Multiple versions can coexist\n- Queues reference schema_id (use highest active version)\n\nExample:\n  POST /v1/schemas\n  {\n    \"schema\": {\n      \"schema_id\": \"order-schema\",\n      \"version\": 2,\n      \"content\": \"{...JSON Schema...}\",\n      \"content_type\": \"json-schema\"\n    }\n  }\n\nReturns: Registered schema\nErrors:\n  - AlreadyExists: schema_id + version already exists\n  - InvalidArgument: Invalid schema syntax",
+        "summary": "RegisterSchema creates the next version of a message validation schema.",
+        "description": "Use for:\n- Enforcing message structure\n- API contract validation\n- Data quality checks\n- Type safety\n\nSchema versioning:\n- Each schema has a schema_id and a server-assigned version number\n- Multiple versions can coexist\n- Queues reference schema_id (use highest active version)\n\nExample:\n  POST /v1/schemas\n  {\n    \"schema_id\": \"order-schema\",\n    \"name\": \"Order schema\",\n    \"content\": \"{...JSON Schema...}\",\n    \"content_type\": \"json-schema\"\n  }\n\nReturns: Registered schema\nErrors:\n  - InvalidArgument: Invalid schema syntax",
         "operationId": "QueueService_RegisterSchema",
         "responses": {
           "200": {
@@ -1152,8 +1152,8 @@
         ]
       },
       "delete": {
-        "summary": "DeleteSchema removes a schema version.",
-        "description": "Effects:\n- Schema version deleted\n- Queues using this schema will fail validation\n\nBest practice: Mark schema as inactive (is_active = false) instead\nof deleting to preserve validation history.\n\nExample:\n  DELETE /v1/schemas/order-schema/versions/1\n\nReturns: Empty response\nErrors:\n  - NotFound: Schema not found\n  - FailedPrecondition: Schema in use by active queues",
+        "summary": "DeleteSchema deactivates a schema version, or all versions when version is 0.",
+        "description": "Effects:\n- Matching active schema versions are marked inactive\n- Inactive versions remain addressable for validation history\n\nExample:\n  DELETE /v1/schemas/order-schema/versions/1\n\nReturns: Number of versions deactivated\nErrors:\n  - NotFound: Schema not found",
         "operationId": "QueueService_DeleteSchema",
         "responses": {
           "200": {
@@ -1180,7 +1180,7 @@
           },
           {
             "name": "version",
-            "description": "Schema version (0 = delete all versions)",
+            "description": "Schema version (0 = deactivate all versions)",
             "in": "path",
             "required": true,
             "type": "integer",
@@ -1267,7 +1267,7 @@
         "CUSTOM"
       ],
       "default": "MONTHLY",
-      "description": "ScheduleType categorizes the primary scheduling pattern.\nDetermines which rule types are applicable.\n\n - MONTHLY: Executes monthly (1st of month, last Friday, etc.)\n - WEEKLY: Executes weekly (every Monday, bi-weekly, etc.)\n - DAILY: Executes daily (every day, weekdays only, etc.)\n - YEARLY: Executes yearly (birthdays, anniversaries, annual reports)\n - BUSINESS_DAYS: Executes on business days (respects holidays/weekends)\n - CUSTOM: Custom logic via expression language"
+      "description": "ScheduleType categorizes the primary scheduling pattern.\nDetermines which rule types are applicable.\n\n - MONTHLY: Executes monthly (1st of month, last Friday, etc.)\n - WEEKLY: Executes weekly (every Monday, bi-weekly, etc.)\n - DAILY: Executes daily (every day, weekdays only, etc.)\n - YEARLY: Executes yearly (birthdays, anniversaries, annual reports)\n - BUSINESS_DAYS: Executes on business days (respects holidays/weekends)\n - CUSTOM: Reserved for wire compatibility; not supported by the v2 server"
     },
     "MessagePostResultErrorCode": {
       "type": "string",
@@ -1673,7 +1673,7 @@
         },
         "custom": {
           "$ref": "#/definitions/v1CustomRule",
-          "title": "For CUSTOM schedules"
+          "title": "Reserved for wire compatibility; not supported by the v2 server"
         },
         "executionTimes": {
           "type": "array",
@@ -1780,21 +1780,21 @@
       "properties": {
         "expression": {
           "type": "string",
-          "description": "expression: Custom scheduling expression.\nFormat depends on rule_type. See ChronoQueue documentation for supported expressions."
+          "description": "expression: Reserved custom scheduling expression."
         },
         "ruleType": {
           "type": "string",
-          "description": "rule_type: Identifies which custom rule processor to use.\nBuilt-in types: \"business_calendar_expression\", \"lua_expression\"\nExtensible via server plugins."
+          "description": "rule_type: Reserved custom rule processor identifier."
         },
         "parameters": {
           "type": "object",
           "additionalProperties": {
             "type": "string"
           },
-          "description": "parameters: Additional configuration for the rule processor.\nContents depend on rule_type."
+          "description": "parameters: Reserved custom rule parameters."
         }
       },
-      "description": "CustomRule allows complex scheduling logic via custom expressions.\nUseful when built-in rules don't support your use case.\n\nExample - Last business day of each quarter:\n  {\n    expression: \"last_business_day_of_quarter\",\n    rule_type: \"business_calendar_expression\",\n    parameters: {\"calendar_id\": \"us-holidays\", \"quarters\": \"1,2,3,4\"}\n  }"
+      "description": "CustomRule is reserved for wire compatibility.\nThe v2 server rejects custom expression rules because it has no custom-rule processors."
     },
     "v1DailyRule": {
       "type": "object",
@@ -1849,7 +1849,7 @@
         "versionsDeleted": {
           "type": "integer",
           "format": "int32",
-          "title": "Number of versions deleted"
+          "title": "Number of versions deactivated"
         }
       }
     },
@@ -2093,7 +2093,7 @@
       "properties": {
         "messageId": {
           "type": "string",
-          "description": "message_id: Unique identifier for this message within its queue.\nMust be unique per queue. Used for deduplication and idempotency.\nIf you retry posting the same message_id, ChronoQueue returns the existing message.\nRecommended format: UUID, task ID, or \"{entity_type}:{entity_id}\"."
+          "description": "message_id: Unique identifier for this message within its queue.\nMust be unique per queue. Used for deduplication and idempotency.\nPosting the same message_id to the same queue again returns ALREADY_EXISTS.\nRecommended format: UUID, task ID, or \"{entity_type}:{entity_id}\"."
         },
         "metadata": {
           "$ref": "#/definitions/v1MessageMetadata",
@@ -2667,7 +2667,7 @@
         "priority": {
           "type": "string",
           "format": "int64",
-          "description": "priority: Priority for messages created by this schedule.\nInherited by posted messages unless message specifies otherwise.\nCommon values: 5 (high), 2 (normal), 0 (low)."
+          "description": "priority: Priority for messages created by this schedule.\nInherited by posted messages unless message specifies otherwise.\nValues: 4 (high), 2 (normal), 0 (low)."
         },
         "hasMaxMessages": {
           "type": "boolean",

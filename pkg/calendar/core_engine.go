@@ -215,11 +215,15 @@ func (e *DefaultEngine) ValidateSchedule(ctx context.Context, calendarSchedule *
 		return ErrInvalidSchedule.WithDetails("calendar schedule is nil")
 	}
 
-	// Validate timezone
-	if calendarSchedule.Timezone != "" {
-		if err := e.timezoneProvider.ValidateTimezone(ctx, calendarSchedule.Timezone); err != nil {
-			return ErrInvalidTimezone.WithDetails(fmt.Sprintf("invalid timezone %s: %v", calendarSchedule.Timezone, err))
-		}
+	if calendarSchedule.Timezone == "" {
+		return ErrInvalidTimezone.WithDetails("timezone is required")
+	}
+	if err := e.timezoneProvider.ValidateTimezone(ctx, calendarSchedule.Timezone); err != nil {
+		return ErrInvalidTimezone.WithDetails(fmt.Sprintf("invalid timezone %s: %v", calendarSchedule.Timezone, err))
+	}
+
+	if calendarSchedule.Type == schedule.CalendarSchedule_CUSTOM {
+		return ErrInvalidSchedule.WithDetails("custom calendar schedules are not supported")
 	}
 
 	// Validate rules
@@ -228,6 +232,25 @@ func (e *DefaultEngine) ValidateSchedule(ctx context.Context, calendarSchedule *
 	}
 
 	for i, rule := range calendarSchedule.Rules {
+		if rule == nil || rule.Rule == nil {
+			return ErrInvalidRule.WithDetails(fmt.Sprintf("rule %d has no rule configuration", i))
+		}
+		if !ruleMatchesScheduleType(calendarSchedule.Type, rule) {
+			return ErrInvalidRule.WithDetails(fmt.Sprintf("rule %d does not match calendar schedule type %s", i, calendarSchedule.Type.String()))
+		}
+		if rule.ValidFrom != nil {
+			if err := rule.ValidFrom.CheckValid(); err != nil {
+				return ErrInvalidRule.WithDetails(fmt.Sprintf("rule %d valid_from is invalid: %v", i, err))
+			}
+		}
+		if rule.ValidUntil != nil {
+			if err := rule.ValidUntil.CheckValid(); err != nil {
+				return ErrInvalidRule.WithDetails(fmt.Sprintf("rule %d valid_until is invalid: %v", i, err))
+			}
+		}
+		if rule.ValidFrom != nil && rule.ValidUntil != nil && rule.ValidFrom.AsTime().After(rule.ValidUntil.AsTime()) {
+			return ErrInvalidRule.WithDetails(fmt.Sprintf("rule %d valid_from must not be after valid_until", i))
+		}
 		if err := e.evaluatorRegistry.ValidateRule(ctx, rule); err != nil {
 			return fmt.Errorf("rule %d validation failed: %w", i, err)
 		}
@@ -248,6 +271,23 @@ func (e *DefaultEngine) ValidateSchedule(ctx context.Context, calendarSchedule *
 	}
 
 	return nil
+}
+
+func ruleMatchesScheduleType(scheduleType schedule.CalendarSchedule_ScheduleType, rule *schedule.CalendarRule) bool {
+	switch scheduleType {
+	case schedule.CalendarSchedule_MONTHLY:
+		return rule.GetMonthly() != nil
+	case schedule.CalendarSchedule_WEEKLY:
+		return rule.GetWeekly() != nil
+	case schedule.CalendarSchedule_DAILY:
+		return rule.GetDaily() != nil
+	case schedule.CalendarSchedule_YEARLY:
+		return rule.GetYearly() != nil
+	case schedule.CalendarSchedule_BUSINESS_DAYS:
+		return rule.GetBusinessDays() != nil
+	default:
+		return false
+	}
 }
 
 // PreviewSchedule generates a preview of execution times for testing/debugging

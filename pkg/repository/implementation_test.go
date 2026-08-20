@@ -195,6 +195,7 @@ func (b *stubBackend) PeekMessagesWithPriorityRange(ctx context.Context, queueNa
 }
 
 func (b *stubBackend) CreateSchedule(ctx context.Context, schedule *schedulepb.Schedule) error {
+	b.schedules = append(b.schedules, schedule)
 	return nil
 }
 
@@ -233,6 +234,39 @@ func (b *stubBackend) DeleteDLQMessage(ctx context.Context, dlqName string, mess
 	return nil
 }
 func (b *stubBackend) PurgeDLQ(ctx context.Context, dlqName string) (int64, error) { return 0, nil }
+
+func TestCreateSchedule_ValidatesCronExpression(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend}
+
+	_, err := impl.CreateSchedule(context.Background(), &queueservicepb.CreateScheduleRequest{
+		Schedule: &schedulepb.Schedule{
+			ScheduleId: "invalid-cron",
+			Metadata: &schedulepb.Schedule_Metadata{
+				QueueName: "jobs",
+				ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{
+					CronSchedule: "* * * * * *",
+				},
+			},
+		},
+	})
+	require.ErrorContains(t, err, "cron schedule is invalid")
+	require.Empty(t, backend.schedules)
+
+	_, err = impl.CreateSchedule(context.Background(), &queueservicepb.CreateScheduleRequest{
+		Schedule: &schedulepb.Schedule{
+			ScheduleId: "valid-cron",
+			Metadata: &schedulepb.Schedule_Metadata{
+				QueueName: "jobs",
+				ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{
+					CronSchedule: "*/5 * * * *",
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, backend.schedules, 1)
+}
 
 func TestCreateQueue_RequiresExclusiveKey(t *testing.T) {
 	backend := &stubBackend{}

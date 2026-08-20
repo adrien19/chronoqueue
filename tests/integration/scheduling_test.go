@@ -155,12 +155,8 @@ func TestScheduling_InvalidCronExpression(t *testing.T) {
 	})
 
 	// Assert - Should return error
-	if err != nil {
-		t.Logf("Expected error for invalid cron: %v", err)
-		helpers.AssertErrorContains(t, err, "cron")
-	} else {
-		t.Log("Server accepted invalid cron expression (might have lenient validation)")
-	}
+	require.Error(t, err)
+	helpers.AssertErrorContains(t, err, "cron")
 }
 
 // TestScheduling_CalendarScheduleBusinessDays validates business day scheduling

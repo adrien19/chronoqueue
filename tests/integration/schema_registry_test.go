@@ -54,7 +54,26 @@ func TestSchemaRegistry_RegisterSchema(t *testing.T) {
 	// Assert
 	require.NoError(t, err, "Schema registration should succeed")
 	assert.NotNil(t, registerResp, "Response should not be nil")
-	assert.NotEmpty(t, registerResp.SchemaId, "Schema ID should be returned")
+	assert.Equal(t, schemaID, registerResp.GetSchemaId())
+	assert.Equal(t, int32(1), registerResp.GetVersion())
+	assert.Positive(t, registerResp.GetCreatedAt())
+
+	secondResp, err := client.RegisterSchema(ctx, &queueservice_pb.RegisterSchemaRequest{
+		SchemaId:    schemaID,
+		Name:        "Order Schema v2",
+		Description: "Second version for metadata validation",
+		Content:     schemaContent,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), secondResp.GetVersion())
+	assert.Equal(t, registerResp.GetCreatedAt(), secondResp.GetCreatedAt())
+
+	listResp, err := client.ListSchemas(ctx, &queueservice_pb.ListSchemasRequest{Prefix: schemaID, Limit: 1})
+	require.NoError(t, err)
+	require.Len(t, listResp.GetSchemas(), 1)
+	listed := listResp.GetSchemas()[0]
+	assert.Equal(t, int32(2), listed.GetVersionCount())
+	assert.Equal(t, secondResp.GetCreatedAt(), listed.GetCreatedAt())
 
 	t.Logf("Registered schema: %s", schemaID)
 }
@@ -209,6 +228,9 @@ func TestSchemaRegistry_ListSchemas(t *testing.T) {
 	for _, listed := range listResp.GetSchemas() {
 		assert.True(t, strings.HasPrefix(listed.GetSchemaId(), prefix))
 		assert.True(t, listed.GetIsActive())
+		assert.Equal(t, int32(1), listed.GetVersionCount())
+		assert.Positive(t, listed.GetCreatedAt())
+		assert.Positive(t, listed.GetUpdatedAt())
 	}
 
 	_, err = client.ListSchemas(ctx, &queueservice_pb.ListSchemasRequest{Limit: -1})
@@ -236,7 +258,7 @@ func TestSchemaRegistry_ListSchemas(t *testing.T) {
 //
 // Test Scenario: TC-V-005 from TESTING_GUIDE.md
 // Data: Registered schema
-// Expected: Schema version deleted
+// Expected: Schema version deactivated and remains addressable
 func TestSchemaRegistry_DeleteSchema(t *testing.T) {
 	t.Parallel()
 
@@ -268,15 +290,16 @@ func TestSchemaRegistry_DeleteSchema(t *testing.T) {
 	// Assert
 	require.NoError(t, err, "Delete schema should succeed")
 	assert.True(t, deleteResp.Success, "Response should indicate success")
+	assert.Equal(t, int32(1), deleteResp.GetVersionsDeleted())
 
-	// Verify schema no longer exists
-	_, err = client.GetSchema(ctx, &queueservice_pb.GetSchemaRequest{
+	// Verify the soft-deleted schema remains addressable but inactive.
+	getResp, err := client.GetSchema(ctx, &queueservice_pb.GetSchemaRequest{
 		SchemaId: schemaID,
 		Version:  1,
 	})
-	if err != nil {
-		t.Logf("Expected: Schema not found after deletion: %v", err)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, getResp.GetSchema())
+	assert.False(t, getResp.GetSchema().GetIsActive())
 }
 
 // TestSchemaValidation_ValidPayload validates payload against schema

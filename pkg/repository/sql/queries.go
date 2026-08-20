@@ -83,16 +83,6 @@ func (qb *QueryBuilder) BuildOldestMessageAgeQuery(_ string) string {
 	)
 }
 
-// BuildUpdateMessageStateQuery builds a query to update message state
-func (qb *QueryBuilder) BuildUpdateMessageStateQuery() string {
-	return fmt.Sprintf(`
-		UPDATE cq_messages
-		SET state = %s,
-		    updated_at = %s
-		WHERE message_id = %s
-	`, qb.dialect.Placeholder(1), qb.dialect.CurrentTimestamp(), qb.dialect.Placeholder(2))
-}
-
 // BuildGetScheduledMessagesQuery builds a query to find messages ready for activation
 func (qb *QueryBuilder) BuildGetScheduledMessagesQuery() string {
 	nowPlaceholder := qb.dialect.Placeholder(1)
@@ -187,15 +177,7 @@ func (qb *QueryBuilder) BuildInsertMessageQuery() string {
 		) VALUES (%s)`, strings.Join(placeholders, ", "))
 
 	// Add conflict clause - both SQLite and PostgreSQL support ON CONFLICT
-	return baseQuery + " ON CONFLICT(message_id) DO NOTHING"
-}
-
-// BuildDeleteMessageQuery builds a query to delete a message
-func (qb *QueryBuilder) BuildDeleteMessageQuery() string {
-	return fmt.Sprintf(`
-		DELETE FROM cq_messages
-		WHERE message_id = %s
-	`, qb.dialect.Placeholder(1))
+	return baseQuery + " ON CONFLICT(queue_name, message_id) DO NOTHING"
 }
 
 // BuildGetQueueMetadataQuery builds a query to retrieve queue metadata

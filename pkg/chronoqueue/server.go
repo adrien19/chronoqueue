@@ -482,8 +482,9 @@ func (s *ChronoQueueServer) RegisterSchema(ctx context.Context, req *queueservic
 
 	s.logger.InfoWithFields("Schema registered successfully", "schema_id", req.GetSchemaId())
 	resp := &queueservice_pb.RegisterSchemaResponse{
-		SchemaId: registryResp.SchemaID,
-		Version:  registryResp.LatestVersion,
+		SchemaId:  registryResp.SchemaID,
+		Version:   registryResp.LatestVersion,
+		CreatedAt: registryResp.CreatedAt.UnixMilli(),
 	}
 	return resp, nil
 }
@@ -528,11 +529,15 @@ func (s *ChronoQueueServer) ListSchemas(ctx context.Context, req *queueservice_p
 
 	schemasInfo := make([]*queueservice_pb.SchemaInfo, 0, len(result.Schemas))
 	for _, schema := range result.Schemas {
+		metadata := result.Metadata[schema.SchemaId]
 		schemasInfo = append(schemasInfo, &queueservice_pb.SchemaInfo{
 			Name:          schema.Name,
 			SchemaId:      schema.SchemaId,
 			Description:   schema.Description,
 			LatestVersion: schema.Version,
+			CreatedAt:     metadata.CreatedAt.UnixMilli(),
+			UpdatedAt:     metadata.UpdatedAt.UnixMilli(),
+			VersionCount:  metadata.TotalVersions,
 			IsActive:      schema.IsActive,
 		})
 	}
@@ -549,7 +554,7 @@ func (s *ChronoQueueServer) DeleteSchema(ctx context.Context, req *queueservice_
 	}
 	s.logger.InfoWithFields("DeleteSchema called", "schema_id", req.GetSchemaId())
 
-	err := s.schemaRegistry.Deactivate(ctx, req.GetSchemaId(), req.GetVersion())
+	versionsDeleted, err := s.schemaRegistry.Deactivate(ctx, req.GetSchemaId(), req.GetVersion())
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to delete schema", "schema_id", req.GetSchemaId(), "error", err)
 		return nil, domainerror.PrefixMessage(err, "failed to delete schema")
@@ -558,7 +563,7 @@ func (s *ChronoQueueServer) DeleteSchema(ctx context.Context, req *queueservice_
 	s.logger.InfoWithFields("Schema deleted successfully", "schema_id", req.GetSchemaId())
 	return &queueservice_pb.DeleteSchemaResponse{
 		Success:         true,
-		VersionsDeleted: req.GetVersion(),
+		VersionsDeleted: versionsDeleted,
 	}, nil
 }
 
@@ -577,7 +582,7 @@ func (s *ChronoQueueServer) ValidatePayload(ctx context.Context, req *queueservi
 	return &queueservice_pb.ValidatePayloadResponse{
 		Valid:         resp.Valid,
 		Errors:        resp.Errors,
-		SchemaId:      req.SchemaId,
-		SchemaVersion: req.Version,
+		SchemaId:      resp.SchemaId,
+		SchemaVersion: resp.SchemaVersion,
 	}, nil
 }
