@@ -87,6 +87,9 @@ func (p *PriorityWeightCalculator) CalculateWeights(ctx context.Context, queueNa
 		if useAgeBoost && ageThreshold > 0 {
 			ageMs := nowMs - createdAt
 			if ageMs >= ageThreshold.Milliseconds() {
+				if weight > maxPriorityValue/boostMultiplier {
+					return nil, fmt.Errorf("priority weight overflow for %s", level)
+				}
 				weight *= boostMultiplier
 			}
 		}
@@ -98,7 +101,7 @@ func (p *PriorityWeightCalculator) CalculateWeights(ctx context.Context, queueNa
 		return map[string]int32{}, nil
 	}
 
-	totalWeight := weights["high"] + weights["medium"] + weights["low"]
+	totalWeight := int64(weights["high"]) + int64(weights["medium"]) + int64(weights["low"])
 	if totalWeight == 0 {
 		weights["high"], weights["medium"], weights["low"] = 1, 1, 1
 	}
@@ -113,9 +116,9 @@ func (p *PriorityWeightCalculator) SelectPriorityLevel(weights map[string]int32)
 		return ""
 	}
 
-	total := int32(0)
+	var total int64
 	for _, w := range weights {
-		total += w
+		total += int64(w)
 	}
 
 	if total <= 0 {
@@ -127,8 +130,8 @@ func (p *PriorityWeightCalculator) SelectPriorityLevel(weights map[string]int32)
 		rng = newSecureRand()
 	}
 
-	draw := rng.Int31n(total)
-	cumulative := int32(0)
+	draw := rng.Int63n(total)
+	var cumulative int64
 
 	for _, entry := range []struct {
 		level  string
@@ -138,7 +141,7 @@ func (p *PriorityWeightCalculator) SelectPriorityLevel(weights map[string]int32)
 		{"medium", weights["medium"]},
 		{"low", weights["low"]},
 	} {
-		cumulative += entry.weight
+		cumulative += int64(entry.weight)
 		if draw < cumulative {
 			return entry.level
 		}

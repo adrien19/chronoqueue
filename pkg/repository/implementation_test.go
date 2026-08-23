@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -16,6 +19,7 @@ import (
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/calendar"
 	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
 	repositorysql "github.com/adrien19/chronoqueue/pkg/repository/sql"
@@ -425,7 +429,7 @@ func TestCreateQueueMessage_ValidatorNil(t *testing.T) {
 
 	req := &queueservicepb.PostMessageRequest{
 		QueueName: "queue-A",
-		Message:   &messagepb.Message{MessageId: "msg-1"},
+		Message:   &messagepb.Message{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	_, err := impl.CreateQueueMessage(context.Background(), req, nil)
@@ -444,6 +448,19 @@ func TestCreateQueueMessage_ValidatorNil(t *testing.T) {
 	}
 }
 
+func TestCreateQueueMessage_RequiresMetadata(t *testing.T) {
+	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{}}
+	impl := &implementation{backend: backend}
+
+	_, err := impl.CreateQueueMessage(context.Background(), &queueservicepb.PostMessageRequest{
+		QueueName: "queue-A",
+		Message:   &messagepb.Message{MessageId: "msg-1"},
+	}, nil)
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(domainerror.ToGRPC(err)))
+	require.Empty(t, backend.enqueued)
+}
+
 func TestCreateQueueMessage_ValidationFails(t *testing.T) {
 	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 3}}
 	impl := &implementation{backend: backend}
@@ -460,7 +477,7 @@ func TestCreateQueueMessage_ValidationFails(t *testing.T) {
 
 	req := &queueservicepb.PostMessageRequest{
 		QueueName: "queue-B",
-		Message:   &messagepb.Message{MessageId: "msg-2"},
+		Message:   &messagepb.Message{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	_, err := impl.CreateQueueMessage(context.Background(), req, val)
@@ -490,7 +507,7 @@ func TestCreateQueueMessage_ValidationPasses(t *testing.T) {
 
 	req := &queueservicepb.PostMessageRequest{
 		QueueName: "queue-C",
-		Message:   &messagepb.Message{MessageId: "msg-3"},
+		Message:   &messagepb.Message{MessageId: "msg-3", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	_, err := impl.CreateQueueMessage(context.Background(), req, val)
@@ -684,9 +701,9 @@ func TestCreateQueueMessagesBulk_Success_AllOrNothing(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
-		{MessageId: "msg-3"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-3", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -738,8 +755,8 @@ func TestCreateQueueMessagesBulk_Success_BestEffort(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -764,6 +781,48 @@ func TestCreateQueueMessagesBulk_Success_BestEffort(t *testing.T) {
 	if len(backend.enqueued) != 2 {
 		t.Fatalf("expected 2 enqueued messages, got %d", len(backend.enqueued))
 	}
+}
+
+func TestCreateQueueMessagesBulk_BestEffortRejectsMissingMetadata(t *testing.T) {
+	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{}}
+	impl := &implementation{backend: backend}
+
+	resp, err := impl.CreateQueueMessagesBulk(context.Background(), &queueservicepb.PostMessagesBulkRequest{
+		QueueName: "test-queue",
+		Messages: []*messagepb.Message{
+			{MessageId: "missing"},
+			{MessageId: "valid", Metadata: &messagepb.Message_Metadata{}},
+		},
+		TransactionMode: queueservicepb.PostMessagesBulkRequest_BEST_EFFORT,
+	}, nil)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, resp.GetSuccessfulCount())
+	require.EqualValues(t, 1, resp.GetFailedCount())
+	require.Equal(t, queueservicepb.PostMessagesBulkResponse_MessagePostResult_VALIDATION_FAILED, resp.GetResults()[0].GetErrorCode())
+	require.Len(t, backend.enqueued, 1)
+	require.Equal(t, "valid", backend.enqueued[0].message.GetMessageId())
+}
+
+func TestCreateQueueMessagesBulk_AllOrNothingReportsIndexedMetadata(t *testing.T) {
+	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{}}
+	impl := &implementation{backend: backend}
+
+	_, err := impl.CreateQueueMessagesBulk(context.Background(), &queueservicepb.PostMessagesBulkRequest{
+		QueueName: "test-queue",
+		Messages: []*messagepb.Message{
+			{MessageId: "valid", Metadata: &messagepb.Message_Metadata{}},
+			{MessageId: "missing"},
+		},
+		TransactionMode: queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING,
+	}, nil)
+	require.Error(t, err)
+	grpcStatus := status.Convert(domainerror.ToGRPC(err))
+	require.Equal(t, codes.InvalidArgument, grpcStatus.Code())
+	require.Empty(t, backend.enqueued)
+	require.Len(t, grpcStatus.Details(), 1)
+	details, ok := grpcStatus.Details()[0].(*errdetails.BadRequest)
+	require.True(t, ok)
+	require.Equal(t, "messages[1].metadata", details.GetFieldViolations()[0].GetField())
 }
 
 func TestCreateQueueMessagesBulk_EmptyMessages(t *testing.T) {
@@ -866,8 +925,8 @@ func TestCreateQueueMessagesBulk_ValidationFails_AllOrNothing(t *testing.T) {
 	}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -900,7 +959,7 @@ func TestCreateQueueMessagesBulk_InheritsQueueDefaults(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -970,9 +1029,9 @@ func TestCreateQueueMessagesBulk_BestEffort_MixedValidation(t *testing.T) {
 	}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
-		{MessageId: "msg-3"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-3", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -1036,9 +1095,9 @@ func TestCreateQueueMessagesBulk_BackendInternalError(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
-		{MessageId: "msg-3"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-3", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -1080,9 +1139,9 @@ func TestCreateQueueMessagesBulk_DuplicateMessageID(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
-		{MessageId: "msg-3"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-3", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -1113,8 +1172,8 @@ func TestCreateQueueMessagesBulk_AllOrNothing_TransactionFailure(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -1158,8 +1217,8 @@ func TestCreateQueueMessagesBulk_BestEffort_PartialTransactionFailure(t *testing
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -1201,9 +1260,9 @@ func TestCreateQueueMessagesBulk_NilMessageInSlice_BestEffort(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
 		nil, // nil message should be treated as a validation error
-		{MessageId: "msg-3"},
+		{MessageId: "msg-3", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{

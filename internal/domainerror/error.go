@@ -71,8 +71,12 @@ func ToGRPC(err error) error {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return status.Error(codes.DeadlineExceeded, "request deadline exceeded")
 	}
-	if grpcStatus, ok := status.FromError(err); ok && grpcStatus.Code() != codes.Unknown {
-		return err
+	if grpcStatus, ok := status.FromError(err); ok {
+		switch grpcStatus.Code() {
+		case codes.Unknown, codes.Internal:
+		default:
+			return err
+		}
 	}
 
 	var domainErr *Error

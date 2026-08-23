@@ -40,7 +40,6 @@ func (lrc *LeaseRuntimeCalculator) CalculateLeaseRuntime(policy *commonpb.LeaseP
 func (lrc *LeaseRuntimeCalculator) CalculateLeaseRuntimeWithDuration(policy *commonpb.LeasePolicy, leaseDuration time.Duration) *LeaseRuntime {
 	nowMs := lrc.clock.NowMs()
 
-	// Convert duration protobuf to milliseconds
 	baseLeaseDurationMs := leaseDuration.Milliseconds()
 	heartbeatTimeoutMs := int64(0)
 	if policy.GetHeartbeatTimeout() != nil {

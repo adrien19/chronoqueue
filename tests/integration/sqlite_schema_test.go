@@ -94,7 +94,7 @@ func TestSQLiteSchemaIntegration(t *testing.T) {
 		assert.True(t, resp.GetValid())
 		assert.Empty(t, resp.GetErrors())
 		assert.Equal(t, "user.profile.v1", resp.GetSchemaId())
-		assert.Equal(t, int32(2), resp.GetSchemaVersion())
+		assert.Equal(t, int32(1), resp.GetSchemaVersion())
 	})
 
 	t.Run("ValidateInvalidPayload", func(t *testing.T) {

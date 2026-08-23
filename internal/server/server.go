@@ -266,8 +266,8 @@ func (s *Server) startGRPCServer() error {
 	}
 	interceptors = append(interceptors,
 		gateway.MetricsInterceptor(s.logger),
-		gateway.ValidationInterceptor(s.logger),
 		gateway.ErrorContractInterceptor(s.logger),
+		gateway.ValidationInterceptor(s.logger),
 	)
 
 	// Get TLS configuration

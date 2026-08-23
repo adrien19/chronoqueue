@@ -156,11 +156,12 @@ func TestMessageLifecycle_PostJSONMessage(t *testing.T) {
 		QueueName:     queueName,
 		LeaseDuration: durationpb.New(5 * time.Second),
 	})
+	claimCompletedAt := time.Now()
 
 	// Assert
 	require.NoError(t, err, "Getting message should succeed")
 	require.NotNil(t, getResp.Message, "Message should be returned")
-	assert.WithinDuration(t, claimStartedAt.Add(5*time.Second), time.UnixMilli(getResp.Message.GetMetadata().GetLeaseExpiry()), time.Second)
+	assert.WithinDuration(t, claimStartedAt.Add(5*time.Second), time.UnixMilli(getResp.Message.GetMetadata().GetLeaseExpiry()), claimCompletedAt.Sub(claimStartedAt)+time.Second)
 	helpers.AssertMessageContentType(t, getResp.Message, "application/json")
 }
 

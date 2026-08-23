@@ -157,6 +157,7 @@ func TestScheduling_InvalidCronExpression(t *testing.T) {
 	// Assert - Should return error
 	require.Error(t, err)
 	helpers.AssertErrorContains(t, err, "cron")
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 // TestScheduling_CalendarScheduleBusinessDays validates business day scheduling

@@ -123,7 +123,7 @@ func TestCronProcessorMarksInvalidExpression(t *testing.T) {
 	logger := log.NewLogger(log.WithLevel(logrus.ErrorLevel))
 	storage, err := sqlite.NewStorage(ctx, &sqlite.Config{Path: ":memory:", Logger: logger})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = storage.Close() })
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
 
 	queue := &queuepb.Queue{Name: "cron-q2", Metadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 1}}
 	require.NoError(t, storage.CreateQueue(ctx, queue))
@@ -161,7 +161,7 @@ func TestCronProcessorCoalescesMissedRunAndRecoversAfterRestart(t *testing.T) {
 	logger := log.NewLogger(log.WithLevel(logrus.ErrorLevel))
 	storage, err := sqlite.NewStorage(ctx, &sqlite.Config{Path: ":memory:", Logger: logger})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = storage.Close() })
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
 
 	queue := &queuepb.Queue{Name: "cron-recovery", Metadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 1}}
 	require.NoError(t, storage.CreateQueue(ctx, queue))

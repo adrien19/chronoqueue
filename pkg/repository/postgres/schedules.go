@@ -111,8 +111,15 @@ func (s *Storage) ListSchedules(ctx context.Context, queueName string) ([]*sched
 	if err != nil {
 		return nil, fmt.Errorf("query schedules: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-	return s.scanSchedules(rows)
+	schedules, scanErr := s.scanSchedules(rows)
+	closeErr := rows.Close()
+	if scanErr != nil {
+		return nil, scanErr
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close schedule rows: %w", closeErr)
+	}
+	return schedules, nil
 }
 
 func (s *Storage) scanSchedules(rows *sql.Rows) ([]*schedulepb.Schedule, error) {

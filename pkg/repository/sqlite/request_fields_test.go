@@ -29,7 +29,7 @@ func TestClaimMessage_UsesRequestedLeaseDuration(t *testing.T) {
 
 	var leaseStartedAt, leaseExpiry int64
 	require.NoError(t, storage.DB.QueryRowContext(ctx,
-		`SELECT lease_started_at, lease_expiry FROM cq_messages WHERE message_id = ?`, message.GetMessageId(),
+		`SELECT lease_started_at, lease_expiry FROM cq_messages WHERE queue_name = ? AND message_id = ?`, queueName, message.GetMessageId(),
 	).Scan(&leaseStartedAt, &leaseExpiry))
 	assert.EqualValues(t, 5*time.Second/time.Millisecond, leaseExpiry-leaseStartedAt)
 }
@@ -86,4 +86,19 @@ func TestListResources_FiltersLiteralPrefixes(t *testing.T) {
 	literalSchedules, err := storage.ListSchedulesWithPrefix(ctx, "%")
 	require.NoError(t, err)
 	require.Empty(t, literalSchedules)
+}
+
+func TestRequestFieldQueries_PropagateClosedDatabaseErrors(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "closed.db"))
+	require.NoError(t, storage.DB.Close())
+
+	_, err := storage.ClaimMessageWithLeaseDuration(ctx, "queue", "worker", "attempt", "", time.Second)
+	require.Error(t, err)
+	_, err = storage.PeekMessagesWithPriorityRange(ctx, "queue", 1, &repositorysql.PriorityRange{Min: 1, Max: 2})
+	require.Error(t, err)
+	_, err = storage.ListQueuesWithPrefix(ctx, "queue")
+	require.Error(t, err)
+	_, err = storage.ListSchedulesWithPrefix(ctx, "schedule")
+	require.Error(t, err)
 }

@@ -69,24 +69,35 @@ func (s *Storage) ListQueuesWithPrefix(ctx context.Context, prefix string) ([]*q
 	if err != nil {
 		return nil, fmt.Errorf("query queues: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
 	var queues []*queuepb.Queue
+	var scanErr error
 	for rows.Next() {
 		var queueBytes []byte
 		if err := rows.Scan(&queueBytes); err != nil {
-			return nil, fmt.Errorf("scan queue: %w", err)
+			scanErr = fmt.Errorf("scan queue: %w", err)
+			break
 		}
 
 		queue, err := s.Serializer.UnmarshalQueue(queueBytes)
 		if err != nil {
-			return nil, fmt.Errorf("unmarshal queue: %w", err)
+			scanErr = fmt.Errorf("unmarshal queue: %w", err)
+			break
 		}
 
 		queues = append(queues, queue)
 	}
 
-	return queues, rows.Err()
+	if scanErr == nil {
+		scanErr = rows.Err()
+	}
+	closeErr := rows.Close()
+	if scanErr != nil {
+		return nil, scanErr
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close queue rows: %w", closeErr)
+	}
+	return queues, nil
 }
 
 // DeleteQueue deletes a queue

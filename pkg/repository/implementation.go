@@ -424,6 +424,12 @@ func (impl *implementation) CreateQueueMessage(ctx context.Context, request *que
 		return nil, domainerror.New(domainerror.InvalidArgument, "queue name is required", nil)
 	}
 	message := request.GetMessage()
+	if message.Metadata == nil {
+		return nil, domainerror.InvalidWithFields("message metadata is required", []domainerror.FieldViolation{{
+			Field:       "message.metadata",
+			Description: "required field missing",
+		}}, nil)
+	}
 
 	// Get queue metadata to inherit defaults
 	queueMetadata, err := impl.backend.GetQueueMetadata(ctx, queueName)
@@ -431,10 +437,6 @@ func (impl *implementation) CreateQueueMessage(ctx context.Context, request *que
 		return nil, domainerror.PrefixMessage(err, "get queue metadata")
 	}
 
-	// Ensure message has metadata
-	if message.Metadata == nil {
-		message.Metadata = &messagepb.Message_Metadata{}
-	}
 	if v != nil {
 		validationResult := v.Validate(ctx, message)
 		if !validationResult.Valid {
@@ -532,9 +534,16 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 			validationErrors[i] = err
 			continue
 		}
-		// Ensure message has metadata
 		if message.Metadata == nil {
-			message.Metadata = &messagepb.Message_Metadata{}
+			err := fmt.Errorf("message metadata is required")
+			if transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
+				return nil, domainerror.InvalidWithFields(err.Error(), []domainerror.FieldViolation{{
+					Field:       fmt.Sprintf("messages[%d].metadata", i),
+					Description: "required field missing",
+				}}, nil)
+			}
+			validationErrors[i] = err
+			continue
 		}
 
 		if v != nil {
@@ -543,10 +552,15 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 				metrics.IncrementValidationFailures(queueName, "message_validation")
 				if transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
 					errorDetails := fmt.Sprintf("Message[%d] validation failed:", i)
+					fieldViolations := make([]domainerror.FieldViolation, 0, len(validationResult.Errors))
 					for _, valErr := range validationResult.Errors {
 						errorDetails += fmt.Sprintf("\n  - %s: %s", valErr.Field, valErr.Message)
+						fieldViolations = append(fieldViolations, domainerror.FieldViolation{
+							Field:       fmt.Sprintf("messages[%d].%s", i, valErr.Field),
+							Description: valErr.Message,
+						})
 					}
-					return nil, domainerror.New(domainerror.FailedPrecondition, errorDetails, nil)
+					return nil, domainerror.InvalidWithFields(errorDetails, fieldViolations, nil)
 				}
 				errorDetails := "validation failed:"
 				for _, valErr := range validationResult.Errors {
@@ -991,6 +1005,12 @@ func (impl *implementation) CreateSchedule(ctx context.Context, request *queuese
 		}
 	default:
 		return nil, domainerror.New(domainerror.InvalidArgument, "schedule configuration is invalid", nil)
+	}
+
+	if nextRun := meta.GetNextRun(); nextRun != nil {
+		if err := nextRun.CheckValid(); err != nil {
+			return nil, domainerror.New(domainerror.InvalidArgument, "schedule next run is invalid", err)
+		}
 	}
 
 	// Pre-compute next_run for calendar schedules so the background processor can pick them up.
