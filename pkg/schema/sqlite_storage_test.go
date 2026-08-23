@@ -254,6 +254,13 @@ func TestSQLiteRegistry_List(t *testing.T) {
 	})
 
 	t.Run("ListWithOptions", func(t *testing.T) {
+		for _, limit := range []int32{0, -1} {
+			unlimited, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "schema", Limit: limit})
+			require.NoError(t, err)
+			assert.Len(t, unlimited.Schemas, 3)
+			assert.Equal(t, int32(3), unlimited.TotalCount)
+		}
+
 		limited, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "schema", Limit: 1})
 		require.NoError(t, err)
 		assert.Len(t, limited.Schemas, 1)

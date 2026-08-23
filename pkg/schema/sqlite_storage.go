@@ -241,6 +241,10 @@ func (s *SQLiteRegistry) List(ctx context.Context) ([]*schema_pb.Schema, error) 
 
 // ListWithOptions lists the latest schema matching the requested filters.
 func (s *SQLiteRegistry) ListWithOptions(ctx context.Context, options ListOptions) (ListResult, error) {
+	if options.Limit <= 0 {
+		options.Limit = math.MaxInt32
+	}
+
 	rows, err := s.db.QueryContext(ctx, `
 		WITH ranked AS (
 			SELECT s.*, ROW_NUMBER() OVER (PARTITION BY schema_id ORDER BY version DESC) AS row_number,
