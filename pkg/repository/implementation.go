@@ -63,13 +63,21 @@ func NewSQLiteStorage(ctx context.Context, config *sqlite.Config) (Storage, erro
 	calendarEngine := calendar.NewDefaultEngine()
 
 	// Start background services
-	schedulerService := background.NewSchedulerService(storage.BaseSQL, 1*time.Second)
+	schedulerInterval := config.SchedulerInterval
+	if schedulerInterval <= 0 {
+		schedulerInterval = time.Second
+	}
+	reclaimInterval := config.ReclaimInterval
+	if reclaimInterval <= 0 {
+		reclaimInterval = 5 * time.Second
+	}
+	schedulerService := background.NewSchedulerService(storage.BaseSQL, schedulerInterval)
 	go schedulerService.Start(bgCtx)
-	config.Logger.Info("Starting SQLite scheduler service", "interval", "1s")
+	config.Logger.Info("Starting SQLite scheduler service", "interval", schedulerInterval)
 
-	reclaimService := background.NewReclaimService(storage, storage.BaseSQL, 5*time.Second)
+	reclaimService := background.NewReclaimService(storage, storage.BaseSQL, reclaimInterval)
 	go reclaimService.Start(bgCtx)
-	config.Logger.Info("Starting SQLite reclaim service", "interval", "5s")
+	config.Logger.Info("Starting SQLite reclaim service", "interval", reclaimInterval)
 
 	metricsReporter := background.NewMetricsReporterService(storage.BaseSQL, 30*time.Second)
 	go metricsReporter.Start(bgCtx)
@@ -113,13 +121,21 @@ func NewPostgresStorage(ctx context.Context, config *postgres.Config) (Storage, 
 
 	calendarEngine := calendar.NewDefaultEngine()
 
-	schedulerService := background.NewSchedulerService(storage.BaseSQL, 1*time.Second)
+	schedulerInterval := config.SchedulerInterval
+	if schedulerInterval <= 0 {
+		schedulerInterval = time.Second
+	}
+	reclaimInterval := config.ReclaimInterval
+	if reclaimInterval <= 0 {
+		reclaimInterval = 5 * time.Second
+	}
+	schedulerService := background.NewSchedulerService(storage.BaseSQL, schedulerInterval)
 	go schedulerService.Start(bgCtx)
-	config.Logger.Info("Starting Postgres scheduler service", "interval", "1s")
+	config.Logger.Info("Starting Postgres scheduler service", "interval", schedulerInterval)
 
-	reclaimService := background.NewReclaimService(storage, storage.BaseSQL, 5*time.Second)
+	reclaimService := background.NewReclaimService(storage, storage.BaseSQL, reclaimInterval)
 	go reclaimService.Start(bgCtx)
-	config.Logger.Info("Starting Postgres reclaim service", "interval", "5s")
+	config.Logger.Info("Starting Postgres reclaim service", "interval", reclaimInterval)
 
 	metricsReporter := background.NewMetricsReporterService(storage.BaseSQL, 30*time.Second)
 	go metricsReporter.Start(bgCtx)
@@ -163,7 +179,7 @@ func (impl *implementation) Close() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var errScheduler, errReclaim, errMetrics, errCalendar, errCron error
+	var errScheduler, errReclaim, errMetrics, errCalendar, errCron, errCleanup error
 
 	if impl.schedulerService != nil {
 		errScheduler = impl.schedulerService.StopGracefully(shutdownCtx)
@@ -180,6 +196,9 @@ func (impl *implementation) Close() error {
 	if impl.cronService != nil {
 		errCron = impl.cronService.StopGracefully(shutdownCtx)
 	}
+	if impl.cleanupService != nil {
+		errCleanup = impl.cleanupService.StopGracefully(shutdownCtx)
+	}
 
 	// Close the appropriate backend
 	var errBackend error
@@ -187,27 +206,29 @@ func (impl *implementation) Close() error {
 		errBackend = impl.backend.Close()
 	}
 
-	// Return combined errors
-	if errScheduler != nil {
-		return fmt.Errorf("scheduler shutdown failed: %w", errScheduler)
-	}
-	if errReclaim != nil {
-		return fmt.Errorf("reclaim shutdown failed: %w", errReclaim)
-	}
-	if errMetrics != nil {
-		return fmt.Errorf("metrics reporter shutdown failed: %w", errMetrics)
-	}
-	if errCalendar != nil {
-		return fmt.Errorf("calendar shutdown failed: %w", errCalendar)
-	}
-	if errCron != nil {
-		return fmt.Errorf("cron processor shutdown failed: %w", errCron)
-	}
-	if errBackend != nil {
-		return fmt.Errorf("backend close failed: %w", errBackend)
-	}
+	return errors.Join(
+		wrapShutdownError("scheduler", errScheduler),
+		wrapShutdownError("reclaim", errReclaim),
+		wrapShutdownError("metrics reporter", errMetrics),
+		wrapShutdownError("calendar", errCalendar),
+		wrapShutdownError("cron processor", errCron),
+		wrapShutdownError("cleanup", errCleanup),
+		wrapShutdownError("backend close", errBackend),
+	)
+}
 
-	return nil
+func wrapShutdownError(component string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s failed: %w", component, err)
+}
+
+func (impl *implementation) Ping(ctx context.Context) error {
+	if impl.backend == nil {
+		return errors.New("storage backend is not initialized")
+	}
+	return impl.backend.Ping(ctx)
 }
 
 // CreateQueue creates a new queue

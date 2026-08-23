@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -80,6 +81,7 @@ type stubBackend struct {
 	enqueueTxErr   error   // transaction-level error for bulk operations
 	cancelled      []cancelledCall
 	cancelErr      error
+	pingErr        error
 }
 
 type stubEngine struct {
@@ -113,7 +115,39 @@ func (e *stubEngine) GetHolidays(ctx context.Context, businessCalendar *schedule
 }
 
 // BackendStorage impl stubs
-func (b *stubBackend) Close() error { return nil }
+func (b *stubBackend) Close() error                   { return nil }
+func (b *stubBackend) Ping(ctx context.Context) error { return b.pingErr }
+
+func TestImplementationPing(t *testing.T) {
+	backendFailure := errors.New("backend unavailable")
+	tests := []struct {
+		name      string
+		backend   BackendStorage
+		wantError error
+		wantText  string
+	}{
+		{name: "backend success", backend: &stubBackend{}},
+		{name: "backend failure", backend: &stubBackend{pingErr: backendFailure}, wantError: backendFailure},
+		{name: "nil backend", wantText: "storage backend is not initialized"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			impl := &implementation{backend: tt.backend}
+			err := impl.Ping(context.Background())
+
+			if tt.wantError != nil {
+				require.ErrorIs(t, err, tt.wantError)
+				return
+			}
+			if tt.wantText != "" {
+				require.ErrorContains(t, err, tt.wantText)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
 
 func (b *stubBackend) CreateQueue(ctx context.Context, queue *queuepb.Queue) error {
 	b.createdQueues = append(b.createdQueues, queue)

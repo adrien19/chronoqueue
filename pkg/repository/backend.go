@@ -18,6 +18,7 @@ import (
 type BackendStorage interface {
 	// Lifecycle
 	Close() error
+	Ping(ctx context.Context) error
 
 	// Queue Operations
 	CreateQueue(ctx context.Context, queue *queuepb.Queue) error

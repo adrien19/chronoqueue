@@ -62,17 +62,11 @@ jobs:
 
       - name: Check for generated proto files
         run: |
-          # Check if proto files exist
-          if [ -d "proto" ]; then
-            echo "Proto files found. Checking if generated files are up to date..."
-            
-            # Install proto tools if proto files are modified
-            if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "^proto/"; then
-              echo "Proto files modified. Verifying generated code..."
-              
-              # This would require proto generation - skip for now if tools not available
-              echo "::warning::Proto files were modified. Ensure you run 'make gen-proto' locally."
-            fi
+          make gen-proto
+          git diff --exit-code -- api docs/api pkg/gateway/chronoqueue.swagger.json
+          if git status --porcelain=v1 --untracked-files=all --ignored -- api docs/api pkg/gateway/chronoqueue.swagger.json | grep -Eq '^\?\?|^!!'; then
+            echo "::error::Generated proto outputs are untracked or ignored."
+            exit 1
           fi
 
       - name: Check for direct commits to protected branches

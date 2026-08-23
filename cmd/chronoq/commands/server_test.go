@@ -1,10 +1,14 @@
 package commands
 
 import (
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewServerCommand(t *testing.T) {
@@ -77,6 +81,17 @@ func TestServerHealthCommand_Execution(t *testing.T) {
 }
 
 func TestServerVersionCommand_Execution(t *testing.T) {
+	originalClient := versionHTTPClient
+	versionHTTPClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		assert.Equal(t, "/ready", request.URL.Path)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     http.StatusText(http.StatusOK),
+			Body:       io.NopCloser(strings.NewReader(`{"version":"2.0.1","git_commit":"abc123","build_date":"2026-08-23"}`)),
+		}, nil
+	})}
+	t.Cleanup(func() { versionHTTPClient = originalClient })
+
 	cmd := newServerVersionCommand()
 
 	// Set up common client flags that are expected
@@ -87,14 +102,16 @@ func TestServerVersionCommand_Execution(t *testing.T) {
 	cmd.Flags().String("ca-file", "", "CA certificate file")
 	cmd.Flags().Duration("timeout", 0, "Request timeout")
 	cmd.Flags().Bool("verbose", false, "Verbose output")
+	require.NoError(t, cmd.Flags().Set("http-server", "http://chronoqueue.test"))
 
-	// Since the version command tries to connect to a server,
-	// we expect it to fail in the test environment, but it shouldn't panic
 	err := cmd.RunE(cmd, []string{})
+	require.NoError(t, err)
+}
 
-	// We expect this to fail since there's no server running in tests
-	// The important thing is that it doesn't panic and handles the error gracefully
-	t.Logf("Version command execution result: err=%v", err)
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
 }
 
 func TestServerCommand_SubcommandStructure(t *testing.T) {

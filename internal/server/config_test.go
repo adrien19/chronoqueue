@@ -206,6 +206,50 @@ func TestHTTPGatewayTimeoutsFromEnvironment(t *testing.T) {
 	assert.Equal(t, 5*time.Second, config.HTTPIdleTimeout)
 }
 
+func TestServiceIntervalValidation(t *testing.T) {
+	tests := []struct {
+		name              string
+		schedulerInterval string
+		reclaimInterval   string
+		wantError         bool
+	}{
+		{
+			name:              "valid non-zero intervals",
+			schedulerInterval: "1",
+			reclaimInterval:   "1",
+		},
+		{
+			name:              "invalid scheduler interval",
+			schedulerInterval: "0",
+			reclaimInterval:   "5000",
+			wantError:         true,
+		},
+		{
+			name:              "invalid reclaim interval",
+			schedulerInterval: "1000",
+			reclaimInterval:   "-1",
+			wantError:         true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("SCHEDULER_INTERVAL_MS", tt.schedulerInterval)
+			t.Setenv("RECLAIM_INTERVAL_MS", tt.reclaimInterval)
+			config := DefaultConfig()
+
+			err := config.Validate()
+			if tt.wantError {
+				require.ErrorContains(t, err, "scheduler and reclaim intervals must be greater than 0")
+				return
+			}
+			require.NoError(t, err)
+			require.Positive(t, config.SchedulerIntervalMs)
+			require.Positive(t, config.ReclaimIntervalMs)
+		})
+	}
+}
+
 func TestHTTPGatewayTimeoutsFromFlags(t *testing.T) {
 	t.Setenv("METRICS_BEARER_TOKEN", "metrics-secret")
 	cmd := &cobra.Command{Use: "test"}

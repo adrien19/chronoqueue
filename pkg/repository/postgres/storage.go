@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/pkg/log"
@@ -21,8 +22,10 @@ type Config struct {
 	// Conn carries connection details (DSN overrides discrete fields when set).
 	Conn ConnectionConfig
 
-	Logger     *log.Logger
-	KeyManager *keymanager.EncryptionKeyManager
+	Logger            *log.Logger
+	KeyManager        *keymanager.EncryptionKeyManager
+	SchedulerInterval time.Duration
+	ReclaimInterval   time.Duration
 }
 
 func (c *Config) connectionConfig() *ConnectionConfig {

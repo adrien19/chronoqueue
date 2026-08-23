@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,6 +22,41 @@ import (
 
 	"github.com/adrien19/chronoqueue/pkg/log"
 )
+
+func TestLivenessHandler(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	LivenessHandler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/live", nil))
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.JSONEq(t, `{"status":"alive","service":"chronoqueue"}`, recorder.Body.String())
+}
+
+func TestReadinessHandler(t *testing.T) {
+	tests := []struct {
+		name       string
+		check      func(context.Context) error
+		wantStatus int
+		wantReady  string
+	}{
+		{name: "ready", check: func(context.Context) error { return nil }, wantStatus: http.StatusOK, wantReady: "ready"},
+		{name: "database failure", check: func(context.Context) error { return errors.New("connection refused") }, wantStatus: http.StatusServiceUnavailable, wantReady: "not_ready"},
+		{name: "uninitialized", wantStatus: http.StatusServiceUnavailable, wantReady: "not_ready"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			ReadinessHandler(tt.check).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/ready", nil))
+
+			assert.Equal(t, tt.wantStatus, recorder.Code)
+			var response map[string]string
+			require.NoError(t, json.NewDecoder(recorder.Body).Decode(&response))
+			assert.Equal(t, tt.wantReady, response["status"])
+			assert.NotEmpty(t, response["version"])
+			assert.NotContains(t, response["error"], "connection refused")
+		})
+	}
+}
 
 func TestNewHTTPGateway_WithoutTLS(t *testing.T) {
 	logger := log.NewLogger(log.WithLevel(logrus.InfoLevel))
