@@ -765,7 +765,7 @@ service QueueService {
 
     // ==================== Schema Management Operations ====================
 
-    // RegisterSchema creates or updates a message validation schema.
+    // RegisterSchema creates the next version of a message validation schema.
     //
     // Use for:
     // - Enforcing message structure
@@ -774,24 +774,21 @@ service QueueService {
     // - Type safety
     //
     // Schema versioning:
-    // - Each schema has a schema_id and version number
+    // - Each schema has a schema_id and a server-assigned version number
     // - Multiple versions can coexist
     // - Queues reference schema_id (use highest active version)
     //
     // Example:
     //   POST /v1/schemas
     //   {
-    //     "schema": {
-    //       "schema_id": "order-schema",
-    //       "version": 2,
-    //       "content": "{...JSON Schema...}",
-    //       "content_type": "json-schema"
-    //     }
+    //     "schema_id": "order-schema",
+    //     "name": "Order schema",
+    //     "content": "{...JSON Schema...}",
+    //     "content_type": "json-schema"
     //   }
     //
     // Returns: Registered schema
     // Errors:
-    //   - AlreadyExists: schema_id + version already exists
     //   - InvalidArgument: Invalid schema syntax
   rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse) {
     option (google.api.http) = {
@@ -831,22 +828,18 @@ service QueueService {
     };
   }
 
-    // DeleteSchema removes a schema version.
+    // DeleteSchema deactivates a schema version, or all versions when version is 0.
     //
     // Effects:
-    // - Schema version deleted
-    // - Queues using this schema will fail validation
-    //
-    // Best practice: Mark schema as inactive (is_active = false) instead
-    // of deleting to preserve validation history.
+    // - Matching active schema versions are marked inactive
+    // - Inactive versions remain addressable for validation history
     //
     // Example:
     //   DELETE /v1/schemas/order-schema/versions/1
     //
-    // Returns: Empty response
+    // Returns: Number of versions deactivated
     // Errors:
     //   - NotFound: Schema not found
-    //   - FailedPrecondition: Schema in use by active queues
   rpc DeleteSchema(DeleteSchemaRequest) returns (DeleteSchemaResponse) {
     option (google.api.http) = {
       delete: "/v1/schemas/{schema_id=*}/versions/{version=*}"

@@ -48,7 +48,7 @@ import "proto/common/v1/common.proto";
 message Message {
     // message_id: Unique identifier for this message within its queue.
     // Must be unique per queue. Used for deduplication and idempotency.
-    // If you retry posting the same message_id, ChronoQueue returns the existing message.
+    // Posting the same message_id to the same queue again returns ALREADY_EXISTS.
     // Recommended format: UUID, task ID, or "{entity_type}:{entity_id}".
   string message_id = 1;
 

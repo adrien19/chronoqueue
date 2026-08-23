@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	common_pb "github.com/adrien19/chronoqueue/api/common/v1"
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 )
@@ -67,7 +69,22 @@ func ValidateLeasePolicy(policy *common_pb.LeasePolicy) error {
 		return nil // No policy to validate
 	}
 
-	// Extract durations
+	for _, field := range []struct {
+		name     string
+		duration *durationpb.Duration
+	}{
+		{name: "base_lease", duration: policy.GetBaseLease()},
+		{name: "max_extension", duration: policy.GetMaxExtension()},
+		{name: "heartbeat_timeout", duration: policy.GetHeartbeatTimeout()},
+		{name: "extend_step", duration: policy.GetExtendStep()},
+	} {
+		if field.duration != nil {
+			if err := field.duration.CheckValid(); err != nil {
+				return fmt.Errorf("lease_policy.%s is invalid: %w", field.name, err)
+			}
+		}
+	}
+
 	baseLease := policy.GetBaseLease().AsDuration()
 	maxExtension := policy.GetMaxExtension().AsDuration()
 	heartbeatTimeout := policy.GetHeartbeatTimeout().AsDuration()
@@ -83,9 +100,21 @@ func ValidateLeasePolicy(policy *common_pb.LeasePolicy) error {
 		return fmt.Errorf("lease_policy.base_lease must be <= 1 hour, got %v", baseLease)
 	}
 
-	// Rule 3: ExtendStep must be positive if extensions are allowed
-	if maxExtension > 0 && extendStep <= 0 {
-		return fmt.Errorf("lease_policy.extend_step must be > 0 when max_extension is set, got %v", extendStep)
+	if maxExtension < 0 {
+		return fmt.Errorf("lease_policy.max_extension must be >= 0, got %v", maxExtension)
+	}
+	if heartbeatTimeout < 0 {
+		return fmt.Errorf("lease_policy.heartbeat_timeout must be >= 0, got %v", heartbeatTimeout)
+	}
+	if extendStep < 0 {
+		return fmt.Errorf("lease_policy.extend_step must be >= 0, got %v", extendStep)
+	}
+	if policy.GetMaxRenewals() < 0 {
+		return fmt.Errorf("lease_policy.max_renewals must be >= 0, got %d", policy.GetMaxRenewals())
+	}
+
+	if heartbeatTimeout > 0 && (maxExtension <= 0 || extendStep <= 0) {
+		return fmt.Errorf("lease_policy.max_extension and extend_step must be > 0 when heartbeat_timeout is set")
 	}
 
 	// Rule 4: MaxExtension must allow at least one extension
@@ -105,7 +134,7 @@ func ValidateLeasePolicy(policy *common_pb.LeasePolicy) error {
 	}
 
 	// Rule 7: ExtendStep should be reasonable relative to base lease
-	if extendStep > baseLease {
+	if extendStep > 0 && extendStep > baseLease {
 		return fmt.Errorf("lease_policy.extend_step (%v) should not exceed base_lease (%v)", extendStep, baseLease)
 	}
 

@@ -83,3 +83,16 @@ func TestLeaseRuntimeCalculator_BasicLease(t *testing.T) {
 	expectedDuration := int64(45000) // 45 seconds in ms
 	assert.InDelta(t, expectedDuration, actualDuration, 1000, "Lease duration should be approximately 45 seconds")
 }
+
+func TestLeaseRuntimeCalculator_RequestedDurationOverridesPolicy(t *testing.T) {
+	calculator := NewLeaseRuntimeCalculator(NewClock())
+	policy := &commonpb.LeasePolicy{
+		BaseLease:        durationpb.New(30 * time.Second),
+		HeartbeatTimeout: durationpb.New(10 * time.Second),
+	}
+
+	runtime := calculator.CalculateLeaseRuntimeWithDuration(policy, 45*time.Second)
+
+	assert.EqualValues(t, 45*time.Second/time.Millisecond, runtime.LeaseExpiry-runtime.LeaseStartedAt)
+	assert.EqualValues(t, 10*time.Second/time.Millisecond, runtime.HeartbeatExpiry-runtime.LastHeartbeatAt)
+}

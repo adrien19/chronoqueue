@@ -22,20 +22,22 @@ import (
 
 // CronProcessorService triggers cron-based schedules when their cron expressions are due.
 type CronProcessorService struct {
-	base     *sqlbase.BaseSQL
-	interval time.Duration
-	stopChan chan struct{}
-	doneChan chan struct{}
-	nowFn    func() time.Time
+	base       *sqlbase.BaseSQL
+	interval   time.Duration
+	stopChan   chan struct{}
+	doneChan   chan struct{}
+	nowFn      func() time.Time
+	generateID func() (string, error)
 }
 
 // NewCronProcessorService creates a new cron background processor.
 func NewCronProcessorService(base *sqlbase.BaseSQL, interval time.Duration) *CronProcessorService {
 	return &CronProcessorService{
-		base:     base,
-		interval: interval,
-		stopChan: make(chan struct{}),
-		doneChan: make(chan struct{}),
+		base:       base,
+		interval:   interval,
+		stopChan:   make(chan struct{}),
+		doneChan:   make(chan struct{}),
+		generateID: util.GenerateID,
 		nowFn: func() time.Time {
 			return base.Clock.Now().UTC()
 		},
@@ -371,7 +373,7 @@ func (c *CronProcessorService) createCronMessage(ctx context.Context, tx *sql.Tx
 		maxAttempts = 3
 	}
 
-	messageID, err := util.GenerateID()
+	messageID, err := c.generateID()
 	if err != nil {
 		return "", fmt.Errorf("generate message id: %w", err)
 	}
@@ -416,7 +418,6 @@ func (c *CronProcessorService) createCronMessage(ctx context.Context, tx *sql.Tx
             message_id, queue_name, state, attempts_left, max_attempts,
             priority, scheduled_at, metadata_pb, created_at, updated_at
         ) VALUES (%s)
-        ON CONFLICT(message_id) DO NOTHING
     `, strings.Join(placeholders, ", "))
 
 	nowMs := c.base.Clock.NowMs()

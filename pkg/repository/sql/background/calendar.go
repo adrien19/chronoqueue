@@ -22,21 +22,23 @@ import (
 
 // CalendarService triggers calendar-based schedules when their next_run arrives.
 type CalendarService struct {
-	base     *sqlbase.BaseSQL
-	engine   calendar.Engine
-	interval time.Duration
-	stopChan chan struct{}
-	doneChan chan struct{}
+	base       *sqlbase.BaseSQL
+	engine     calendar.Engine
+	interval   time.Duration
+	stopChan   chan struct{}
+	doneChan   chan struct{}
+	generateID func() (string, error)
 }
 
 // NewCalendarService creates a new calendar background processor.
 func NewCalendarService(base *sqlbase.BaseSQL, engine calendar.Engine, interval time.Duration) *CalendarService {
 	return &CalendarService{
-		base:     base,
-		engine:   engine,
-		interval: interval,
-		stopChan: make(chan struct{}),
-		doneChan: make(chan struct{}),
+		base:       base,
+		engine:     engine,
+		interval:   interval,
+		stopChan:   make(chan struct{}),
+		doneChan:   make(chan struct{}),
+		generateID: util.GenerateID,
 	}
 }
 
@@ -318,7 +320,7 @@ func (c *CalendarService) createScheduledMessage(ctx context.Context, tx *sql.Tx
 		maxAttempts = 3
 	}
 
-	messageID, err := util.GenerateID()
+	messageID, err := c.generateID()
 	if err != nil {
 		return "", fmt.Errorf("generate message id: %w", err)
 	}
@@ -363,7 +365,6 @@ func (c *CalendarService) createScheduledMessage(ctx context.Context, tx *sql.Tx
 			message_id, queue_name, state, attempts_left, max_attempts,
 			priority, scheduled_at, metadata_pb, created_at, updated_at
 		) VALUES (%s)
-		ON CONFLICT(message_id) DO NOTHING
 	`, strings.Join(placeholders, ", "))
 
 	now := c.base.Clock.NowMs()

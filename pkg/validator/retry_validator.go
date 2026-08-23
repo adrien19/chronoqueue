@@ -89,12 +89,12 @@ func (v *RetryValidator) Validate(ctx context.Context, msg *message_pb.Message) 
 		}
 	} else {
 		// For finite retries, validate attempts_left
-		if attemptsLeft < 0 && attemptsLeft != InfiniteRetries {
+		if attemptsLeft < 0 {
 			result.Valid = false
 			result.Errors = append(result.Errors, NewValidationError(
 				"metadata.attempts_left",
 				schema_pb.ErrorCode_VALUE_OUT_OF_RANGE,
-				fmt.Sprintf("Attempts left must be >= 0 or -1 (infinite), got %d", attemptsLeft),
+				fmt.Sprintf("Attempts left must be >= 0 for finite retries, got %d", attemptsLeft),
 			))
 		}
 

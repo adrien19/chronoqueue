@@ -11,6 +11,8 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
@@ -42,12 +44,12 @@ func TestAttemptOwnership_GRPCAndHTTP(t *testing.T) {
 			QueueName: queueName, MessageId: claim.GetMessage().GetMessageId(), State: messagepb.Message_Metadata_COMPLETED,
 			AttemptId: &attemptID, WorkerId: &staleWorker,
 		})
-		require.Error(t, err)
+		require.Equal(t, codes.FailedPrecondition, status.Code(err))
 		_, err = client.AcknowledgeMessage(ctx, &queueservicepb.AcknowledgeMessageRequest{
 			QueueName: otherQueue, MessageId: claim.GetMessage().GetMessageId(), State: messagepb.Message_Metadata_COMPLETED,
 			AttemptId: &attemptID, WorkerId: &workerID,
 		})
-		require.Error(t, err)
+		require.Equal(t, codes.NotFound, status.Code(err))
 
 		start := make(chan struct{})
 		errs := make(chan error, 2)
@@ -78,7 +80,7 @@ func TestAttemptOwnership_GRPCAndHTTP(t *testing.T) {
 			QueueName: queueName, MessageId: claim.GetMessage().GetMessageId(), State: messagepb.Message_Metadata_COMPLETED,
 			AttemptId: &attemptID, WorkerId: &workerID,
 		})
-		require.Error(t, err)
+		require.Equal(t, codes.NotFound, status.Code(err))
 	})
 
 	t.Run("grpc rejects an expired lease", func(t *testing.T) {
@@ -92,22 +94,22 @@ func TestAttemptOwnership_GRPCAndHTTP(t *testing.T) {
 			QueueName: queueName, MessageId: claim.GetMessage().GetMessageId(), State: messagepb.Message_Metadata_COMPLETED,
 			AttemptId: claim.AttemptId, WorkerId: claim.WorkerId,
 		})
-		require.Error(t, err)
+		require.Equal(t, codes.DeadlineExceeded, status.Code(err))
 	})
 
 	t.Run("http requires ownership and rejects duplicate acknowledgment", func(t *testing.T) {
 		claim := postAndClaimOwnedMessage(t, ctx, client, queueName, "http-owner")
 		path := fmt.Sprintf("%s/v1/queues/%s/messages/%s:acknowledge", env.HTTPAddr, queueName, claim.GetMessage().GetMessageId())
 		missing := doOwnershipHTTPRequest(t, ctx, path, `{"state":"COMPLETED"}`)
-		require.NotEqual(t, http.StatusOK, missing)
+		require.Equal(t, http.StatusBadRequest, missing)
 		staleWorkerBody := fmt.Sprintf(`{"state":"COMPLETED","attemptId":%q,"workerId":"stale-worker"}`, claim.GetAttemptId())
-		require.NotEqual(t, http.StatusOK, doOwnershipHTTPRequest(t, ctx, path, staleWorkerBody))
+		require.Equal(t, http.StatusBadRequest, doOwnershipHTTPRequest(t, ctx, path, staleWorkerBody))
 		wrongQueuePath := fmt.Sprintf("%s/v1/queues/%s/messages/%s:acknowledge", env.HTTPAddr, otherQueue, claim.GetMessage().GetMessageId())
 		wrongQueueBody := fmt.Sprintf(`{"state":"COMPLETED","attemptId":%q,"workerId":%q}`, claim.GetAttemptId(), claim.GetWorkerId())
-		require.NotEqual(t, http.StatusOK, doOwnershipHTTPRequest(t, ctx, wrongQueuePath, wrongQueueBody))
+		require.Equal(t, http.StatusNotFound, doOwnershipHTTPRequest(t, ctx, wrongQueuePath, wrongQueueBody))
 		body := fmt.Sprintf(`{"state":"COMPLETED","attemptId":%q,"workerId":%q}`, claim.GetAttemptId(), claim.GetWorkerId())
 		require.Equal(t, http.StatusOK, doOwnershipHTTPRequest(t, ctx, path, body))
-		require.NotEqual(t, http.StatusOK, doOwnershipHTTPRequest(t, ctx, path, body))
+		require.Equal(t, http.StatusNotFound, doOwnershipHTTPRequest(t, ctx, path, body))
 	})
 
 	t.Run("http rejects an expired lease", func(t *testing.T) {
@@ -119,7 +121,7 @@ func TestAttemptOwnership_GRPCAndHTTP(t *testing.T) {
 		require.NoError(t, err)
 		path := fmt.Sprintf("%s/v1/queues/%s/messages/%s:acknowledge", env.HTTPAddr, queueName, claim.GetMessage().GetMessageId())
 		body := fmt.Sprintf(`{"state":"COMPLETED","attemptId":%q,"workerId":%q}`, claim.GetAttemptId(), claim.GetWorkerId())
-		require.NotEqual(t, http.StatusOK, doOwnershipHTTPRequest(t, ctx, path, body))
+		require.Equal(t, http.StatusGatewayTimeout, doOwnershipHTTPRequest(t, ctx, path, body))
 	})
 
 	t.Run("http permits one concurrent terminal transition", func(t *testing.T) {

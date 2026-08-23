@@ -140,7 +140,7 @@ type Message struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// message_id: Unique identifier for this message within its queue.
 	// Must be unique per queue. Used for deduplication and idempotency.
-	// If you retry posting the same message_id, ChronoQueue returns the existing message.
+	// Posting the same message_id to the same queue again returns ALREADY_EXISTS.
 	// Recommended format: UUID, task ID, or "{entity_type}:{entity_id}".
 	MessageId string `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
 	// metadata: All message execution and lifecycle information.

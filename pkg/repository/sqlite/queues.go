@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 )
 
 // CreateQueue creates a new queue
@@ -18,6 +19,9 @@ func (s *Storage) CreateQueue(ctx context.Context, queue *queuepb.Queue) error {
 	query := `INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
 	_, err = s.DB.ExecContext(ctx, query, queue.Name, queueBytes)
 	if err != nil {
+		if isUniqueConstraintError(err) {
+			return domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("queue %q already exists", queue.Name), err)
+		}
 		return fmt.Errorf("insert queue: %w", err)
 	}
 
@@ -30,7 +34,7 @@ func (s *Storage) GetQueue(ctx context.Context, name string) (*queuepb.Queue, er
 	var queueBytes []byte
 	err := s.DB.QueryRowContext(ctx, query, name).Scan(&queueBytes)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("queue not found: %s", name)
+		return nil, domainerror.New(domainerror.NotFound, fmt.Sprintf("queue %q not found", name), err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query queue: %w", err)
@@ -55,29 +59,45 @@ func (s *Storage) GetQueueMetadata(ctx context.Context, name string) (*queuepb.Q
 
 // ListQueues returns all queues
 func (s *Storage) ListQueues(ctx context.Context) ([]*queuepb.Queue, error) {
-	query := `SELECT metadata_pb FROM cq_queues ORDER BY name`
-	rows, err := s.DB.QueryContext(ctx, query)
+	return s.ListQueuesWithPrefix(ctx, "")
+}
+
+// ListQueuesWithPrefix returns queues whose names start with prefix.
+func (s *Storage) ListQueuesWithPrefix(ctx context.Context, prefix string) ([]*queuepb.Queue, error) {
+	query := `SELECT metadata_pb FROM cq_queues WHERE instr(name, ?) = 1 ORDER BY name`
+	rows, err := s.DB.QueryContext(ctx, query, prefix)
 	if err != nil {
 		return nil, fmt.Errorf("query queues: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
 	var queues []*queuepb.Queue
+	var scanErr error
 	for rows.Next() {
 		var queueBytes []byte
 		if err := rows.Scan(&queueBytes); err != nil {
-			return nil, fmt.Errorf("scan queue: %w", err)
+			scanErr = fmt.Errorf("scan queue: %w", err)
+			break
 		}
 
 		queue, err := s.Serializer.UnmarshalQueue(queueBytes)
 		if err != nil {
-			return nil, fmt.Errorf("unmarshal queue: %w", err)
+			scanErr = fmt.Errorf("unmarshal queue: %w", err)
+			break
 		}
 
 		queues = append(queues, queue)
 	}
 
-	return queues, rows.Err()
+	if scanErr == nil {
+		scanErr = rows.Err()
+	}
+	closeErr := rows.Close()
+	if scanErr != nil {
+		return nil, scanErr
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close queue rows: %w", closeErr)
+	}
+	return queues, nil
 }
 
 // DeleteQueue deletes a queue
@@ -93,7 +113,7 @@ func (s *Storage) DeleteQueue(ctx context.Context, name string) error {
 		return fmt.Errorf("get rows affected: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("queue not found: %s", name)
+		return domainerror.New(domainerror.NotFound, fmt.Sprintf("queue %q not found", name), nil)
 	}
 
 	return nil

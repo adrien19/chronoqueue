@@ -83,7 +83,7 @@ func TestSQLiteSchemaIntegration(t *testing.T) {
 	t.Run("ValidatePayload", func(t *testing.T) {
 		resp, err := client.ValidatePayload(ctx, &queueservicepb.ValidatePayloadRequest{
 			SchemaId: "user.profile.v1",
-			Version:  1,
+			Version:  0,
 			Payload: `{
 				"name": "John Doe",
 				"email": "john@example.com",
@@ -93,6 +93,8 @@ func TestSQLiteSchemaIntegration(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, resp.GetValid())
 		assert.Empty(t, resp.GetErrors())
+		assert.Equal(t, "user.profile.v1", resp.GetSchemaId())
+		assert.Equal(t, int32(1), resp.GetSchemaVersion())
 	})
 
 	t.Run("ValidateInvalidPayload", func(t *testing.T) {

@@ -237,7 +237,7 @@ func TestSQLiteRegistry_List(t *testing.T) {
 
 	t.Run("ListOnlyActiveSchemas", func(t *testing.T) {
 		// Deactivate one schema
-		err := registry.Deactivate(ctx, "schema2", 1)
+		_, err := registry.Deactivate(ctx, "schema2", 1)
 		require.NoError(t, err)
 
 		list, err := registry.List(ctx)
@@ -252,6 +252,67 @@ func TestSQLiteRegistry_List(t *testing.T) {
 		assert.False(t, schemaIDs["schema2"]) // Deactivated
 		assert.True(t, schemaIDs["schema3"])
 	})
+
+	t.Run("ListWithOptions", func(t *testing.T) {
+		for _, limit := range []int32{0, -1} {
+			unlimited, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "schema", Limit: limit})
+			require.NoError(t, err)
+			assert.Len(t, unlimited.Schemas, 3)
+			assert.Equal(t, int32(3), unlimited.TotalCount)
+		}
+
+		limited, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "schema", Limit: 1})
+		require.NoError(t, err)
+		assert.Len(t, limited.Schemas, 1)
+		assert.Equal(t, int32(3), limited.TotalCount)
+		assert.Equal(t, int32(1), limited.Metadata[limited.Schemas[0].GetSchemaId()].TotalVersions)
+
+		inactive, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "schema2", Limit: 100})
+		require.NoError(t, err)
+		require.Len(t, inactive.Schemas, 1)
+		assert.False(t, inactive.Schemas[0].GetIsActive())
+		assert.Equal(t, int32(1), inactive.TotalCount)
+
+		activeOnly, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "schema2", Limit: 100, ActiveOnly: true})
+		require.NoError(t, err)
+		assert.Empty(t, activeOnly.Schemas)
+		assert.Zero(t, activeOnly.TotalCount)
+
+		literalPrefix, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "%", Limit: 100})
+		require.NoError(t, err)
+		assert.Empty(t, literalPrefix.Schemas)
+		assert.Zero(t, literalPrefix.TotalCount)
+	})
+}
+
+func TestSQLiteRegistry_ListWithOptions_ActiveOnlyExcludesInactiveLatestVersion(t *testing.T) {
+	registry, cleanup := setupTestSQLiteRegistry(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	schemaID := "latest-inactive"
+	for _, name := range []string{"version 1", "version 2"} {
+		_, err := registry.Register(ctx, &schema_pb.Schema{
+			SchemaId: schemaID,
+			Name:     name,
+			Content:  `{"type":"object","properties":{"field":{"type":"string"}}}`,
+		})
+		require.NoError(t, err)
+	}
+	_, err := registry.Deactivate(ctx, schemaID, 2)
+	require.NoError(t, err)
+
+	activeOnly, err := registry.ListWithOptions(ctx, ListOptions{Prefix: schemaID, Limit: 100, ActiveOnly: true})
+	require.NoError(t, err)
+	assert.Empty(t, activeOnly.Schemas)
+	assert.Zero(t, activeOnly.TotalCount)
+
+	all, err := registry.ListWithOptions(ctx, ListOptions{Prefix: schemaID, Limit: 100})
+	require.NoError(t, err)
+	require.Len(t, all.Schemas, 1)
+	assert.Equal(t, int32(2), all.Schemas[0].GetVersion())
+	assert.False(t, all.Schemas[0].GetIsActive())
+	assert.Equal(t, int32(1), all.TotalCount)
 }
 
 func TestSQLiteRegistry_Deactivate(t *testing.T) {
@@ -276,8 +337,9 @@ func TestSQLiteRegistry_Deactivate(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("DeactivateExisting", func(t *testing.T) {
-		err := registry.Deactivate(ctx, "deactivate.test", 1)
+		count, err := registry.Deactivate(ctx, "deactivate.test", 1)
 		require.NoError(t, err)
+		assert.Equal(t, int32(1), count)
 
 		// Verify it's deactivated
 		retrieved, err := registry.Get(ctx, "deactivate.test", 1)
@@ -286,10 +348,50 @@ func TestSQLiteRegistry_Deactivate(t *testing.T) {
 	})
 
 	t.Run("DeactivateNonExistent", func(t *testing.T) {
-		err := registry.Deactivate(ctx, "nonexistent", 1)
+		_, err := registry.Deactivate(ctx, "nonexistent", 1)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "schema not found")
 	})
+}
+
+func TestSQLiteRegistry_DeactivateAllVersions(t *testing.T) {
+	registry, cleanup := setupTestSQLiteRegistry(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	for range 2 {
+		_, err := registry.Register(ctx, &schema_pb.Schema{
+			SchemaId: "deactivate-all.test",
+			Name:     "Deactivate All Test",
+			Content:  `{"type":"object"}`,
+		})
+		require.NoError(t, err)
+	}
+
+	count, err := registry.Deactivate(ctx, "deactivate-all.test", 0)
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), count)
+
+	result, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "deactivate-all.test", Limit: 10, ActiveOnly: true})
+	require.NoError(t, err)
+	assert.Empty(t, result.Schemas)
+}
+
+func TestSQLiteRegistry_RegisterRejectsExistingVersion(t *testing.T) {
+	registry, cleanup := setupTestSQLiteRegistry(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	schema := &schema_pb.Schema{SchemaId: "duplicate.test", Version: 1, Name: "Original", Content: `{"type":"object"}`}
+	_, err := registry.Register(ctx, schema)
+	require.NoError(t, err)
+
+	_, err = registry.Register(ctx, &schema_pb.Schema{SchemaId: schema.SchemaId, Version: 1, Name: "Replacement", Content: `{"type":"string"}`})
+	require.ErrorContains(t, err, "already exists")
+
+	stored, err := registry.Get(ctx, schema.SchemaId, 1)
+	require.NoError(t, err)
+	assert.Equal(t, "Original", stored.Name)
 }
 
 func TestSQLiteRegistry_Validate(t *testing.T) {
@@ -471,6 +573,23 @@ func TestSQLiteRegistry_Timestamps(t *testing.T) {
 
 	metadata, err := registry.Register(ctx, schema)
 	require.NoError(t, err)
+	firstCreatedAt := metadata.CreatedAt
+
+	time.Sleep(10 * time.Millisecond)
+	metadata, err = registry.Register(ctx, &schema_pb.Schema{
+		SchemaId: schema.SchemaId,
+		Name:     "Timestamp Test v2",
+		Content:  schema.Content,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, firstCreatedAt, metadata.CreatedAt)
+
+	listed, err := registry.ListWithOptions(ctx, ListOptions{Prefix: schema.SchemaId, Limit: 1})
+	require.NoError(t, err)
+	listedMetadata := listed.Metadata[schema.SchemaId]
+	assert.Equal(t, metadata.CreatedAt, listedMetadata.CreatedAt)
+	assert.Equal(t, metadata.UpdatedAt, listedMetadata.UpdatedAt)
+	assert.Equal(t, metadata.TotalVersions, listedMetadata.TotalVersions)
 
 	time.Sleep(10 * time.Millisecond)
 	afterRegister := time.Now().UnixMilli()

@@ -130,7 +130,7 @@ message Schedule {
 
         // priority: Priority for messages created by this schedule.
         // Inherited by posted messages unless message specifies otherwise.
-        // Common values: 5 (high), 2 (normal), 0 (low).
+        // Values: 4 (high), 2 (normal), 0 (low).
     int64 priority = 12;
 
         // has_max_messages: If true, enforces max_messages limit.
@@ -234,7 +234,7 @@ message CalendarSchedule {
     DAILY         = 2;          // Executes daily (every day, weekdays only, etc.)
     YEARLY        = 3;         // Executes yearly (birthdays, anniversaries, annual reports)
     BUSINESS_DAYS = 4;  // Executes on business days (respects holidays/weekends)
-    CUSTOM        = 5;         // Custom logic via expression language
+    CUSTOM        = 5;         // Reserved for wire compatibility; not supported by the v2 server
   }
 
     // type: Primary scheduling pattern.
@@ -298,7 +298,7 @@ message CalendarRule {
     DailyRule        daily         = 3;                  // For DAILY schedules
     YearlyRule       yearly        = 4;                // For YEARLY schedules
     BusinessDaysRule business_days = 5;   // For BUSINESS_DAYS schedules
-    CustomRule       custom        = 6;                // For CUSTOM schedules
+    CustomRule       custom        = 6;                // Reserved for wire compatibility; not supported by the v2 server
   }
 
     // execution_times: What time(s) of day to execute on matching dates.
@@ -479,27 +479,16 @@ message BusinessDaysRule {
   int32 day_offset = 2;
 }
 
-// CustomRule allows complex scheduling logic via custom expressions.
-// Useful when built-in rules don't support your use case.
-//
-// Example - Last business day of each quarter:
-//   {
-//     expression: "last_business_day_of_quarter",
-//     rule_type: "business_calendar_expression",
-//     parameters: {"calendar_id": "us-holidays", "quarters": "1,2,3,4"}
-//   }
+// CustomRule is reserved for wire compatibility.
+// The v2 server rejects custom expression rules because it has no custom-rule processors.
 message CustomRule {
-    // expression: Custom scheduling expression.
-    // Format depends on rule_type. See ChronoQueue documentation for supported expressions.
+    // expression: Reserved custom scheduling expression.
   string expression = 1;
 
-    // rule_type: Identifies which custom rule processor to use.
-    // Built-in types: "business_calendar_expression", "lua_expression"
-    // Extensible via server plugins.
+    // rule_type: Reserved custom rule processor identifier.
   string rule_type = 2;
 
-    // parameters: Additional configuration for the rule processor.
-    // Contents depend on rule_type.
+    // parameters: Reserved custom rule parameters.
   map<string, string> parameters = 3;
 }
 

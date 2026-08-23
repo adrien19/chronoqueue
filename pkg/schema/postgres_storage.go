@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	schema_pb "github.com/adrien19/chronoqueue/api/schema/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/log"
 )
 
@@ -64,7 +66,7 @@ func (r *PostgresRegistry) initSchema(ctx context.Context) error {
 // Register registers a new schema or creates a new version.
 func (r *PostgresRegistry) Register(ctx context.Context, schema *schema_pb.Schema) (SchemaMetadata, error) {
 	if err := validateSchemaContent(schema.Content); err != nil {
-		return SchemaMetadata{}, fmt.Errorf("invalid schema content: %w", err)
+		return SchemaMetadata{}, domainerror.New(domainerror.InvalidArgument, "invalid schema content", err)
 	}
 
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -72,6 +74,10 @@ func (r *PostgresRegistry) Register(ctx context.Context, schema *schema_pb.Schem
 		return SchemaMetadata{}, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, schema.SchemaId); err != nil {
+		return SchemaMetadata{}, fmt.Errorf("failed to lock schema registration: %w", err)
+	}
 
 	if schema.Version == 0 {
 		latestVersion, err := r.getLatestVersionTx(ctx, tx, schema.SchemaId)
@@ -92,19 +98,13 @@ func (r *PostgresRegistry) Register(ctx context.Context, schema *schema_pb.Schem
 		schema.ContentType = "json-schema"
 	}
 
-	if _, err := tx.ExecContext(
+	result, err := tx.ExecContext(
 		ctx, `
         INSERT INTO cq_schemas (
             schema_id, version, name, description, content,
             content_type, is_active, created_at, updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT(schema_id, version) DO UPDATE SET
-            name = EXCLUDED.name,
-            description = EXCLUDED.description,
-            content = EXCLUDED.content,
-            content_type = EXCLUDED.content_type,
-            is_active = EXCLUDED.is_active,
-            updated_at = EXCLUDED.updated_at
+        ON CONFLICT(schema_id, version) DO NOTHING
     `,
 		schema.SchemaId,
 		schema.Version,
@@ -115,8 +115,16 @@ func (r *PostgresRegistry) Register(ctx context.Context, schema *schema_pb.Schem
 		true,
 		schema.CreatedAt,
 		schema.UpdatedAt,
-	); err != nil {
+	)
+	if err != nil {
 		return SchemaMetadata{}, fmt.Errorf("failed to insert schema: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return SchemaMetadata{}, fmt.Errorf("failed to get inserted schema row count: %w", err)
+	}
+	if rowsAffected == 0 {
+		return SchemaMetadata{}, domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("schema already exists: %s version %d", schema.SchemaId, schema.Version), nil)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -163,7 +171,7 @@ func (r *PostgresRegistry) Get(ctx context.Context, schemaID string, version int
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("schema not found: %s version %d", schemaID, version)
+		return nil, domainerror.New(domainerror.NotFound, fmt.Sprintf("schema not found: %s version %d", schemaID, version), err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get schema: %w", err)
@@ -199,7 +207,7 @@ func (r *PostgresRegistry) GetLatest(ctx context.Context, schemaID string) (*sch
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("schema not found: %s", schemaID)
+		return nil, domainerror.New(domainerror.NotFound, fmt.Sprintf("schema %q not found", schemaID), err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest schema: %w", err)
@@ -212,27 +220,53 @@ func (r *PostgresRegistry) GetLatest(ctx context.Context, schemaID string) (*sch
 
 // List lists all active schemas (latest version of each).
 func (r *PostgresRegistry) List(ctx context.Context) ([]*schema_pb.Schema, error) {
-	rows, err := r.db.QueryContext(ctx, `
-        SELECT s.schema_id, s.version, s.name, s.description, s.content,
-               s.content_type, s.is_active, s.created_at, s.updated_at
-        FROM cq_schemas s
-        INNER JOIN (
-            SELECT schema_id, MAX(version) AS max_version
-            FROM cq_schemas
-            WHERE is_active = TRUE
-            GROUP BY schema_id
-        ) latest ON s.schema_id = latest.schema_id AND s.version = latest.max_version
-        ORDER BY s.schema_id
-    `)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list schemas: %w", err)
+	result, err := r.ListWithOptions(ctx, ListOptions{Limit: math.MaxInt32, ActiveOnly: true})
+	return result.Schemas, err
+}
+
+// ListWithOptions lists the latest schema matching the requested filters.
+func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOptions) (ListResult, error) {
+	if options.Limit <= 0 {
+		options.Limit = math.MaxInt32
 	}
-	defer func() { _ = rows.Close() }()
+
+	rows, err := r.db.QueryContext(ctx, `
+		WITH ranked AS (
+			SELECT s.*, ROW_NUMBER() OVER (PARTITION BY schema_id ORDER BY version DESC) AS row_number,
+			       COUNT(*) OVER (PARTITION BY schema_id) AS version_count,
+			       MIN(created_at) OVER (PARTITION BY schema_id) AS first_created_at,
+			       MAX(updated_at) OVER (PARTITION BY schema_id) AS last_updated_at
+			FROM cq_schemas s
+			WHERE STRPOS(schema_id, $2) = 1
+		), latest AS (
+			SELECT * FROM ranked WHERE row_number = 1
+		)
+		SELECT schema_id, version, name, description, content, content_type,
+		       is_active, created_at, updated_at, version_count, first_created_at,
+		       last_updated_at, COUNT(*) OVER ()
+		FROM latest
+		WHERE ($1 = FALSE OR is_active = TRUE)
+		ORDER BY schema_id
+		LIMIT $3
+	`, options.ActiveOnly, options.Prefix, options.Limit)
+	if err != nil {
+		return ListResult{}, fmt.Errorf("failed to list schemas: %w", err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			r.logger.DPanic("failed to close schema list rows: ", closeErr)
+		}
+	}()
 
 	var schemas []*schema_pb.Schema
+	var totalCount int32
+	metadata := make(map[string]SchemaMetadata)
 	for rows.Next() {
 		var schema schema_pb.Schema
 		var isActive bool
+		var versionCount int32
+		var firstCreatedAt int64
+		var lastUpdatedAt int64
 
 		if err := rows.Scan(
 			&schema.SchemaId,
@@ -244,6 +278,10 @@ func (r *PostgresRegistry) List(ctx context.Context) ([]*schema_pb.Schema, error
 			&isActive,
 			&schema.CreatedAt,
 			&schema.UpdatedAt,
+			&versionCount,
+			&firstCreatedAt,
+			&lastUpdatedAt,
+			&totalCount,
 		); err != nil {
 			r.logger.ErrorWithFields("Failed to scan schema", "error", err)
 			continue
@@ -251,37 +289,43 @@ func (r *PostgresRegistry) List(ctx context.Context) ([]*schema_pb.Schema, error
 
 		schema.IsActive = isActive
 		schemas = append(schemas, &schema)
+		metadata[schema.SchemaId] = SchemaMetadata{SchemaID: schema.SchemaId, LatestVersion: schema.Version, TotalVersions: versionCount, CreatedAt: time.UnixMilli(firstCreatedAt), UpdatedAt: time.UnixMilli(lastUpdatedAt)}
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating schemas: %w", err)
+		return ListResult{}, fmt.Errorf("error iterating schemas: %w", err)
 	}
 
-	return schemas, nil
+	return ListResult{Schemas: schemas, TotalCount: totalCount, Metadata: metadata}, nil
 }
 
 // Deactivate marks a schema version as inactive.
-func (r *PostgresRegistry) Deactivate(ctx context.Context, schemaID string, version int32) error {
-	result, err := r.db.ExecContext(ctx, `
+func (r *PostgresRegistry) Deactivate(ctx context.Context, schemaID string, version int32) (int32, error) {
+	query := `
         UPDATE cq_schemas
         SET is_active = FALSE, updated_at = $1
-        WHERE schema_id = $2 AND version = $3
-    `, time.Now().UnixMilli(), schemaID, version)
+		WHERE schema_id = $2 AND is_active = TRUE`
+	args := []interface{}{time.Now().UnixMilli(), schemaID}
+	if version != 0 {
+		query += ` AND version = $3`
+		args = append(args, version)
+	}
+	result, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("failed to deactivate schema: %w", err)
+		return 0, fmt.Errorf("failed to deactivate schema: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("schema not found: %s version %d", schemaID, version)
+		return 0, domainerror.New(domainerror.NotFound, fmt.Sprintf("active schema not found: %s version %d", schemaID, version), nil)
 	}
 
 	r.logger.InfoWithFields("Schema deactivated", "schemaId", schemaID, "version", version)
-	return nil
+	return int32(rowsAffected), nil
 }
 
 // Validate validates a JSON payload against a schema.
@@ -297,7 +341,9 @@ func (r *PostgresRegistry) Validate(ctx context.Context, schemaID string, versio
 
 	if err != nil {
 		return &schema_pb.ValidationResult{
-			Valid: false,
+			Valid:         false,
+			SchemaId:      schemaID,
+			SchemaVersion: version,
 			Errors: []*schema_pb.ValidationError{
 				{
 					Field:     "schema",
@@ -322,7 +368,7 @@ func (r *PostgresRegistry) Validate(ctx context.Context, schemaID string, versio
 		}, nil
 	}
 
-	result.SchemaId = schemaID
+	result.SchemaId = schema.SchemaId
 	result.SchemaVersion = schema.Version
 	result.ValidatedAt = time.Now().UnixMilli()
 
@@ -379,29 +425,22 @@ func (r *PostgresRegistry) getLatestVersionTx(ctx context.Context, tx *sql.Tx, s
 func (r *PostgresRegistry) getMetadata(ctx context.Context, schemaID string) (SchemaMetadata, error) {
 	var metadata SchemaMetadata
 	var totalVersions int32
+	var createdAt, updatedAt int64
 
 	err := r.db.QueryRowContext(ctx, `
-        SELECT MAX(version) AS latest_version, COUNT(*) AS total_versions
+        SELECT MAX(version) AS latest_version,
+		       COUNT(*) AS total_versions,
+		       MIN(created_at) AS created_at,
+		       MAX(updated_at) AS updated_at
         FROM cq_schemas
         WHERE schema_id = $1
-    `, schemaID).Scan(&metadata.LatestVersion, &totalVersions)
+	`, schemaID).Scan(&metadata.LatestVersion, &totalVersions, &createdAt, &updatedAt)
 	if err != nil {
 		return SchemaMetadata{}, err
 	}
 
 	metadata.SchemaID = schemaID
 	metadata.TotalVersions = totalVersions
-
-	var createdAt, updatedAt int64
-	err = r.db.QueryRowContext(ctx, `
-        SELECT created_at, updated_at
-        FROM cq_schemas
-        WHERE schema_id = $1 AND version = $2
-    `, schemaID, metadata.LatestVersion).Scan(&createdAt, &updatedAt)
-	if err != nil {
-		return SchemaMetadata{}, err
-	}
-
 	metadata.CreatedAt = time.UnixMilli(createdAt)
 	metadata.UpdatedAt = time.UnixMilli(updatedAt)
 

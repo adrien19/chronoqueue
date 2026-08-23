@@ -1,11 +1,15 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,8 +19,55 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/log"
 )
+
+func TestErrorContractInterceptor(t *testing.T) {
+	logger := log.NewLogger(log.WithLevel(logrus.PanicLevel))
+	tests := []struct {
+		name        string
+		handler     error
+		wantCode    codes.Code
+		wantMessage string
+	}{
+		{name: "domain error", handler: domainerror.New(domainerror.InvalidArgument, "invalid queue", nil), wantCode: codes.InvalidArgument, wantMessage: "invalid queue"},
+		{name: "internal detail is masked", handler: errors.New("database password leaked"), wantCode: codes.Internal, wantMessage: "internal server error"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ErrorContractInterceptor(logger)(context.Background(), nil, &grpc.UnaryServerInfo{}, func(context.Context, interface{}) (interface{}, error) {
+				return nil, tt.handler
+			})
+			grpcStatus := status.Convert(err)
+			assert.Equal(t, tt.wantCode, grpcStatus.Code())
+			assert.Equal(t, tt.wantMessage, grpcStatus.Message())
+		})
+	}
+}
+
+func TestHTTPErrorContract(t *testing.T) {
+	err := domainerror.ToGRPC(domainerror.New(domainerror.InvalidArgument, "invalid queue", errors.New("private detail")))
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/queues", bytes.NewReader(nil))
+	runtime.DefaultHTTPErrorHandler(context.Background(), runtime.NewServeMux(), &runtime.JSONPb{}, recorder, request, err)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.JSONEq(t, `{"code":3,"message":"invalid queue"}`, recorder.Body.String())
+	assert.NotContains(t, recorder.Body.String(), "private detail")
+}
+
+func TestHTTPErrorContractMasksInternalDetails(t *testing.T) {
+	err := domainerror.ToGRPC(errors.New("database password leaked"))
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/queues", bytes.NewReader(nil))
+	runtime.DefaultHTTPErrorHandler(context.Background(), runtime.NewServeMux(), &runtime.JSONPb{}, recorder, request, err)
+
+	assert.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assert.JSONEq(t, `{"code":13,"message":"internal server error"}`, recorder.Body.String())
+	assert.NotContains(t, recorder.Body.String(), "database password leaked")
+}
 
 func TestAuthInterceptor(t *testing.T) {
 	logger := log.NewLogger(log.WithLevel(logrus.PanicLevel))

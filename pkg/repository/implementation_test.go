@@ -8,6 +8,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
@@ -15,8 +19,10 @@ import (
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/calendar"
 	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
+	repositorysql "github.com/adrien19/chronoqueue/pkg/repository/sql"
 	"github.com/adrien19/chronoqueue/pkg/validator"
 )
 
@@ -50,18 +56,30 @@ type claimCall struct {
 	workerId       string
 	attemptId      string
 	exclusivityKey string
+	leaseDuration  time.Duration
+}
+
+type peekCall struct {
+	queueName     string
+	limit         int32
+	priorityRange *repositorysql.PriorityRange
 }
 
 type stubBackend struct {
-	queueMetadata *queuepb.QueueMetadata
-	createdQueues []*queuepb.Queue
-	claims        []claimCall
-	enqueued      []enqueuedCall
-	enqueueErr    error
-	enqueueErrs   []error // per-message errors for bulk operations
-	enqueueTxErr  error   // transaction-level error for bulk operations
-	cancelled     []cancelledCall
-	cancelErr     error
+	queueMetadata  *queuepb.QueueMetadata
+	createdQueues  []*queuepb.Queue
+	claims         []claimCall
+	peekCalls      []peekCall
+	queues         []*queuepb.Queue
+	schedules      []*schedulepb.Schedule
+	queuePrefix    string
+	schedulePrefix string
+	enqueued       []enqueuedCall
+	enqueueErr     error
+	enqueueErrs    []error // per-message errors for bulk operations
+	enqueueTxErr   error   // transaction-level error for bulk operations
+	cancelled      []cancelledCall
+	cancelErr      error
 }
 
 type stubEngine struct {
@@ -112,8 +130,12 @@ func (b *stubBackend) GetQueueMetadata(ctx context.Context, name string) (*queue
 	}
 	return &queuepb.QueueMetadata{}, nil
 }
-func (b *stubBackend) ListQueues(ctx context.Context) ([]*queuepb.Queue, error) { return nil, nil }
-func (b *stubBackend) DeleteQueue(ctx context.Context, name string) error       { return nil }
+
+func (b *stubBackend) ListQueuesWithPrefix(ctx context.Context, prefix string) ([]*queuepb.Queue, error) {
+	b.queuePrefix = prefix
+	return b.queues, nil
+}
+func (b *stubBackend) DeleteQueue(ctx context.Context, name string) error { return nil }
 func (b *stubBackend) EnqueueMessage(ctx context.Context, queueName string, message *messagepb.Message) error {
 	b.enqueued = append(b.enqueued, enqueuedCall{queue: queueName, message: message})
 	return b.enqueueErr
@@ -145,8 +167,8 @@ func (b *stubBackend) EnqueueMessagesBulk(ctx context.Context, queueName string,
 	return errors, b.enqueueTxErr
 }
 
-func (b *stubBackend) ClaimMessage(ctx context.Context, queueName string, workerId string, attemptId string, exclusivityKey string) (*messagepb.Message, error) {
-	b.claims = append(b.claims, claimCall{queueName: queueName, workerId: workerId, attemptId: attemptId, exclusivityKey: exclusivityKey})
+func (b *stubBackend) ClaimMessageWithLeaseDuration(ctx context.Context, queueName string, workerId string, attemptId string, exclusivityKey string, leaseDuration time.Duration) (*messagepb.Message, error) {
+	b.claims = append(b.claims, claimCall{queueName: queueName, workerId: workerId, attemptId: attemptId, exclusivityKey: exclusivityKey, leaseDuration: leaseDuration})
 	return nil, nil
 }
 
@@ -171,11 +193,13 @@ func (b *stubBackend) ExtendMessageLease(ctx context.Context, queueName string, 
 	return nil
 }
 
-func (b *stubBackend) PeekMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error) {
+func (b *stubBackend) PeekMessagesWithPriorityRange(ctx context.Context, queueName string, limit int32, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error) {
+	b.peekCalls = append(b.peekCalls, peekCall{queueName: queueName, limit: limit, priorityRange: priorityRange})
 	return nil, nil
 }
 
 func (b *stubBackend) CreateSchedule(ctx context.Context, schedule *schedulepb.Schedule) error {
+	b.schedules = append(b.schedules, schedule)
 	return nil
 }
 
@@ -184,7 +208,12 @@ func (b *stubBackend) GetSchedule(ctx context.Context, scheduleId string) (*sche
 }
 
 func (b *stubBackend) ListSchedules(ctx context.Context, queueName string) ([]*schedulepb.Schedule, error) {
-	return nil, nil
+	return b.schedules, nil
+}
+
+func (b *stubBackend) ListSchedulesWithPrefix(ctx context.Context, prefix string) ([]*schedulepb.Schedule, error) {
+	b.schedulePrefix = prefix
+	return b.schedules, nil
 }
 func (b *stubBackend) DeleteSchedule(ctx context.Context, scheduleId string) error { return nil }
 func (b *stubBackend) PauseSchedule(ctx context.Context, scheduleId string) error  { return nil }
@@ -209,6 +238,39 @@ func (b *stubBackend) DeleteDLQMessage(ctx context.Context, dlqName string, mess
 	return nil
 }
 func (b *stubBackend) PurgeDLQ(ctx context.Context, dlqName string) (int64, error) { return 0, nil }
+
+func TestCreateSchedule_ValidatesCronExpression(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend}
+
+	_, err := impl.CreateSchedule(context.Background(), &queueservicepb.CreateScheduleRequest{
+		Schedule: &schedulepb.Schedule{
+			ScheduleId: "invalid-cron",
+			Metadata: &schedulepb.Schedule_Metadata{
+				QueueName: "jobs",
+				ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{
+					CronSchedule: "* * * * * *",
+				},
+			},
+		},
+	})
+	require.ErrorContains(t, err, "cron schedule is invalid")
+	require.Empty(t, backend.schedules)
+
+	_, err = impl.CreateSchedule(context.Background(), &queueservicepb.CreateScheduleRequest{
+		Schedule: &schedulepb.Schedule{
+			ScheduleId: "valid-cron",
+			Metadata: &schedulepb.Schedule_Metadata{
+				QueueName: "jobs",
+				ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{
+					CronSchedule: "*/5 * * * *",
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, backend.schedules, 1)
+}
 
 func TestCreateQueue_RequiresExclusiveKey(t *testing.T) {
 	backend := &stubBackend{}
@@ -250,13 +312,124 @@ func TestGetQueueMessage_ForwardsExclusivityKey(t *testing.T) {
 	require.Equal(t, []claimCall{{queueName: "exclusive", workerId: workerID, attemptId: attemptID, exclusivityKey: "orders"}}, backend.claims)
 }
 
+func TestGetQueueMessage_LeaseDuration(t *testing.T) {
+	tests := []struct {
+		name          string
+		leaseDuration *durationpb.Duration
+		wantDuration  time.Duration
+		wantError     string
+	}{
+		{name: "request override", leaseDuration: durationpb.New(45 * time.Second), wantDuration: 45 * time.Second},
+		{name: "queue default", leaseDuration: nil, wantDuration: 0},
+		{name: "zero duration", leaseDuration: durationpb.New(0), wantError: "greater than zero"},
+		{name: "negative duration", leaseDuration: durationpb.New(-time.Second), wantError: "greater than zero"},
+		{name: "invalid protobuf duration", leaseDuration: &durationpb.Duration{Seconds: 315576000001}, wantError: "invalid lease duration"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			backend := &stubBackend{}
+			impl := &implementation{backend: backend}
+			_, err := impl.GetQueueMessage(context.Background(), &queueservicepb.GetNextMessageRequest{
+				QueueName: "queue", LeaseDuration: tt.leaseDuration,
+			})
+			if tt.wantError != "" {
+				require.ErrorContains(t, err, tt.wantError)
+				require.Empty(t, backend.claims)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, backend.claims, 1)
+			require.Equal(t, tt.wantDuration, backend.claims[0].leaseDuration)
+		})
+	}
+}
+
+func TestPeekQueueMessages_PriorityRange(t *testing.T) {
+	tests := []struct {
+		name      string
+		rangeReq  *queueservicepb.PeekQueueMessagesRequest_PriorityRange
+		wantRange *repositorysql.PriorityRange
+		wantError string
+	}{
+		{name: "filtered", rangeReq: &queueservicepb.PeekQueueMessagesRequest_PriorityRange{Min: 2, Max: 4}, wantRange: &repositorysql.PriorityRange{Min: 2, Max: 4}},
+		{name: "full boundary", rangeReq: &queueservicepb.PeekQueueMessagesRequest_PriorityRange{Min: 0, Max: 4}, wantRange: &repositorysql.PriorityRange{Min: 0, Max: 4}},
+		{name: "unfiltered"},
+		{name: "minimum exceeds maximum", rangeReq: &queueservicepb.PeekQueueMessagesRequest_PriorityRange{Min: 3, Max: 2}, wantError: "minimum must not exceed maximum"},
+		{name: "below minimum", rangeReq: &queueservicepb.PeekQueueMessagesRequest_PriorityRange{Min: -1, Max: 2}, wantError: "between 0 and 4"},
+		{name: "above maximum", rangeReq: &queueservicepb.PeekQueueMessagesRequest_PriorityRange{Min: 2, Max: 5}, wantError: "between 0 and 4"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			backend := &stubBackend{}
+			impl := &implementation{backend: backend}
+			_, err := impl.PeekQueueMessages(context.Background(), &queueservicepb.PeekQueueMessagesRequest{
+				QueueName: "queue", Limit: 10, PriorityRange: tt.rangeReq,
+			})
+			if tt.wantError != "" {
+				require.ErrorContains(t, err, tt.wantError)
+				require.Empty(t, backend.peekCalls)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, backend.peekCalls, 1)
+			require.Equal(t, tt.wantRange, backend.peekCalls[0].priorityRange)
+		})
+	}
+}
+
+func TestListQueues_FiltersByPrefix(t *testing.T) {
+	backend := &stubBackend{queues: []*queuepb.Queue{{Name: "orders-eu"}, {Name: "orders-us"}}}
+	impl := &implementation{backend: backend}
+
+	filtered, err := impl.ListQueues(context.Background(), &queueservicepb.ListQueuesRequest{Prefix: "orders-"})
+	require.NoError(t, err)
+	require.Equal(t, "orders-", backend.queuePrefix)
+	require.Equal(t, []string{"orders-eu", "orders-us"}, []string{filtered.Queues[0].GetName(), filtered.Queues[1].GetName()})
+
+	backend.queues = []*queuepb.Queue{{Name: "orders-eu"}, {Name: "orders-us"}, {Name: "payments"}}
+	all, err := impl.ListQueues(context.Background(), &queueservicepb.ListQueuesRequest{})
+	require.NoError(t, err)
+	require.Empty(t, backend.queuePrefix)
+	require.Len(t, all.GetQueues(), 3)
+
+	backend.queues = nil
+	none, err := impl.ListQueues(context.Background(), &queueservicepb.ListQueuesRequest{Prefix: "missing"})
+	require.NoError(t, err)
+	require.Equal(t, "missing", backend.queuePrefix)
+	require.Empty(t, none.GetQueues())
+}
+
+func TestListSchedules_FiltersByPrefix(t *testing.T) {
+	backend := &stubBackend{schedules: []*schedulepb.Schedule{{ScheduleId: "billing-daily"}, {ScheduleId: "billing-monthly"}}}
+	impl := &implementation{backend: backend}
+
+	filtered, err := impl.ListSchedules(context.Background(), &queueservicepb.ListSchedulesRequest{Prefix: "billing-"})
+	require.NoError(t, err)
+	require.Equal(t, "billing-", backend.schedulePrefix)
+	require.Equal(t, []string{"billing-daily", "billing-monthly"}, []string{filtered.Schedules[0].GetScheduleId(), filtered.Schedules[1].GetScheduleId()})
+
+	backend.schedules = []*schedulepb.Schedule{{ScheduleId: "billing-daily"}, {ScheduleId: "billing-monthly"}, {ScheduleId: "cleanup"}}
+	all, err := impl.ListSchedules(context.Background(), &queueservicepb.ListSchedulesRequest{})
+	require.NoError(t, err)
+	require.Empty(t, backend.schedulePrefix)
+	require.Len(t, all.GetSchedules(), 3)
+
+	backend.schedules = nil
+	none, err := impl.ListSchedules(context.Background(), &queueservicepb.ListSchedulesRequest{Prefix: "missing"})
+	require.NoError(t, err)
+	require.Equal(t, "missing", backend.schedulePrefix)
+	require.Empty(t, none.GetSchedules())
+}
+
 func TestCreateQueueMessage_ValidatorNil(t *testing.T) {
 	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 2}}
 	impl := &implementation{backend: backend}
 
 	req := &queueservicepb.PostMessageRequest{
 		QueueName: "queue-A",
-		Message:   &messagepb.Message{MessageId: "msg-1"},
+		Message:   &messagepb.Message{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	_, err := impl.CreateQueueMessage(context.Background(), req, nil)
@@ -275,6 +448,19 @@ func TestCreateQueueMessage_ValidatorNil(t *testing.T) {
 	}
 }
 
+func TestCreateQueueMessage_RequiresMetadata(t *testing.T) {
+	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{}}
+	impl := &implementation{backend: backend}
+
+	_, err := impl.CreateQueueMessage(context.Background(), &queueservicepb.PostMessageRequest{
+		QueueName: "queue-A",
+		Message:   &messagepb.Message{MessageId: "msg-1"},
+	}, nil)
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(domainerror.ToGRPC(err)))
+	require.Empty(t, backend.enqueued)
+}
+
 func TestCreateQueueMessage_ValidationFails(t *testing.T) {
 	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 3}}
 	impl := &implementation{backend: backend}
@@ -291,7 +477,7 @@ func TestCreateQueueMessage_ValidationFails(t *testing.T) {
 
 	req := &queueservicepb.PostMessageRequest{
 		QueueName: "queue-B",
-		Message:   &messagepb.Message{MessageId: "msg-2"},
+		Message:   &messagepb.Message{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	_, err := impl.CreateQueueMessage(context.Background(), req, val)
@@ -321,7 +507,7 @@ func TestCreateQueueMessage_ValidationPasses(t *testing.T) {
 
 	req := &queueservicepb.PostMessageRequest{
 		QueueName: "queue-C",
-		Message:   &messagepb.Message{MessageId: "msg-3"},
+		Message:   &messagepb.Message{MessageId: "msg-3", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	_, err := impl.CreateQueueMessage(context.Background(), req, val)
@@ -515,9 +701,9 @@ func TestCreateQueueMessagesBulk_Success_AllOrNothing(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
-		{MessageId: "msg-3"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-3", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -569,8 +755,8 @@ func TestCreateQueueMessagesBulk_Success_BestEffort(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -595,6 +781,48 @@ func TestCreateQueueMessagesBulk_Success_BestEffort(t *testing.T) {
 	if len(backend.enqueued) != 2 {
 		t.Fatalf("expected 2 enqueued messages, got %d", len(backend.enqueued))
 	}
+}
+
+func TestCreateQueueMessagesBulk_BestEffortRejectsMissingMetadata(t *testing.T) {
+	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{}}
+	impl := &implementation{backend: backend}
+
+	resp, err := impl.CreateQueueMessagesBulk(context.Background(), &queueservicepb.PostMessagesBulkRequest{
+		QueueName: "test-queue",
+		Messages: []*messagepb.Message{
+			{MessageId: "missing"},
+			{MessageId: "valid", Metadata: &messagepb.Message_Metadata{}},
+		},
+		TransactionMode: queueservicepb.PostMessagesBulkRequest_BEST_EFFORT,
+	}, nil)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, resp.GetSuccessfulCount())
+	require.EqualValues(t, 1, resp.GetFailedCount())
+	require.Equal(t, queueservicepb.PostMessagesBulkResponse_MessagePostResult_VALIDATION_FAILED, resp.GetResults()[0].GetErrorCode())
+	require.Len(t, backend.enqueued, 1)
+	require.Equal(t, "valid", backend.enqueued[0].message.GetMessageId())
+}
+
+func TestCreateQueueMessagesBulk_AllOrNothingReportsIndexedMetadata(t *testing.T) {
+	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{}}
+	impl := &implementation{backend: backend}
+
+	_, err := impl.CreateQueueMessagesBulk(context.Background(), &queueservicepb.PostMessagesBulkRequest{
+		QueueName: "test-queue",
+		Messages: []*messagepb.Message{
+			{MessageId: "valid", Metadata: &messagepb.Message_Metadata{}},
+			{MessageId: "missing"},
+		},
+		TransactionMode: queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING,
+	}, nil)
+	require.Error(t, err)
+	grpcStatus := status.Convert(domainerror.ToGRPC(err))
+	require.Equal(t, codes.InvalidArgument, grpcStatus.Code())
+	require.Empty(t, backend.enqueued)
+	require.Len(t, grpcStatus.Details(), 1)
+	details, ok := grpcStatus.Details()[0].(*errdetails.BadRequest)
+	require.True(t, ok)
+	require.Equal(t, "messages[1].metadata", details.GetFieldViolations()[0].GetField())
 }
 
 func TestCreateQueueMessagesBulk_EmptyMessages(t *testing.T) {
@@ -697,8 +925,8 @@ func TestCreateQueueMessagesBulk_ValidationFails_AllOrNothing(t *testing.T) {
 	}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -731,7 +959,7 @@ func TestCreateQueueMessagesBulk_InheritsQueueDefaults(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -801,9 +1029,9 @@ func TestCreateQueueMessagesBulk_BestEffort_MixedValidation(t *testing.T) {
 	}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
-		{MessageId: "msg-3"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-3", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -867,9 +1095,9 @@ func TestCreateQueueMessagesBulk_BackendInternalError(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
-		{MessageId: "msg-3"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-3", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -895,9 +1123,8 @@ func TestCreateQueueMessagesBulk_BackendInternalError(t *testing.T) {
 		t.Fatalf("expected INTERNAL_ERROR for msg-2, got %v", resp.Results[1].ErrorCode)
 	}
 
-	if !strings.Contains(resp.Results[1].Error, "database connection lost") {
-		t.Fatalf("expected error message to contain backend error")
-	}
+	require.Equal(t, "internal server error", resp.Results[1].Error)
+	require.NotContains(t, resp.Results[1].Error, "database connection lost")
 }
 
 func TestCreateQueueMessagesBulk_DuplicateMessageID(t *testing.T) {
@@ -912,9 +1139,9 @@ func TestCreateQueueMessagesBulk_DuplicateMessageID(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
-		{MessageId: "msg-3"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-3", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -945,8 +1172,8 @@ func TestCreateQueueMessagesBulk_AllOrNothing_TransactionFailure(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -990,8 +1217,8 @@ func TestCreateQueueMessagesBulk_BestEffort_PartialTransactionFailure(t *testing
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
-		{MessageId: "msg-2"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+		{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{
@@ -1033,9 +1260,9 @@ func TestCreateQueueMessagesBulk_NilMessageInSlice_BestEffort(t *testing.T) {
 	impl := &implementation{backend: backend}
 
 	messages := []*messagepb.Message{
-		{MessageId: "msg-1"},
+		{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
 		nil, // nil message should be treated as a validation error
-		{MessageId: "msg-3"},
+		{MessageId: "msg-3", Metadata: &messagepb.Message_Metadata{}},
 	}
 
 	req := &queueservicepb.PostMessagesBulkRequest{

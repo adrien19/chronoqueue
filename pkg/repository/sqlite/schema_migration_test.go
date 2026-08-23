@@ -22,7 +22,17 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 		`CREATE TABLE cq_schema_version (version INTEGER PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, description TEXT)`,
 		`INSERT INTO cq_schema_version (version, description) VALUES (1, 'release fixture')`,
 		`CREATE TABLE cq_schedules (id TEXT PRIMARY KEY, state INTEGER NOT NULL)`,
-		`CREATE TABLE cq_messages (id INTEGER PRIMARY KEY, queue_name TEXT NOT NULL, state INTEGER NOT NULL)`,
+		`CREATE TABLE cq_queues (name TEXT PRIMARY KEY, metadata_pb BLOB NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+		`INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES ('queue-a', X'00', 1, 1), ('queue-b', X'00', 1, 1)`,
+		`CREATE TABLE cq_messages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, queue_name TEXT NOT NULL, message_id TEXT NOT NULL UNIQUE,
+			metadata_pb BLOB NOT NULL, state INTEGER NOT NULL, priority INTEGER NOT NULL DEFAULT 5,
+			scheduled_at INTEGER, lease_expiry INTEGER, heartbeat_expiry INTEGER, attempts_left INTEGER,
+			max_attempts INTEGER, current_attempt_id TEXT, current_worker_id TEXT, lease_started_at INTEGER,
+			lease_extension_used INTEGER DEFAULT 0, lease_renewal_count INTEGER DEFAULT 0,
+			last_heartbeat_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+		)`,
+		`INSERT INTO cq_messages (queue_name, message_id, metadata_pb, state, priority, created_at, updated_at) VALUES ('queue-a', 'shared-id', X'00', 1, 1, 1, 1)`,
 	}
 	for _, statement := range statements {
 		_, err := db.ExecContext(ctx, statement)
@@ -38,6 +48,10 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 
 	assertSQLiteColumns(t, ctx, db, "cq_schedules", "next_run", "last_run", "cron_schedule", "execution_count")
 	assertSQLiteColumns(t, ctx, db, "cq_messages", "completed_at", "deleted_at", "cancellation_reason")
+	_, err = db.ExecContext(ctx, `INSERT INTO cq_messages (queue_name, message_id, metadata_pb, state, priority, created_at, updated_at) VALUES ('queue-b', 'shared-id', X'00', 1, 1, 1, 1)`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO cq_messages (queue_name, message_id, metadata_pb, state, priority, created_at, updated_at) VALUES ('queue-a', 'shared-id', X'00', 1, 1, 1, 1)`)
+	require.Error(t, err)
 }
 
 func TestSchemaMigration_RollsBackFailedVersion(t *testing.T) {

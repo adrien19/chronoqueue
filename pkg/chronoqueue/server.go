@@ -2,10 +2,10 @@ package chronoqueue
 
 import (
 	"context"
-	"fmt"
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schema_pb "github.com/adrien19/chronoqueue/api/schema/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/adrien19/chronoqueue/pkg/repository"
 	"github.com/adrien19/chronoqueue/pkg/schema"
@@ -38,7 +38,7 @@ func (s *ChronoQueueServer) CreateQueue(ctx context.Context, req *queueservice_p
 	resp, err := s.storage.CreateQueue(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to create queue", "queue_name", req.GetName(), "error", err)
-		return nil, fmt.Errorf("failed to create queue: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to create queue")
 	}
 
 	s.logger.InfoWithFields("Queue created successfully", "queue_name", req.GetName())
@@ -51,7 +51,7 @@ func (s *ChronoQueueServer) DeleteQueue(ctx context.Context, req *queueservice_p
 	resp, err := s.storage.DeleteQueue(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to delete queue", "queue_name", req.GetName(), "error", err)
-		return nil, fmt.Errorf("failed to delete queue: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to delete queue")
 	}
 
 	s.logger.InfoWithFields("Queue deleted successfully", "queue_name", req.GetName())
@@ -64,7 +64,7 @@ func (s *ChronoQueueServer) ListQueues(ctx context.Context, req *queueservice_pb
 	resp, err := s.storage.ListQueues(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to list queues", "error", err)
-		return nil, fmt.Errorf("failed to list queues: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to list queues")
 	}
 
 	return resp, nil
@@ -76,7 +76,7 @@ func (s *ChronoQueueServer) GetQueueState(ctx context.Context, req *queueservice
 	resp, err := s.storage.GetQueueState(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to get queue state", "queue_name", req.GetQueueName(), "error", err)
-		return nil, fmt.Errorf("failed to get queue state: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to get queue state")
 	}
 
 	return resp, nil
@@ -90,7 +90,7 @@ func (s *ChronoQueueServer) PostMessage(ctx context.Context, req *queueservice_p
 	queueMeta, err := s.storage.GetQueueMetadata(ctx, req.GetQueueName())
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to get queue metadata", "queue_name", req.GetQueueName(), "error", err)
-		return nil, fmt.Errorf("failed to get queue metadata: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to get queue metadata")
 	}
 
 	validator := validator.NewPayloadValidator(queueMeta, s.schemaRegistry)
@@ -98,7 +98,7 @@ func (s *ChronoQueueServer) PostMessage(ctx context.Context, req *queueservice_p
 	resp, err := s.storage.CreateQueueMessage(ctx, req, validator)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to post message", "queue_name", req.GetQueueName(), "error", err)
-		return nil, fmt.Errorf("failed to post message: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to post message")
 	}
 
 	s.logger.InfoWithFields("Message posted successfully", "queue_name", req.GetQueueName())
@@ -116,7 +116,7 @@ func (s *ChronoQueueServer) PostMessagesBulk(ctx context.Context, req *queueserv
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to get queue metadata",
 			"queue_name", req.GetQueueName(), "error", err)
-		return nil, fmt.Errorf("failed to get queue metadata: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to get queue metadata")
 	}
 
 	// Create validator with schema registry
@@ -129,7 +129,7 @@ func (s *ChronoQueueServer) PostMessagesBulk(ctx context.Context, req *queueserv
 			"queue_name", req.GetQueueName(),
 			"message_count", len(req.GetMessages()),
 			"error", err)
-		return resp, fmt.Errorf("failed to post messages in bulk: %w", err)
+		return resp, domainerror.PrefixMessage(err, "failed to post messages in bulk")
 	}
 
 	s.logger.InfoWithFields("Messages posted successfully",
@@ -146,7 +146,7 @@ func (s *ChronoQueueServer) GetNextMessage(ctx context.Context, req *queueservic
 	resp, err := s.storage.GetQueueMessage(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to get next message", "queue_name", req.GetQueueName(), "error", err)
-		return nil, fmt.Errorf("failed to get next message: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to get next message")
 	}
 
 	return resp, nil
@@ -163,7 +163,7 @@ func (s *ChronoQueueServer) AcknowledgeMessage(ctx context.Context, req *queuese
 			"queue_name", req.GetQueueName(),
 			"message_id", req.GetMessageId(),
 			"error", err)
-		return nil, fmt.Errorf("failed to acknowledge message: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to acknowledge message")
 	}
 
 	return resp, nil
@@ -180,7 +180,7 @@ func (s *ChronoQueueServer) CancelMessage(ctx context.Context, req *queueservice
 			"queue_name", req.GetQueueName(),
 			"message_id", req.GetMessageId(),
 			"error", err)
-		return nil, fmt.Errorf("failed to cancel message: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to cancel message")
 	}
 
 	return resp, nil
@@ -197,7 +197,7 @@ func (s *ChronoQueueServer) RenewMessageLease(ctx context.Context, req *queueser
 			"queue_name", req.GetQueueName(),
 			"message_id", req.GetMessageId(),
 			"error", err)
-		return nil, fmt.Errorf("failed to renew message lease: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to renew message lease")
 	}
 
 	return resp, nil
@@ -209,7 +209,7 @@ func (s *ChronoQueueServer) PeekQueueMessages(ctx context.Context, req *queueser
 	resp, err := s.storage.PeekQueueMessages(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to peek queue messages", "queue_name", req.GetQueueName(), "error", err)
-		return nil, fmt.Errorf("failed to peek queue messages: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to peek queue messages")
 	}
 
 	return resp, nil
@@ -221,7 +221,7 @@ func (s *ChronoQueueServer) SendMessageHeartBeat(ctx context.Context, req *queue
 	resp, err := s.storage.SendMessageHeartBeat(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to send message heartbeat", "queue_name", req.GetQueueName(), "error", err)
-		return nil, fmt.Errorf("failed to send message heartbeat: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to send message heartbeat")
 	}
 
 	return resp, nil
@@ -235,7 +235,7 @@ func (s *ChronoQueueServer) CreateSchedule(ctx context.Context, req *queueservic
 	resp, err := s.storage.CreateSchedule(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to create schedule", "schedule_name", req.GetSchedule().ScheduleId, "error", err)
-		return nil, fmt.Errorf("failed to create schedule: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to create schedule")
 	}
 
 	s.logger.InfoWithFields("Schedule created successfully", "schedule_name", req.GetSchedule().ScheduleId)
@@ -248,7 +248,7 @@ func (s *ChronoQueueServer) DeleteSchedule(ctx context.Context, req *queueservic
 	resp, err := s.storage.DeleteSchedule(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to delete schedule", "schedule_name", req.ScheduleId, "error", err)
-		return nil, fmt.Errorf("failed to delete schedule: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to delete schedule")
 	}
 
 	s.logger.InfoWithFields("Schedule deleted successfully", "schedule_name", req.ScheduleId)
@@ -261,7 +261,7 @@ func (s *ChronoQueueServer) GetSchedule(ctx context.Context, req *queueservice_p
 	resp, err := s.storage.GetSchedule(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to get schedule", "schedule_name", req.ScheduleId, "error", err)
-		return nil, fmt.Errorf("failed to get schedule: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to get schedule")
 	}
 
 	return resp, nil
@@ -273,7 +273,7 @@ func (s *ChronoQueueServer) ListSchedules(ctx context.Context, req *queueservice
 	resp, err := s.storage.ListSchedules(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to list schedules", "error", err)
-		return nil, fmt.Errorf("failed to list schedules: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to list schedules")
 	}
 
 	return resp, nil
@@ -285,7 +285,7 @@ func (s *ChronoQueueServer) GetScheduleHistory(ctx context.Context, req *queuese
 	resp, err := s.storage.GetScheduleHistory(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to get schedule history", "schedule_name", req.ScheduleId, "error", err)
-		return nil, fmt.Errorf("failed to get schedule history: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to get schedule history")
 	}
 
 	return resp, nil
@@ -297,7 +297,7 @@ func (s *ChronoQueueServer) PauseSchedule(ctx context.Context, req *queueservice
 	resp, err := s.storage.PauseSchedule(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to pause schedule", "schedule_name", req.ScheduleId, "error", err)
-		return nil, fmt.Errorf("failed to pause schedule: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to pause schedule")
 	}
 
 	s.logger.InfoWithFields("Schedule paused successfully", "schedule_name", req.ScheduleId)
@@ -310,7 +310,7 @@ func (s *ChronoQueueServer) ResumeSchedule(ctx context.Context, req *queueservic
 	resp, err := s.storage.ResumeSchedule(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to resume schedule", "schedule_name", req.ScheduleId, "error", err)
-		return nil, fmt.Errorf("failed to resume schedule: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to resume schedule")
 	}
 
 	s.logger.InfoWithFields("Schedule resumed successfully", "schedule_name", req.ScheduleId)
@@ -353,7 +353,7 @@ func (s *ChronoQueueServer) PreviewCalendarSchedule(ctx context.Context, req *qu
 	preview, err := s.storage.GetCalendarSchedulePreview(ctx, req.GetCalendarSchedule(), int(count))
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to generate calendar schedule preview", "error", err)
-		return nil, fmt.Errorf("failed to generate preview: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to generate preview")
 	}
 
 	s.logger.InfoWithFields("Calendar schedule preview generated successfully", "execution_count", len(preview.ExecutionTimes))
@@ -368,7 +368,7 @@ func (s *ChronoQueueServer) GetDLQMessages(ctx context.Context, req *queueservic
 	messages, err := s.storage.GetDLQMessages(ctx, req.GetDlqName(), req.GetLimit())
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to get DLQ messages", "dlq_name", req.GetDlqName(), "error", err)
-		return nil, fmt.Errorf("failed to get DLQ messages: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to get DLQ messages")
 	}
 
 	return &queueservice_pb.GetDLQMessagesResponse{
@@ -389,7 +389,7 @@ func (s *ChronoQueueServer) RequeueFromDLQ(ctx context.Context, req *queueservic
 			"message_id", req.GetMessageId(),
 			"target_queue", req.GetTargetQueue(),
 			"error", err)
-		return nil, fmt.Errorf("failed to requeue message from DLQ: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to requeue message from DLQ")
 	}
 
 	s.logger.InfoWithFields("Message requeued from DLQ successfully",
@@ -413,7 +413,7 @@ func (s *ChronoQueueServer) DeleteFromDLQ(ctx context.Context, req *queueservice
 			"dlq_name", req.GetDlqName(),
 			"message_id", req.GetMessageId(),
 			"error", err)
-		return nil, fmt.Errorf("failed to delete message from DLQ: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to delete message from DLQ")
 	}
 
 	s.logger.InfoWithFields("Message deleted from DLQ successfully",
@@ -431,7 +431,7 @@ func (s *ChronoQueueServer) PurgeDLQ(ctx context.Context, req *queueservice_pb.P
 	err := s.storage.PurgeDLQ(ctx, req.GetDlqName())
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to purge DLQ", "dlq_name", req.GetDlqName(), "error", err)
-		return nil, fmt.Errorf("failed to purge DLQ: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to purge DLQ")
 	}
 
 	s.logger.InfoWithFields("DLQ purged successfully", "dlq_name", req.GetDlqName())
@@ -446,7 +446,7 @@ func (s *ChronoQueueServer) GetDLQStats(ctx context.Context, req *queueservice_p
 	stats, err := s.storage.GetDLQStats(ctx, req.GetDlqName())
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to get DLQ stats", "dlq_name", req.GetDlqName(), "error", err)
-		return nil, fmt.Errorf("failed to get DLQ stats: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to get DLQ stats")
 	}
 
 	return &queueservice_pb.GetDLQStatsResponse{
@@ -460,6 +460,9 @@ func (s *ChronoQueueServer) GetDLQStats(ctx context.Context, req *queueservice_p
 // Schema Management Methods
 
 func (s *ChronoQueueServer) RegisterSchema(ctx context.Context, req *queueservice_pb.RegisterSchemaRequest) (*queueservice_pb.RegisterSchemaResponse, error) {
+	if req == nil || req.GetSchemaId() == "" || req.GetName() == "" || req.GetContent() == "" {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schema id, name, and content are required", nil)
+	}
 	s.logger.InfoWithFields("RegisterSchema called", "schema_id", req.GetSchemaId())
 
 	reqSchema := &schema_pb.Schema{
@@ -474,24 +477,28 @@ func (s *ChronoQueueServer) RegisterSchema(ctx context.Context, req *queueservic
 	registryResp, err := s.schemaRegistry.Register(ctx, reqSchema)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to register schema", "schema_id", req.GetSchemaId(), "error", err)
-		return nil, fmt.Errorf("failed to register schema: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to register schema")
 	}
 
 	s.logger.InfoWithFields("Schema registered successfully", "schema_id", req.GetSchemaId())
 	resp := &queueservice_pb.RegisterSchemaResponse{
-		SchemaId: registryResp.SchemaID,
-		Version:  registryResp.LatestVersion,
+		SchemaId:  registryResp.SchemaID,
+		Version:   registryResp.LatestVersion,
+		CreatedAt: registryResp.CreatedAt.UnixMilli(),
 	}
 	return resp, nil
 }
 
 func (s *ChronoQueueServer) GetSchema(ctx context.Context, req *queueservice_pb.GetSchemaRequest) (*queueservice_pb.GetSchemaResponse, error) {
+	if req == nil || req.GetSchemaId() == "" || req.GetVersion() < 0 {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schema id is required and version must be >= 0", nil)
+	}
 	s.logger.InfoWithFields("GetSchema called", "schema_id", req.GetSchemaId())
 
 	resp, err := s.schemaRegistry.Get(ctx, req.SchemaId, req.Version)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to get schema", "schema_id", req.GetSchemaId(), "error", err)
-		return nil, fmt.Errorf("failed to get schema: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to get schema")
 	}
 
 	return &queueservice_pb.GetSchemaResponse{
@@ -502,57 +509,80 @@ func (s *ChronoQueueServer) GetSchema(ctx context.Context, req *queueservice_pb.
 func (s *ChronoQueueServer) ListSchemas(ctx context.Context, req *queueservice_pb.ListSchemasRequest) (*queueservice_pb.ListSchemasResponse, error) {
 	s.logger.Info("ListSchemas called")
 
-	resp, err := s.schemaRegistry.List(ctx)
-	if err != nil {
-		s.logger.ErrorWithFields("Failed to list schemas", "error", err)
-		return nil, fmt.Errorf("failed to list schemas: %w", err)
+	limit := req.GetLimit()
+	if limit < 0 {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schema list limit must not be negative", nil)
+	}
+	if limit == 0 {
+		limit = 100
 	}
 
-	schemasInfo := make([]*queueservice_pb.SchemaInfo, 0, len(resp))
-	for _, schema := range resp {
+	result, err := s.schemaRegistry.ListWithOptions(ctx, schema.ListOptions{
+		Prefix:     req.GetPrefix(),
+		Limit:      limit,
+		ActiveOnly: req.GetActiveOnly(),
+	})
+	if err != nil {
+		s.logger.ErrorWithFields("Failed to list schemas", "error", err)
+		return nil, domainerror.PrefixMessage(err, "failed to list schemas")
+	}
+
+	schemasInfo := make([]*queueservice_pb.SchemaInfo, 0, len(result.Schemas))
+	for _, schema := range result.Schemas {
+		metadata := result.Metadata[schema.SchemaId]
 		schemasInfo = append(schemasInfo, &queueservice_pb.SchemaInfo{
 			Name:          schema.Name,
 			SchemaId:      schema.SchemaId,
 			Description:   schema.Description,
 			LatestVersion: schema.Version,
+			CreatedAt:     metadata.CreatedAt.UnixMilli(),
+			UpdatedAt:     metadata.UpdatedAt.UnixMilli(),
+			VersionCount:  metadata.TotalVersions,
 			IsActive:      schema.IsActive,
 		})
 	}
 
 	return &queueservice_pb.ListSchemasResponse{
-		Schemas: schemasInfo,
+		Schemas:    schemasInfo,
+		TotalCount: result.TotalCount,
 	}, nil
 }
 
 func (s *ChronoQueueServer) DeleteSchema(ctx context.Context, req *queueservice_pb.DeleteSchemaRequest) (*queueservice_pb.DeleteSchemaResponse, error) {
+	if req == nil || req.GetSchemaId() == "" || req.GetVersion() < 0 {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schema id is required and version must be >= 0", nil)
+	}
 	s.logger.InfoWithFields("DeleteSchema called", "schema_id", req.GetSchemaId())
 
-	err := s.schemaRegistry.Deactivate(ctx, req.GetSchemaId(), req.GetVersion())
+	versionsDeleted, err := s.schemaRegistry.Deactivate(ctx, req.GetSchemaId(), req.GetVersion())
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to delete schema", "schema_id", req.GetSchemaId(), "error", err)
-		return nil, fmt.Errorf("failed to delete schema: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to delete schema")
 	}
 
 	s.logger.InfoWithFields("Schema deleted successfully", "schema_id", req.GetSchemaId())
 	return &queueservice_pb.DeleteSchemaResponse{
 		Success:         true,
-		VersionsDeleted: req.GetVersion(),
+		VersionsDeleted: versionsDeleted,
 	}, nil
 }
 
 func (s *ChronoQueueServer) ValidatePayload(ctx context.Context, req *queueservice_pb.ValidatePayloadRequest) (*queueservice_pb.ValidatePayloadResponse, error) {
+	if req == nil || req.GetSchemaId() == "" || req.GetVersion() < 0 {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schema id is required and version must be >= 0", nil)
+	}
 	s.logger.InfoWithFields("ValidatePayload called", "schema_id", req.GetSchemaId())
 
 	resp, err := s.schemaRegistry.Validate(ctx, req.GetSchemaId(), req.GetVersion(), []byte(req.GetPayload()))
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to validate payload", "schema_id", req.GetSchemaId(), "error", err)
-		return nil, fmt.Errorf("failed to validate payload: %w", err)
+		return nil, domainerror.PrefixMessage(err, "failed to validate payload")
 	}
 
 	return &queueservice_pb.ValidatePayloadResponse{
 		Valid:         resp.Valid,
 		Errors:        resp.Errors,
-		SchemaId:      req.SchemaId,
-		SchemaVersion: req.Version,
+		SchemaId:      resp.SchemaId,
+		SchemaVersion: resp.SchemaVersion,
 	}, nil
 }

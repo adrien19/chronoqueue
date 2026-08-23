@@ -21,11 +21,14 @@ type PayloadValidator struct {
 func NewPayloadValidator(queueMeta *queue_pb.QueueMetadata, schemaRegistry schema.Registry) *PayloadValidator {
 	validators := []Validator{
 		// Phase 3: Metadata validators (validate protobuf-defined fields FIRST)
-		NewMessageIDValidator(),         // Validate message ID format
+		NewMessageIDValidator(), // Validate message ID format
+		NewRuntimeValidator(),
 		NewPriorityValidator(queueMeta), // Validate priority bounds
+		NewLeasePolicyValidator(queueMeta),
 		NewDurationValidator(queueMeta), // Validate duration limits
 		NewRetryValidator(queueMeta),    // Validate retry configuration
-		NewHeadersValidator(),           // Validate headers (prepared for future)
+		NewTimestampValidator(),
+		NewHeadersValidator(), // Validate headers (prepared for future)
 
 		// Phase 1: Payload validators (validate user content)
 		NewContentTypeValidator(queueMeta), // Validate MIME type

@@ -3411,11 +3411,11 @@ func (x *SchemaInfo) GetIsActive() bool {
 	return false
 }
 
-// Delete a schema or specific version
+// Deactivate a schema or specific version. Inactive schemas remain available by ID and version.
 type DeleteSchemaRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SchemaId      string                 `protobuf:"bytes,1,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"` // Schema identifier
-	Version       int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`                  // Schema version (0 = delete all versions)
+	Version       int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`                  // Schema version (0 = deactivate all versions)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3467,7 +3467,7 @@ func (x *DeleteSchemaRequest) GetVersion() int32 {
 type DeleteSchemaResponse struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Success         bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	VersionsDeleted int32                  `protobuf:"varint,2,opt,name=versions_deleted,json=versionsDeleted,proto3" json:"versions_deleted,omitempty"` // Number of versions deleted
+	VersionsDeleted int32                  `protobuf:"varint,2,opt,name=versions_deleted,json=versionsDeleted,proto3" json:"versions_deleted,omitempty"` // Number of versions deactivated
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }

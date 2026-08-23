@@ -684,7 +684,7 @@ type QueueServiceClient interface {
 	//
 	// Returns: List of upcoming execution timestamps
 	PreviewCalendarSchedule(ctx context.Context, in *PreviewCalendarScheduleRequest, opts ...grpc.CallOption) (*PreviewCalendarScheduleResponse, error)
-	// RegisterSchema creates or updates a message validation schema.
+	// RegisterSchema creates the next version of a message validation schema.
 	//
 	// Use for:
 	// - Enforcing message structure
@@ -693,7 +693,7 @@ type QueueServiceClient interface {
 	// - Type safety
 	//
 	// Schema versioning:
-	// - Each schema has a schema_id and version number
+	// - Each schema has a schema_id and a server-assigned version number
 	// - Multiple versions can coexist
 	// - Queues reference schema_id (use highest active version)
 	//
@@ -701,17 +701,14 @@ type QueueServiceClient interface {
 	//
 	//	POST /v1/schemas
 	//	{
-	//	  "schema": {
-	//	    "schema_id": "order-schema",
-	//	    "version": 2,
-	//	    "content": "{...JSON Schema...}",
-	//	    "content_type": "json-schema"
-	//	  }
+	//	  "schema_id": "order-schema",
+	//	  "name": "Order schema",
+	//	  "content": "{...JSON Schema...}",
+	//	  "content_type": "json-schema"
 	//	}
 	//
 	// Returns: Registered schema
 	// Errors:
-	//   - AlreadyExists: schema_id + version already exists
 	//   - InvalidArgument: Invalid schema syntax
 	RegisterSchema(ctx context.Context, in *RegisterSchemaRequest, opts ...grpc.CallOption) (*RegisterSchemaResponse, error)
 	// GetSchema retrieves a specific schema version.
@@ -737,23 +734,19 @@ type QueueServiceClient interface {
 	//
 	// Returns: List of schemas (all versions)
 	ListSchemas(ctx context.Context, in *ListSchemasRequest, opts ...grpc.CallOption) (*ListSchemasResponse, error)
-	// DeleteSchema removes a schema version.
+	// DeleteSchema deactivates a schema version, or all versions when version is 0.
 	//
 	// Effects:
-	// - Schema version deleted
-	// - Queues using this schema will fail validation
-	//
-	// Best practice: Mark schema as inactive (is_active = false) instead
-	// of deleting to preserve validation history.
+	// - Matching active schema versions are marked inactive
+	// - Inactive versions remain addressable for validation history
 	//
 	// Example:
 	//
 	//	DELETE /v1/schemas/order-schema/versions/1
 	//
-	// Returns: Empty response
+	// Returns: Number of versions deactivated
 	// Errors:
 	//   - NotFound: Schema not found
-	//   - FailedPrecondition: Schema in use by active queues
 	DeleteSchema(ctx context.Context, in *DeleteSchemaRequest, opts ...grpc.CallOption) (*DeleteSchemaResponse, error)
 	// ValidatePayload validates a payload against a schema without posting a message.
 	//
@@ -1710,7 +1703,7 @@ type QueueServiceServer interface {
 	//
 	// Returns: List of upcoming execution timestamps
 	PreviewCalendarSchedule(context.Context, *PreviewCalendarScheduleRequest) (*PreviewCalendarScheduleResponse, error)
-	// RegisterSchema creates or updates a message validation schema.
+	// RegisterSchema creates the next version of a message validation schema.
 	//
 	// Use for:
 	// - Enforcing message structure
@@ -1719,7 +1712,7 @@ type QueueServiceServer interface {
 	// - Type safety
 	//
 	// Schema versioning:
-	// - Each schema has a schema_id and version number
+	// - Each schema has a schema_id and a server-assigned version number
 	// - Multiple versions can coexist
 	// - Queues reference schema_id (use highest active version)
 	//
@@ -1727,17 +1720,14 @@ type QueueServiceServer interface {
 	//
 	//	POST /v1/schemas
 	//	{
-	//	  "schema": {
-	//	    "schema_id": "order-schema",
-	//	    "version": 2,
-	//	    "content": "{...JSON Schema...}",
-	//	    "content_type": "json-schema"
-	//	  }
+	//	  "schema_id": "order-schema",
+	//	  "name": "Order schema",
+	//	  "content": "{...JSON Schema...}",
+	//	  "content_type": "json-schema"
 	//	}
 	//
 	// Returns: Registered schema
 	// Errors:
-	//   - AlreadyExists: schema_id + version already exists
 	//   - InvalidArgument: Invalid schema syntax
 	RegisterSchema(context.Context, *RegisterSchemaRequest) (*RegisterSchemaResponse, error)
 	// GetSchema retrieves a specific schema version.
@@ -1763,23 +1753,19 @@ type QueueServiceServer interface {
 	//
 	// Returns: List of schemas (all versions)
 	ListSchemas(context.Context, *ListSchemasRequest) (*ListSchemasResponse, error)
-	// DeleteSchema removes a schema version.
+	// DeleteSchema deactivates a schema version, or all versions when version is 0.
 	//
 	// Effects:
-	// - Schema version deleted
-	// - Queues using this schema will fail validation
-	//
-	// Best practice: Mark schema as inactive (is_active = false) instead
-	// of deleting to preserve validation history.
+	// - Matching active schema versions are marked inactive
+	// - Inactive versions remain addressable for validation history
 	//
 	// Example:
 	//
 	//	DELETE /v1/schemas/order-schema/versions/1
 	//
-	// Returns: Empty response
+	// Returns: Number of versions deactivated
 	// Errors:
 	//   - NotFound: Schema not found
-	//   - FailedPrecondition: Schema in use by active queues
 	DeleteSchema(context.Context, *DeleteSchemaRequest) (*DeleteSchemaResponse, error)
 	// ValidatePayload validates a payload against a schema without posting a message.
 	//

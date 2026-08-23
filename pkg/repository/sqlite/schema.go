@@ -8,7 +8,7 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/schema"
 )
 
-const latestVersion = uint(5)
+const latestVersion = uint(6)
 
 type SchemaManager struct {
 	baseManager *schema.BaseManager
@@ -103,6 +103,10 @@ func (m *SchemaManager) Migrate(ctx context.Context, db *sql.DB, targetVersion u
 		case 5:
 			if err := m.migrateToV5_AddCancellationReason(ctx, db); err != nil {
 				return fmt.Errorf("migrate to version 5: %w", err)
+			}
+		case 6:
+			if err := m.migrateToV6_QueueScopedMessageIDs(ctx, db); err != nil {
+				return fmt.Errorf("migrate to version 6: %w", err)
 			}
 		default:
 			return fmt.Errorf("unsupported target version %d", v)
@@ -214,6 +218,58 @@ func (m *SchemaManager) migrateToV5_AddCancellationReason(ctx context.Context, d
 	return tx.Commit()
 }
 
+func (m *SchemaManager) migrateToV6_QueueScopedMessageIDs(ctx context.Context, db *sql.DB) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin migration tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE cq_messages RENAME TO cq_messages_v5`); err != nil {
+		return fmt.Errorf("rename messages table: %w", err)
+	}
+	for _, indexName := range []string{
+		"idx_messages_scheduler",
+		"idx_messages_reclaim",
+		"idx_messages_heartbeat",
+		"idx_messages_message_id",
+		"idx_messages_queue_state",
+		"idx_messages_cleanup",
+		"idx_messages_queue_state_active",
+	} {
+		if _, err := tx.ExecContext(ctx, `DROP INDEX IF EXISTS `+indexName); err != nil {
+			return fmt.Errorf("drop old messages index %s: %w", indexName, err)
+		}
+	}
+	if err := m.createMessagesTable(ctx, tx); err != nil {
+		return fmt.Errorf("create queue-scoped messages table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO cq_messages (
+			id, queue_name, message_id, metadata_pb, state, priority, scheduled_at,
+			lease_expiry, heartbeat_expiry, attempts_left, max_attempts,
+			current_attempt_id, current_worker_id, lease_started_at,
+			lease_extension_used, lease_renewal_count, last_heartbeat_at,
+			created_at, updated_at, completed_at, deleted_at, cancellation_reason
+		)
+		SELECT id, queue_name, message_id, metadata_pb, state, priority, scheduled_at,
+			lease_expiry, heartbeat_expiry, attempts_left, max_attempts,
+			current_attempt_id, current_worker_id, lease_started_at,
+			lease_extension_used, lease_renewal_count, last_heartbeat_at,
+			created_at, updated_at, completed_at, deleted_at, cancellation_reason
+		FROM cq_messages_v5
+	`); err != nil {
+		return fmt.Errorf("copy messages: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DROP TABLE cq_messages_v5`); err != nil {
+		return fmt.Errorf("drop old messages table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES (?, ?)`, 6, "Scope message IDs to queues"); err != nil {
+		return fmt.Errorf("record schema version: %w", err)
+	}
+	return tx.Commit()
+}
+
 func (m *SchemaManager) Version(ctx context.Context, db *sql.DB) (uint, bool, error) {
 	return m.GetVersion(ctx, db)
 }
@@ -227,7 +283,7 @@ func (m *SchemaManager) createMessagesTable(ctx context.Context, tx *sql.Tx) err
 	_, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS cq_messages (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		queue_name TEXT NOT NULL,
-		message_id TEXT NOT NULL UNIQUE,
+		message_id TEXT NOT NULL,
 		metadata_pb BLOB NOT NULL,
 		state INTEGER NOT NULL,
 		priority INTEGER NOT NULL DEFAULT 5,
@@ -247,7 +303,8 @@ func (m *SchemaManager) createMessagesTable(ctx context.Context, tx *sql.Tx) err
 		completed_at INTEGER,
 		deleted_at INTEGER,
 		cancellation_reason TEXT,
-		FOREIGN KEY (queue_name) REFERENCES cq_queues(name) ON DELETE CASCADE
+		FOREIGN KEY (queue_name) REFERENCES cq_queues(name) ON DELETE CASCADE,
+		UNIQUE (queue_name, message_id)
 	)`)
 	if err != nil {
 		return err
@@ -256,7 +313,6 @@ func (m *SchemaManager) createMessagesTable(ctx context.Context, tx *sql.Tx) err
 		`CREATE INDEX IF NOT EXISTS idx_messages_scheduler ON cq_messages(state, scheduled_at, priority DESC) WHERE state = 1`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_reclaim ON cq_messages(queue_name, state, lease_expiry) WHERE state = 2`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_heartbeat ON cq_messages(queue_name, state, heartbeat_expiry) WHERE state = 2 AND heartbeat_expiry IS NOT NULL`,
-		`CREATE INDEX IF NOT EXISTS idx_messages_message_id ON cq_messages(message_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_queue_state ON cq_messages(queue_name, state)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_cleanup ON cq_messages(deleted_at) WHERE deleted_at IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_queue_state_active ON cq_messages(queue_name, state) WHERE deleted_at IS NULL`,

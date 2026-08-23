@@ -50,8 +50,8 @@ func (s *Storage) RetryDLQMessage(ctx context.Context, queueName string, message
 		// Get message
 		var messageBytes []byte
 		var oldState messagepb.Message_Metadata_State
-		query := `SELECT metadata_pb, state FROM cq_messages WHERE message_id = ?`
-		err := tx.QueryRowContext(ctx, query, messageId).Scan(&messageBytes, &oldState)
+		query := `SELECT metadata_pb, state FROM cq_messages WHERE message_id = ? AND queue_name = ?`
+		err := tx.QueryRowContext(ctx, query, messageId, queueName).Scan(&messageBytes, &oldState)
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("message not found: %s", messageId)
 		}
@@ -74,9 +74,9 @@ func (s *Storage) RetryDLQMessage(ctx context.Context, queueName string, message
 			SET state = ?,
 				attempts_left = ?,
 				updated_at = CURRENT_TIMESTAMP
-			WHERE message_id = ?
+			WHERE message_id = ? AND queue_name = ?
 		`
-		_, err = tx.ExecContext(ctx, updateQuery, messagepb.Message_Metadata_PENDING, msg.GetMetadata().GetMaxAttempts(), messageId)
+		_, err = tx.ExecContext(ctx, updateQuery, messagepb.Message_Metadata_PENDING, msg.GetMetadata().GetMaxAttempts(), messageId, queueName)
 		if err != nil {
 			return fmt.Errorf("update message: %w", err)
 		}
@@ -99,7 +99,7 @@ func (s *Storage) DeleteDLQMessage(ctx context.Context, queueName string, messag
 	return s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		// Get current state
 		var oldState messagepb.Message_Metadata_State
-		err := tx.QueryRowContext(ctx, `SELECT state FROM cq_messages WHERE message_id = ?`, messageId).Scan(&oldState)
+		err := tx.QueryRowContext(ctx, `SELECT state FROM cq_messages WHERE message_id = ? AND queue_name = ?`, messageId, queueName).Scan(&oldState)
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("message not found: %s", messageId)
 		}
@@ -112,8 +112,8 @@ func (s *Storage) DeleteDLQMessage(ctx context.Context, queueName string, messag
 		}
 
 		// Delete message
-		query := `DELETE FROM cq_messages WHERE message_id = ?`
-		result, err := tx.ExecContext(ctx, query, messageId)
+		query := `DELETE FROM cq_messages WHERE message_id = ? AND queue_name = ?`
+		result, err := tx.ExecContext(ctx, query, messageId, queueName)
 		if err != nil {
 			return fmt.Errorf("delete message: %w", err)
 		}

@@ -15,6 +15,7 @@ require (
 	// CLI and Configuration
 	github.com/spf13/pflag v1.0.9 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478
 	// Core gRPC and HTTP Gateway
 	google.golang.org/grpc v1.82.1
 	google.golang.org/protobuf v1.36.11
@@ -46,14 +47,13 @@ require (
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
 )
 
 require (
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.1
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
 	github.com/xeipuuv/gojsonschema v1.2.0
@@ -96,7 +96,6 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.66.1 // indirect
@@ -113,4 +112,5 @@ require (
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 )

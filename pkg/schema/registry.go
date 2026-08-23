@@ -9,7 +9,7 @@ import (
 
 // Registry manages message schemas
 type Registry interface {
-	// Register registers a new schema or updates an existing one
+	// Register registers a new schema version.
 	Register(ctx context.Context, schema *schema_pb.Schema) (SchemaMetadata, error)
 
 	// Get retrieves a specific schema version
@@ -20,15 +20,29 @@ type Registry interface {
 
 	// List lists all active schemas
 	List(ctx context.Context) ([]*schema_pb.Schema, error)
+	ListWithOptions(ctx context.Context, options ListOptions) (ListResult, error)
 
-	// Deactivate marks a schema version as inactive
-	Deactivate(ctx context.Context, schemaID string, version int32) error
+	// Deactivate marks one schema version, or all versions when version is zero, inactive.
+	Deactivate(ctx context.Context, schemaID string, version int32) (int32, error)
 
 	// Validate validates a JSON payload against a schema
 	Validate(ctx context.Context, schemaID string, version int32, payload []byte) (*schema_pb.ValidationResult, error)
 
 	// IsCompatible checks if a new schema content is compatible with existing versions
 	IsCompatible(ctx context.Context, schemaID string, newContent string) (bool, error)
+}
+
+type ListOptions struct {
+	Prefix string
+	// Limit is the maximum number of schemas to return. A value of zero or less means no limit.
+	Limit      int32
+	ActiveOnly bool // If true, only return active schemas; if false, return all schemas
+}
+
+type ListResult struct {
+	Schemas    []*schema_pb.Schema
+	TotalCount int32
+	Metadata   map[string]SchemaMetadata
 }
 
 // SchemaMetadata contains metadata about a schema

@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
+	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/pkg/calendar"
@@ -170,4 +171,51 @@ func TestCalendarServiceSkipsCronOnlySchedules(t *testing.T) {
 	var count int
 	require.NoError(t, storage.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM cq_messages WHERE queue_name = ?", queue.Name).Scan(&count))
 	require.Equal(t, 0, count)
+}
+
+func TestCalendarServiceDoesNotRecordConflictingMessage(t *testing.T) {
+	ctx := context.Background()
+	storage := newTestStorage(t)
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+
+	queue := &queuepb.Queue{Name: "calendar-conflict", Metadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 1}}
+	require.NoError(t, storage.CreateQueue(ctx, queue))
+	require.NoError(t, storage.EnqueueMessage(ctx, queue.Name, &messagepb.Message{
+		MessageId: "duplicate-id",
+		Metadata:  &messagepb.Message_Metadata{State: messagepb.Message_Metadata_PENDING, AttemptsLeft: 1, MaxAttempts: 1},
+	}))
+	countsBefore, err := storage.StateManager.GetStateCounts(ctx, storage.DB, queue.Name)
+	require.NoError(t, err)
+
+	now := time.Now().Add(-time.Minute)
+	next := now.Add(time.Hour)
+	schedule := &schedulepb.Schedule{
+		ScheduleId: "calendar-conflict",
+		Metadata: &schedulepb.Schedule_Metadata{
+			State:          schedulepb.Schedule_Metadata_SCHEDULED,
+			QueueName:      queue.Name,
+			NextRun:        timestamppb.New(now),
+			ScheduleConfig: &schedulepb.Schedule_Metadata_CalendarSchedule{CalendarSchedule: &schedulepb.CalendarSchedule{}},
+		},
+	}
+	require.NoError(t, storage.CreateSchedule(ctx, schedule))
+
+	service := NewCalendarService(storage.BaseSQL, &stubCalendarEngine{nextRun: &next}, time.Second)
+	service.generateID = func() (string, error) { return "duplicate-id", nil }
+	require.NoError(t, service.RunOnce(ctx))
+
+	var messageCount, historyCount int
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_messages WHERE queue_name = ?`, queue.Name).Scan(&messageCount))
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_schedule_history WHERE schedule_id = ?`, schedule.ScheduleId).Scan(&historyCount))
+	require.Equal(t, 1, messageCount)
+	require.Zero(t, historyCount)
+
+	counts, err := storage.StateManager.GetStateCounts(ctx, storage.DB, queue.Name)
+	require.NoError(t, err)
+	require.Equal(t, countsBefore, counts)
+
+	updated, err := storage.GetSchedule(ctx, schedule.ScheduleId)
+	require.NoError(t, err)
+	require.Equal(t, schedulepb.Schedule_Metadata_ERRORED, updated.GetMetadata().GetState())
+	require.Contains(t, updated.GetMetadata().GetStateMessage(), "insert message")
 }

@@ -16,6 +16,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
@@ -199,25 +201,17 @@ func TestQueueOperations_DuplicateQueueCreation_Error(t *testing.T) {
 	require.True(t, resp1.Success)
 
 	// Act - Second creation (duplicate)
-	resp2, err2 := client.CreateQueue(ctx, request)
+	_, err2 := client.CreateQueue(ctx, request)
 
-	// Assert
-	// Should either return error or response with success=false
-	if err2 != nil {
-		// Error case - this is acceptable
-		t.Logf("Duplicate creation returned error (expected): %v", err2)
-	} else {
-		// Response case - should indicate failure
-		assert.False(t, resp2.Success, "Duplicate queue creation should fail")
-	}
+	assert.Equal(t, codes.AlreadyExists, status.Code(err2))
 }
 
-// TestQueueOperations_ListQueues_Pagination validates queue listing with multiple queues.
+// TestQueueOperations_ListQueues_Prefix validates queue listing by name prefix.
 //
 // Test Scenario: TC-Q-007 from TESTING_GUIDE.md
 // Data: 10+ queues created
 // Expected: All queues returned with correct metadata
-func TestQueueOperations_ListQueues_Pagination(t *testing.T) {
+func TestQueueOperations_ListQueues_Prefix(t *testing.T) {
 	// Note: Not parallel - creates many queues
 
 	// Arrange
@@ -231,10 +225,11 @@ func TestQueueOperations_ListQueues_Pagination(t *testing.T) {
 
 	const numQueues = 15
 	createdQueues := make([]string, numQueues)
+	prefix := helpers.GenerateUniqueQueueName(t, "list-prefix") + "-"
 
 	// Create multiple queues
 	for i := 0; i < numQueues; i++ {
-		queueName := fmt.Sprintf("test-queue-%d", i)
+		queueName := fmt.Sprintf("%s%d", prefix, i)
 		createdQueues[i] = queueName
 
 		_, err := client.CreateQueue(ctx, &queueservice_pb.CreateQueueRequest{
@@ -247,11 +242,11 @@ func TestQueueOperations_ListQueues_Pagination(t *testing.T) {
 	}
 
 	// Act
-	listResp, err := client.ListQueues(ctx, &queueservice_pb.ListQueuesRequest{})
+	listResp, err := client.ListQueues(ctx, &queueservice_pb.ListQueuesRequest{Prefix: prefix})
 
 	// Assert
 	require.NoError(t, err, "List queues should succeed")
-	assert.GreaterOrEqual(t, len(listResp.Queues), numQueues, "Should return all created queues")
+	require.Len(t, listResp.Queues, numQueues, "Should return only queues with the requested prefix")
 
 	queueNames := extractQueueNames(listResp.Queues)
 	for _, queueName := range createdQueues {
