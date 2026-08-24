@@ -848,8 +848,12 @@ func TestPostMessagesBulkPropagatesHeaders(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, service.bulkRequest)
 	require.Len(t, service.bulkRequest.GetMessages(), 2)
-	require.Len(t, service.bulkRequest.GetMessages()[0].GetMetadata().GetHeaders(), 2)
-	require.Equal(t, []byte{0x00, 0xff}, service.bulkRequest.GetMessages()[0].GetMetadata().GetHeaders()[0].GetValue())
+	headers := service.bulkRequest.GetMessages()[0].GetMetadata().GetHeaders()
+	require.Len(t, headers, 2)
+	require.Equal(t, "trace-id", headers[0].GetKey())
+	require.Equal(t, []byte{0x00, 0xff}, headers[0].GetValue())
+	require.Equal(t, "trace-id", headers[1].GetKey())
+	require.Equal(t, []byte("second"), headers[1].GetValue())
 	require.Empty(t, service.bulkRequest.GetMessages()[1].GetMetadata().GetHeaders())
 }
 
@@ -870,7 +874,9 @@ func TestCreateSchedulePropagatesHeaders(t *testing.T) {
 	require.NotNil(t, service.scheduleRequest)
 	headers := service.scheduleRequest.GetSchedule().GetMetadata().GetHeaders()
 	require.Len(t, headers, 2)
+	require.Equal(t, "trace-id", headers[0].GetKey())
 	require.Equal(t, []byte{0x00, 0xff}, headers[0].GetValue())
+	require.Equal(t, "trace-id", headers[1].GetKey())
 	require.Equal(t, []byte("second"), headers[1].GetValue())
 }
 

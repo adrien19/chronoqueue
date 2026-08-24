@@ -108,7 +108,7 @@ func TestParseBulkMessageHeaders(t *testing.T) {
 
 func TestFormatMessageHeaders(t *testing.T) {
 	assert.Equal(t, "[]", formatMessageHeaders(nil))
-	assert.Equal(t, "[trace-id=AP8=, <nil>]", formatMessageHeaders([]*messagepb.Message_Metadata_Header{
+	assert.Equal(t, "[trace-id=base64:AP8=, <nil>]", formatMessageHeaders([]*messagepb.Message_Metadata_Header{
 		{Key: "trace-id", Value: []byte{0x00, 0xff}},
 		nil,
 	}))

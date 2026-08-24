@@ -230,6 +230,23 @@ func TestServiceIntervalValidation(t *testing.T) {
 			reclaimInterval:   "-1",
 			wantError:         true,
 		},
+		{
+			name:              "maximum representable intervals",
+			schedulerInterval: "9223372036854",
+			reclaimInterval:   "9223372036854",
+		},
+		{
+			name:              "scheduler interval overflows duration",
+			schedulerInterval: "9223372036855",
+			reclaimInterval:   "5000",
+			wantError:         true,
+		},
+		{
+			name:              "reclaim interval overflows duration",
+			schedulerInterval: "1000",
+			reclaimInterval:   "9223372036855",
+			wantError:         true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -240,7 +257,7 @@ func TestServiceIntervalValidation(t *testing.T) {
 
 			err := config.Validate()
 			if tt.wantError {
-				require.ErrorContains(t, err, "scheduler and reclaim intervals must be greater than 0")
+				require.Error(t, err)
 				return
 			}
 			require.NoError(t, err)

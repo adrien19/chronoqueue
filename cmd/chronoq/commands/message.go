@@ -597,7 +597,7 @@ func formatMessageHeaders(headers []*message_pb.Message_Metadata_Header) string 
 			formatted[i] = "<nil>"
 			continue
 		}
-		formatted[i] = fmt.Sprintf("%s=%s", header.GetKey(), base64.StdEncoding.EncodeToString(header.GetValue()))
+		formatted[i] = fmt.Sprintf("%s=base64:%s", header.GetKey(), base64.StdEncoding.EncodeToString(header.GetValue()))
 	}
 	return "[" + strings.Join(formatted, ", ") + "]"
 }
