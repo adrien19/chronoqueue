@@ -274,6 +274,8 @@ jobs:
 
   e2e-tests:
     name: E2E Tests
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

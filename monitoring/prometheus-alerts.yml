@@ -5,6 +5,37 @@
 #     - 'chronoqueue-alerts.yml'
 
 groups:
+  - name: chronoqueue
+    rules:
+      - alert: ChronoQueueDLQGrowing
+        expr: rate(chronoqueue_dlq_ingestion_total[10m]) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: ChronoQueue messages are entering a dead-letter queue
+      - alert: ChronoQueueReclaimFailures
+        expr: rate(chronoqueue_background_service_iterations_total{service="reclaim",status="error"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: ChronoQueue reclaim cycles are failing
+      - alert: ChronoQueueSchedulerLag
+        expr: chronoqueue_schedule_lag_seconds > 60
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: ChronoQueue schedule activation is delayed
+      - alert: ChronoQueueDatabaseSaturation
+        expr: chronoqueue_db_connections_wait > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: ChronoQueue is waiting for database connections
+
   - name: chronoqueue_message_processing
     interval: 30s
     rules:
