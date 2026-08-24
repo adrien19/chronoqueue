@@ -1,4 +1,4 @@
-# Dockerfile for ALL storage backends (Postgres, Redis, SQLite)
+# Dockerfile with SQLite and PostgreSQL support
 # Requires CGO for SQLite support
 # Used for integration testing and development with full feature set
 

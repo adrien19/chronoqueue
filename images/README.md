@@ -6,7 +6,7 @@ This directory contains Dockerfiles for building ChronoQueue container images.
 
 ### `Dockerfile` (Production)
 
-**Purpose**: Production-ready builds for Postgres and Redis backends  
+**Purpose**: Production-ready builds for the PostgreSQL backend
 **Features**:
 
 - ✅ Pure Go build (CGO_ENABLED=0)
@@ -16,7 +16,7 @@ This directory contains Dockerfiles for building ChronoQueue container images.
 - ✅ Fast build times (no C compiler needed)
 - ✅ Optimized for production deployment
 
-**Supported Backends**: PostgreSQL, Redis  
+**Supported Backends**: PostgreSQL
 **Build Command**:
 
 ```bash
@@ -40,7 +40,7 @@ docker build -f images/Dockerfile -t chronoqueue:latest .
 - ⚠️ Platform-specific binary (build architecture dependent)
 - ⚠️ Slower build times (requires gcc/musl-dev)
 
-**Supported Backends**: SQLite (plus PostgreSQL, Redis)  
+**Supported Backends**: SQLite and PostgreSQL
 **Build Command**:
 
 ```bash
@@ -86,7 +86,7 @@ docker build \
 | Build Time | Fast | Slower |
 | Cross-compile | ✅ Easy | ❌ Complex |
 | SQLite Support | ❌ No | ✅ Yes |
-| Postgres/Redis | ✅ Yes | ✅ Yes |
+| PostgreSQL | ✅ Yes | ✅ Yes |
 | Production Ready | ✅ Yes | ⚠️ Dev/Test only |
 
 ## Best Practices
@@ -97,7 +97,7 @@ docker build \
 - ✅ Kubernetes clusters
 - ✅ Cloud platforms (AWS, GCP, Azure)
 - ✅ Multi-architecture builds
-- ✅ When using Postgres or Redis
+- ✅ When using PostgreSQL
 
 ### When to Use SQLite Dockerfile
 

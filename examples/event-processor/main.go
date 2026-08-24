@@ -18,7 +18,7 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:   "event-processor",
 		Short: "Event Processing System Demo for ChronoQueue",
-		Long:  `A comprehensive demonstration of high-throughput event processing with Redis Streams architecture.`,
+		Long:  `A comprehensive demonstration of high-throughput event processing with ChronoQueue.`,
 	}
 
 	rootCmd.PersistentFlags().StringVar(&serverAddr, "server", "host.docker.internal:9000", "ChronoQueue server address")

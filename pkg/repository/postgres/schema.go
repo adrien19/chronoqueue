@@ -8,7 +8,7 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/schema"
 )
 
-const latestVersion = uint(6)
+const latestVersion = uint(7)
 
 // SchemaManager handles PostgreSQL schema initialization and versioning.
 type SchemaManager struct {
@@ -107,6 +107,10 @@ func (m *SchemaManager) Migrate(ctx context.Context, db *sql.DB, targetVersion u
 		case 6:
 			if err := m.migrateToV6_QueueScopedMessageIDs(ctx, db); err != nil {
 				return fmt.Errorf("migrate to version 6: %w", err)
+			}
+		case 7:
+			if err := m.migrateToV7_FixSchedulerIndex(ctx, db); err != nil {
+				return fmt.Errorf("migrate to version 7: %w", err)
 			}
 		default:
 			return fmt.Errorf("unsupported target version %d", v)
@@ -241,6 +245,25 @@ func (m *SchemaManager) migrateToV6_QueueScopedMessageIDs(ctx context.Context, d
 	return tx.Commit()
 }
 
+func (m *SchemaManager) migrateToV7_FixSchedulerIndex(ctx context.Context, db *sql.DB) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin migration tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `DROP INDEX IF EXISTS idx_messages_scheduler`); err != nil {
+		return fmt.Errorf("drop scheduler index: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX idx_messages_scheduler ON cq_messages(state, scheduled_at, priority DESC) WHERE state = 0`); err != nil {
+		return fmt.Errorf("create scheduler index: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES ($1, $2)`, 7, "Index invisible scheduled messages"); err != nil {
+		return fmt.Errorf("record schema version: %w", err)
+	}
+	return tx.Commit()
+}
+
 func (m *SchemaManager) Version(ctx context.Context, db *sql.DB) (uint, bool, error) {
 	return m.GetVersion(ctx, db)
 }
@@ -290,7 +313,7 @@ func (m *SchemaManager) createMessagesTable(ctx context.Context, tx *sql.Tx) err
 	}
 
 	indices := []string{
-		`CREATE INDEX IF NOT EXISTS idx_messages_scheduler ON cq_messages(state, scheduled_at, priority DESC) WHERE state = 1`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_scheduler ON cq_messages(state, scheduled_at, priority DESC) WHERE state = 0`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_reclaim ON cq_messages(queue_name, state, lease_expiry) WHERE state = 2`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_heartbeat ON cq_messages(queue_name, state, heartbeat_expiry) WHERE state = 2 AND heartbeat_expiry IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_queue_state ON cq_messages(queue_name, state)`,

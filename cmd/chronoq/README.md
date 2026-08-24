@@ -76,7 +76,7 @@ This starts both gRPC and HTTP gateway servers:
 - **Health Check**: Available at `http://localhost:8080/health`
 - **Metrics**: Available at `http://localhost:8080/metrics`
 - **API Documentation**: Available at `http://localhost:8080/docs/` (dev mode)
-- **Storage**: Supports PostgreSQL (default), SQLite, or Redis (legacy)
+- **Storage**: Supports PostgreSQL (default) and SQLite
 
 ### Queue Management
 

@@ -72,6 +72,10 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 			assert.True(t, exists, "column %s.%s is missing", table, column)
 		}
 	}
+	var schedulerIndexDefinition string
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT indexdef FROM pg_indexes WHERE tablename = 'cq_messages' AND indexname = 'idx_messages_scheduler'`).Scan(&schedulerIndexDefinition))
+	assert.Contains(t, schedulerIndexDefinition, "WHERE (state = 0)")
+	assert.NotContains(t, schedulerIndexDefinition, "WHERE (state = 1)")
 
 	_, err = db.ExecContext(ctx, `INSERT INTO cq_messages (queue_name, message_id, metadata_pb, state, priority, created_at, updated_at) VALUES ('queue-b', 'shared-id', '\x00', 1, 1, 1, 1)`)
 	require.NoError(t, err)

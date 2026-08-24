@@ -17,10 +17,6 @@ import (
 // Why keep it separate?
 //
 //  1. Implementation-Specific: The find-and-update pattern is SQL-specific.
-//     Other backends (Redis, in-memory) might use different mechanisms:
-//     - Redis: ZRANGEBYSCORE on sorted set by expiry time
-//     - In-memory: Timer-based callbacks
-//     - Message broker: Native TTL handling
 //
 //  2. Prevents Interface Pollution: BackendStorage defines public operations
 //     (EnqueueMessage, ClaimMessage, etc.). Reclaim operations are internal

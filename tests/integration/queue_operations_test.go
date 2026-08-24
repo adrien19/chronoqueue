@@ -3,7 +3,7 @@ package integration
 // Package integration provides integration tests for ChronoQueue queue operations.
 //
 // These tests validate queue creation, deletion, listing, and state management
-// using real Redis and ChronoQueue server containers via Testcontainers.
+// using a real ChronoQueue server and SQL database via Testcontainers.
 //
 // Run with: go test -v ./tests/integration/...
 

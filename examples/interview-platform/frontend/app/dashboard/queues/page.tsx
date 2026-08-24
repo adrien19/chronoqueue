@@ -320,8 +320,8 @@ export default function QueuesPage() {
                                 Message Persistence
                             </h4>
                             <p className="text-sm text-blue-800 dark:text-blue-200">
-                                All messages are persisted in Redis, ensuring no data loss even if workers
-                                restart or crash.
+                                All messages are persisted in the configured PostgreSQL or SQLite backend,
+                                so worker restarts do not discard queued messages.
                             </p>
                         </div>
                     </div>
