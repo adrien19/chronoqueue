@@ -1335,6 +1335,19 @@
       },
       "title": "-----------------------------------------------------------------------\nCurrent attempt runtime\n-----------------------------------------------------------------------"
     },
+    "MetadataHeader": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "description": "Header is an ordered message header. Header keys may\nrepeat, and values are opaque bytes. Headers are optional and are not\npart of the business payload."
+    },
     "MonthlyRuleDayType": {
       "type": "string",
       "enum": [
@@ -2158,6 +2171,14 @@
           "type": "integer",
           "format": "int32",
           "description": "priority_level: Internal priority level for stream routing (auto-calculated).\nManaged by ChronoQueue based on priority score. Read-only from client perspective.\nUsed internally for routing to high/medium/low priority streams."
+        },
+        "headers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/MetadataHeader"
+          },
+          "description": "headers: Optional ordered application headers delivered with the message.\nHeaders count toward the total message size and have separate per-value\nand aggregate limits. They are stored outside payload encryption."
         }
       },
       "description": "Metadata contains all message execution and lifecycle information."
@@ -2693,6 +2714,14 @@
             "format": "date-time"
           },
           "description": "next_runs: Precomputed upcoming execution times (for preview/validation).\nPopulated by PreviewSchedule API or ValidateSchedule API.\nShows next N execution times to verify schedule behaves as expected."
+        },
+        "headers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/MetadataHeader"
+          },
+          "description": "headers: Optional ordered headers copied to every message created by\nthis schedule. Values are opaque bytes and duplicate keys are allowed."
         }
       },
       "description": "Metadata contains schedule configuration and execution state."

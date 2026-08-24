@@ -21,6 +21,8 @@ type DLQStats struct {
 // Storage defines the interface for ChronoQueue persistence layer.
 // All storage backends (SQLite, Postgres, Redis) must implement this interface.
 type Storage interface {
+	Ping(ctx context.Context) error
+
 	// Queue Operations
 	CreateQueue(ctx context.Context, request *queueservicepb.CreateQueueRequest) (*queueservicepb.CreateQueueResponse, error)
 	GetQueueMetadata(ctx context.Context, queueName string) (*queuepb.QueueMetadata, error)

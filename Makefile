@@ -294,8 +294,7 @@ test-stable-gotestsum: check-gotestsum
 ################################################################################
 .PHONY: test-race
 test-race:
-	CGO_ENABLED=1 ./pkg/... ./internal/... ./cmd/... ./client/... | xargs \
-		go test -race
+	CGO_ENABLED=1 go test -race -tags="test_dep sqlite" ./pkg/... ./internal/... ./cmd/... ./client/...
 
 ################################################################################
 # Target: build-test-image                                                     #
@@ -352,6 +351,21 @@ ci-test-integration: check-gotestsum build-test-image
 				-v \
 				./tests/integration/... ./pkg/repository/postgres
 
+.PHONY: ci-test-integration-sqlite
+ci-test-integration-sqlite: check-gotestsum build-test-image
+	CGO_ENABLED=1 \
+		TESTCONTAINERS_RYUK_DISABLED=false \
+		DOCKER_HOST=${DOCKER_HOST} \
+		gotestsum \
+		--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration_sqlite.json \
+		--junitfile $(TEST_OUTPUT_FILE_PREFIX)_integration_sqlite.xml \
+		--format standard-verbose \
+		-- \
+		-tags="test_dep integration sqlite" \
+		-count=1 \
+		-timeout 30m \
+		./tests/integration/... ./pkg/repository/sqlite
+
 ################################################################################
 # Target: test-e2e                                                             #
 ################################################################################
@@ -396,6 +410,9 @@ test-all: test test-integration test-e2e
 ################################################################################
 .PHONY: ci-test-all
 ci-test-all: ci-test ci-test-integration ci-test-e2e
+
+.PHONY: ci-release-test
+ci-release-test: ci-test ci-test-sqlite test-race ci-test-integration ci-test-integration-sqlite ci-test-migrations ci-test-e2e
 
 ################################################################################
 # Target: ci-test-migrations                                                   #

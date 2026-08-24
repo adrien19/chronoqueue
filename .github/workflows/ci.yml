@@ -91,7 +91,6 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
-        continue-on-error: true
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -266,8 +265,6 @@ jobs:
           image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
           format: "sarif"
           output: "trivy-results.sarif"
-        continue-on-error: true
-
       - name: Upload Trivy results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         if: always()
@@ -276,10 +273,10 @@ jobs:
         continue-on-error: true
 
   e2e-tests:
-    name: E2E Tests (Optional)
+    name: E2E Tests
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
-    # Only run E2E tests on manual trigger or schedule
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

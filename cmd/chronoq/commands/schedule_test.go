@@ -54,7 +54,7 @@ func TestNewScheduleCreateCommand(t *testing.T) {
 	assert.NotNil(t, cmd.Args)
 
 	// Check that flags are properly added - based on actual implementation
-	flags := []string{"id", "cron", "metadata", "max-messages", "lease-duration"}
+	flags := []string{"id", "cron", "metadata", "max-messages", "lease-duration", "header"}
 	for _, flagName := range flags {
 		flag := cmd.Flags().Lookup(flagName)
 		assert.NotNil(t, flag, "Flag %s should be present", flagName)
@@ -278,7 +278,7 @@ func TestScheduleCommand_Flags(t *testing.T) {
 	cmd := newScheduleCreateCommand()
 
 	// Test that required flags exist for schedule create command
-	requiredFlags := []string{"id", "cron", "metadata", "max-messages", "lease-duration"}
+	requiredFlags := []string{"id", "cron", "metadata", "max-messages", "lease-duration", "header"}
 
 	for _, flagName := range requiredFlags {
 		flag := cmd.Flags().Lookup(flagName)

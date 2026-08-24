@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
+	"github.com/adrien19/chronoqueue/pkg/version"
 )
 
 //go:embed chronoqueue.swagger.json
@@ -227,23 +229,44 @@ func corsHandler(handler http.Handler, allowedOrigins []string) http.Handler {
 	})
 }
 
-// HealthCheckHandler provides a simple health check endpoint
-func HealthCheckHandler() http.Handler {
+// LivenessHandler reports whether the HTTP process is serving requests.
+func LivenessHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-
-		response := map[string]interface{}{
-			"status":  "healthy",
+		if err := json.NewEncoder(w).Encode(map[string]string{
+			"status":  "alive",
 			"service": "chronoqueue",
-			"version": "2.0",
+		}); err != nil {
+			return
 		}
+	})
+}
 
-		// In production, you might want to check database connectivity,
-		// Redis connectivity, etc.
-
-		_, _ = fmt.Fprintf(w, `{"status": "%s", "service": "%s", "version": "%s"}`,
-			response["status"], response["service"], response["version"])
+// ReadinessHandler reports initialization and database connectivity.
+func ReadinessHandler(check func(context.Context) error) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		status := http.StatusOK
+		response := map[string]string{
+			"status":     "ready",
+			"service":    "chronoqueue",
+			"version":    version.Version,
+			"git_commit": version.GitCommit,
+			"build_date": version.BuildDate,
+		}
+		if check == nil {
+			status = http.StatusServiceUnavailable
+			response["status"] = "not_ready"
+			response["error"] = "readiness check is not configured"
+		} else if err := check(r.Context()); err != nil {
+			status = http.StatusServiceUnavailable
+			response["status"] = "not_ready"
+			response["error"] = "database is unavailable"
+		}
+		w.WriteHeader(status)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			return
+		}
 	})
 }
 

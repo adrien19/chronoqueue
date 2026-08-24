@@ -1,14 +1,17 @@
 package commands
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	"github.com/adrien19/chronoqueue/client"
 	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
@@ -45,16 +48,18 @@ Message data can be provided in three ways:
   1. Inline JSON: chronoq message post orders '{"key":"value"}'
   2. From file:   chronoq message post orders --file /path/to/data.json
   3. From stdin:  cat data.json | chronoq message post orders -
-  
+
 The --file flag takes precedence if both inline and file are provided.`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			queueName := args[0]
 
 			// Get message data from --file flag, inline argument, or stdin
-			filePath, _ := cmd.Flags().GetString("file")
+			filePath, err := cmd.Flags().GetString("file")
+			if err != nil {
+				return fmt.Errorf("get message file flag: %w", err)
+			}
 			var messageData string
-			var err error
 
 			if filePath != "" {
 				// Read from file
@@ -111,6 +116,14 @@ The --file flag takes precedence if both inline and file are provided.`,
 			if err != nil {
 				return err
 			}
+			headerValues, err := cmd.Flags().GetStringArray("header")
+			if err != nil {
+				return fmt.Errorf("get header flags: %w", err)
+			}
+			headers, err := parseMessageHeaders(headerValues)
+			if err != nil {
+				return err
+			}
 
 			// Convert string data to structpb.Struct
 			var dataStruct *structpb.Struct
@@ -152,6 +165,7 @@ The --file flag takes precedence if both inline and file are provided.`,
 			}
 
 			messageOpts := client.MessageOptions{
+				Headers: headers,
 				Payload: client.Payload{
 					Data:          dataStruct,
 					Metadata:      metadataMap,
@@ -185,6 +199,7 @@ The --file flag takes precedence if both inline and file are provided.`,
 	cmd.Flags().StringP("content-type", "t", "application/json", "Content type (MIME type)")
 	cmd.Flags().StringP("schema-id", "s", "", "Schema ID for validation")
 	cmd.Flags().Int32("schema-version", 0, "Schema version")
+	cmd.Flags().StringArray("header", nil, "Ordered message header as key=value or key=base64:encoded-value (repeatable)")
 
 	return cmd
 }
@@ -201,12 +216,14 @@ The messages file should contain a JSON array of message objects. Each message o
   - data: Message payload (required)
   - priority: Message priority (optional, default: 5)
   - maxAttempts: Maximum processing attempts (optional)
+  - headers: Ordered headers with base64-encoded values (optional)
 
 Example messages file (messages.json):
 [
   {
     "id": "msg-001",
     "data": {"order": "item-1", "quantity": 2},
+	"headers": [{"key": "trace-id", "value": "YWJjMTIz"}],
     "priority": 2
   },
   {
@@ -307,9 +324,15 @@ Limits:
 					maxAttempts = int32(ma)
 				}
 
+				headers, err := parseBulkMessageHeaders(msgData["headers"])
+				if err != nil {
+					return fmt.Errorf("invalid headers for message[%d]: %w", i, err)
+				}
+
 				messages[i] = client.MessageWithID{
 					MessageID: msgID,
 					Options: client.MessageOptions{
+						Headers: headers,
 						Payload: client.Payload{
 							Data:        dataStruct,
 							ContentType: contentType,
@@ -403,6 +426,7 @@ func newMessageGetCommand() *cobra.Command {
 					outputs.PrintInfo(fmt.Sprintf("Attempt ID: %s", attemptID))
 				}
 				outputs.PrintInfo(fmt.Sprintf("Metadata: %v", resp.GetMessage().GetMetadata()))
+				outputs.PrintInfo(fmt.Sprintf("Headers: %s", formatMessageHeaders(resp.GetMessage().GetMetadata().GetHeaders())))
 				outputs.PrintInfo(fmt.Sprintf("Payload: %v", resp.GetMessage().GetMetadata().GetPayload()))
 				outputs.PrintInfo(fmt.Sprintf("Data: %v", resp.GetMessage().GetMetadata().GetPayload().GetData()))
 				return nil
@@ -498,6 +522,7 @@ func newMessagePeekCommand() *cobra.Command {
 				for _, msg := range resp.GetMessages() {
 					outputs.PrintInfo(fmt.Sprintf("Message ID: %s", msg.GetMessageId()))
 					outputs.PrintInfo(fmt.Sprintf("Metadata: %v", msg.GetMetadata()))
+					outputs.PrintInfo(fmt.Sprintf("Headers: %s", formatMessageHeaders(msg.GetMetadata().GetHeaders())))
 					outputs.PrintInfo(fmt.Sprintf("Payload: %v", msg.GetMetadata().GetPayload()))
 					outputs.PrintInfo(fmt.Sprintf("Data: %v", msg.GetMetadata().GetPayload().GetData()))
 				}
@@ -510,6 +535,71 @@ func newMessagePeekCommand() *cobra.Command {
 	cmd.Flags().StringToInt("time-range", map[string]int{"min": 0, "max": 0}, "Time range for messages to peek")
 
 	return cmd
+}
+
+func parseMessageHeaders(values []string) ([]client.MessageHeader, error) {
+	headers := make([]client.MessageHeader, 0, len(values))
+	for i, value := range values {
+		key, encodedValue, err := splitHeader(value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid --header value at index %d: %w", i, err)
+		}
+		headerValue := []byte(encodedValue)
+		if base64Value, found := strings.CutPrefix(encodedValue, "base64:"); found {
+			headerValue, err = base64.StdEncoding.DecodeString(base64Value)
+			if err != nil {
+				return nil, fmt.Errorf("decode base64 --header value at index %d: %w", i, err)
+			}
+		}
+		headers = append(headers, client.MessageHeader{Key: key, Value: headerValue})
+	}
+	return headers, nil
+}
+
+func splitHeader(value string) (string, string, error) {
+	parts := strings.SplitN(value, "=", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("expected key=value")
+	}
+	if parts[0] == "" {
+		return "", "", fmt.Errorf("header key is required")
+	}
+	return parts[0], parts[1], nil
+}
+
+func parseBulkMessageHeaders(value interface{}) ([]client.MessageHeader, error) {
+	if value == nil {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("marshal headers: %w", err)
+	}
+	var headers []client.MessageHeader
+	if err := json.Unmarshal(encoded, &headers); err != nil {
+		return nil, fmt.Errorf("decode headers: %w", err)
+	}
+	for i, header := range headers {
+		if header.Key == "" {
+			return nil, fmt.Errorf("header[%d] key is required", i)
+		}
+	}
+	return headers, nil
+}
+
+func formatMessageHeaders(headers []*message_pb.Message_Metadata_Header) string {
+	if len(headers) == 0 {
+		return "[]"
+	}
+	formatted := make([]string, len(headers))
+	for i, header := range headers {
+		if header == nil {
+			formatted[i] = "<nil>"
+			continue
+		}
+		formatted[i] = fmt.Sprintf("%s=base64:%s", header.GetKey(), base64.StdEncoding.EncodeToString(header.GetValue()))
+	}
+	return "[" + strings.Join(formatted, ", ") + "]"
 }
 
 // newMessageRenewCommand creates the message lease renewal subcommand

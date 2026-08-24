@@ -1,10 +1,14 @@
 package commands
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 )
 
 func TestNewMessageCommand(t *testing.T) {
@@ -54,11 +58,60 @@ func TestNewMessagePostCommand(t *testing.T) {
 	assert.NotNil(t, cmd.Args)
 
 	// Check that flags are properly added
-	flags := []string{"id", "lease-duration", "max-attempts", "invisibility-duration", "priority", "metadata"}
+	flags := []string{"id", "lease-duration", "max-attempts", "invisibility-duration", "priority", "metadata", "header"}
 	for _, flagName := range flags {
 		flag := cmd.Flags().Lookup(flagName)
 		assert.NotNil(t, flag, "Flag %s should be present", flagName)
 	}
+}
+
+func TestParseMessageHeaders(t *testing.T) {
+	binary := []byte{0x00, 0xff}
+	headers, err := parseMessageHeaders([]string{
+		"trace-id=first",
+		"binary=base64:" + base64.StdEncoding.EncodeToString(binary),
+		"trace-id=second=value",
+	})
+	require.NoError(t, err)
+	require.Len(t, headers, 3)
+	assert.Equal(t, "trace-id", headers[0].Key)
+	assert.Equal(t, []byte("first"), headers[0].Value)
+	assert.Equal(t, binary, headers[1].Value)
+	assert.Equal(t, []byte("second=value"), headers[2].Value)
+
+	for _, value := range []string{"missing-separator", "=missing-key", "binary=base64:not-base64"} {
+		_, err := parseMessageHeaders([]string{value})
+		require.Error(t, err)
+	}
+}
+
+func TestParseBulkMessageHeaders(t *testing.T) {
+	headers, err := parseBulkMessageHeaders([]interface{}{
+		map[string]interface{}{"key": "trace-id", "value": "Zmlyc3Q="},
+		map[string]interface{}{"key": "trace-id", "value": "c2Vjb25k"},
+	})
+	require.NoError(t, err)
+	require.Len(t, headers, 2)
+	assert.Equal(t, []byte("first"), headers[0].Value)
+	assert.Equal(t, []byte("second"), headers[1].Value)
+
+	for _, value := range []interface{}{
+		[]interface{}{map[string]interface{}{"key": "", "value": ""}},
+		[]interface{}{map[string]interface{}{"key": "trace-id", "value": "not-base64"}},
+		"not-an-array",
+		make(chan int),
+	} {
+		_, err := parseBulkMessageHeaders(value)
+		require.Error(t, err)
+	}
+}
+
+func TestFormatMessageHeaders(t *testing.T) {
+	assert.Equal(t, "[]", formatMessageHeaders(nil))
+	assert.Equal(t, "[trace-id=base64:AP8=, <nil>]", formatMessageHeaders([]*messagepb.Message_Metadata_Header{
+		{Key: "trace-id", Value: []byte{0x00, 0xff}},
+		nil,
+	}))
 }
 
 func TestNewMessageGetCommand(t *testing.T) {

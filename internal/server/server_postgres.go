@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/adrien19/chronoqueue/pkg/repository"
 	postgresrepository "github.com/adrien19/chronoqueue/pkg/repository/postgres"
@@ -25,9 +26,11 @@ func (s *Server) initializePostgresStorage(ctx context.Context) error {
 	}
 
 	storage, err := repository.NewPostgresStorage(ctx, &postgresrepository.Config{
-		Conn:       connConfig,
-		Logger:     s.logger,
-		KeyManager: s.encryptionKeyManager,
+		Conn:              connConfig,
+		Logger:            s.logger,
+		KeyManager:        s.encryptionKeyManager,
+		SchedulerInterval: time.Duration(s.config.SchedulerIntervalMs) * time.Millisecond,
+		ReclaimInterval:   time.Duration(s.config.ReclaimIntervalMs) * time.Millisecond,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create Postgres repository: %w", err)

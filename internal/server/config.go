@@ -272,6 +272,13 @@ func (c *Config) Validate() error {
 	if c.HTTPReadHeaderTimeout <= 0 || c.HTTPReadTimeout <= 0 || c.HTTPWriteTimeout <= 0 || c.HTTPIdleTimeout <= 0 {
 		return fmt.Errorf("HTTP gateway timeouts must be greater than 0")
 	}
+	if c.SchedulerIntervalMs <= 0 || c.ReclaimIntervalMs <= 0 {
+		return fmt.Errorf("scheduler and reclaim intervals must be greater than 0")
+	}
+	const maxServiceIntervalMilliseconds = int64(time.Duration(1<<63-1) / time.Millisecond)
+	if int64(c.SchedulerIntervalMs) > maxServiceIntervalMilliseconds || int64(c.ReclaimIntervalMs) > maxServiceIntervalMilliseconds {
+		return fmt.Errorf("scheduler and reclaim intervals must not exceed %d milliseconds", maxServiceIntervalMilliseconds)
+	}
 
 	// Validate storage configuration
 	if c.StorageType != "sqlite" && c.StorageType != "postgres" {

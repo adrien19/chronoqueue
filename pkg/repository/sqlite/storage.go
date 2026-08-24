@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/pkg/log"
@@ -17,9 +18,11 @@ type Storage struct {
 
 // Config holds SQLite storage configuration
 type Config struct {
-	Path       string
-	Logger     *log.Logger
-	KeyManager *keymanager.EncryptionKeyManager
+	Path              string
+	Logger            *log.Logger
+	KeyManager        *keymanager.EncryptionKeyManager
+	SchedulerInterval time.Duration
+	ReclaimInterval   time.Duration
 }
 
 // NewStorage creates a new SQLite storage instance

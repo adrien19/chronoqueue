@@ -355,8 +355,11 @@ func (s *Server) startHTTPGateway(ctx context.Context) error {
 	// Mount the gRPC-Gateway at the root
 	httpMux.Handle("/", gatewayHandler)
 
-	// Add health check endpoint
-	httpMux.Handle("/health", gateway.HealthCheckHandler())
+	// Keep /health as a readiness alias for existing deployments.
+	readinessHandler := gateway.ReadinessHandler(s.database.Ping)
+	httpMux.Handle("/health", readinessHandler)
+	httpMux.Handle("/ready", readinessHandler)
+	httpMux.Handle("/live", gateway.LivenessHandler())
 
 	// Add metrics endpoint
 	httpMux.Handle("/metrics", metricsHTTPHandler(s.config))

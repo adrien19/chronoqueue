@@ -78,6 +78,10 @@ func TestCalendarServiceProcessesDueSchedule(t *testing.T) {
 	schedule := &schedulepb.Schedule{
 		ScheduleId: "s1",
 		Metadata: &schedulepb.Schedule_Metadata{
+			Headers: []*messagepb.Message_Metadata_Header{
+				{Key: "trace-id", Value: []byte{0x00, 0xff}},
+				{Key: "trace-id", Value: []byte("second")},
+			},
 			State:          schedulepb.Schedule_Metadata_SCHEDULED,
 			QueueName:      "q1",
 			NextRun:        timestamppb.New(now),
@@ -96,6 +100,16 @@ func TestCalendarServiceProcessesDueSchedule(t *testing.T) {
 	var count int
 	require.NoError(t, storage.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM cq_messages WHERE queue_name = ?", "q1").Scan(&count))
 	require.Equal(t, 1, count)
+	var messageBytes []byte
+	require.NoError(t, storage.DB.QueryRowContext(ctx, "SELECT metadata_pb FROM cq_messages WHERE queue_name = ?", "q1").Scan(&messageBytes))
+	createdMessage, err := storage.Serializer.UnmarshalMessage(messageBytes)
+	require.NoError(t, err)
+	headers := createdMessage.GetMetadata().GetHeaders()
+	require.Len(t, headers, 2)
+	require.Equal(t, "trace-id", headers[0].GetKey())
+	require.Equal(t, []byte{0x00, 0xff}, headers[0].GetValue())
+	require.Equal(t, "trace-id", headers[1].GetKey())
+	require.Equal(t, []byte("second"), headers[1].GetValue())
 
 	updated, err := storage.GetSchedule(ctx, "s1")
 	require.NoError(t, err)

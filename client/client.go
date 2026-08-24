@@ -47,6 +47,7 @@ type (
 	}
 	MessageOptions struct {
 		Payload            Payload            `json:"payload,omitempty"`
+		Headers            []MessageHeader    `json:"headers,omitempty"`
 		AttemptsLeft       int32              `json:"attemptsLeft,omitempty"`
 		MaxAttempts        int32              `json:"maxAttempts,omitempty"`
 		ScheduledTime      *time.Time         `json:"scheduledTime,omitempty"`
@@ -56,6 +57,11 @@ type (
 		InvisibilityExpiry int64              `json:"invisibilityExpiry,omitempty"`
 		Priority           int64              `json:"Priority,omitempty"`
 		LeasePolicy        LeasePolicyOptions `json:"leasePolicy,omitempty"`
+	}
+	// MessageHeader is an ordered binary message header. Duplicate keys are allowed.
+	MessageHeader struct {
+		Key   string `json:"key"`
+		Value []byte `json:"value"`
 	}
 	// MessageWithID represents a message with its ID for bulk operations
 	MessageWithID struct {
@@ -75,6 +81,7 @@ type (
 	}
 	ScheduleOptions struct {
 		Payload          Payload                       `json:"payload,omitempty"`
+		Headers          []MessageHeader               `json:"headers,omitempty"`
 		State            State                         `json:"state,omitempty"`
 		CronSchedule     string                        `json:"cronSchedule,omitempty"`
 		CalendarSchedule *schedule_pb.CalendarSchedule `json:"calendarSchedule,omitempty"` // New: for calendar-based scheduling
@@ -519,6 +526,7 @@ func (client *ChronoQueueClient) PostMessage(ctx context.Context, queue string, 
 	}
 
 	metadata := &message_pb.Message_Metadata{
+		Headers: buildMessageHeaders(messageOptions.Headers),
 		Payload: &common_pb.Payload{
 			Metadata:      messageOptions.Payload.Metadata,
 			Data:          messageOptions.Payload.Data,
@@ -594,6 +602,7 @@ func (client *ChronoQueueClient) PostMessagesBulk(ctx context.Context, queue str
 		}
 
 		metadata := &message_pb.Message_Metadata{
+			Headers: buildMessageHeaders(msg.Options.Headers),
 			Payload: &common_pb.Payload{
 				Metadata:      msg.Options.Payload.Metadata,
 				Data:          msg.Options.Payload.Data,
@@ -632,6 +641,21 @@ func (client *ChronoQueueClient) PostMessagesBulk(ctx context.Context, queue str
 	}
 
 	return res, nil
+}
+
+func buildMessageHeaders(headers []MessageHeader) []*message_pb.Message_Metadata_Header {
+	if len(headers) == 0 {
+		return nil
+	}
+
+	protoHeaders := make([]*message_pb.Message_Metadata_Header, len(headers))
+	for i, header := range headers {
+		protoHeaders[i] = &message_pb.Message_Metadata_Header{
+			Key:   header.Key,
+			Value: append([]byte(nil), header.Value...),
+		}
+	}
+	return protoHeaders
 }
 
 func (client *ChronoQueueClient) manageHeartbeats(ctx context.Context, queueName string, messageId string, attemptID string, workerID string) {
@@ -981,6 +1005,7 @@ func (client *ChronoQueueClient) CreateSchedule(ctx context.Context, scheduleId 
 
 	// Prepare schedule metadata
 	metadata := &schedule_pb.Schedule_Metadata{
+		Headers: buildMessageHeaders(scheduleOptions.Headers),
 		Payload: &common_pb.Payload{
 			Metadata: scheduleOptions.Payload.Metadata,
 			Data:     scheduleOptions.Payload.Data,

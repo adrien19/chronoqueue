@@ -11,10 +11,49 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	repositorysql "github.com/adrien19/chronoqueue/pkg/repository/sql"
 )
+
+func TestMessageQueriesPreserveOrderedBinaryHeaders(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "headers.db"))
+	queueName := "headers"
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
+	message := reclaimTestMessage("message", 2, 2)
+	message.Metadata.Headers = []*messagepb.Message_Metadata_Header{
+		{Key: "trace-id", Value: []byte{0x00, 0xff}},
+		{Key: "trace-id", Value: []byte("second")},
+	}
+	require.NoError(t, storage.EnqueueMessage(ctx, queueName, message))
+
+	peeked, err := storage.PeekMessagesWithPriorityRange(ctx, queueName, 1, nil)
+	require.NoError(t, err)
+	require.Len(t, peeked, 1)
+	requireHeadersEqual(t, message.Metadata.Headers, peeked[0].GetMetadata().GetHeaders())
+
+	claimed, err := storage.ClaimMessageWithLeaseDuration(ctx, queueName, "worker", "attempt", "", time.Second)
+	require.NoError(t, err)
+	requireHeadersEqual(t, message.Metadata.Headers, claimed.GetMetadata().GetHeaders())
+
+	_, err = storage.DB.ExecContext(ctx, `UPDATE cq_messages SET state = ? WHERE queue_name = ? AND message_id = ?`, messagepb.Message_Metadata_ERRORED, queueName, message.GetMessageId())
+	require.NoError(t, err)
+	dlqMessages, err := storage.GetDLQMessages(ctx, queueName, 1)
+	require.NoError(t, err)
+	require.Len(t, dlqMessages, 1)
+	requireHeadersEqual(t, message.Metadata.Headers, dlqMessages[0].GetMetadata().GetHeaders())
+}
+
+func requireHeadersEqual(t *testing.T, expected, actual []*messagepb.Message_Metadata_Header) {
+	t.Helper()
+	require.Len(t, actual, len(expected))
+	for i := range expected {
+		require.Equal(t, expected[i].GetKey(), actual[i].GetKey())
+		require.Equal(t, expected[i].GetValue(), actual[i].GetValue())
+	}
+}
 
 func TestClaimMessage_UsesRequestedLeaseDuration(t *testing.T) {
 	ctx := context.Background()

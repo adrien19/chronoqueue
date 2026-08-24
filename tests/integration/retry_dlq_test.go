@@ -3,7 +3,7 @@ package integration
 // Package integration provides retry system and DLQ tests for ChronoQueue.
 //
 // These tests validate:
-// - Message retry with exponential backoff
+// - Immediate message retry
 // - Maximum retry attempts
 // - Dead Letter Queue (DLQ) operations
 // - Message requeue from DLQ
@@ -29,13 +29,12 @@ import (
 	"github.com/adrien19/chronoqueue/tests/helpers"
 )
 
-// TestRetrySystem_ExponentialBackoff validates retry with exponential backoff
+// TestRetrySystem_ImmediateRetry validates that a NACK makes a retriable message immediately claimable.
 //
 // Test Scenario: TC-R-002 from TESTING_GUIDE.md
 // Data: Message that fails multiple times
-// Expected: Retry delays increase exponentially
-func TestRetrySystem_ExponentialBackoff(t *testing.T) {
-	// Skip in short mode due to timing requirements
+// Expected: The next attempt is available without a configured backoff delay.
+func TestRetrySystem_ImmediateRetry(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping retry system test in short mode")
 	}
@@ -47,7 +46,7 @@ func TestRetrySystem_ExponentialBackoff(t *testing.T) {
 	defer func() { _ = conn.Close() }()
 	client := queueservice_pb.NewQueueServiceClient(conn)
 
-	queueName := helpers.GenerateUniqueQueueName(t, "test-retry-backoff")
+	queueName := helpers.GenerateUniqueQueueName(t, "test-immediate-retry")
 
 	// Create queue with short retry settings for testing
 	_, err := client.CreateQueue(ctx, &queueservice_pb.CreateQueueRequest{
@@ -64,7 +63,7 @@ func TestRetrySystem_ExponentialBackoff(t *testing.T) {
 	// Post message
 	msgID := helpers.GenerateUniqueMessageID(t)
 	payload := &common_pb.Payload{
-		Data:        createStruct(t, map[string]interface{}{"test": "exponential_backoff"}),
+		Data:        createStruct(t, map[string]interface{}{"test": "immediate_retry"}),
 		ContentType: "application/json",
 	}
 
@@ -86,37 +85,27 @@ func TestRetrySystem_ExponentialBackoff(t *testing.T) {
 	// Wait for background worker to process message state transition (INVISIBLE -> PENDING)
 	helpers.WaitForMessageTransition(t)
 
-	// Act - Fail message multiple times and track timing
-	var retryTimes []time.Time
-	for attempt := 0; attempt < 3; attempt++ {
-		// Get message
-		getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
-			QueueName:     queueName,
-			LeaseDuration: durationpb.New(5 * time.Second),
-		})
+	first, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{QueueName: queueName})
+	require.NoError(t, err)
+	require.NotNil(t, first.GetMessage())
+	firstWorkerID := first.GetWorkerId()
+	firstAttemptID := first.GetAttemptId()
 
-		if err != nil || getResp.Message == nil {
-			// Message might still be invisible
-			time.Sleep(2 * time.Second)
-			continue
-		}
+	_, err = client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
+		QueueName: queueName,
+		MessageId: msgID,
+		State:     message_pb.Message_Metadata_ERRORED,
+		WorkerId:  &firstWorkerID,
+		AttemptId: &firstAttemptID,
+	})
+	require.NoError(t, err)
 
-		retryTimes = append(retryTimes, time.Now())
-		t.Logf("Attempt %d at %s, attempts left: %d",
-			attempt+1, retryTimes[len(retryTimes)-1], getResp.Message.Metadata.AttemptsLeft)
-
-		// Fail the message by letting lease expire
-		time.Sleep(6 * time.Second) // Let lease expire
-	}
-
-	// Assert - Verify exponential backoff (each retry takes longer than previous)
-	if len(retryTimes) >= 2 {
-		t.Logf("Retry timing: %v attempts recorded", len(retryTimes))
-		for i := 1; i < len(retryTimes); i++ {
-			delay := retryTimes[i].Sub(retryTimes[i-1])
-			t.Logf("Delay between attempt %d and %d: %v", i, i+1, delay)
-		}
-	}
+	retried, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{QueueName: queueName})
+	require.NoError(t, err)
+	require.NotNil(t, retried.GetMessage())
+	assert.Equal(t, msgID, retried.Message.GetMessageId())
+	assert.NotEqual(t, first.GetAttemptId(), retried.GetAttemptId())
+	assert.Equal(t, first.Message.Metadata.GetAttemptsLeft()-1, retried.Message.Metadata.GetAttemptsLeft())
 }
 
 // TestRetrySystem_MaxRetriesReached validates DLQ after max retries

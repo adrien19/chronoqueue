@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -18,9 +19,11 @@ import (
 func (s *Server) initializeSQLiteStorage(ctx context.Context) error {
 	// Create repository using SQLite backend
 	storage, err := repository.NewSQLiteStorage(ctx, &sqliterepository.Config{
-		Path:       s.config.SQLiteDBPath,
-		Logger:     s.logger,
-		KeyManager: s.encryptionKeyManager,
+		Path:              s.config.SQLiteDBPath,
+		Logger:            s.logger,
+		KeyManager:        s.encryptionKeyManager,
+		SchedulerInterval: time.Duration(s.config.SchedulerIntervalMs) * time.Millisecond,
+		ReclaimInterval:   time.Duration(s.config.ReclaimIntervalMs) * time.Millisecond,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create SQLite repository: %w", err)

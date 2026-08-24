@@ -127,3 +127,8 @@ func (b *BaseSQL) ApplyConfig(ctx context.Context, cfg *Config) error {
 func (b *BaseSQL) Close() error {
 	return b.DB.Close()
 }
+
+// Ping verifies that the database connection is usable.
+func (b *BaseSQL) Ping(ctx context.Context) error {
+	return b.DB.PingContext(ctx)
+}
