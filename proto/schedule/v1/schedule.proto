@@ -158,6 +158,10 @@ message Schedule {
         // Populated by PreviewSchedule API or ValidateSchedule API.
         // Shows next N execution times to verify schedule behaves as expected.
     repeated google.protobuf.Timestamp next_runs = 18;
+
+        // headers: Optional ordered headers copied to every message created by
+        // this schedule. Values are opaque bytes and duplicate keys are allowed.
+    repeated chronoqueue.api.message.v1.Message.Metadata.Header headers = 19;
   }
 
     // metadata: Schedule configuration and execution state.

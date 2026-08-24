@@ -75,6 +75,10 @@ func TestCronProcessorExecutesSchedule(t *testing.T) {
 	schedule := &schedulepb.Schedule{
 		ScheduleId: "cron-s1",
 		Metadata: &schedulepb.Schedule_Metadata{
+			Headers: []*messagepb.Message_Metadata_Header{
+				{Key: "trace-id", Value: []byte{0x00, 0xff}},
+				{Key: "trace-id", Value: []byte("second")},
+			},
 			State:          schedulepb.Schedule_Metadata_SCHEDULED,
 			QueueName:      queue.Name,
 			NextRun:        timestamppb.New(baseTime),
@@ -105,6 +109,10 @@ func TestCronProcessorExecutesSchedule(t *testing.T) {
 	msg, err := storage.Serializer.UnmarshalMessage(metadataBytes)
 	require.NoError(t, err)
 	require.True(t, proto.Equal(schedule.Metadata.GetPayload(), msg.GetMetadata().GetPayload()), "payloads should be equal")
+	require.True(t, proto.Equal(schedule.Metadata.GetHeaders()[0], msg.GetMetadata().GetHeaders()[0]))
+	require.True(t, proto.Equal(schedule.Metadata.GetHeaders()[1], msg.GetMetadata().GetHeaders()[1]))
+	require.True(t, proto.Equal(schedule.Metadata.GetHeaders()[0], msg.GetMetadata().GetHeaders()[0]))
+	require.True(t, proto.Equal(schedule.Metadata.GetHeaders()[1], msg.GetMetadata().GetHeaders()[1]))
 
 	var executionCount int64
 	var nextRunMs, lastRunMs int64

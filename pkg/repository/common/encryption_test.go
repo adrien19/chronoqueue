@@ -25,6 +25,10 @@ func TestEncryptDecryptMessagePayload_RoundTrip(t *testing.T) {
 	original := &messagepb.Message{
 		MessageId: "msg-enc-1",
 		Metadata: &messagepb.Message_Metadata{
+			Headers: []*messagepb.Message_Metadata_Header{
+				{Key: "trace-id", Value: []byte{0x00, 0xff}},
+				{Key: "trace-id", Value: []byte("second")},
+			},
 			Payload:      buildTestPayload(t, "user-123", "demo-task"),
 			State:        messagepb.Message_Metadata_PENDING,
 			AttemptsLeft: 1,
@@ -38,6 +42,7 @@ func TestEncryptDecryptMessagePayload_RoundTrip(t *testing.T) {
 
 	encrypted := proto.Clone(original).(*messagepb.Message)
 	require.NoError(t, EncryptMessagePayload(encrypted, keyManager))
+	assert.Equal(t, original.Metadata.Headers, encrypted.Metadata.Headers)
 
 	// Payload should be replaced by encrypted metadata only
 	assert.Nil(t, encrypted.Metadata.Payload.GetData())
@@ -46,6 +51,7 @@ func TestEncryptDecryptMessagePayload_RoundTrip(t *testing.T) {
 	assert.Contains(t, encrypted.Metadata.Payload.GetMetadata(), "encryptionKeyId")
 
 	require.NoError(t, DecryptMessagePayload(encrypted, keyManager))
+	assert.Equal(t, original.Metadata.Headers, encrypted.Metadata.Headers)
 
 	decryptedPayload := encrypted.GetMetadata().GetPayload()
 	require.NotNil(t, decryptedPayload)

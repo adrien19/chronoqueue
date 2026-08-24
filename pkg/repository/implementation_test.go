@@ -306,6 +306,32 @@ func TestCreateSchedule_ValidatesCronExpression(t *testing.T) {
 	require.Len(t, backend.schedules, 1)
 }
 
+func TestCreateSchedule_ValidatesHeaders(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend}
+	request := func(id string, headers ...*messagepb.Message_Metadata_Header) *queueservicepb.CreateScheduleRequest {
+		return &queueservicepb.CreateScheduleRequest{Schedule: &schedulepb.Schedule{
+			ScheduleId: id,
+			Metadata: &schedulepb.Schedule_Metadata{
+				QueueName:      "jobs",
+				Headers:        headers,
+				ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "*/5 * * * *"},
+			},
+		}}
+	}
+
+	_, err := impl.CreateSchedule(context.Background(), request("invalid", &messagepb.Message_Metadata_Header{Key: "Invalid_Key"}))
+	require.ErrorContains(t, err, "metadata.headers[0].key")
+	require.Empty(t, backend.schedules)
+
+	_, err = impl.CreateSchedule(context.Background(), request("valid",
+		&messagepb.Message_Metadata_Header{Key: "trace-id", Value: []byte{0x00, 0xff}},
+		&messagepb.Message_Metadata_Header{Key: "trace-id", Value: []byte("second")},
+	))
+	require.NoError(t, err)
+	require.Len(t, backend.schedules, 1)
+}
+
 func TestCreateQueue_RequiresExclusiveKey(t *testing.T) {
 	backend := &stubBackend{}
 	impl := &implementation{backend: backend}

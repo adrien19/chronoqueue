@@ -12,14 +12,15 @@
 package message
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	v1 "github.com/adrien19/chronoqueue/api/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -248,6 +249,10 @@ type Message_Metadata struct {
 	// Managed by ChronoQueue based on priority score. Read-only from client perspective.
 	// Used internally for routing to high/medium/low priority streams.
 	PriorityLevel int32 `protobuf:"varint,21,opt,name=priority_level,json=priorityLevel,proto3" json:"priority_level,omitempty"`
+	// headers: Optional ordered application headers delivered with the message.
+	// Headers count toward the total message size and have separate per-value
+	// and aggregate limits. They are stored outside payload encryption.
+	Headers       []*Message_Metadata_Header `protobuf:"bytes,22,rep,name=headers,proto3" json:"headers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -366,6 +371,13 @@ func (x *Message_Metadata) GetPriorityLevel() int32 {
 	return 0
 }
 
+func (x *Message_Metadata) GetHeaders() []*Message_Metadata_Header {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
 // -----------------------------------------------------------------------
 // Current attempt runtime
 // -----------------------------------------------------------------------
@@ -477,16 +489,71 @@ func (x *Message_Metadata_AttemptRuntime) GetHeartbeatExpiry() int64 {
 	return 0
 }
 
+// Header is an ordered message header. Header keys may
+// repeat, and values are opaque bytes. Headers are optional and are not
+// part of the business payload.
+type Message_Metadata_Header struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value         []byte                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Message_Metadata_Header) Reset() {
+	*x = Message_Metadata_Header{}
+	mi := &file_proto_message_v1_message_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Message_Metadata_Header) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Message_Metadata_Header) ProtoMessage() {}
+
+func (x *Message_Metadata_Header) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_v1_message_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Message_Metadata_Header.ProtoReflect.Descriptor instead.
+func (*Message_Metadata_Header) Descriptor() ([]byte, []int) {
+	return file_proto_message_v1_message_proto_rawDescGZIP(), []int{0, 0, 1}
+}
+
+func (x *Message_Metadata_Header) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *Message_Metadata_Header) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
 var File_proto_message_v1_message_proto protoreflect.FileDescriptor
 
 const file_proto_message_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"\x1eproto/message/v1/message.proto\x12\x1achronoqueue.api.message.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cproto/common/v1/common.proto\"\xd7\n" +
-	"\n" +
+	"\x1eproto/message/v1/message.proto\x12\x1achronoqueue.api.message.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cproto/common/v1/common.proto\"\xd8\v\n" +
 	"\aMessage\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\x12H\n" +
-	"\bmetadata\x18\x03 \x01(\v2,.chronoqueue.api.message.v1.Message.MetadataR\bmetadata\x1a\xe2\t\n" +
+	"\bmetadata\x18\x03 \x01(\v2,.chronoqueue.api.message.v1.Message.MetadataR\bmetadata\x1a\xe3\n" +
+	"\n" +
 	"\bMetadata\x12<\n" +
 	"\apayload\x18\x01 \x01(\v2\".chronoqueue.api.common.v1.PayloadR\apayload\x12H\n" +
 	"\x05state\x18\x02 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\x12#\n" +
@@ -500,7 +567,8 @@ const file_proto_message_v1_message_proto_rawDesc = "" +
 	"\flease_policy\x18\v \x01(\v2&.chronoqueue.api.common.v1.LeasePolicyR\vleasePolicy\x12d\n" +
 	"\x0fcurrent_attempt\x18\f \x01(\v2;.chronoqueue.api.message.v1.Message.Metadata.AttemptRuntimeR\x0ecurrentAttempt\x12A\n" +
 	"\x0escheduled_time\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\rscheduledTime\x12%\n" +
-	"\x0epriority_level\x18\x15 \x01(\x05R\rpriorityLevel\x1a\xa5\x03\n" +
+	"\x0epriority_level\x18\x15 \x01(\x05R\rpriorityLevel\x12M\n" +
+	"\aheaders\x18\x16 \x03(\v23.chronoqueue.api.message.v1.Message.Metadata.HeaderR\aheaders\x1a\xa5\x03\n" +
 	"\x0eAttemptRuntime\x12\x1d\n" +
 	"\n" +
 	"attempt_id\x18\x01 \x01(\tR\tattemptId\x12\x1b\n" +
@@ -510,7 +578,10 @@ const file_proto_message_v1_message_proto_rawDesc = "" +
 	"\x14lease_extension_used\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x12leaseExtensionUsed\x12.\n" +
 	"\x13lease_renewal_count\x18\x06 \x01(\x05R\x11leaseRenewalCount\x12F\n" +
 	"\x11last_heartbeat_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0flastHeartbeatAt\x12)\n" +
-	"\x10heartbeat_expiry\x18\b \x01(\x03R\x0fheartbeatExpiry\"Z\n" +
+	"\x10heartbeat_expiry\x18\b \x01(\x03R\x0fheartbeatExpiry\x1a0\n" +
+	"\x06Header\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value\"Z\n" +
 	"\x05State\x12\r\n" +
 	"\tINVISIBLE\x10\x00\x12\v\n" +
 	"\aPENDING\x10\x01\x12\v\n" +
@@ -532,33 +603,35 @@ func file_proto_message_v1_message_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_message_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_message_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_proto_message_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_proto_message_v1_message_proto_goTypes = []any{
 	(Message_Metadata_State)(0),             // 0: chronoqueue.api.message.v1.Message.Metadata.State
 	(*Message)(nil),                         // 1: chronoqueue.api.message.v1.Message
 	(*Message_Metadata)(nil),                // 2: chronoqueue.api.message.v1.Message.Metadata
 	(*Message_Metadata_AttemptRuntime)(nil), // 3: chronoqueue.api.message.v1.Message.Metadata.AttemptRuntime
-	(*v1.Payload)(nil),                      // 4: chronoqueue.api.common.v1.Payload
-	(*durationpb.Duration)(nil),             // 5: google.protobuf.Duration
-	(*v1.LeasePolicy)(nil),                  // 6: chronoqueue.api.common.v1.LeasePolicy
-	(*timestamppb.Timestamp)(nil),           // 7: google.protobuf.Timestamp
+	(*Message_Metadata_Header)(nil),         // 4: chronoqueue.api.message.v1.Message.Metadata.Header
+	(*v1.Payload)(nil),                      // 5: chronoqueue.api.common.v1.Payload
+	(*durationpb.Duration)(nil),             // 6: google.protobuf.Duration
+	(*v1.LeasePolicy)(nil),                  // 7: chronoqueue.api.common.v1.LeasePolicy
+	(*timestamppb.Timestamp)(nil),           // 8: google.protobuf.Timestamp
 }
 var file_proto_message_v1_message_proto_depIdxs = []int32{
 	2,  // 0: chronoqueue.api.message.v1.Message.metadata:type_name -> chronoqueue.api.message.v1.Message.Metadata
-	4,  // 1: chronoqueue.api.message.v1.Message.Metadata.payload:type_name -> chronoqueue.api.common.v1.Payload
+	5,  // 1: chronoqueue.api.message.v1.Message.Metadata.payload:type_name -> chronoqueue.api.common.v1.Payload
 	0,  // 2: chronoqueue.api.message.v1.Message.Metadata.state:type_name -> chronoqueue.api.message.v1.Message.Metadata.State
-	5,  // 3: chronoqueue.api.message.v1.Message.Metadata.lease_duration:type_name -> google.protobuf.Duration
-	6,  // 4: chronoqueue.api.message.v1.Message.Metadata.lease_policy:type_name -> chronoqueue.api.common.v1.LeasePolicy
+	6,  // 3: chronoqueue.api.message.v1.Message.Metadata.lease_duration:type_name -> google.protobuf.Duration
+	7,  // 4: chronoqueue.api.message.v1.Message.Metadata.lease_policy:type_name -> chronoqueue.api.common.v1.LeasePolicy
 	3,  // 5: chronoqueue.api.message.v1.Message.Metadata.current_attempt:type_name -> chronoqueue.api.message.v1.Message.Metadata.AttemptRuntime
-	7,  // 6: chronoqueue.api.message.v1.Message.Metadata.scheduled_time:type_name -> google.protobuf.Timestamp
-	7,  // 7: chronoqueue.api.message.v1.Message.Metadata.AttemptRuntime.lease_started_at:type_name -> google.protobuf.Timestamp
-	5,  // 8: chronoqueue.api.message.v1.Message.Metadata.AttemptRuntime.lease_extension_used:type_name -> google.protobuf.Duration
-	7,  // 9: chronoqueue.api.message.v1.Message.Metadata.AttemptRuntime.last_heartbeat_at:type_name -> google.protobuf.Timestamp
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	8,  // 6: chronoqueue.api.message.v1.Message.Metadata.scheduled_time:type_name -> google.protobuf.Timestamp
+	4,  // 7: chronoqueue.api.message.v1.Message.Metadata.headers:type_name -> chronoqueue.api.message.v1.Message.Metadata.Header
+	8,  // 8: chronoqueue.api.message.v1.Message.Metadata.AttemptRuntime.lease_started_at:type_name -> google.protobuf.Timestamp
+	6,  // 9: chronoqueue.api.message.v1.Message.Metadata.AttemptRuntime.lease_extension_used:type_name -> google.protobuf.Duration
+	8,  // 10: chronoqueue.api.message.v1.Message.Metadata.AttemptRuntime.last_heartbeat_at:type_name -> google.protobuf.Timestamp
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_proto_message_v1_message_proto_init() }
@@ -572,7 +645,7 @@ func file_proto_message_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_message_v1_message_proto_rawDesc), len(file_proto_message_v1_message_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

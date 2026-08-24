@@ -78,6 +78,14 @@ func newScheduleCreateCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			headerValues, err := cmd.Flags().GetStringArray("header")
+			if err != nil {
+				return fmt.Errorf("get header flags: %w", err)
+			}
+			headers, err := parseMessageHeaders(headerValues)
+			if err != nil {
+				return err
+			}
 
 			// Convert string data to structpb.Struct
 			var dataStruct *structpb.Struct
@@ -120,6 +128,7 @@ func newScheduleCreateCommand() *cobra.Command {
 
 			// Use the client to create the schedule
 			scheduleOpts := client.ScheduleOptions{
+				Headers:       headers,
 				QueueName:     queueName,
 				MaxMessages:   maxMessages,
 				LeaseDuration: leaseDuration,
@@ -142,7 +151,10 @@ func newScheduleCreateCommand() *cobra.Command {
 			}
 
 			// Parse additional flags
-			scheduleID, _ := cmd.Flags().GetString("id")
+			scheduleID, err := cmd.Flags().GetString("id")
+			if err != nil {
+				return fmt.Errorf("get schedule id flag: %w", err)
+			}
 			if scheduleID == "" {
 				scheduleID = fmt.Sprintf("schedule-%d", time.Now().Unix())
 			}
@@ -165,6 +177,7 @@ func newScheduleCreateCommand() *cobra.Command {
 	cmd.Flags().StringP("metadata", "d", "", "Message metadata as JSON")
 	cmd.Flags().Int64P("max-messages", "m", 1, "Maximum number of messages to send per schedule run")
 	cmd.Flags().StringP("lease-duration", "l", "30s", "Lease duration for the scheduled messages in seconds")
+	cmd.Flags().StringArray("header", nil, "Ordered message header as key=value or key=base64:encoded-value (repeatable)")
 
 	return cmd
 }

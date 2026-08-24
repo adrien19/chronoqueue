@@ -1015,6 +1015,12 @@ func (impl *implementation) CreateSchedule(ctx context.Context, request *queuese
 			return nil, domainerror.New(domainerror.InvalidArgument, "schedule lease duration must be greater than zero", err)
 		}
 	}
+	headerValidation := validator.NewHeadersValidator().Validate(ctx, &messagepb.Message{
+		Metadata: &messagepb.Message_Metadata{Headers: meta.GetHeaders()},
+	})
+	if headerValidation.HasErrors() {
+		return nil, domainerror.New(domainerror.InvalidArgument, headerValidation.Errors[0].Error(), nil)
+	}
 	switch config := meta.GetScheduleConfig().(type) {
 	case *schedulepb.Schedule_Metadata_CronSchedule:
 		if _, err := cron.ParseStandard(config.CronSchedule); err != nil {

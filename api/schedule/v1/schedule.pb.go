@@ -2005,7 +2005,10 @@ type Schedule_Metadata struct {
 	// next_runs: Precomputed upcoming execution times (for preview/validation).
 	// Populated by PreviewSchedule API or ValidateSchedule API.
 	// Shows next N execution times to verify schedule behaves as expected.
-	NextRuns      []*timestamppb.Timestamp `protobuf:"bytes,18,rep,name=next_runs,json=nextRuns,proto3" json:"next_runs,omitempty"`
+	NextRuns []*timestamppb.Timestamp `protobuf:"bytes,18,rep,name=next_runs,json=nextRuns,proto3" json:"next_runs,omitempty"`
+	// headers: Optional ordered headers copied to every message created by
+	// this schedule. Values are opaque bytes and duplicate keys are allowed.
+	Headers       []*v1.Message_Metadata_Header `protobuf:"bytes,19,rep,name=headers,proto3" json:"headers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2170,6 +2173,13 @@ func (x *Schedule_Metadata) GetNextRuns() []*timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Schedule_Metadata) GetHeaders() []*v1.Message_Metadata_Header {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
 type isSchedule_Metadata_ScheduleConfig interface {
 	isSchedule_Metadata_ScheduleConfig()
 }
@@ -2207,11 +2217,11 @@ var File_proto_schedule_v1_schedule_proto protoreflect.FileDescriptor
 
 const file_proto_schedule_v1_schedule_proto_rawDesc = "" +
 	"\n" +
-	" proto/schedule/v1/schedule.proto\x12\x1bchronoqueue.api.schedule.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cproto/common/v1/common.proto\x1a\x1eproto/message/v1/message.proto\"\xc5\b\n" +
+	" proto/schedule/v1/schedule.proto\x12\x1bchronoqueue.api.schedule.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cproto/common/v1/common.proto\x1a\x1eproto/message/v1/message.proto\"\x94\t\n" +
 	"\bSchedule\x12\x1f\n" +
 	"\vschedule_id\x18\x01 \x01(\tR\n" +
 	"scheduleId\x12J\n" +
-	"\bmetadata\x18\x02 \x01(\v2..chronoqueue.api.schedule.v1.Schedule.MetadataR\bmetadata\x1a\xcb\a\n" +
+	"\bmetadata\x18\x02 \x01(\v2..chronoqueue.api.schedule.v1.Schedule.MetadataR\bmetadata\x1a\x9a\b\n" +
 	"\bMetadata\x12<\n" +
 	"\apayload\x18\x01 \x01(\v2\".chronoqueue.api.common.v1.PayloadR\apayload\x12J\n" +
 	"\x05state\x18\x02 \x01(\x0e24.chronoqueue.api.schedule.v1.Schedule.Metadata.StateR\x05state\x12%\n" +
@@ -2233,7 +2243,8 @@ const file_proto_schedule_v1_schedule_proto_rawDesc = "" +
 	"\fmax_messages\x18\x0e \x01(\x03R\vmaxMessages\x12@\n" +
 	"\x0elease_duration\x18\x0f \x01(\v2\x19.google.protobuf.DurationR\rleaseDuration\x12\x1a\n" +
 	"\btimezone\x18\x11 \x01(\tR\btimezone\x127\n" +
-	"\tnext_runs\x18\x12 \x03(\v2\x1a.google.protobuf.TimestampR\bnextRuns\"=\n" +
+	"\tnext_runs\x18\x12 \x03(\v2\x1a.google.protobuf.TimestampR\bnextRuns\x12M\n" +
+	"\aheaders\x18\x13 \x03(\v23.chronoqueue.api.message.v1.Message.Metadata.HeaderR\aheaders\"=\n" +
 	"\x05State\x12\r\n" +
 	"\tSCHEDULED\x10\x00\x12\f\n" +
 	"\bCANCELED\x10\x01\x12\v\n" +
@@ -2418,6 +2429,7 @@ var file_proto_schedule_v1_schedule_proto_goTypes = []any{
 	(*timestamppb.Timestamp)(nil),        // 25: google.protobuf.Timestamp
 	(*v11.Payload)(nil),                  // 26: chronoqueue.api.common.v1.Payload
 	(*durationpb.Duration)(nil),          // 27: google.protobuf.Duration
+	(*v1.Message_Metadata_Header)(nil),   // 28: chronoqueue.api.message.v1.Message.Metadata.Header
 }
 var file_proto_schedule_v1_schedule_proto_depIdxs = []int32{
 	22, // 0: chronoqueue.api.schedule.v1.Schedule.metadata:type_name -> chronoqueue.api.schedule.v1.Schedule.Metadata
@@ -2462,11 +2474,12 @@ var file_proto_schedule_v1_schedule_proto_depIdxs = []int32{
 	25, // 39: chronoqueue.api.schedule.v1.Schedule.Metadata.updated_at:type_name -> google.protobuf.Timestamp
 	27, // 40: chronoqueue.api.schedule.v1.Schedule.Metadata.lease_duration:type_name -> google.protobuf.Duration
 	25, // 41: chronoqueue.api.schedule.v1.Schedule.Metadata.next_runs:type_name -> google.protobuf.Timestamp
-	42, // [42:42] is the sub-list for method output_type
-	42, // [42:42] is the sub-list for method input_type
-	42, // [42:42] is the sub-list for extension type_name
-	42, // [42:42] is the sub-list for extension extendee
-	0,  // [0:42] is the sub-list for field type_name
+	28, // 42: chronoqueue.api.schedule.v1.Schedule.Metadata.headers:type_name -> chronoqueue.api.message.v1.Message.Metadata.Header
+	43, // [43:43] is the sub-list for method output_type
+	43, // [43:43] is the sub-list for method input_type
+	43, // [43:43] is the sub-list for extension type_name
+	43, // [43:43] is the sub-list for extension extendee
+	0,  // [0:43] is the sub-list for field type_name
 }
 
 func init() { file_proto_schedule_v1_schedule_proto_init() }

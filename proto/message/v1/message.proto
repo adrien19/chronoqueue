@@ -173,6 +173,19 @@ message Message {
         // Managed by ChronoQueue based on priority score. Read-only from client perspective.
         // Used internally for routing to high/medium/low priority streams.
     int32 priority_level = 21;
+
+        // Header is an ordered message header. Header keys may
+        // repeat, and values are opaque bytes. Headers are optional and are not
+        // part of the business payload.
+    message Header {
+      string key   = 1;
+      bytes  value = 2;
+    }
+
+        // headers: Optional ordered application headers delivered with the message.
+        // Headers count toward the total message size and have separate per-value
+        // and aggregate limits. They are stored outside payload encryption.
+    repeated Header headers = 22;
   }
 
     // metadata: All message execution and lifecycle information.

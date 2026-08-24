@@ -2,9 +2,12 @@ package validator
 
 import (
 	"context"
+	"fmt"
 	"regexp"
+	"strings"
 
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	schema_pb "github.com/adrien19/chronoqueue/api/schema/v1"
 )
 
 const (
@@ -35,76 +38,52 @@ func NewHeadersValidator() Validator {
 }
 
 // Validate validates the message headers
-func (v *HeadersValidator) Validate(ctx context.Context, msg *message_pb.Message) *ValidationResult {
-	result := &ValidationResult{
-		Valid:  true,
-		Errors: []*ValidationError{},
+func (v *HeadersValidator) Validate(_ context.Context, msg *message_pb.Message) *ValidationResult {
+	result := NewValidationResult()
+	if msg == nil || msg.GetMetadata() == nil {
+		return result
 	}
 
-	// NOTE: Headers are not yet implemented in the Message protobuf definition
-	// This validator is prepared for future use when headers are added
-	// For now, it always returns valid
-
-	// TODO: Uncomment when headers field is added to Message_Metadata
-	/*
-		if msg.Metadata == nil {
-			return result // Headers are optional, no metadata is ok
+	totalSize := 0
+	for i, header := range msg.GetMetadata().GetHeaders() {
+		field := fmt.Sprintf("metadata.headers[%d]", i)
+		if header == nil {
+			result.AddError(NewValidationError(field, schema_pb.ErrorCode_REQUIRED_FIELD_MISSING, "Header is required"))
+			continue
 		}
 
-		headers := msg.Metadata.GetHeaders()
-		if len(headers) == 0 {
-			return result // No headers is valid
+		key := header.GetKey()
+		if !v.keyPattern.MatchString(key) {
+			result.AddError(NewValidationError(field+".key", schema_pb.ErrorCode_INVALID_FORMAT, "Header key must contain only lowercase letters, numbers, and hyphens"))
 		}
-
-		totalSize := 0
-
-		for key, value := range headers {
-			// Validate key format
-			if !v.keyPattern.MatchString(key) {
-				result.Valid = false
-				result.Errors = append(result.Errors, &ValidationError{
-					Field:   fmt.Sprintf("metadata.headers.%s", key),
-					Message: "Header key must contain only lowercase letters, numbers, and hyphens",
-				})
+		for _, prefix := range v.reservedPrefixes {
+			if strings.HasPrefix(key, prefix) {
+				result.AddError(
+					NewValidationError(field+".key", schema_pb.ErrorCode_INVALID_FORMAT, "Header key uses a reserved prefix").
+						WithDetail("reserved_prefix", prefix),
+				)
+				break
 			}
-
-			// Check for reserved prefixes
-			for _, prefix := range v.reservedPrefixes {
-				if strings.HasPrefix(key, prefix) {
-					result.Valid = false
-					result.Errors = append(result.Errors, &ValidationError{
-						Field:   fmt.Sprintf("metadata.headers.%s", key),
-						Message: fmt.Sprintf("Header key cannot start with reserved prefix: %s", prefix),
-					})
-					break
-				}
-			}
-
-			// Check value size
-			valueSize := len(value)
-			if valueSize > v.maxValueSize {
-				result.Valid = false
-				result.Errors = append(result.Errors, &ValidationError{
-					Field:   fmt.Sprintf("metadata.headers.%s", key),
-					Message: fmt.Sprintf("Header value size %d bytes exceeds maximum of %d bytes",
-						valueSize, v.maxValueSize),
-				})
-			}
-
-			// Accumulate total size (key + value)
-			totalSize += len(key) + valueSize
 		}
 
-		// Check total headers size
-		if totalSize > v.maxTotalSize {
-			result.Valid = false
-			result.Errors = append(result.Errors, &ValidationError{
-				Field:   "metadata.headers",
-				Message: fmt.Sprintf("Total headers size %d bytes exceeds maximum of %d bytes",
-					totalSize, v.maxTotalSize),
-			})
+		valueSize := len(header.GetValue())
+		if valueSize > v.maxValueSize {
+			result.AddError(
+				NewValidationError(field+".value", schema_pb.ErrorCode_PAYLOAD_SIZE_EXCEEDED, "Header value exceeds maximum size").
+					WithDetail("size", fmt.Sprintf("%d", valueSize)).
+					WithDetail("max_size", fmt.Sprintf("%d", v.maxValueSize)),
+			)
 		}
-	*/
+		totalSize += len(key) + valueSize
+	}
+
+	if totalSize > v.maxTotalSize {
+		result.AddError(
+			NewValidationError("metadata.headers", schema_pb.ErrorCode_PAYLOAD_SIZE_EXCEEDED, "Total headers size exceeds maximum").
+				WithDetail("size", fmt.Sprintf("%d", totalSize)).
+				WithDetail("max_size", fmt.Sprintf("%d", v.maxTotalSize)),
+		)
+	}
 
 	return result
 }

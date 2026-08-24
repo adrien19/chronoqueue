@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -59,6 +60,22 @@ type mockChronoQueueServer struct {
 	queueservice_pb.UnimplementedQueueServiceServer
 	lastAckAttemptID string
 	lastAckWorkerID  string
+}
+
+type capturingQueueServiceClient struct {
+	queueservice_pb.QueueServiceClient
+	bulkRequest     *queueservice_pb.PostMessagesBulkRequest
+	scheduleRequest *queueservice_pb.CreateScheduleRequest
+}
+
+func (c *capturingQueueServiceClient) PostMessagesBulk(_ context.Context, request *queueservice_pb.PostMessagesBulkRequest, _ ...grpc.CallOption) (*queueservice_pb.PostMessagesBulkResponse, error) {
+	c.bulkRequest = request
+	return &queueservice_pb.PostMessagesBulkResponse{SuccessfulCount: int32(len(request.GetMessages()))}, nil
+}
+
+func (c *capturingQueueServiceClient) CreateSchedule(_ context.Context, request *queueservice_pb.CreateScheduleRequest, _ ...grpc.CallOption) (*queueservice_pb.CreateScheduleResponse, error) {
+	c.scheduleRequest = request
+	return &queueservice_pb.CreateScheduleResponse{Success: true}, nil
 }
 
 func dialer() func(context.Context, string) (net.Conn, error) {
@@ -116,6 +133,12 @@ func (*mockChronoQueueServer) PostMessage(ctx context.Context, req *queueservice
 	}
 	if req.Message.GetMessageId() == "" {
 		return &queueservice_pb.PostMessageResponse{Success: false}, status.Errorf(codes.InvalidArgument, "cannot post message with no message ID %v", req.Message.GetMessageId())
+	}
+	if req.Message.GetMessageId() == "message-with-headers" {
+		headers := req.Message.GetMetadata().GetHeaders()
+		if len(headers) != 2 || headers[0].GetKey() != "trace-id" || !reflect.DeepEqual(headers[0].GetValue(), []byte{0x00, 0xff}) || headers[1].GetKey() != "trace-id" || !reflect.DeepEqual(headers[1].GetValue(), []byte("second")) {
+			return &queueservice_pb.PostMessageResponse{Success: false}, status.Error(codes.InvalidArgument, "message headers were not propagated")
+		}
 	}
 	return &queueservice_pb.PostMessageResponse{Success: true}, nil
 }
@@ -703,6 +726,23 @@ func TestChronoQueueClient_PostMessage(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "Successful Message Posting with Ordered Binary Headers",
+			args: args{
+				ctx:       context.Background(),
+				queue:     "validQueueName",
+				messageId: "message-with-headers",
+				messageOptions: MessageOptions{
+					LeaseDuration: "3s",
+					Headers: []MessageHeader{
+						{Key: "trace-id", Value: []byte{0x00, 0xff}},
+						{Key: "trace-id", Value: []byte("second")},
+					},
+				},
+			},
+			want:    &queueservice_pb.PostMessageResponse{Success: true},
+			wantErr: false,
+		},
+		{
 			name: "Failed Message Posting with Invalid Queue Name",
 			args: args{
 				ctx:       context.Background(),
@@ -763,6 +803,75 @@ func TestChronoQueueClient_PostMessage(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildMessageHeadersPreservesOrderDuplicatesAndCopiesValues(t *testing.T) {
+	value := []byte{0x00, 0xff}
+	headers := []MessageHeader{
+		{Key: "trace-id", Value: value},
+		{Key: "trace-id", Value: []byte("second")},
+	}
+
+	result := buildMessageHeaders(headers)
+	require.Len(t, result, 2)
+	require.Equal(t, "trace-id", result[0].GetKey())
+	require.Equal(t, []byte{0x00, 0xff}, result[0].GetValue())
+	require.Equal(t, "trace-id", result[1].GetKey())
+	require.Equal(t, []byte("second"), result[1].GetValue())
+
+	value[0] = 0x7f
+	require.Equal(t, []byte{0x00, 0xff}, result[0].GetValue())
+	require.Nil(t, buildMessageHeaders(nil))
+}
+
+func TestPostMessagesBulkPropagatesHeaders(t *testing.T) {
+	service := &capturingQueueServiceClient{}
+	chronoqueueClient := &ChronoQueueClient{
+		service: service,
+		opts:    ClientOptions{DefaultRPCTimeout: time.Second},
+	}
+	messages := []MessageWithID{
+		{
+			MessageID: "first",
+			Options: MessageOptions{
+				LeaseDuration: "3s",
+				Headers: []MessageHeader{
+					{Key: "trace-id", Value: []byte{0x00, 0xff}},
+					{Key: "trace-id", Value: []byte("second")},
+				},
+			},
+		},
+		{MessageID: "second", Options: MessageOptions{LeaseDuration: "3s"}},
+	}
+
+	_, err := chronoqueueClient.PostMessagesBulk(context.Background(), "queue", messages, queueservice_pb.PostMessagesBulkRequest_ALL_OR_NOTHING)
+	require.NoError(t, err)
+	require.NotNil(t, service.bulkRequest)
+	require.Len(t, service.bulkRequest.GetMessages(), 2)
+	require.Len(t, service.bulkRequest.GetMessages()[0].GetMetadata().GetHeaders(), 2)
+	require.Equal(t, []byte{0x00, 0xff}, service.bulkRequest.GetMessages()[0].GetMetadata().GetHeaders()[0].GetValue())
+	require.Empty(t, service.bulkRequest.GetMessages()[1].GetMetadata().GetHeaders())
+}
+
+func TestCreateSchedulePropagatesHeaders(t *testing.T) {
+	service := &capturingQueueServiceClient{}
+	chronoqueueClient := &ChronoQueueClient{service: service, opts: ClientOptions{DefaultRPCTimeout: time.Second}}
+
+	_, err := chronoqueueClient.CreateSchedule(context.Background(), "schedule", ScheduleOptions{
+		QueueName:     "queue",
+		CronSchedule:  "*/5 * * * *",
+		LeaseDuration: "3s",
+		Headers: []MessageHeader{
+			{Key: "trace-id", Value: []byte{0x00, 0xff}},
+			{Key: "trace-id", Value: []byte("second")},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, service.scheduleRequest)
+	headers := service.scheduleRequest.GetSchedule().GetMetadata().GetHeaders()
+	require.Len(t, headers, 2)
+	require.Equal(t, []byte{0x00, 0xff}, headers[0].GetValue())
+	require.Equal(t, []byte("second"), headers[1].GetValue())
 }
 
 func TestChronoQueueClient_manageHeartbeats(t *testing.T) {

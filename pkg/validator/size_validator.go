@@ -68,6 +68,19 @@ func (v *SizeValidator) Validate(ctx context.Context, msg *message_pb.Message) *
 		)
 	}
 
+	// Validate the complete binary protobuf envelope, including optional headers.
+	totalSize := proto.Size(msg)
+	if totalSize > v.maxMessageSize {
+		result.AddError(
+			NewValidationError(
+				"message",
+				schema_pb.ErrorCode_PAYLOAD_SIZE_EXCEEDED,
+				"Total message size exceeds maximum",
+			).WithDetail("size", fmt.Sprintf("%d", totalSize)).
+				WithDetail("max_size", fmt.Sprintf("%d", v.maxMessageSize)),
+		)
+	}
+
 	if msg.Metadata == nil || msg.Metadata.Payload == nil {
 		return result
 	}
@@ -117,19 +130,6 @@ func (v *SizeValidator) Validate(ctx context.Context, msg *message_pb.Message) *
 		}
 	}
 
-	// Validate total message size
-	totalSize := calculateTotalMessageSize(msg)
-	if totalSize > v.maxMessageSize {
-		result.AddError(
-			NewValidationError(
-				"message",
-				schema_pb.ErrorCode_PAYLOAD_SIZE_EXCEEDED,
-				"Total message size exceeds maximum",
-			).WithDetail("size", fmt.Sprintf("%d", totalSize)).
-				WithDetail("max_size", fmt.Sprintf("%d", v.maxMessageSize)),
-		)
-	}
-
 	return result
 }
 
@@ -141,24 +141,6 @@ func calculateDataSize(data interface{}) int {
 	if err != nil {
 		// Fallback to string representation
 		return len(fmt.Sprintf("%v", data))
-	}
-	return len(bytes)
-}
-
-// calculateTotalMessageSize calculates the total size of the message
-func calculateTotalMessageSize(msg *message_pb.Message) int {
-	marshaller := protojson.MarshalOptions{EmitUnpopulated: true}
-	bytes, err := marshaller.Marshal(msg)
-	if err != nil {
-		// Fallback to approximate calculation
-		size := len(msg.MessageId)
-		if msg.Metadata != nil && msg.Metadata.Payload != nil {
-			size += calculateDataSize(msg.Metadata.Payload.Data)
-			for k, v := range msg.Metadata.Payload.Metadata {
-				size += len(k) + len(v.String())
-			}
-		}
-		return size
 	}
 	return len(bytes)
 }

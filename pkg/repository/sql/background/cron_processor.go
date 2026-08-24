@@ -389,6 +389,7 @@ func (c *CronProcessorService) createCronMessage(ctx context.Context, tx *sql.Tx
 	message := &messagepb.Message{
 		MessageId: messageID,
 		Metadata: &messagepb.Message_Metadata{
+			Headers:       cloneHeaders(meta.GetHeaders()),
 			Payload:       meta.GetPayload(),
 			State:         messagepb.Message_Metadata_INVISIBLE,
 			AttemptsLeft:  int32(maxAttempts),
