@@ -1,9 +1,11 @@
 # ADR-001: Redis Streams Architecture
 
-**Status:** Accepted
+**Status:** Superseded by ADR-002
 **Date:** 2025-11-02
 **Authors:** ChronoQueue Team - @adrien19
 **Related Issues:** refactor/migrate_to_redis_stream
+
+This document records a historical architecture and does not describe a currently supported ChronoQueue storage backend.
 
 ## Context
 

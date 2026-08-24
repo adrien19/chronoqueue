@@ -6,7 +6,7 @@ package integration
 // ChronoQueue server using real containers via Testcontainers.
 //
 // The UI server is started in-process and connects to the containerized
-// ChronoQueue server (gRPC) and Redis.
+// ChronoQueue server over gRPC with its configured SQL backend.
 //
 // Prerequisites:
 //   - Build the test Docker image first: make build-test-image

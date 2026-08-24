@@ -1,4 +1,4 @@
-# Production Dockerfile (Postgres/Redis)
+# Production Dockerfile (PostgreSQL)
 # Pure Go build - no CGO, fully static binary, cross-platform compatible
 # For SQLite support, use Dockerfile.sqlite instead
 
@@ -28,7 +28,7 @@ ARG TARGETARCH
 ARG TARGETVARIANT
 
 # Build static binary (no CGO, fully portable)
-# Production backends: Postgres, Redis - no SQLite
+# Production backend: PostgreSQL - no SQLite
 RUN target_os="${TARGETOS:-$(go env GOOS)}" && \
     target_arch="${TARGETARCH:-$(go env GOARCH)}" && \
     if [ "$target_arch" = "arm" ]; then export GOARM="${TARGETVARIANT#v}"; fi && \

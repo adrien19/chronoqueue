@@ -402,10 +402,10 @@ docker-compose up --scale evaluation-worker=5
 # Add more API instances behind load balancer
 docker-compose up --scale backend-api=3
 
-# Use Redis for session storage if needed
+# Optionally use an external Redis service for application session storage
 ```
 
-**ChronoQueue**: Scales with Redis cluster (see ChronoQueue docs)
+**ChronoQueue**: Scale service instances with PostgreSQL as the shared storage backend
 
 ---
 
@@ -419,7 +419,7 @@ docker-compose up --scale backend-api=3
 
 **Caching**:
 
-- Add Redis cache for:
+- Optionally add an external Redis cache, separate from ChronoQueue storage, for:
   - Queue metrics
   - Company configurations
   - User profiles

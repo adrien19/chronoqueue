@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -79,13 +80,10 @@ func (s *MetricsReporterService) reportMetrics(ctx context.Context) {
 		_ = rows.Close() // Best effort close
 	}()
 
-	var queueNames []string
-	for rows.Next() {
-		var queueName string
-		if err := rows.Scan(&queueName); err != nil {
-			continue
-		}
-		queueNames = append(queueNames, queueName)
+	queueNames, err := collectQueueNames(rows)
+	if err != nil {
+		metrics.IncrementBackgroundServiceIterations("metrics_reporter", "error")
+		return
 	}
 
 	// Update queues total metric
@@ -93,7 +91,10 @@ func (s *MetricsReporterService) reportMetrics(ctx context.Context) {
 
 	// For each queue, get state counts and update metrics
 	for _, queueName := range queueNames {
-		s.updateQueueStateMetrics(ctx, queueName)
+		if err := s.updateQueueStateMetrics(ctx, queueName); err != nil {
+			metrics.IncrementBackgroundServiceIterations("metrics_reporter", "error")
+			return
+		}
 	}
 
 	s.mu.Lock()
@@ -104,7 +105,7 @@ func (s *MetricsReporterService) reportMetrics(ctx context.Context) {
 }
 
 // updateQueueStateMetrics queries and updates messagesByState metrics for a specific queue
-func (s *MetricsReporterService) updateQueueStateMetrics(ctx context.Context, queueName string) {
+func (s *MetricsReporterService) updateQueueStateMetrics(ctx context.Context, queueName string) error {
 	// Query message counts by state for this queue
 	// Use ? for SQLite, $1 for Postgres
 	placeholder := "$1"
@@ -121,12 +122,37 @@ func (s *MetricsReporterService) updateQueueStateMetrics(ctx context.Context, qu
 	`
 	rows, err := s.baseSQL.DB.QueryContext(ctx, query, queueName)
 	if err != nil {
-		return
+		return fmt.Errorf("query message state counts: %w", err)
 	}
 	defer func() {
 		_ = rows.Close() // Best effort close
 	}()
 
+	return updateMessagesByStateMetrics(queueName, rows)
+}
+
+type rowIterator interface {
+	Next() bool
+	Scan(dest ...any) error
+	Err() error
+}
+
+func collectQueueNames(rows rowIterator) ([]string, error) {
+	var queueNames []string
+	for rows.Next() {
+		var queueName string
+		if err := rows.Scan(&queueName); err != nil {
+			return nil, fmt.Errorf("scan queue name: %w", err)
+		}
+		queueNames = append(queueNames, queueName)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate queue names: %w", err)
+	}
+	return queueNames, nil
+}
+
+func updateMessagesByStateMetrics(queueName string, rows rowIterator) error {
 	// Initialize all states to 0 first (to clear old data for queues with no messages)
 	states := []string{"INVISIBLE", "PENDING", "RUNNING", "COMPLETED", "CANCELED", "ERRORED"}
 	for _, state := range states {
@@ -138,7 +164,7 @@ func (s *MetricsReporterService) updateQueueStateMetrics(ctx context.Context, qu
 		var stateInt int32
 		var count int64
 		if err := rows.Scan(&stateInt, &count); err != nil {
-			continue
+			return fmt.Errorf("scan message state count: %w", err)
 		}
 
 		var stateName string
@@ -161,6 +187,10 @@ func (s *MetricsReporterService) updateQueueStateMetrics(ctx context.Context, qu
 
 		metrics.SetMessagesByState(queueName, stateName, float64(count))
 	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate message state counts: %w", err)
+	}
+	return nil
 }
 
 // StopGracefully stops the metrics reporter and waits for completion

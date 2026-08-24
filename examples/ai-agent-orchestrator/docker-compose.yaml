@@ -107,8 +107,7 @@ services:
       - ai-orchestrator-network
 
   # ChronoQueue Server (External - assumes already running)
-  # Optionally, you can run "export REDIS_PASSWORD='mypassword' && make server-dev"
-  # at root directory.
+  # Optionally, run "make server-dev" at the repository root.
   # chronoqueue:
   #   # ChronoQueue must be running separately
   #   # Start it with: make server-dev

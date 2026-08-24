@@ -83,20 +83,6 @@ func (qb *QueryBuilder) BuildOldestMessageAgeQuery(_ string) string {
 	)
 }
 
-// BuildGetScheduledMessagesQuery builds a query to find messages ready for activation
-func (qb *QueryBuilder) BuildGetScheduledMessagesQuery() string {
-	nowPlaceholder := qb.dialect.Placeholder(1)
-	return fmt.Sprintf(`
-		SELECT id, message_id, queue_name, metadata_pb
-		FROM cq_messages
-		WHERE state = 3
-		  AND scheduled_at IS NOT NULL
-		  AND scheduled_at <= %s
-		ORDER BY scheduled_at ASC, priority DESC
-		LIMIT %s
-	`, nowPlaceholder, qb.dialect.Placeholder(2))
-}
-
 // BuildUpdateStateCountersQuery builds a query to update queue state counters.
 // Uses JSON functions to increment/decrement state counts.
 func (qb *QueryBuilder) BuildUpdateStateCountersQuery(increment bool, stateKey string) string {

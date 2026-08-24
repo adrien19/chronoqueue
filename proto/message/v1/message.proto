@@ -55,7 +55,7 @@ message Message {
     // Metadata contains all message execution and lifecycle information.
   message Metadata {
         // Reserved field numbers from deprecated features (for backward compatibility).
-        // These fields were removed as part of Redis Streams migration.
+        // These fields belong to a deprecated pre-SQL storage contract.
     reserved 3, 8;
     reserved "invisibility_duration", "invisibility_expiry";
 

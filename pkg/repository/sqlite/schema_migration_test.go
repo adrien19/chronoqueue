@@ -48,10 +48,35 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 
 	assertSQLiteColumns(t, ctx, db, "cq_schedules", "next_run", "last_run", "cron_schedule", "execution_count")
 	assertSQLiteColumns(t, ctx, db, "cq_messages", "completed_at", "deleted_at", "cancellation_reason")
+	var schedulerIndexSQL string
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_messages_scheduler'`).Scan(&schedulerIndexSQL))
+	assert.Contains(t, schedulerIndexSQL, "WHERE state = 0")
+	assert.NotContains(t, schedulerIndexSQL, "WHERE state = 1")
 	_, err = db.ExecContext(ctx, `INSERT INTO cq_messages (queue_name, message_id, metadata_pb, state, priority, created_at, updated_at) VALUES ('queue-b', 'shared-id', X'00', 1, 1, 1, 1)`)
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, `INSERT INTO cq_messages (queue_name, message_id, metadata_pb, state, priority, created_at, updated_at) VALUES ('queue-a', 'shared-id', X'00', 1, 1, 1, 1)`)
 	require.Error(t, err)
+}
+
+func TestSchemaMigration_V7RollsBackWithoutMessagesTable(t *testing.T) {
+	ctx := context.Background()
+	db, err := OpenConnection(ctx, DefaultConnectionConfig(filepath.Join(t.TempDir(), "migration.db")))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+	_, err = db.ExecContext(ctx, `CREATE TABLE cq_schema_version (version INTEGER PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, description TEXT)`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES (6, 'fixture without messages table')`)
+	require.NoError(t, err)
+
+	manager := NewSchemaManager()
+	err = manager.Migrate(ctx, db, 7)
+	require.ErrorContains(t, err, "migrate to version 7: create scheduler index")
+
+	version, exists, err := manager.Version(ctx, db)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, uint(6), version)
 }
 
 func TestSchemaMigration_RollsBackFailedVersion(t *testing.T) {

@@ -253,19 +253,16 @@ Total Events: 4 pending
   Type: email
   Priority: 9
   Recipient: user@example.com
-  Stream Entry ID: 1730470123457-0
   
 [Worker email-1] ❤️  Heartbeat sent (lease extended: 30s)
 [Worker email-1] ✓ Email sent successfully
 [Worker email-1] ✓ Event evt-001 acknowledged (COMPLETED)
-  PEL Status: Removed
   Processing Time: 2.3s
 
 [Worker email-2] 📧 Processing event: evt-003
   Type: email
   Priority: 2
   Recipient: admin@example.com
-  Stream Entry ID: 1730470123459-0
   
 [Worker email-2] ✓ Email sent successfully
 [Worker email-2] ✓ Event evt-003 acknowledged (COMPLETED)
@@ -298,7 +295,6 @@ Waiting for more events...
   Type: webhook
   Priority: 10 (CRITICAL)
   URL: https://api.example.com/webhooks/urgent
-  Stream Entry ID: 1730470123456-0
   
 [Worker webhook-1] ❤️  Heartbeat sent (lease extended: 30s)
 [Worker webhook-1] → POST https://api.example.com/webhooks/urgent
@@ -311,7 +307,6 @@ Waiting for more events...
   Type: webhook
   Priority: 2
   URL: https://api.example.com/webhooks/standard
-  Stream Entry ID: 1730470123458-0
   
 [Worker webhook-2] ❤️  Heartbeat sent (lease extended: 30s)
 [Worker webhook-2] → POST https://api.example.com/webhooks/standard
@@ -834,14 +829,14 @@ This script demonstrates:
 
 ### Scenario 4: Failure Recovery with DLQ
 
-### Redis Streams Benefits Demonstrated
+### ChronoQueue Benefits Demonstrated
 
-1. **Consumer Groups**: Multiple workers coordinate automatically
-2. **PEL Tracking**: Pending Entry List prevents message loss
-3. **Stream Entry IDs**: Precise message acknowledgment with XACK
-4. **XAUTOCLAIM**: Automatic reclaim of stuck messages
-5. **Priority Streams**: Separate streams for priority routing
-6. **Heartbeat via XCLAIM**: Worker liveliness tracking
+1. **Concurrent Workers**: Multiple workers safely claim messages
+2. **Leases**: In-flight messages remain recoverable if a worker stops
+3. **Acknowledgments**: Workers explicitly report processing outcomes
+4. **Automatic Reclaim**: Expired leases return messages for processing
+5. **Priority Ordering**: Higher-priority messages are claimed first
+6. **Heartbeats**: Active workers extend message visibility while processing
 
 ### Worker Coordination
 
@@ -850,13 +845,13 @@ This script demonstrates:
 │                    ChronoQueue Server                    │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
 │  │ Critical    │  │ Normal      │  │ Low         │    │
-│  │ Stream      │  │ Stream      │  │ Stream      │    │
+│  │ Messages    │  │ Messages    │  │ Messages    │    │
 │  │ (Pri 8-10)  │  │ (Pri 4-7)   │  │ (Pri 1-3)   │    │
 │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘    │
 │         │                │                │            │
 │    ┌────┴────────────────┴────────────────┴────┐       │
-│    │         Consumer Group: processors        │       │
-│    │              (PEL Tracking)               │       │
+│    │             Processor Workers             │       │
+│    │            (Leased Message Claims)        │       │
 │    └───────────────────┬───────────────────────┘       │
 └────────────────────────┼───────────────────────────────┘
                          │
