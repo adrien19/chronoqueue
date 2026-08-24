@@ -67,6 +67,10 @@ func NewSchemasHandler(
 
 // List renders the schema registry listing page.
 func (h *SchemasHandler) List(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
@@ -77,7 +81,7 @@ func (h *SchemasHandler) List(w http.ResponseWriter, r *http.Request) {
 		activeOnly = raw == "true" || raw == "1" || strings.EqualFold(raw, "on")
 	}
 
-	schemas, err := h.activeClient().ListSchemas(ctx, prefix, 200, activeOnly)
+	schemas, err := activeClient.ListSchemas(ctx, prefix, 200, activeOnly)
 	if err != nil {
 		h.logger.ErrorWithFields("Failed to list schemas", "error", err)
 		h.renderError(w, http.StatusInternalServerError, "Failed to load schemas")
@@ -117,6 +121,10 @@ func (h *SchemasHandler) New(w http.ResponseWriter, r *http.Request) {
 
 // Create handles schema registration (HTMX POST).
 func (h *SchemasHandler) Create(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		h.logger.ErrorWithFields("Failed to parse schema form", "error", err)
 		h.writeInlineFormError(w, r, "Invalid form data")
@@ -161,7 +169,7 @@ func (h *SchemasHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	err = h.activeClient().RegisterSchema(ctx, schemaID, client.SchemaOptions{
+	err = activeClient.RegisterSchema(ctx, schemaID, client.SchemaOptions{
 		Name:        name,
 		Description: description,
 		Content:     content,
@@ -189,6 +197,10 @@ func (h *SchemasHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // Detail renders a schema detail page for a schema id and optional version.
 func (h *SchemasHandler) Detail(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	schemaID := strings.TrimSpace(r.PathValue("schemaId"))
 	if schemaID == "" {
 		h.renderError(w, http.StatusBadRequest, "Schema ID required")
@@ -208,7 +220,7 @@ func (h *SchemasHandler) Detail(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	schemaMap, err := h.activeClient().GetSchema(ctx, schemaID, version)
+	schemaMap, err := activeClient.GetSchema(ctx, schemaID, version)
 	if err != nil {
 		h.logger.ErrorWithFields("Failed to get schema", "error", err, "schema_id", schemaID, "version", version)
 		h.renderError(w, http.StatusInternalServerError, "Failed to load schema")
@@ -238,6 +250,10 @@ func (h *SchemasHandler) Detail(w http.ResponseWriter, r *http.Request) {
 
 // Validate validates a payload against a schema (HTMX POST).
 func (h *SchemasHandler) Validate(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	schemaID := strings.TrimSpace(r.PathValue("schemaId"))
 	if schemaID == "" {
 		h.writeInlineFormError(w, r, "Schema ID required")
@@ -274,7 +290,7 @@ func (h *SchemasHandler) Validate(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	err := h.activeClient().ValidatePayload(ctx, schemaID, version, payload)
+	err := activeClient.ValidatePayload(ctx, schemaID, version, payload)
 	if err != nil {
 		h.writeInlineFormError(w, r, fmt.Sprintf("Validation failed: %v", err))
 		return
@@ -288,6 +304,10 @@ func (h *SchemasHandler) Validate(w http.ResponseWriter, r *http.Request) {
 
 // Delete removes a schema version or all versions (version=0) and redirects.
 func (h *SchemasHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	schemaID := strings.TrimSpace(r.PathValue("schemaId"))
 	if schemaID == "" {
 		h.renderError(w, http.StatusBadRequest, "Schema ID required")
@@ -305,7 +325,7 @@ func (h *SchemasHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	if err := h.activeClient().DeleteSchema(ctx, schemaID, version); err != nil {
+	if err := activeClient.DeleteSchema(ctx, schemaID, version); err != nil {
 		h.logger.ErrorWithFields("Failed to delete schema", "error", err, "schema_id", schemaID, "version", version)
 		h.renderError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to delete schema: %v", err))
 		return

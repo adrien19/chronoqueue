@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/adrien19/chronoqueue/client"
 	clusterstore "github.com/adrien19/chronoqueue/cmd/chronoq/web-ui/cluster"
 	"github.com/adrien19/chronoqueue/pkg/log"
 
@@ -37,10 +38,14 @@ func NewDashboardHandler(
 
 // Index renders the home dashboard.
 func (h *DashboardHandler) Index(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	queuesResp, err := h.activeClient().ListQueues(ctx, "")
+	queuesResp, err := activeClient.ListQueues(ctx, "")
 	if err != nil {
 		h.logger.WarnWithFields("Backend unavailable, rendering empty dashboard", "error", err)
 	}
@@ -49,7 +54,7 @@ func (h *DashboardHandler) Index(w http.ResponseWriter, r *http.Request) {
 	if queuesResp != nil {
 		queues = queuesResp.GetQueues()
 	}
-	rows, totalPending, totalRunning, totalCompleted, totalDLQ := h.buildQueueRows(ctx, queues)
+	rows, totalPending, totalRunning, totalCompleted, totalDLQ := h.buildQueueRows(ctx, activeClient, queues)
 
 	brokerStatus := "Healthy"
 	if err != nil {
@@ -75,10 +80,14 @@ func (h *DashboardHandler) Index(w http.ResponseWriter, r *http.Request) {
 // DashboardStats renders the broker state + totals fragment, polled by HTMX every 5 s.
 // All sections share a single buildQueueRows call.
 func (h *DashboardHandler) DashboardStats(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	queuesResp, err := h.activeClient().ListQueues(ctx, "")
+	queuesResp, err := activeClient.ListQueues(ctx, "")
 	if err != nil {
 		h.logger.WarnWithFields("Backend unavailable for dashboard stats fragment", "error", err)
 	}
@@ -87,7 +96,7 @@ func (h *DashboardHandler) DashboardStats(w http.ResponseWriter, r *http.Request
 	if queuesResp != nil {
 		queues = queuesResp.GetQueues()
 	}
-	_, totalPending, totalRunning, totalCompleted, totalDLQ := h.buildQueueRows(ctx, queues)
+	_, totalPending, totalRunning, totalCompleted, totalDLQ := h.buildQueueRows(ctx, activeClient, queues)
 
 	brokerStatus := "Healthy"
 	if err != nil {
@@ -113,6 +122,10 @@ func (h *DashboardHandler) DashboardStats(w http.ResponseWriter, r *http.Request
 
 // LiveOverview streams a Server-Sent Events fragment for the home page live surfaces panel.
 func (h *DashboardHandler) LiveOverview(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -120,7 +133,7 @@ func (h *DashboardHandler) LiveOverview(w http.ResponseWriter, r *http.Request) 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	queuesResp, err := h.activeClient().ListQueues(ctx, "")
+	queuesResp, err := activeClient.ListQueues(ctx, "")
 	if err != nil {
 		h.logger.WarnWithFields("Backend unavailable for live overview", "error", err)
 	}
@@ -136,7 +149,7 @@ func (h *DashboardHandler) LiveOverview(w http.ResponseWriter, r *http.Request) 
 		liveQueues = queuesResp.GetQueues()
 	}
 	for _, q := range liveQueues {
-		stateResp, err := h.activeClient().GetQueueState(ctx, q.GetName())
+		stateResp, err := activeClient.GetQueueState(ctx, q.GetName())
 		if err != nil {
 			continue
 		}
@@ -210,7 +223,7 @@ func (bw *bufWriter) Write(p []byte) (int, error) {
 }
 
 // buildQueueRows fetches state for each queue concurrently and returns QueueRow view models.
-func (h *DashboardHandler) buildQueueRows(ctx context.Context, queues []*pb_queue.Queue) (
+func (h *DashboardHandler) buildQueueRows(ctx context.Context, activeClient *client.ChronoQueueClient, queues []*pb_queue.Queue) (
 	rows []QueueRow,
 	totalPending, totalRunning, totalCompleted, totalDLQ int64,
 ) {
@@ -223,6 +236,7 @@ func (h *DashboardHandler) buildQueueRows(ctx context.Context, queues []*pb_queu
 	}
 
 	results := make([]result, len(queues))
+	associations := buildQueueAssociations(queues)
 	var wg sync.WaitGroup
 
 	for i, q := range queues {
@@ -231,10 +245,10 @@ func (h *DashboardHandler) buildQueueRows(ctx context.Context, queues []*pb_queu
 			defer wg.Done()
 			name := queue.GetName()
 
-			stateResp, err := h.activeClient().GetQueueState(ctx, name)
+			stateResp, err := activeClient.GetQueueState(ctx, name)
 			if err != nil {
 				h.logger.ErrorWithFields("Failed to get queue state", "error", err, "queue", name)
-				results[idx].row = QueueRow{Name: name, Href: "/queues/" + name, IsDLQ: isDLQ(name)}
+				results[idx].row = QueueRow{Name: name, Href: "/queues/" + name, IsDLQ: len(associations.sourcesByDLQ[name]) > 0}
 				return
 			}
 
@@ -243,12 +257,18 @@ func (h *DashboardHandler) buildQueueRows(ctx context.Context, queues []*pb_queu
 			running := int64(counts["RUNNING"])
 			completed := int64(counts["COMPLETED"])
 			errored := int64(counts["ERRORED"])
+			delayed := int64(counts["INVISIBLE"])
 
 			var dlqCount int64
-			dlqName := name + "-dlq"
-			dlqResp, dlqErr := h.activeClient().GetDLQStats(ctx, dlqName)
-			if dlqErr == nil && dlqResp != nil {
-				dlqCount = int64(dlqResp.GetMessageCount())
+			dlqDisplay := "—"
+			if dlqName := associations.dlqBySource[name]; dlqName != "" {
+				dlqResp, dlqErr := activeClient.GetDLQStats(ctx, dlqName)
+				if dlqErr != nil {
+					h.logger.ErrorWithFields("Failed to get DLQ stats", "error", dlqErr, "queue", name, "dlq", dlqName)
+				} else {
+					dlqCount = int64(dlqResp.GetMessageCount())
+					dlqDisplay = fmt.Sprintf("%d", dlqCount)
+				}
 			}
 
 			results[idx] = result{
@@ -256,13 +276,13 @@ func (h *DashboardHandler) buildQueueRows(ctx context.Context, queues []*pb_queu
 					Name:       name,
 					Ready:      fmt.Sprintf("%d", pending),
 					InFlight:   fmt.Sprintf("%d", running),
-					Delayed:    "0",
-					Retries:    fmt.Sprintf("%d", errored),
-					RetriesInt: int(errored),
-					DLQ:        fmt.Sprintf("%d", dlqCount),
+					Delayed:    fmt.Sprintf("%d", delayed),
+					Errored:    fmt.Sprintf("%d", errored),
+					ErroredInt: int(errored),
+					DLQ:        dlqDisplay,
 					DLQInt:     int(dlqCount),
 					Href:       "/queues/" + name,
-					IsDLQ:      isDLQ(name),
+					IsDLQ:      len(associations.sourcesByDLQ[name]) > 0,
 				},
 				pending:    pending,
 				running:    running,

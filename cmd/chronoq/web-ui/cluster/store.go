@@ -2,10 +2,13 @@ package cluster
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -13,6 +16,8 @@ import (
 
 	"github.com/adrien19/chronoqueue/client"
 )
+
+var ErrNoActiveCluster = errors.New("no active cluster configured")
 
 // Cluster holds connection details for a single ChronoQueue gRPC backend.
 type Cluster struct {
@@ -225,15 +230,18 @@ func (s *Store) ActiveCluster() *Cluster {
 }
 
 // ActiveClient returns the cached gRPC client for the active cluster, creating it lazily if needed.
-func (s *Store) ActiveClient() *client.ChronoQueueClient {
+func (s *Store) ActiveClient() (*client.ChronoQueueClient, error) {
 	active := s.ActiveCluster()
 	if active == nil {
-		return nil
+		return nil, ErrNoActiveCluster
+	}
+	if err := validateBrokerAddress(active.BrokerAddress); err != nil {
+		return nil, fmt.Errorf("invalid broker address for cluster %q: %w", active.Name, err)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if cl, ok := s.clients[active.Slug]; ok {
-		return cl
+		return cl, nil
 	}
 	opts := client.ClientOptions{
 		MaxRetries: 3,
@@ -244,10 +252,25 @@ func (s *Store) ActiveClient() *client.ChronoQueueClient {
 	}
 	cl, err := client.NewChronoQueueClient(active.BrokerAddress, opts)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("create client for cluster %q: %w", active.Name, err)
 	}
 	s.clients[active.Slug] = cl
-	return cl
+	return cl, nil
+}
+
+func validateBrokerAddress(address string) error {
+	host, portText, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(host) == "" {
+		return fmt.Errorf("host is required")
+	}
+	port, err := strconv.ParseUint(portText, 10, 16)
+	if err != nil || port == 0 {
+		return fmt.Errorf("port must be between 1 and 65535")
+	}
+	return nil
 }
 
 // CloseAll closes every cached gRPC client.

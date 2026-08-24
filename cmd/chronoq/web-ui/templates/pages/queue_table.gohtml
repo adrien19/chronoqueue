@@ -3,7 +3,7 @@
 <table class="cq-table">
   <thead>
     <tr>
-      <th>Queue</th><th>Ready</th><th>Inflight</th><th>Delayed</th><th>Retries</th><th>DLQ</th>
+      <th>Queue</th><th>Ready</th><th>Inflight</th><th>Delayed</th><th>Errored</th><th>DLQ</th>
     </tr>
   </thead>
   <tbody>
@@ -21,7 +21,7 @@
       <td class="text-blue-300">{{ .Ready }}</td>
       <td>{{ .InFlight }}</td>
       <td>{{ .Delayed }}</td>
-      <td class="{{ if gt .RetriesInt 0 }}text-amber-300{{ end }}">{{ .Retries }}</td>
+      <td class="{{ if gt .ErroredInt 0 }}text-amber-300{{ end }}">{{ .Errored }}</td>
       <td class="{{ if gt .DLQInt 0 }}text-red-300{{ end }}">{{ .DLQ }}</td>
     </tr>
     {{ end }}

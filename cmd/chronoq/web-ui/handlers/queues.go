@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"html/template"
@@ -16,6 +17,8 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
+	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	"github.com/adrien19/chronoqueue/client"
 	clusterstore "github.com/adrien19/chronoqueue/cmd/chronoq/web-ui/cluster"
 	"github.com/adrien19/chronoqueue/pkg/log"
@@ -33,21 +36,22 @@ type MessageDisplay struct {
 	State        string
 	Priority     int64
 	AttemptCount int32
-	CreatedAt    time.Time
-	DeliverAt    *time.Time // non-nil when the message has a future scheduled delivery time
+	ScheduledAt  *time.Time
 }
 
 // QueueDetail contains the view model for the queue detail page.
 type QueueDetail struct {
-	Name        string
-	Ready       string
-	InFlight    string
-	Retries     string
-	DLQ         string
-	DLQName     string // non-empty when this queue has an associated DLQ
-	SourceQueue string // non-empty when this queue is itself a DLQ
-	Completed   string
-	IsDLQ       bool
+	Name         string
+	Ready        string
+	InFlight     string
+	Delayed      string
+	Errored      string
+	DLQ          string
+	DLQName      string // non-empty when this queue has an associated DLQ
+	SourceQueue  string // non-empty when this queue is itself a DLQ
+	SourceQueues []string
+	Completed    string
+	IsDLQ        bool
 }
 
 // QueueSchemaOption is the view model for queue create schema suggestions.
@@ -65,9 +69,27 @@ func shortenID(id string) string {
 	return id[:12]
 }
 
-// isDLQ checks if a queue is a Dead Letter Queue by naming convention.
-func isDLQ(queueName string) bool {
-	return len(queueName) >= 4 && (strings.HasSuffix(queueName, "-dlq") || strings.HasSuffix(queueName, "_dlq"))
+type queueAssociations struct {
+	dlqBySource  map[string]string
+	sourcesByDLQ map[string][]string
+}
+
+var errDLQMetadataUnavailable = errors.New("DLQ metadata unavailable")
+
+func buildQueueAssociations(queues []*queue_pb.Queue) queueAssociations {
+	associations := queueAssociations{
+		dlqBySource:  make(map[string]string),
+		sourcesByDLQ: make(map[string][]string),
+	}
+	for _, queue := range queues {
+		if queue == nil || queue.GetMetadata() == nil || queue.GetMetadata().GetDeadLetterQueueName() == "" {
+			continue
+		}
+		source, dlq := queue.GetName(), queue.GetMetadata().GetDeadLetterQueueName()
+		associations.dlqBySource[source] = dlq
+		associations.sourcesByDLQ[dlq] = append(associations.sourcesByDLQ[dlq], source)
+	}
+	return associations
 }
 
 // NewQueuesHandler creates a QueuesHandler.
@@ -87,12 +109,16 @@ func NewQueuesHandler(
 
 // List renders the queue listing page.
 func (h *QueuesHandler) List(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
 	query := r.URL.Query().Get("q")
 
-	queuesResp, err := h.activeClient().ListQueues(ctx, "")
+	queuesResp, err := activeClient.ListQueues(ctx, "")
 	if err != nil {
 		h.logger.ErrorWithFields("Failed to list queues", "error", err)
 		h.renderError(w, http.StatusInternalServerError, "Failed to load queues")
@@ -100,33 +126,47 @@ func (h *QueuesHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var rows []QueueRow
+	associations := buildQueueAssociations(queuesResp.GetQueues())
 	for _, q := range queuesResp.GetQueues() {
 		name := q.GetName()
 		if query != "" && !strings.Contains(strings.ToLower(name), strings.ToLower(query)) {
 			continue
 		}
 
-		stateResp, err := h.activeClient().GetQueueState(ctx, name)
+		stateResp, err := activeClient.GetQueueState(ctx, name)
 		if err != nil {
 			h.logger.ErrorWithFields("Failed to get queue state", "error", err, "queue", name)
-			rows = append(rows, QueueRow{Name: name, Href: "/queues/" + name, IsDLQ: isDLQ(name)})
+			rows = append(rows, QueueRow{Name: name, Href: "/queues/" + name, IsDLQ: len(associations.sourcesByDLQ[name]) > 0})
 			continue
 		}
 		counts := stateResp.GetStateCounts()
 		pending := int64(counts["PENDING"])
 		running := int64(counts["RUNNING"])
 		errored := int64(counts["ERRORED"])
+		delayed := int64(counts["INVISIBLE"])
+		dlqDisplay := "—"
+		var dlqCount int
+		if dlqName := associations.dlqBySource[name]; dlqName != "" {
+			dlqResp, err := activeClient.GetDLQStats(ctx, dlqName)
+			if err != nil {
+				h.logger.ErrorWithFields("Failed to get DLQ stats", "error", err, "queue", name, "dlq", dlqName)
+			} else {
+				dlqCount = int(dlqResp.GetMessageCount())
+				dlqDisplay = strconv.Itoa(dlqCount)
+			}
+		}
 
 		rows = append(rows, QueueRow{
 			Name:       name,
 			Ready:      fmt.Sprintf("%d", pending),
 			InFlight:   fmt.Sprintf("%d", running),
-			Delayed:    "0",
-			Retries:    fmt.Sprintf("%d", errored),
-			RetriesInt: int(errored),
-			DLQ:        "—",
+			Delayed:    fmt.Sprintf("%d", delayed),
+			Errored:    fmt.Sprintf("%d", errored),
+			ErroredInt: int(errored),
+			DLQ:        dlqDisplay,
+			DLQInt:     dlqCount,
 			Href:       "/queues/" + name,
-			IsDLQ:      isDLQ(name),
+			IsDLQ:      len(associations.sourcesByDLQ[name]) > 0,
 		})
 	}
 
@@ -152,10 +192,14 @@ var queueNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
 // New renders the create queue form.
 func (h *QueuesHandler) New(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	schemaOptions := h.loadSchemaOptions(ctx)
+	schemaOptions := h.loadSchemaOptions(ctx, activeClient)
 
 	h.render(w, "queue_new_content", map[string]any{
 		"PageTitle": "New Queue",
@@ -166,6 +210,10 @@ func (h *QueuesHandler) New(w http.ResponseWriter, r *http.Request) {
 
 // Create handles queue creation (HTMX POST).
 func (h *QueuesHandler) Create(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		h.logger.ErrorWithFields("Failed to parse form", "error", err)
 		h.writeInlineFormError(w, r, "Invalid form data")
@@ -235,7 +283,7 @@ func (h *QueuesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	if _, err := h.activeClient().CreateQueue(ctx, name, opts); err != nil {
+	if _, err := activeClient.CreateQueue(ctx, name, opts); err != nil {
 		h.logger.ErrorWithFields("Failed to create queue", "error", err, "queue", name)
 		h.writeInlineFormError(w, r, fmt.Sprintf("Failed to create queue: %v", err))
 		return
@@ -260,11 +308,25 @@ func (h *QueuesHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, http.StatusBadRequest, "Queue name required")
 		return
 	}
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	stateResp, err := h.activeClient().GetQueueState(ctx, queueName)
+	listResp, err := activeClient.ListQueues(ctx, "")
+	if err != nil {
+		h.logger.ErrorWithFields("Failed to list queues", "error", err)
+		h.renderError(w, http.StatusInternalServerError, "Failed to load queue metadata")
+		return
+	}
+	associations := buildQueueAssociations(listResp.GetQueues())
+	sourceQueues := associations.sourcesByDLQ[queueName]
+	isDeadLetterQueue := len(sourceQueues) > 0
+
+	stateResp, err := activeClient.GetQueueState(ctx, queueName)
 	if err != nil {
 		h.logger.ErrorWithFields("Failed to get queue state", "error", err, "queue", queueName)
 		h.renderError(w, http.StatusInternalServerError, "Failed to load queue")
@@ -272,73 +334,51 @@ func (h *QueuesHandler) Detail(w http.ResponseWriter, r *http.Request) {
 	}
 	counts := stateResp.GetStateCounts()
 
-	peekResp, err := h.activeClient().PeekQueueMessages(ctx, queueName, 100, client.TimeRangeOption{})
-	if err != nil {
-		h.logger.ErrorWithFields("Failed to peek queue messages", "error", err, "queue", queueName)
+	var rawMessages []*message_pb.Message
+	if isDeadLetterQueue {
+		dlqResp, err := activeClient.GetDLQMessages(ctx, queueName, 100)
+		if err != nil {
+			h.logger.ErrorWithFields("Failed to get DLQ messages", "error", err, "queue", queueName)
+			h.renderError(w, http.StatusInternalServerError, "Failed to load DLQ messages")
+			return
+		}
+		rawMessages = dlqResp.GetMessages()
+	} else {
+		peekResp, err := activeClient.PeekQueueMessages(ctx, queueName, 100, client.TimeRangeOption{})
+		if err != nil {
+			h.logger.ErrorWithFields("Failed to peek queue messages", "error", err, "queue", queueName)
+			h.renderError(w, http.StatusInternalServerError, "Failed to load queue messages")
+			return
+		}
+		rawMessages = peekResp.GetMessages()
 	}
 
-	var messages []MessageDisplay
-	if peekResp != nil {
-		for _, msg := range peekResp.GetMessages() {
-			if msg == nil {
-				continue
-			}
-			meta := msg.GetMetadata()
-			if meta == nil {
-				continue
-			}
-			createdAt := time.Now()
-			var deliverAt *time.Time
-			if ts := meta.GetScheduledTime(); ts != nil {
-				t := ts.AsTime()
-				if t.After(time.Now().UTC().Add(5 * time.Second)) {
-					// scheduled_time is meaningfully in the future → this is a delayed message
-					deliverAt = &t
-				} else {
-					createdAt = t
-				}
-			}
-			attemptCount := meta.GetMaxAttempts() - meta.GetAttemptsLeft()
-			if attemptCount < 0 {
-				attemptCount = 0
-			}
-			messages = append(messages, MessageDisplay{
-				Id:           msg.GetMessageId(),
-				ShortId:      shortenID(msg.GetMessageId()),
-				State:        meta.GetState().String(),
-				Priority:     meta.GetPriority(),
-				AttemptCount: attemptCount,
-				CreatedAt:    createdAt,
-				DeliverAt:    deliverAt,
-			})
-		}
-	}
+	messages := buildMessageDisplays(rawMessages)
 
 	queue := QueueDetail{
-		Name:      queueName,
-		Ready:     fmt.Sprintf("%d", counts["PENDING"]),
-		InFlight:  fmt.Sprintf("%d", counts["RUNNING"]),
-		Retries:   fmt.Sprintf("%d", counts["ERRORED"]),
-		DLQ:       "0",
-		Completed: fmt.Sprintf("%d", counts["COMPLETED"]),
-		IsDLQ:     isDLQ(queueName),
+		Name:         queueName,
+		Ready:        fmt.Sprintf("%d", counts["PENDING"]),
+		InFlight:     fmt.Sprintf("%d", counts["RUNNING"]),
+		Delayed:      fmt.Sprintf("%d", counts["INVISIBLE"]),
+		Errored:      fmt.Sprintf("%d", counts["ERRORED"]),
+		DLQ:          "—",
+		Completed:    fmt.Sprintf("%d", counts["COMPLETED"]),
+		IsDLQ:        isDeadLetterQueue,
+		SourceQueues: sourceQueues,
 	}
 
-	// Resolve linked DLQ name from queue metadata, and source queue for DLQ pages.
-	if queue.IsDLQ {
-		queue.SourceQueue = strings.TrimSuffix(strings.TrimSuffix(queueName, "-dlq"), "_dlq")
-	} else {
-		listResp, err := h.activeClient().ListQueues(ctx, queueName)
-		if err == nil {
-			for _, q := range listResp.GetQueues() {
-				if q.GetName() == queueName {
-					if meta := q.GetMetadata(); meta != nil {
-						queue.DLQName = meta.GetDeadLetterQueueName()
-					}
-					break
-				}
-			}
+	if len(sourceQueues) == 1 {
+		queue.SourceQueue = sourceQueues[0]
+	}
+	queue.DLQName = associations.dlqBySource[queueName]
+	if queue.DLQName != "" {
+		dlqStats, err := activeClient.GetDLQStats(ctx, queue.DLQName)
+		if err != nil {
+			h.logger.ErrorWithFields("Failed to get DLQ stats", "error", err, "queue", queueName, "dlq", queue.DLQName)
+			h.renderError(w, http.StatusInternalServerError, "Failed to load DLQ statistics")
+			return
 		}
+		queue.DLQ = fmt.Sprintf("%d", dlqStats.GetMessageCount())
 	}
 
 	data := map[string]any{
@@ -350,6 +390,34 @@ func (h *QueuesHandler) Detail(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "queue_detail_content", data)
 }
 
+func buildMessageDisplays(rawMessages []*message_pb.Message) []MessageDisplay {
+	messages := make([]MessageDisplay, 0, len(rawMessages))
+	for _, msg := range rawMessages {
+		if msg == nil {
+			continue
+		}
+		meta := msg.GetMetadata()
+		if meta == nil {
+			continue
+		}
+		var scheduledAt *time.Time
+		if ts := meta.GetScheduledTime(); ts != nil {
+			t := ts.AsTime()
+			scheduledAt = &t
+		}
+		attemptCount := max(meta.GetMaxAttempts()-meta.GetAttemptsLeft(), 0)
+		messages = append(messages, MessageDisplay{
+			Id:           msg.GetMessageId(),
+			ShortId:      shortenID(msg.GetMessageId()),
+			State:        meta.GetState().String(),
+			Priority:     meta.GetPriority(),
+			AttemptCount: attemptCount,
+			ScheduledAt:  scheduledAt,
+		})
+	}
+	return messages
+}
+
 // NewMessage renders the post-message form for a queue.
 func (h *QueuesHandler) NewMessage(w http.ResponseWriter, r *http.Request) {
 	queueName := r.PathValue("name")
@@ -357,13 +425,17 @@ func (h *QueuesHandler) NewMessage(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, http.StatusBadRequest, "Queue name required")
 		return
 	}
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	schemaOptions := h.loadSchemaOptions(ctx)
+	schemaOptions := h.loadSchemaOptions(ctx, activeClient)
 
-	queueSchemaID, queueSchemaRequired, err := h.resolveQueueSchemaDefaults(ctx, queueName)
+	queueSchemaID, queueSchemaRequired, err := h.resolveQueueSchemaDefaults(ctx, activeClient, queueName)
 	queueSchemaLookupFailed := err != nil
 	if err != nil {
 		h.logger.WarnWithFields("Failed to load queue schema defaults", "error", err, "queue", queueName)
@@ -385,6 +457,10 @@ func (h *QueuesHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 	queueName := r.PathValue("name")
 	if queueName == "" {
 		h.writeInlineFormError(w, r, "Queue name required")
+		return
+	}
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
 		return
 	}
 
@@ -506,7 +582,7 @@ func (h *QueuesHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	if _, err := h.activeClient().PostMessage(ctx, queueName, messageID, opts); err != nil {
+	if _, err := activeClient.PostMessage(ctx, queueName, messageID, opts); err != nil {
 		h.logger.ErrorWithFields("Failed to post message", "error", err, "queue", queueName)
 		h.writeInlineFormError(w, r, fmt.Sprintf("Failed to post message: %v", err))
 		return
@@ -530,6 +606,10 @@ func (h *QueuesHandler) ValidateMessage(w http.ResponseWriter, r *http.Request) 
 	queueName := r.PathValue("name")
 	if queueName == "" {
 		h.writeInlineFormError(w, r, "Queue name required")
+		return
+	}
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
 		return
 	}
 
@@ -566,7 +646,7 @@ func (h *QueuesHandler) ValidateMessage(w http.ResponseWriter, r *http.Request) 
 	defer cancel()
 
 	if schemaID == "" {
-		queueSchemaID, _, err := h.resolveQueueSchemaDefaults(ctx, queueName)
+		queueSchemaID, _, err := h.resolveQueueSchemaDefaults(ctx, activeClient, queueName)
 		if err != nil {
 			h.logger.ErrorWithFields("Failed to resolve queue schema defaults", "error", err, "queue", queueName)
 			h.writeInlineFormError(w, r, "Failed to resolve queue schema defaults")
@@ -579,7 +659,7 @@ func (h *QueuesHandler) ValidateMessage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := h.activeClient().ValidatePayload(ctx, schemaID, schemaVersion, payloadRaw); err != nil {
+	if err := activeClient.ValidatePayload(ctx, schemaID, schemaVersion, payloadRaw); err != nil {
 		h.writeInlineFormError(w, r, fmt.Sprintf("Validation failed: %v", err))
 		return
 	}
@@ -595,8 +675,8 @@ func (h *QueuesHandler) ValidateMessage(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (h *QueuesHandler) resolveQueueSchemaDefaults(ctx context.Context, queueName string) (string, bool, error) {
-	listResp, err := h.activeClient().ListQueues(ctx, queueName)
+func (h *QueuesHandler) resolveQueueSchemaDefaults(ctx context.Context, activeClient *client.ChronoQueueClient, queueName string) (string, bool, error) {
+	listResp, err := activeClient.ListQueues(ctx, queueName)
 	if err != nil {
 		return "", false, err
 	}
@@ -614,9 +694,9 @@ func (h *QueuesHandler) resolveQueueSchemaDefaults(ctx context.Context, queueNam
 	return "", false, nil
 }
 
-func (h *QueuesHandler) loadSchemaOptions(ctx context.Context) []QueueSchemaOption {
+func (h *QueuesHandler) loadSchemaOptions(ctx context.Context, activeClient *client.ChronoQueueClient) []QueueSchemaOption {
 	schemaOptions := make([]QueueSchemaOption, 0)
-	schemas, err := h.activeClient().ListSchemas(ctx, "", 200, true)
+	schemas, err := activeClient.ListSchemas(ctx, "", 200, true)
 	if err != nil {
 		h.logger.WarnWithFields("Failed to load schema options", "error", err)
 		return schemaOptions
@@ -642,18 +722,41 @@ func (h *QueuesHandler) MessageDetail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "message_id required", http.StatusBadRequest)
 		return
 	}
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	peekResp, err := h.activeClient().PeekQueueMessages(ctx, queueName, 100, client.TimeRangeOption{})
+	listResp, err := activeClient.ListQueues(ctx, "")
 	if err != nil {
-		h.logger.ErrorWithFields("Failed to peek messages", "error", err, "queue", queueName)
+		h.logger.ErrorWithFields("Failed to list queues", "error", err)
 		http.Error(w, "Failed to load message", http.StatusInternalServerError)
 		return
 	}
+	associations := buildQueueAssociations(listResp.GetQueues())
+	var messages []*message_pb.Message
+	if len(associations.sourcesByDLQ[queueName]) > 0 {
+		dlqResp, err := activeClient.GetDLQMessages(ctx, queueName, 100)
+		if err != nil {
+			h.logger.ErrorWithFields("Failed to get DLQ messages", "error", err, "queue", queueName)
+			http.Error(w, "Failed to load message", http.StatusInternalServerError)
+			return
+		}
+		messages = dlqResp.GetMessages()
+	} else {
+		peekResp, err := activeClient.PeekQueueMessages(ctx, queueName, 100, client.TimeRangeOption{})
+		if err != nil {
+			h.logger.ErrorWithFields("Failed to peek messages", "error", err, "queue", queueName)
+			http.Error(w, "Failed to load message", http.StatusInternalServerError)
+			return
+		}
+		messages = peekResp.GetMessages()
+	}
 
-	for _, msg := range peekResp.GetMessages() {
+	for _, msg := range messages {
 		if msg == nil {
 			continue
 		}
@@ -724,37 +827,69 @@ func (h *QueuesHandler) MessageDetail(w http.ResponseWriter, r *http.Request) {
 // RequeueAll requeues all messages from a DLQ back to the source queue.
 func (h *QueuesHandler) RequeueAll(w http.ResponseWriter, r *http.Request) {
 	queueName := r.PathValue("name")
-	if !isDLQ(queueName) {
-		http.Error(w, "Not a DLQ", http.StatusBadRequest)
+	if err := r.ParseForm(); err != nil {
+		h.logger.ErrorWithFields("Failed to parse requeue form", "error", err)
+		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		return
+	}
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	sourceQueue := strings.TrimSuffix(strings.TrimSuffix(queueName, "-dlq"), "_dlq")
+	sourceQueue, err := h.resolveDLQTarget(ctx, activeClient, queueName, r.FormValue("target_queue"))
+	if err != nil {
+		if errors.Is(err, errDLQMetadataUnavailable) {
+			h.logger.ErrorWithFields("Failed to load queue metadata", "error", err)
+			http.Error(w, "Failed to verify DLQ target", http.StatusInternalServerError)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	const pageSize = int32(100)
 	requeued := 0
+	seen := make(map[string]struct{})
 	for {
-		peekResp, err := h.activeClient().PeekQueueMessages(ctx, queueName, pageSize, client.TimeRangeOption{})
+		dlqResp, err := activeClient.GetDLQMessages(ctx, queueName, pageSize)
 		if err != nil {
-			h.logger.ErrorWithFields("Failed to peek DLQ messages", "error", err, "queue", queueName)
+			h.logger.ErrorWithFields("Failed to get DLQ messages", "error", err, "queue", queueName)
 			http.Error(w, "Failed to load DLQ messages", http.StatusInternalServerError)
 			return
 		}
-		msgs := peekResp.GetMessages()
+		msgs := dlqResp.GetMessages()
 		if len(msgs) == 0 {
 			break
 		}
+		pageRequeued := 0
 		for _, msg := range msgs {
 			if msg == nil {
 				continue
 			}
-			if _, err := h.activeClient().RequeueFromDLQ(ctx, queueName, msg.GetMessageId(), sourceQueue); err != nil {
-				h.logger.ErrorWithFields("Failed to requeue message", "error", err, "queue", queueName, "message", msg.GetMessageId())
-				continue
+			messageID := msg.GetMessageId()
+			if messageID == "" {
+				http.Error(w, "DLQ returned a message without an ID", http.StatusInternalServerError)
+				return
 			}
+			if _, exists := seen[messageID]; exists {
+				http.Error(w, "DLQ did not advance while requeueing messages", http.StatusInternalServerError)
+				return
+			}
+			if _, err := activeClient.RequeueFromDLQ(ctx, queueName, messageID, sourceQueue); err != nil {
+				h.logger.ErrorWithFields("Failed to requeue message", "error", err, "queue", queueName, "message", messageID)
+				http.Error(w, "Failed to requeue all DLQ messages", http.StatusInternalServerError)
+				return
+			}
+			seen[messageID] = struct{}{}
 			requeued++
+			pageRequeued++
+		}
+		if pageRequeued == 0 {
+			http.Error(w, "DLQ returned no requeueable messages", http.StatusInternalServerError)
+			return
 		}
 		if len(msgs) < int(pageSize) {
 			break
@@ -769,18 +904,31 @@ func (h *QueuesHandler) RequeueAll(w http.ResponseWriter, r *http.Request) {
 func (h *QueuesHandler) RequeueMessage(w http.ResponseWriter, r *http.Request) {
 	queueName := r.PathValue("name")
 	messageID := r.PathValue("messageId")
-
-	if !isDLQ(queueName) {
-		http.Error(w, "Not a DLQ", http.StatusBadRequest)
+	if err := r.ParseForm(); err != nil {
+		h.logger.ErrorWithFields("Failed to parse requeue form", "error", err)
+		http.Error(w, "Invalid form data", http.StatusBadRequest)
 		return
 	}
 
-	sourceQueue := strings.TrimSuffix(strings.TrimSuffix(queueName, "-dlq"), "_dlq")
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	if _, err := h.activeClient().RequeueFromDLQ(ctx, queueName, messageID, sourceQueue); err != nil {
+	sourceQueue, err := h.resolveDLQTarget(ctx, activeClient, queueName, r.FormValue("target_queue"))
+	if err != nil {
+		if errors.Is(err, errDLQMetadataUnavailable) {
+			h.logger.ErrorWithFields("Failed to load queue metadata", "error", err)
+			http.Error(w, "Failed to verify DLQ target", http.StatusInternalServerError)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if _, err := activeClient.RequeueFromDLQ(ctx, queueName, messageID, sourceQueue); err != nil {
 		h.logger.ErrorWithFields("Failed to requeue message from DLQ", "error", err, "queue", queueName, "message", messageID)
 		http.Error(w, "Failed to requeue message", http.StatusInternalServerError)
 		return
@@ -795,15 +943,25 @@ func (h *QueuesHandler) DeleteDLQMessage(w http.ResponseWriter, r *http.Request)
 	queueName := r.PathValue("name")
 	messageID := r.PathValue("messageId")
 
-	if !isDLQ(queueName) {
-		http.Error(w, "Not a DLQ", http.StatusBadRequest)
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	if _, err := h.activeClient().DeleteFromDLQ(ctx, queueName, messageID); err != nil {
+	isDLQ, err := h.isConfiguredDLQ(ctx, activeClient, queueName)
+	if err != nil {
+		h.logger.ErrorWithFields("Failed to load queue metadata", "error", err)
+		http.Error(w, "Failed to verify DLQ", http.StatusInternalServerError)
+		return
+	}
+	if !isDLQ {
+		http.Error(w, "Not a configured DLQ", http.StatusBadRequest)
+		return
+	}
+	if _, err := activeClient.DeleteFromDLQ(ctx, queueName, messageID); err != nil {
 		h.logger.ErrorWithFields("Failed to delete message from DLQ", "error", err, "queue", queueName, "message", messageID)
 		http.Error(w, "Failed to delete message", http.StatusInternalServerError)
 		return
@@ -816,16 +974,26 @@ func (h *QueuesHandler) DeleteDLQMessage(w http.ResponseWriter, r *http.Request)
 // Purge removes all messages from a queue (DLQ only).
 func (h *QueuesHandler) Purge(w http.ResponseWriter, r *http.Request) {
 	queueName := r.PathValue("name")
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	if !isDLQ(queueName) {
-		http.Error(w, "Purge is only supported for DLQ queues", http.StatusBadRequest)
+	isDLQ, err := h.isConfiguredDLQ(ctx, activeClient, queueName)
+	if err != nil {
+		h.logger.ErrorWithFields("Failed to load queue metadata", "error", err)
+		http.Error(w, "Failed to verify DLQ", http.StatusInternalServerError)
+		return
+	}
+	if !isDLQ {
+		http.Error(w, "Purge is only supported for configured DLQ queues", http.StatusBadRequest)
 		return
 	}
 
-	if _, err := h.activeClient().PurgeDLQ(ctx, queueName); err != nil {
+	if _, err := activeClient.PurgeDLQ(ctx, queueName); err != nil {
 		h.logger.ErrorWithFields("Failed to purge DLQ", "error", err, "queue", queueName)
 		http.Error(w, "Failed to purge queue", http.StatusInternalServerError)
 		return
@@ -833,4 +1001,39 @@ func (h *QueuesHandler) Purge(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.InfoWithFields("DLQ purged", "queue", queueName)
 	http.Redirect(w, r, "/queues/"+queueName, http.StatusSeeOther)
+}
+
+func (h *QueuesHandler) resolveDLQTarget(ctx context.Context, activeClient *client.ChronoQueueClient, dlqName, requestedTarget string) (string, error) {
+	queuesResp, err := activeClient.ListQueues(ctx, "")
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", errDLQMetadataUnavailable, err)
+	}
+	sources := buildQueueAssociations(queuesResp.GetQueues()).sourcesByDLQ[dlqName]
+	return selectDLQTarget(dlqName, sources, requestedTarget)
+}
+
+func selectDLQTarget(dlqName string, sources []string, requestedTarget string) (string, error) {
+	if len(sources) == 0 {
+		return "", fmt.Errorf("queue %q is not a configured DLQ", dlqName)
+	}
+	if requestedTarget == "" {
+		if len(sources) == 1 {
+			return sources[0], nil
+		}
+		return "", fmt.Errorf("target queue is required for a shared DLQ")
+	}
+	for _, source := range sources {
+		if requestedTarget == source {
+			return source, nil
+		}
+	}
+	return "", fmt.Errorf("queue %q is not a source for DLQ %q", requestedTarget, dlqName)
+}
+
+func (h *QueuesHandler) isConfiguredDLQ(ctx context.Context, activeClient *client.ChronoQueueClient, queueName string) (bool, error) {
+	queuesResp, err := activeClient.ListQueues(ctx, "")
+	if err != nil {
+		return false, err
+	}
+	return len(buildQueueAssociations(queuesResp.GetQueues()).sourcesByDLQ[queueName]) > 0, nil
 }

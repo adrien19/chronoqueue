@@ -42,17 +42,21 @@ func NewSchedulesHandler(
 
 // List renders the schedules listing page.
 func (h *SchedulesHandler) List(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	schedulesResp, err := h.activeClient().ListSchedules(ctx, "")
+	schedulesResp, err := activeClient.ListSchedules(ctx, "")
 	if err != nil {
 		h.logger.ErrorWithFields("Failed to list schedules", "error", err)
 		h.renderError(w, http.StatusInternalServerError, "Failed to load schedules")
 		return
 	}
 
-	queuesResp, err := h.activeClient().ListQueues(ctx, "")
+	queuesResp, err := activeClient.ListQueues(ctx, "")
 	if err != nil {
 		h.logger.ErrorWithFields("Failed to list queues", "error", err)
 	}
@@ -102,6 +106,10 @@ func (h *SchedulesHandler) New(w http.ResponseWriter, r *http.Request) {
 
 // Create handles schedule creation (HTMX POST).
 func (h *SchedulesHandler) Create(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		h.logger.ErrorWithFields("Failed to parse form", "error", err)
 		http.Error(w, "Invalid form data", http.StatusBadRequest)
@@ -131,7 +139,7 @@ func (h *SchedulesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	if err := h.ensureQueueExists(ctx, w, r, queueName, scheduleID); err != nil {
+	if err := h.ensureQueueExists(ctx, activeClient, w, r, queueName, scheduleID); err != nil {
 		return
 	}
 
@@ -142,7 +150,7 @@ func (h *SchedulesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.activeClient().CreateSchedule(ctx, scheduleID, *scheduleOpts); err != nil {
+	if _, err := activeClient.CreateSchedule(ctx, scheduleID, *scheduleOpts); err != nil {
 		h.logger.ErrorWithFields("Failed to create schedule", "error", err, "schedule_id", scheduleID)
 		http.Error(w, fmt.Sprintf("Failed to create schedule: %v", err), http.StatusInternalServerError)
 		return
@@ -156,10 +164,10 @@ func (h *SchedulesHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // ensureQueueExists checks queue existence, auto-creates if requested, or returns a warning fragment.
-func (h *SchedulesHandler) ensureQueueExists(ctx context.Context, w http.ResponseWriter, r *http.Request, queueName, scheduleID string) error {
+func (h *SchedulesHandler) ensureQueueExists(ctx context.Context, activeClient *client.ChronoQueueClient, w http.ResponseWriter, r *http.Request, queueName, scheduleID string) error {
 	autoCreate := r.FormValue("auto_create_queue") == "true"
 
-	queuesResp, err := h.activeClient().ListQueues(ctx, "")
+	queuesResp, err := activeClient.ListQueues(ctx, "")
 	if err != nil {
 		h.logger.ErrorWithFields("Failed to check queue existence", "error", err)
 		http.Error(w, "Failed to verify queue existence", http.StatusInternalServerError)
@@ -180,14 +188,14 @@ func (h *SchedulesHandler) ensureQueueExists(ctx context.Context, w http.Respons
 	}
 
 	if !exists && autoCreate {
-		return h.autoCreateQueue(ctx, queueName, scheduleID)
+		return h.autoCreateQueue(ctx, activeClient, queueName, scheduleID)
 	}
 
 	return nil
 }
 
 // autoCreateQueue creates a queue with sensible defaults.
-func (h *SchedulesHandler) autoCreateQueue(ctx context.Context, queueName, scheduleID string) error {
+func (h *SchedulesHandler) autoCreateQueue(ctx context.Context, activeClient *client.ChronoQueueClient, queueName, scheduleID string) error {
 	h.logger.InfoWithFields("Auto-creating queue for schedule", "queue", queueName, "schedule", scheduleID)
 	opts := client.QueueOptions{
 		DequeueAttempts:     3,
@@ -195,7 +203,7 @@ func (h *SchedulesHandler) autoCreateQueue(ctx context.Context, queueName, sched
 		AutoCreateDLQ:       true,
 		DeadLetterQueueName: queueName + "-dlq",
 	}
-	if _, err := h.activeClient().CreateQueue(ctx, queueName, opts); err != nil {
+	if _, err := activeClient.CreateQueue(ctx, queueName, opts); err != nil {
 		h.logger.ErrorWithFields("Failed to auto-create queue", "error", err, "queue", queueName)
 		return fmt.Errorf("failed to create queue '%s': %w", queueName, err)
 	}
@@ -229,6 +237,10 @@ func (h *SchedulesHandler) renderQueueWarningDialog(w http.ResponseWriter, queue
 
 // Toggle handles pause/resume (HTMX POST).
 func (h *SchedulesHandler) Toggle(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	scheduleID := strings.TrimSpace(r.FormValue("schedule_id"))
 	action := r.FormValue("action")
 
@@ -248,9 +260,9 @@ func (h *SchedulesHandler) Toggle(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch action {
 	case "pause":
-		_, err = h.activeClient().PauseSchedule(ctx, scheduleID)
+		_, err = activeClient.PauseSchedule(ctx, scheduleID)
 	case "resume":
-		_, err = h.activeClient().ResumeSchedule(ctx, scheduleID)
+		_, err = activeClient.ResumeSchedule(ctx, scheduleID)
 	default:
 		http.Error(w, "Invalid action", http.StatusBadRequest)
 		return
@@ -308,6 +320,10 @@ func (h *SchedulesHandler) Toggle(w http.ResponseWriter, r *http.Request) {
 
 // Delete deletes a schedule (HTMX DELETE).
 func (h *SchedulesHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	scheduleID := r.PathValue("id")
 	if scheduleID == "" {
 		http.Error(w, "Schedule ID required", http.StatusBadRequest)
@@ -317,7 +333,7 @@ func (h *SchedulesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	if _, err := h.activeClient().DeleteSchedule(ctx, scheduleID); err != nil {
+	if _, err := activeClient.DeleteSchedule(ctx, scheduleID); err != nil {
 		h.logger.ErrorWithFields("Failed to delete schedule", "error", err, "schedule_id", scheduleID)
 		http.Error(w, fmt.Sprintf("Failed to delete schedule: %v", err), http.StatusInternalServerError)
 		return

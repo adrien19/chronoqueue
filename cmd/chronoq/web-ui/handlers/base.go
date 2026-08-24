@@ -30,8 +30,8 @@ type QueueRow struct {
 	Ready      string
 	InFlight   string
 	Delayed    string
-	Retries    string
-	RetriesInt int
+	Errored    string
+	ErroredInt int
 	DLQ        string
 	DLQInt     int
 	Href       string
@@ -62,8 +62,20 @@ type BaseHandler struct {
 }
 
 // activeClient returns the gRPC client for the currently-active cluster.
-func (h *BaseHandler) activeClient() *client.ChronoQueueClient {
+func (h *BaseHandler) activeClient() (*client.ChronoQueueClient, error) {
 	return h.store.ActiveClient()
+}
+
+func (h *BaseHandler) requireActiveClient(w http.ResponseWriter) (*client.ChronoQueueClient, bool) {
+	client, err := h.activeClient()
+	if err == nil {
+		return client, true
+	}
+	if h.logger != nil {
+		h.logger.ErrorWithFields("Failed to acquire active cluster client", "error", err)
+	}
+	h.renderError(w, http.StatusServiceUnavailable, "ChronoQueue backend is unavailable")
+	return nil, false
 }
 
 // render executes the base layout with the given content template and data map.
