@@ -83,8 +83,7 @@ func (h *SchemasHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	schemas, err := activeClient.ListSchemas(ctx, prefix, 200, activeOnly)
 	if err != nil {
-		h.logger.ErrorWithFields("Failed to list schemas", "error", err)
-		h.renderError(w, http.StatusInternalServerError, "Failed to load schemas")
+		h.writeRPCError(w, r, "list schemas", err)
 		return
 	}
 
@@ -177,8 +176,7 @@ func (h *SchemasHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Metadata:    metadata,
 	})
 	if err != nil {
-		h.logger.ErrorWithFields("Failed to register schema", "error", err, "schema_id", schemaID)
-		h.writeInlineFormError(w, r, fmt.Sprintf("Failed to register schema: %v", err))
+		h.writeRPCError(w, r, "register schema", err)
 		return
 	}
 
@@ -222,8 +220,7 @@ func (h *SchemasHandler) Detail(w http.ResponseWriter, r *http.Request) {
 
 	schemaMap, err := activeClient.GetSchema(ctx, schemaID, version)
 	if err != nil {
-		h.logger.ErrorWithFields("Failed to get schema", "error", err, "schema_id", schemaID, "version", version)
-		h.renderError(w, http.StatusInternalServerError, "Failed to load schema")
+		h.writeRPCError(w, r, "load schema", err)
 		return
 	}
 
@@ -292,7 +289,7 @@ func (h *SchemasHandler) Validate(w http.ResponseWriter, r *http.Request) {
 
 	err := activeClient.ValidatePayload(ctx, schemaID, version, payload)
 	if err != nil {
-		h.writeInlineFormError(w, r, fmt.Sprintf("Validation failed: %v", err))
+		h.writeRPCError(w, r, "validate schema payload", err)
 		return
 	}
 
@@ -326,8 +323,7 @@ func (h *SchemasHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := activeClient.DeleteSchema(ctx, schemaID, version); err != nil {
-		h.logger.ErrorWithFields("Failed to delete schema", "error", err, "schema_id", schemaID, "version", version)
-		h.renderError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to delete schema: %v", err))
+		h.writeRPCError(w, r, "delete schema", err)
 		return
 	}
 

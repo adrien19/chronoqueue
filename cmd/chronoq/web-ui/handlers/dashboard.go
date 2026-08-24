@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"html/template"
 	"net/http"
 	"sync"
@@ -47,31 +48,30 @@ func (h *DashboardHandler) Index(w http.ResponseWriter, r *http.Request) {
 
 	queuesResp, err := activeClient.ListQueues(ctx, "")
 	if err != nil {
-		h.logger.WarnWithFields("Backend unavailable, rendering empty dashboard", "error", err)
+		h.writeRPCError(w, r, "list dashboard queues", err)
+		return
 	}
 
 	var queues []*pb_queue.Queue
 	if queuesResp != nil {
 		queues = queuesResp.GetQueues()
 	}
-	rows, totalPending, totalRunning, totalCompleted, totalDLQ := h.buildQueueRows(ctx, activeClient, queues)
-
-	brokerStatus := "Healthy"
-	if err != nil {
-		brokerStatus = "Unreachable"
-	}
+	rows, totalPending, totalRunning, totalCompleted, totalDLQ, partialData := h.buildQueueRows(ctx, activeClient, queues)
 
 	data := map[string]any{
 		"PageTitle":      "Home",
 		"Active":         "home",
 		"Rows":           rows,
-		"BrokerStatus":   brokerStatus,
+		"BrokerStatus":   "Healthy",
 		"TotalReady":     fmt.Sprintf("%d", totalPending),
 		"TotalRunning":   fmt.Sprintf("%d", totalRunning),
 		"TotalCompleted": fmt.Sprintf("%d", totalCompleted),
 		"TotalPending":   fmt.Sprintf("%d", totalPending),
 		"TotalDLQ":       fmt.Sprintf("%d", totalDLQ),
 		"RatePoints":     []int{},
+	}
+	if partialData {
+		data["PartialDataWarning"] = "Some queue state or dead-letter statistics could not be loaded. Dashboard totals are incomplete."
 	}
 
 	h.render(w, "home_content", data)
@@ -89,35 +89,29 @@ func (h *DashboardHandler) DashboardStats(w http.ResponseWriter, r *http.Request
 
 	queuesResp, err := activeClient.ListQueues(ctx, "")
 	if err != nil {
-		h.logger.WarnWithFields("Backend unavailable for dashboard stats fragment", "error", err)
+		h.writeRPCError(w, r, "load dashboard statistics", err)
+		return
 	}
 
 	var queues []*pb_queue.Queue
 	if queuesResp != nil {
 		queues = queuesResp.GetQueues()
 	}
-	_, totalPending, totalRunning, totalCompleted, totalDLQ := h.buildQueueRows(ctx, activeClient, queues)
-
-	brokerStatus := "Healthy"
-	if err != nil {
-		brokerStatus = "Unreachable"
-	}
+	_, totalPending, totalRunning, totalCompleted, totalDLQ, partialData := h.buildQueueRows(ctx, activeClient, queues)
 
 	data := map[string]any{
-		"BrokerStatus":   brokerStatus,
+		"BrokerStatus":   "Healthy",
 		"TotalReady":     fmt.Sprintf("%d", totalPending),
 		"TotalRunning":   fmt.Sprintf("%d", totalRunning),
 		"TotalCompleted": fmt.Sprintf("%d", totalCompleted),
 		"TotalPending":   fmt.Sprintf("%d", totalPending),
 		"TotalDLQ":       fmt.Sprintf("%d", totalDLQ),
 		"RatePoints":     []int{},
+		"PartialData":    partialData,
 	}
 	h.injectBaseData(data)
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.templates.ExecuteTemplate(w, "dashboard_stats", data); err != nil {
-		h.logger.ErrorWithFields("Failed to render dashboard_stats fragment", "error", err)
-	}
+	h.renderFragment(w, "dashboard_stats", data)
 }
 
 // LiveOverview streams a Server-Sent Events fragment for the home page live surfaces panel.
@@ -135,7 +129,8 @@ func (h *DashboardHandler) LiveOverview(w http.ResponseWriter, r *http.Request) 
 
 	queuesResp, err := activeClient.ListQueues(ctx, "")
 	if err != nil {
-		h.logger.WarnWithFields("Backend unavailable for live overview", "error", err)
+		h.writeLiveOverviewError(w, "load live overview", err)
+		return
 	}
 
 	type queueSummary struct {
@@ -144,6 +139,7 @@ func (h *DashboardHandler) LiveOverview(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var summaries []queueSummary
+	partialData := false
 	var liveQueues []*pb_queue.Queue
 	if queuesResp != nil {
 		liveQueues = queuesResp.GetQueues()
@@ -151,6 +147,7 @@ func (h *DashboardHandler) LiveOverview(w http.ResponseWriter, r *http.Request) 
 	for _, q := range liveQueues {
 		stateResp, err := activeClient.GetQueueState(ctx, q.GetName())
 		if err != nil {
+			partialData = true
 			continue
 		}
 		counts := stateResp.GetStateCounts()
@@ -172,6 +169,7 @@ func (h *DashboardHandler) LiveOverview(w http.ResponseWriter, r *http.Request) 
 	fragmentData := map[string]any{
 		"QueueSummary":    summaries,
 		"InflightSummary": []any{},
+		"PartialData":     partialData,
 	}
 
 	var buf []byte
@@ -209,6 +207,18 @@ func (h *DashboardHandler) LiveOverview(w http.ResponseWriter, r *http.Request) 
 	flusher.Flush()
 }
 
+func (h *DashboardHandler) writeLiveOverviewError(w http.ResponseWriter, operation string, err error) {
+	mapped := mapRPCError(err)
+	h.logger.ErrorWithFields("ChronoQueue RPC failed", "error", err, "operation", operation, "status", mapped.statusCode)
+	if _, writeErr := fmt.Fprintf(w, "event: overview\ndata: <div class=\"rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300\">%s</div>\n\n", html.EscapeString(mapped.message)); writeErr != nil {
+		h.logger.ErrorWithFields("Failed to write live overview error event", "error", writeErr, "operation", operation)
+		return
+	}
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 // bufWriter is a minimal io.Writer that accumulates bytes.
 type bufWriter struct {
 	b  []byte
@@ -226,6 +236,7 @@ func (bw *bufWriter) Write(p []byte) (int, error) {
 func (h *DashboardHandler) buildQueueRows(ctx context.Context, activeClient *client.ChronoQueueClient, queues []*pb_queue.Queue) (
 	rows []QueueRow,
 	totalPending, totalRunning, totalCompleted, totalDLQ int64,
+	partialData bool,
 ) {
 	type result struct {
 		row        QueueRow
@@ -233,6 +244,7 @@ func (h *DashboardHandler) buildQueueRows(ctx context.Context, activeClient *cli
 		running    int64
 		completed  int64
 		dlqPending int64
+		partial    bool
 	}
 
 	results := make([]result, len(queues))
@@ -249,6 +261,7 @@ func (h *DashboardHandler) buildQueueRows(ctx context.Context, activeClient *cli
 			if err != nil {
 				h.logger.ErrorWithFields("Failed to get queue state", "error", err, "queue", name)
 				results[idx].row = QueueRow{Name: name, Href: "/queues/" + name, IsDLQ: len(associations.sourcesByDLQ[name]) > 0}
+				results[idx].partial = true
 				return
 			}
 
@@ -260,11 +273,13 @@ func (h *DashboardHandler) buildQueueRows(ctx context.Context, activeClient *cli
 			delayed := int64(counts["INVISIBLE"])
 
 			var dlqCount int64
+			partial := false
 			dlqDisplay := "—"
 			if dlqName := associations.dlqBySource[name]; dlqName != "" {
 				dlqResp, dlqErr := activeClient.GetDLQStats(ctx, dlqName)
 				if dlqErr != nil {
 					h.logger.ErrorWithFields("Failed to get DLQ stats", "error", dlqErr, "queue", name, "dlq", dlqName)
+					partial = true
 				} else {
 					dlqCount = int64(dlqResp.GetMessageCount())
 					dlqDisplay = fmt.Sprintf("%d", dlqCount)
@@ -288,6 +303,7 @@ func (h *DashboardHandler) buildQueueRows(ctx context.Context, activeClient *cli
 				running:    running,
 				completed:  completed,
 				dlqPending: dlqCount,
+				partial:    partial,
 			}
 		}(i, q)
 	}
@@ -300,9 +316,10 @@ func (h *DashboardHandler) buildQueueRows(ctx context.Context, activeClient *cli
 		totalRunning += res.running
 		totalCompleted += res.completed
 		totalDLQ += res.dlqPending
+		partialData = partialData || res.partial
 	}
 
-	return rows, totalPending, totalRunning, totalCompleted, totalDLQ
+	return rows, totalPending, totalRunning, totalCompleted, totalDLQ, partialData
 }
 
 // formatDuration formats a duration in a human-readable short form.

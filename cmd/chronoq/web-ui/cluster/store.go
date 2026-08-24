@@ -1,6 +1,8 @@
 package cluster
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,14 +21,26 @@ import (
 
 var ErrNoActiveCluster = errors.New("no active cluster configured")
 
+const (
+	TransportPlaintext = "plaintext"
+	TransportTLS       = "tls"
+)
+
 // Cluster holds connection details for a single ChronoQueue gRPC backend.
 type Cluster struct {
-	Slug          string `json:"slug"`
-	Name          string `json:"name"`
-	Description   string `json:"description"`
-	BrokerAddress string `json:"brokerAddress"`
-	SkipSSLCheck  bool   `json:"skipSSLCheck"`
-	IsActive      bool   `json:"isActive"`
+	Slug           string `json:"slug"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	BrokerAddress  string `json:"brokerAddress"`
+	TransportMode  string `json:"transportMode"`
+	SkipTLSVerify  bool   `json:"skipTLSVerify,omitempty"`
+	TLSServerName  string `json:"tlsServerName,omitempty"`
+	CACertFile     string `json:"caCertFile,omitempty"`
+	ClientCertFile string `json:"clientCertFile,omitempty"`
+	ClientKeyFile  string `json:"clientKeyFile,omitempty"`
+	APIKeyEnv      string `json:"apiKeyEnv,omitempty"`
+	SkipSSLCheck   bool   `json:"skipSSLCheck,omitempty"`
+	IsActive       bool   `json:"isActive"`
 }
 
 // Store manages cluster definitions and their cached gRPC clients.
@@ -37,7 +51,10 @@ type Store struct {
 	filePath string
 }
 
-var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
+var (
+	slugRe                = regexp.MustCompile(`[^a-z0-9]+`)
+	environmentVariableRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+)
 
 // SlugFor converts a broker address into a URL-safe slug (e.g. "localhost:9000" → "localhost-9000").
 func SlugFor(brokerAddr string) string {
@@ -70,6 +87,15 @@ func (s *Store) Load() error {
 	if err := json.Unmarshal(data, &tmp); err != nil {
 		return fmt.Errorf("parse cluster store: %w", err)
 	}
+	for index, cluster := range tmp {
+		if cluster == nil {
+			return fmt.Errorf("parse cluster store: cluster at index %d is null", index)
+		}
+		normalizeCluster(cluster)
+		if err := validateCluster(*cluster); err != nil {
+			return fmt.Errorf("validate cluster %q: %w", cluster.Name, err)
+		}
+	}
 	s.mu.Lock()
 	s.clusters = tmp
 	s.mu.Unlock()
@@ -86,7 +112,7 @@ func (s *Store) Seed(name, brokerAddr string, skipSSL bool) {
 			Name:          name,
 			Description:   "Default ChronoQueue server",
 			BrokerAddress: brokerAddr,
-			SkipSSLCheck:  skipSSL,
+			TransportMode: mapLegacyTransport(skipSSL),
 			IsActive:      true,
 		})
 	}
@@ -119,6 +145,10 @@ func (s *Store) Get(slug string) (*Cluster, bool) {
 
 // Add appends a new cluster. Returns an error if the slug or name already exists.
 func (s *Store) Add(c Cluster) error {
+	normalizeCluster(&c)
+	if err := validateCluster(c); err != nil {
+		return err
+	}
 	if c.Slug == "" {
 		c.Slug = SlugFor(c.BrokerAddress)
 	}
@@ -140,8 +170,12 @@ func (s *Store) Add(c Cluster) error {
 }
 
 // Update replaces editable fields of an existing cluster. Invalidates the cached client
-// when the broker address changes.
+// when connection or authentication settings change.
 func (s *Store) Update(slug string, updated Cluster) error {
+	normalizeCluster(&updated)
+	if err := validateCluster(updated); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, c := range s.clusters {
@@ -156,7 +190,7 @@ func (s *Store) Update(slug string, updated Cluster) error {
 		if c.Slug != slug {
 			continue
 		}
-		if c.BrokerAddress != updated.BrokerAddress || c.SkipSSLCheck != updated.SkipSSLCheck {
+		if connectionConfigChanged(*c, updated) {
 			if cl, ok := s.clients[slug]; ok {
 				cl.Close()
 				delete(s.clients, slug)
@@ -165,7 +199,14 @@ func (s *Store) Update(slug string, updated Cluster) error {
 		c.Name = updated.Name
 		c.Description = updated.Description
 		c.BrokerAddress = updated.BrokerAddress
-		c.SkipSSLCheck = updated.SkipSSLCheck
+		c.TransportMode = updated.TransportMode
+		c.SkipTLSVerify = updated.SkipTLSVerify
+		c.TLSServerName = updated.TLSServerName
+		c.CACertFile = updated.CACertFile
+		c.ClientCertFile = updated.ClientCertFile
+		c.ClientKeyFile = updated.ClientKeyFile
+		c.APIKeyEnv = updated.APIKeyEnv
+		c.SkipSSLCheck = false
 		return s.save()
 	}
 	return fmt.Errorf("cluster %q not found", slug)
@@ -243,12 +284,9 @@ func (s *Store) ActiveClient() (*client.ChronoQueueClient, error) {
 	if cl, ok := s.clients[active.Slug]; ok {
 		return cl, nil
 	}
-	opts := client.ClientOptions{
-		MaxRetries: 3,
-		APIKey:     os.Getenv("CHRONOQUEUE_API_KEY"),
-	}
-	if !active.SkipSSLCheck {
-		opts.TLSCredentials = credentials.NewClientTLSFromCert(nil, "")
+	opts, err := clientOptions(*active)
+	if err != nil {
+		return nil, fmt.Errorf("configure client for cluster %q: %w", active.Name, err)
 	}
 	cl, err := client.NewChronoQueueClient(active.BrokerAddress, opts)
 	if err != nil {
@@ -256,6 +294,61 @@ func (s *Store) ActiveClient() (*client.ChronoQueueClient, error) {
 	}
 	s.clients[active.Slug] = cl
 	return cl, nil
+}
+
+func clientOptions(cluster Cluster) (client.ClientOptions, error) {
+	normalizeCluster(&cluster)
+	if err := validateCluster(cluster); err != nil {
+		return client.ClientOptions{}, err
+	}
+
+	apiKeyEnv := cluster.APIKeyEnv
+	if apiKeyEnv == "" {
+		apiKeyEnv = "CHRONOQUEUE_API_KEY"
+	}
+	apiKey := os.Getenv(apiKeyEnv)
+	if cluster.APIKeyEnv != "" && apiKey == "" {
+		return client.ClientOptions{}, fmt.Errorf("API key environment variable %q is not set", apiKeyEnv)
+	}
+
+	opts := client.ClientOptions{MaxRetries: 3, APIKey: apiKey}
+	if cluster.TransportMode == TransportPlaintext {
+		return opts, nil
+	}
+
+	tlsConfig, err := clusterTLSConfig(cluster)
+	if err != nil {
+		return client.ClientOptions{}, err
+	}
+	opts.TLSCredentials = credentials.NewTLS(tlsConfig)
+	return opts, nil
+}
+
+func clusterTLSConfig(cluster Cluster) (*tls.Config, error) {
+	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		ServerName:         cluster.TLSServerName,
+		InsecureSkipVerify: cluster.SkipTLSVerify, //nolint:gosec // explicitly configured for development clusters
+	}
+	if cluster.CACertFile != "" {
+		caPEM, err := os.ReadFile(cluster.CACertFile)
+		if err != nil {
+			return nil, fmt.Errorf("read CA certificate: %w", err)
+		}
+		roots := x509.NewCertPool()
+		if !roots.AppendCertsFromPEM(caPEM) {
+			return nil, fmt.Errorf("parse CA certificate")
+		}
+		tlsConfig.RootCAs = roots
+	}
+	if cluster.ClientCertFile != "" {
+		certificate, err := tls.LoadX509KeyPair(cluster.ClientCertFile, cluster.ClientKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("load client certificate: %w", err)
+		}
+		tlsConfig.Certificates = []tls.Certificate{certificate}
+	}
+	return tlsConfig, nil
 }
 
 func validateBrokerAddress(address string) error {
@@ -271,6 +364,53 @@ func validateBrokerAddress(address string) error {
 		return fmt.Errorf("port must be between 1 and 65535")
 	}
 	return nil
+}
+
+func normalizeCluster(cluster *Cluster) {
+	if cluster == nil {
+		return
+	}
+	if cluster.TransportMode == "" {
+		cluster.TransportMode = mapLegacyTransport(cluster.SkipSSLCheck)
+	}
+	cluster.SkipSSLCheck = false
+}
+
+func mapLegacyTransport(skipSSL bool) string {
+	if skipSSL {
+		return TransportPlaintext
+	}
+	return TransportTLS
+}
+
+func validateCluster(cluster Cluster) error {
+	if err := validateBrokerAddress(cluster.BrokerAddress); err != nil {
+		return fmt.Errorf("invalid broker address: %w", err)
+	}
+	if cluster.TransportMode != TransportPlaintext && cluster.TransportMode != TransportTLS {
+		return fmt.Errorf("transport mode must be %q or %q", TransportPlaintext, TransportTLS)
+	}
+	if cluster.TransportMode == TransportPlaintext && (cluster.SkipTLSVerify || cluster.TLSServerName != "" || cluster.CACertFile != "" || cluster.ClientCertFile != "" || cluster.ClientKeyFile != "") {
+		return fmt.Errorf("TLS settings require TLS transport")
+	}
+	if (cluster.ClientCertFile == "") != (cluster.ClientKeyFile == "") {
+		return fmt.Errorf("client certificate and key files must be configured together")
+	}
+	if cluster.APIKeyEnv != "" && !environmentVariableRe.MatchString(cluster.APIKeyEnv) {
+		return fmt.Errorf("API key environment variable name is invalid")
+	}
+	return nil
+}
+
+func connectionConfigChanged(current, updated Cluster) bool {
+	return current.BrokerAddress != updated.BrokerAddress ||
+		current.TransportMode != updated.TransportMode ||
+		current.SkipTLSVerify != updated.SkipTLSVerify ||
+		current.TLSServerName != updated.TLSServerName ||
+		current.CACertFile != updated.CACertFile ||
+		current.ClientCertFile != updated.ClientCertFile ||
+		current.ClientKeyFile != updated.ClientKeyFile ||
+		current.APIKeyEnv != updated.APIKeyEnv
 }
 
 // CloseAll closes every cached gRPC client.

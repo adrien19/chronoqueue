@@ -2,12 +2,17 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"html/template"
 	"net/http"
 	"strings"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/adrien19/chronoqueue/client"
 	clusterstore "github.com/adrien19/chronoqueue/cmd/chronoq/web-ui/cluster"
@@ -56,13 +61,17 @@ type DayOption struct {
 
 // BaseHandler provides common template rendering and navigation injection for all handlers.
 type BaseHandler struct {
-	templates *template.Template
-	store     *clusterstore.Store
-	logger    *log.Logger
+	templates      *template.Template
+	store          *clusterstore.Store
+	logger         *log.Logger
+	clientProvider func() (*client.ChronoQueueClient, error)
 }
 
 // activeClient returns the gRPC client for the currently-active cluster.
 func (h *BaseHandler) activeClient() (*client.ChronoQueueClient, error) {
+	if h.clientProvider != nil {
+		return h.clientProvider()
+	}
 	return h.store.ActiveClient()
 }
 
@@ -80,12 +89,30 @@ func (h *BaseHandler) requireActiveClient(w http.ResponseWriter) (*client.Chrono
 
 // render executes the base layout with the given content template and data map.
 func (h *BaseHandler) render(w http.ResponseWriter, contentTemplate string, data map[string]any) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.injectBaseData(data)
 	data["ContentTemplate"] = contentTemplate
-	if err := h.templates.ExecuteTemplate(w, "base", data); err != nil {
+	var rendered bytes.Buffer
+	if err := h.templates.ExecuteTemplate(&rendered, "base", data); err != nil {
 		h.logger.ErrorWithFields("template execution failed", "error", err, "content", contentTemplate)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if _, err := w.Write(rendered.Bytes()); err != nil {
+		h.logger.ErrorWithFields("failed to write response", "error", err, "content", contentTemplate)
+	}
+}
+
+func (h *BaseHandler) renderFragment(w http.ResponseWriter, templateName string, data any) {
+	var rendered bytes.Buffer
+	if err := h.templates.ExecuteTemplate(&rendered, templateName, data); err != nil {
+		h.logger.ErrorWithFields("fragment template execution failed", "error", err, "content", templateName)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if _, err := w.Write(rendered.Bytes()); err != nil {
+		h.logger.ErrorWithFields("failed to write fragment response", "error", err, "content", templateName)
 	}
 }
 
@@ -221,6 +248,63 @@ func ToJSON(v any) template.JS {
 
 func isHTMXRequest(r *http.Request) bool {
 	return strings.EqualFold(strings.TrimSpace(r.Header.Get("HX-Request")), "true")
+}
+
+type rpcErrorResponse struct {
+	statusCode int
+	message    string
+}
+
+func mapRPCError(err error) rpcErrorResponse {
+	if err == nil {
+		return rpcErrorResponse{}
+	}
+	if errors.Is(err, context.Canceled) {
+		return rpcErrorResponse{statusCode: http.StatusRequestTimeout, message: "The request was canceled"}
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return rpcErrorResponse{statusCode: http.StatusGatewayTimeout, message: "ChronoQueue did not respond before the deadline"}
+	}
+
+	switch status.Code(err) {
+	case codes.InvalidArgument, codes.OutOfRange:
+		return rpcErrorResponse{statusCode: http.StatusBadRequest, message: "ChronoQueue rejected the request"}
+	case codes.NotFound:
+		return rpcErrorResponse{statusCode: http.StatusNotFound, message: "The requested ChronoQueue resource was not found"}
+	case codes.AlreadyExists, codes.Aborted, codes.FailedPrecondition:
+		return rpcErrorResponse{statusCode: http.StatusConflict, message: "The request conflicts with the current ChronoQueue state"}
+	case codes.Unauthenticated:
+		return rpcErrorResponse{statusCode: http.StatusUnauthorized, message: "ChronoQueue authentication failed"}
+	case codes.PermissionDenied:
+		return rpcErrorResponse{statusCode: http.StatusForbidden, message: "ChronoQueue denied this operation"}
+	case codes.ResourceExhausted:
+		return rpcErrorResponse{statusCode: http.StatusTooManyRequests, message: "ChronoQueue is temporarily rate limited or out of capacity"}
+	case codes.Canceled:
+		return rpcErrorResponse{statusCode: http.StatusRequestTimeout, message: "The request was canceled"}
+	case codes.DeadlineExceeded:
+		return rpcErrorResponse{statusCode: http.StatusGatewayTimeout, message: "ChronoQueue did not respond before the deadline"}
+	case codes.Unavailable:
+		return rpcErrorResponse{statusCode: http.StatusServiceUnavailable, message: "ChronoQueue is unavailable"}
+	default:
+		return rpcErrorResponse{statusCode: http.StatusInternalServerError, message: "ChronoQueue could not complete the request"}
+	}
+}
+
+func (h *BaseHandler) writeRPCError(w http.ResponseWriter, r *http.Request, operation string, err error) {
+	mapped := mapRPCError(err)
+	h.logger.ErrorWithFields("ChronoQueue RPC failed", "error", err, "operation", operation, "status", mapped.statusCode)
+	if !isHTMXRequest(r) {
+		h.renderError(w, mapped.statusCode, mapped.message)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("HX-Reswap", "innerHTML")
+	// HTMX does not swap non-2xx responses by default.
+	w.WriteHeader(http.StatusOK)
+	if _, writeErr := fmt.Fprintf(w, `<div class="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">%s</div>`, html.EscapeString(mapped.message)); writeErr != nil {
+		h.logger.ErrorWithFields("failed to write RPC error fragment", "error", writeErr, "operation", operation)
+	}
 }
 
 func (h *BaseHandler) writeInlineFormError(w http.ResponseWriter, r *http.Request, message string) {

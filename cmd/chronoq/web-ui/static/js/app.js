@@ -57,6 +57,20 @@ function initializeFormToggles() {
     scheduleType.addEventListener('change', toggleScheduleType);
     toggleScheduleType();
   }
+
+  const transportMode = document.querySelector('select[name="transportMode"]');
+  if (transportMode && !transportMode.dataset.toggleInitialized) {
+    const toggleTLSFields = () => {
+      const tlsEnabled = transportMode.value === 'tls';
+      ['tlsServerName', 'caCertFile', 'clientCertFile', 'clientKeyFile', 'skipTLSVerify'].forEach((name) => {
+        const field = document.querySelector(`[name="${name}"]`);
+        if (field instanceof HTMLInputElement) field.disabled = !tlsEnabled;
+      });
+    };
+    transportMode.dataset.toggleInitialized = 'true';
+    transportMode.addEventListener('change', toggleTLSFields);
+    toggleTLSFields();
+  }
 }
 
 initializeFormToggles();

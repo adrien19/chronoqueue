@@ -51,14 +51,15 @@ func (h *SchedulesHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	schedulesResp, err := activeClient.ListSchedules(ctx, "")
 	if err != nil {
-		h.logger.ErrorWithFields("Failed to list schedules", "error", err)
-		h.renderError(w, http.StatusInternalServerError, "Failed to load schedules")
+		h.writeRPCError(w, r, "list schedules", err)
 		return
 	}
 
 	queuesResp, err := activeClient.ListQueues(ctx, "")
+	partialDataWarning := ""
 	if err != nil {
 		h.logger.ErrorWithFields("Failed to list queues", "error", err)
+		partialDataWarning = "Queue availability could not be loaded. Schedule rows may have incomplete queue status."
 	}
 
 	existingQueues := make(map[string]bool)
@@ -77,11 +78,12 @@ func (h *SchedulesHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]any{
-		"PageTitle":        "Schedules",
-		"Active":           "schedules",
-		"Schedules":        schedulesResp.GetSchedules(),
-		"ExistingQueues":   existingQueues,
-		"HasMissingQueues": hasMissingQueues,
+		"PageTitle":          "Schedules",
+		"Active":             "schedules",
+		"Schedules":          schedulesResp.GetSchedules(),
+		"ExistingQueues":     existingQueues,
+		"HasMissingQueues":   hasMissingQueues,
+		"PartialDataWarning": partialDataWarning,
 	}
 	h.render(w, "schedules_content", data)
 }
@@ -151,8 +153,7 @@ func (h *SchedulesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := activeClient.CreateSchedule(ctx, scheduleID, *scheduleOpts); err != nil {
-		h.logger.ErrorWithFields("Failed to create schedule", "error", err, "schedule_id", scheduleID)
-		http.Error(w, fmt.Sprintf("Failed to create schedule: %v", err), http.StatusInternalServerError)
+		h.writeRPCError(w, r, "create schedule", err)
 		return
 	}
 
@@ -169,8 +170,7 @@ func (h *SchedulesHandler) ensureQueueExists(ctx context.Context, activeClient *
 
 	queuesResp, err := activeClient.ListQueues(ctx, "")
 	if err != nil {
-		h.logger.ErrorWithFields("Failed to check queue existence", "error", err)
-		http.Error(w, "Failed to verify queue existence", http.StatusInternalServerError)
+		h.writeRPCError(w, r, "verify queue existence", err)
 		return err
 	}
 
@@ -188,7 +188,10 @@ func (h *SchedulesHandler) ensureQueueExists(ctx context.Context, activeClient *
 	}
 
 	if !exists && autoCreate {
-		return h.autoCreateQueue(ctx, activeClient, queueName, scheduleID)
+		if err := h.autoCreateQueue(ctx, activeClient, queueName, scheduleID); err != nil {
+			h.writeRPCError(w, r, "create schedule queue", err)
+			return err
+		}
 	}
 
 	return nil
@@ -269,8 +272,7 @@ func (h *SchedulesHandler) Toggle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		h.logger.ErrorWithFields("Failed to toggle schedule", "error", err, "schedule_id", scheduleID, "action", action)
-		http.Error(w, fmt.Sprintf("Failed to %s schedule: %v", action, err), http.StatusInternalServerError)
+		h.writeRPCError(w, r, action+" schedule", err)
 		return
 	}
 
@@ -334,8 +336,7 @@ func (h *SchedulesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if _, err := activeClient.DeleteSchedule(ctx, scheduleID); err != nil {
-		h.logger.ErrorWithFields("Failed to delete schedule", "error", err, "schedule_id", scheduleID)
-		http.Error(w, fmt.Sprintf("Failed to delete schedule: %v", err), http.StatusInternalServerError)
+		h.writeRPCError(w, r, "delete schedule", err)
 		return
 	}
 
