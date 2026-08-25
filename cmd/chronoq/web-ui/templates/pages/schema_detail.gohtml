@@ -17,6 +17,9 @@
         <form method="POST" action="/api/schemas/{{ .Schema.SchemaID }}/versions/{{ .Schema.Version }}/delete" data-confirm="Delete schema {{ .Schema.SchemaID }} version {{ .Schema.Version }}?">
           <button class="cq-btn border-red-500/30 text-red-300 hover:border-red-500/50" type="submit">Delete v{{ .Schema.Version }}</button>
         </form>
+		<form method="POST" action="/api/schemas/{{ .Schema.SchemaID }}/deactivate" data-confirm="Deactivate ALL versions of schema {{ .Schema.SchemaID }}? Producers using the latest active version may fail until a version is reactivated.">
+		  <button class="cq-btn border-amber-500/30 text-amber-300" type="submit">Deactivate all versions</button>
+		</form>
       </div>
     </div>
 

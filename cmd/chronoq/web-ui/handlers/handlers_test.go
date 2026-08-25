@@ -137,6 +137,10 @@ func TestBuildMessageDisplaysPreservesStatesAndScheduledTimes(t *testing.T) {
 		if displays[i].State != state.String() {
 			t.Errorf("state[%d] = %q, want %q", i, displays[i].State, state)
 		}
+		wantCancelable := state == message_pb.Message_Metadata_INVISIBLE || state == message_pb.Message_Metadata_PENDING
+		if displays[i].Cancelable != wantCancelable {
+			t.Errorf("cancelable[%d] = %v, want %v for %s", i, displays[i].Cancelable, wantCancelable, state)
+		}
 	}
 	if displays[0].ScheduledAt == nil || !displays[0].ScheduledAt.Equal(future) {
 		t.Fatalf("future scheduled time = %v, want %v", displays[0].ScheduledAt, future)

@@ -24,6 +24,21 @@
         <p class="mt-1 text-xs text-zinc-500">JSON object to attach as the message payload.</p>
       </div>
 
+      <details class="rounded-xl border border-line bg-zinc-950/40 p-5">
+        <summary class="cursor-pointer text-sm font-medium text-zinc-300">Metadata, ordered binary headers, and lease policy</summary>
+        <div class="mt-4 space-y-4">
+          <div><label class="mb-2 block text-sm text-zinc-200">Payload metadata (JSON object)</label><textarea class="cq-input min-h-[90px] w-full font-mono text-sm" name="payload_metadata" placeholder='{"tenant":"acme"}'></textarea></div>
+          <div><label class="mb-2 block text-sm text-zinc-200">Headers (ordered JSON array)</label><textarea class="cq-input min-h-[100px] w-full font-mono text-sm" name="headers" placeholder='[{"key":"trace-id","value_base64":"YWJj"},{"key":"trace-id","value_base64":"ZGVm"}]'></textarea><p class="mt-1 text-xs text-zinc-500">Values are base64 so arbitrary binary data and duplicate ordered keys are preserved.</p></div>
+          <div class="grid grid-cols-4 gap-4">
+            <div><label class="mb-2 block text-sm text-zinc-200">Base lease</label><input class="cq-input w-full" name="base_lease" placeholder="30s"></div>
+            <div><label class="mb-2 block text-sm text-zinc-200">Maximum extension</label><input class="cq-input w-full" name="max_extension" placeholder="5m"></div>
+            <div><label class="mb-2 block text-sm text-zinc-200">Heartbeat timeout</label><input class="cq-input w-full" name="heartbeat_timeout" placeholder="15s"></div>
+            <div><label class="mb-2 block text-sm text-zinc-200">Extension step</label><input class="cq-input w-full" name="extend_step" placeholder="10s"></div>
+          </div>
+		  <div><label class="mb-2 block text-sm text-zinc-200">Maximum renewals</label><input class="cq-input w-48" type="number" min="0" name="max_renewals" placeholder="0 (unlimited)"></div>
+        </div>
+      </details>
+
       <div class="grid grid-cols-3 gap-4">
         <div>
           <label class="mb-2 block text-sm font-medium text-zinc-200">Priority</label>

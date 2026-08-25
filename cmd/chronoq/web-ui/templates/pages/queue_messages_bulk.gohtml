@@ -1,0 +1,20 @@
+{{ define "queue_messages_bulk_content" }}
+<section class="space-y-5">
+  <div class="flex items-center gap-3"><a href="/queues/{{ .QueueName }}" class="cq-btn !px-2">←</a><h2 class="text-2xl font-semibold text-white">Bulk Post Messages</h2></div>
+  <div class="cq-panel p-6">
+    <form method="POST" action="/api/queues/{{ .QueueName }}/messages/bulk" hx-post="/api/queues/{{ .QueueName }}/messages/bulk" hx-target="#bulk-results" class="space-y-5">
+      <div><label class="mb-2 block text-sm font-medium text-zinc-200">Transaction mode</label><select class="cq-input w-full" name="transaction_mode" required><option value="ALL_OR_NOTHING">All or nothing</option><option value="BEST_EFFORT">Best effort</option></select></div>
+      <div><label class="mb-2 block text-sm font-medium text-zinc-200">Messages (JSON array)</label><textarea class="cq-input min-h-[280px] w-full font-mono text-sm" name="messages" required placeholder='[{"message_id":"order-1","payload":{"orderId":1},"headers":[{"key":"trace-id","value_base64":"YWJj"}]}]'></textarea><p class="mt-1 text-xs text-zinc-500">1–1000 messages. Header values are base64; duplicate ordered keys are preserved.</p></div>
+      <div id="bulk-results"></div>
+      <div class="flex gap-3 border-t border-line pt-4"><button class="cq-btn cq-btn-primary" type="submit">Post batch</button><a class="cq-btn" href="/queues/{{ .QueueName }}">Cancel</a></div>
+    </form>
+  </div>
+</section>
+{{ end }}
+
+{{ define "bulk_message_results" }}
+<div class="rounded-xl border border-line bg-zinc-950/40 p-4">
+  <p class="text-sm text-zinc-200">{{ .SuccessfulCount }} succeeded; {{ .FailedCount }} failed.</p>
+  <div class="mt-3 space-y-2">{{ range .Results }}<div class="flex justify-between gap-3 text-sm"><code>{{ .MessageID }}</code>{{ if .Success }}<span class="text-emerald-300">Success</span>{{ else }}<span class="text-red-300">{{ .Error }}</span>{{ end }}</div>{{ end }}</div>
+</div>
+{{ end }}

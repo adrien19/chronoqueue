@@ -299,7 +299,7 @@ func (h *SchemasHandler) Validate(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Delete removes a schema version or all versions (version=0) and redirects.
+// Delete removes a positive schema version and redirects.
 func (h *SchemasHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	activeClient, ok := h.requireActiveClient(w)
 	if !ok {
@@ -327,8 +327,24 @@ func (h *SchemasHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if version == 0 {
-		http.Redirect(w, r, "/schemas", http.StatusSeeOther)
+	http.Redirect(w, r, "/schemas/"+url.PathEscape(schemaID), http.StatusSeeOther)
+}
+
+// DeactivateAll deactivates every version of a schema through the version-zero server contract.
+func (h *SchemasHandler) DeactivateAll(w http.ResponseWriter, r *http.Request) {
+	schemaID := strings.TrimSpace(r.PathValue("schemaId"))
+	if schemaID == "" {
+		h.renderError(w, http.StatusBadRequest, "Schema ID required")
+		return
+	}
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if err := activeClient.DeleteSchema(ctx, schemaID, 0); err != nil {
+		h.writeRPCError(w, r, "deactivate all schema versions", err)
 		return
 	}
 	http.Redirect(w, r, "/schemas/"+url.PathEscape(schemaID), http.StatusSeeOther)
