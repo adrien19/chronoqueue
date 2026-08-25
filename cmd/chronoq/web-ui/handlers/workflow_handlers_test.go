@@ -8,11 +8,14 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
@@ -145,7 +148,7 @@ func TestQueueListAcceptsNormalizedHTMXHeader(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/queues", nil)
 	request.Header.Set("HX-Request", " TRUE ")
 	handler.List(recorder, request)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "fragment warning") || strings.Contains(recorder.Body.String(), "full warning") {
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "fragment warning") || !strings.Contains(recorder.Body.String(), "—") || strings.Contains(recorder.Body.String(), "full warning") {
 		t.Fatalf("response = (%d, %q)", recorder.Code, recorder.Body.String())
 	}
 }
@@ -165,6 +168,152 @@ func TestQueueDetailKeepsPageOnDLQStatsFailure(t *testing.T) {
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "partial warning") || !strings.Contains(recorder.Body.String(), "—") {
 		t.Fatalf("response = (%d, %q)", recorder.Code, recorder.Body.String())
 	}
+}
+
+func TestDashboardStatsUseTruthfulAggregateStates(t *testing.T) {
+	tests := []struct {
+		name          string
+		stateResponse *queueservicepb.GetQueueStateResponse
+		stateErr      error
+		want          string
+	}{
+		{name: "complete", stateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int32{"PENDING": 3, "RUNNING": 2, "COMPLETED": 5}}, want: "Reachable|3|2|5|0|false"},
+		{name: "partial", stateErr: status.Error(codes.Unavailable, "private"), want: "Partial data|—|—|—|—|true"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service := &workflowQueueService{
+				listQueuesResponse:    &queueservicepb.ListQueuesResponse{Queues: []*queuepb.Queue{{Name: "orders"}}},
+				getQueueStateResponse: test.stateResponse,
+				getQueueStateErr:      test.stateErr,
+			}
+			handler := &DashboardHandler{BaseHandler: workflowBaseHandler(t, service)}
+			recorder := httptest.NewRecorder()
+			handler.DashboardStats(recorder, httptest.NewRequest(http.MethodGet, "/fragments/dashboard-stats", nil))
+			if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != test.want {
+				t.Fatalf("response = (%d, %q), want %q", recorder.Code, recorder.Body.String(), test.want)
+			}
+		})
+	}
+
+	t.Run("DLQ failure", func(t *testing.T) {
+		service := &workflowQueueService{
+			listQueuesResponse:    &queueservicepb.ListQueuesResponse{Queues: []*queuepb.Queue{{Name: "orders", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "orders-dlq"}}}},
+			getQueueStateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int32{"PENDING": 3}},
+			getDLQStatsErr:        status.Error(codes.Unavailable, "private"),
+		}
+		handler := &DashboardHandler{BaseHandler: workflowBaseHandler(t, service)}
+		recorder := httptest.NewRecorder()
+		handler.DashboardStats(recorder, httptest.NewRequest(http.MethodGet, "/fragments/dashboard-stats", nil))
+		if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != "Partial data|—|—|—|—|true" {
+			t.Fatalf("response = (%d, %q)", recorder.Code, recorder.Body.String())
+		}
+	})
+
+	t.Run("queue list failure", func(t *testing.T) {
+		service := &workflowQueueService{listQueuesErr: status.Error(codes.Unavailable, "private")}
+		handler := &DashboardHandler{BaseHandler: workflowBaseHandler(t, service)}
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/fragments/dashboard-stats", nil)
+		request.Header.Set("HX-Request", "true")
+		handler.DashboardStats(recorder, request)
+		if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "ChronoQueue is unavailable") || strings.Contains(recorder.Body.String(), "private") {
+			t.Fatalf("response = (%d, %q)", recorder.Code, recorder.Body.String())
+		}
+	})
+}
+
+func TestSettingsNavigationOnlyExposesSupportedServerSettings(t *testing.T) {
+	items := settingsNav()
+	if len(items) != 1 || items[0].Key != "clusters" || items[0].Href != "/settings/clusters" {
+		t.Fatalf("settings navigation = %+v", items)
+	}
+}
+
+func TestLeaseMonitorRuntimeMetadataAndFailures(t *testing.T) {
+	now := time.Date(2030, time.January, 1, 12, 0, 0, 0, time.UTC)
+	message := &messagepb.Message{MessageId: "message-123456789", Metadata: &messagepb.Message_Metadata{
+		State: messagepb.Message_Metadata_RUNNING,
+		CurrentAttempt: &messagepb.Message_Metadata_AttemptRuntime{
+			WorkerId:          "worker-1",
+			LeaseStartedAt:    timestamppb.New(now.Add(-2 * time.Minute)),
+			LeaseExpiry:       now.Add(30 * time.Second).UnixMilli(),
+			LeaseRenewalCount: 3,
+			LastHeartbeatAt:   timestamppb.New(now.Add(-10 * time.Second)),
+		},
+	}}
+	row := buildLeaseRow(message, "orders", now)
+	if row.Worker != "worker-1" || row.Renewals != "3" || row.Duration != "2m" || row.ExpiresIn != "30s" || row.LastHeartbeat != "10s ago" {
+		t.Fatalf("lease row = %+v", row)
+	}
+
+	unknown := buildLeaseRow(&messagepb.Message{MessageId: "message", Metadata: &messagepb.Message_Metadata{State: messagepb.Message_Metadata_RUNNING}}, "orders", now)
+	if unknown.Worker != "—" || unknown.Renewals != "—" || unknown.Duration != "—" || unknown.ExpiresIn != "—" || unknown.LastHeartbeat != "—" {
+		t.Fatalf("unknown lease row = %+v", unknown)
+	}
+
+	t.Run("peek success", func(t *testing.T) {
+		service := &workflowQueueService{
+			listQueuesResponse:    &queueservicepb.ListQueuesResponse{Queues: []*queuepb.Queue{{Name: "orders"}}},
+			getQueueStateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int32{"RUNNING": 1}},
+			peekQueueResponse:     &queueservicepb.PeekQueueMessagesResponse{Messages: []*messagepb.Message{message}},
+		}
+		base := workflowBaseHandler(t, service)
+		activeClient, err := base.clientProvider()
+		if err != nil {
+			t.Fatalf("active client: %v", err)
+		}
+		inflight, total, partial, err := (&LeaseMonitorHandler{BaseHandler: base}).collectInflight(context.Background(), activeClient)
+		if err != nil || partial || total != 1 || len(inflight) != 1 || len(inflight[0].Rows) != 1 || inflight[0].Rows[0].Worker != "worker-1" {
+			t.Fatalf("inflight = (%+v, %d, %t, %v)", inflight, total, partial, err)
+		}
+	})
+
+	t.Run("list failure", func(t *testing.T) {
+		service := &workflowQueueService{listQueuesErr: status.Error(codes.Unavailable, "private")}
+		base := workflowBaseHandler(t, service)
+		activeClient, err := base.clientProvider()
+		if err != nil {
+			t.Fatalf("active client: %v", err)
+		}
+		_, _, _, err = (&LeaseMonitorHandler{BaseHandler: base}).collectInflight(context.Background(), activeClient)
+		if status.Code(err) != codes.Unavailable {
+			t.Fatalf("collect error = %v", err)
+		}
+	})
+
+	t.Run("peek failure is partial", func(t *testing.T) {
+		service := &workflowQueueService{
+			listQueuesResponse:    &queueservicepb.ListQueuesResponse{Queues: []*queuepb.Queue{{Name: "orders"}}},
+			getQueueStateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int32{"RUNNING": 1}},
+			peekQueueErr:          status.Error(codes.Unavailable, "private"),
+		}
+		base := workflowBaseHandler(t, service)
+		activeClient, err := base.clientProvider()
+		if err != nil {
+			t.Fatalf("active client: %v", err)
+		}
+		inflight, total, partial, err := (&LeaseMonitorHandler{BaseHandler: base}).collectInflight(context.Background(), activeClient)
+		if err != nil || !partial || total != 1 || len(inflight) != 1 || len(inflight[0].Rows) != 0 {
+			t.Fatalf("inflight = (%+v, %d, %t, %v)", inflight, total, partial, err)
+		}
+	})
+
+	t.Run("state failure is partial", func(t *testing.T) {
+		service := &workflowQueueService{
+			listQueuesResponse: &queueservicepb.ListQueuesResponse{Queues: []*queuepb.Queue{{Name: "orders"}}},
+			getQueueStateErr:   status.Error(codes.Unavailable, "private"),
+		}
+		base := workflowBaseHandler(t, service)
+		activeClient, err := base.clientProvider()
+		if err != nil {
+			t.Fatalf("active client: %v", err)
+		}
+		inflight, total, partial, err := (&LeaseMonitorHandler{BaseHandler: base}).collectInflight(context.Background(), activeClient)
+		if err != nil || !partial || total != 0 || len(inflight) != 0 {
+			t.Fatalf("inflight = (%+v, %d, %t, %v)", inflight, total, partial, err)
+		}
+	})
 }
 
 func TestBulkPostModesPartialAndTransportFailure(t *testing.T) {
@@ -464,7 +613,7 @@ func workflowBaseHandler(t *testing.T, service *workflowQueueService) BaseHandle
 	}
 	store := clusterstore.NewStore("")
 	store.Seed("Local", "localhost:9000", true)
-	templates := template.Must(template.New("test").Parse(`{{ define "base" }}{{ .ErrorMessage }}{{ with .Schedule }}{{ .Metadata.State }}{{ end }}{{ if eq .ContentTemplate "queue_detail_content" }}{{ template "queue_detail_content" . }}{{ end }}{{ end }}{{ define "bulk_message_results" }}{{ .SuccessfulCount }} succeeded; {{ .FailedCount }} failed{{ end }}{{ define "calendar_validation_result" }}{{ .ErrorMessage }}{{ end }}{{ define "calendar_preview_result" }}{{ .TotalCount }} runs{{ end }}{{ define "queue_table" }}{{ if .PartialDataFragmentWarning }}fragment warning{{ end }}{{ if .PartialDataWarning }}full warning{{ end }}{{ range .Rows }}{{ .Name }}{{ end }}{{ end }}{{ define "queue_detail_content" }}{{ if .PartialDataWarning }}partial warning{{ end }} {{ .Queue.DLQ }}{{ end }}`))
+	templates := template.Must(template.New("test").Parse(`{{ define "base" }}{{ .ErrorMessage }}{{ with .Schedule }}{{ .Metadata.State }}{{ end }}{{ if eq .ContentTemplate "queue_detail_content" }}{{ template "queue_detail_content" . }}{{ end }}{{ end }}{{ define "bulk_message_results" }}{{ .SuccessfulCount }} succeeded; {{ .FailedCount }} failed{{ end }}{{ define "calendar_validation_result" }}{{ .ErrorMessage }}{{ end }}{{ define "calendar_preview_result" }}{{ .TotalCount }} runs{{ end }}{{ define "queue_table" }}{{ if .PartialDataFragmentWarning }}fragment warning{{ end }}{{ if .PartialDataWarning }}full warning{{ end }}{{ range .Rows }}{{ .Name }}{{ .Ready }}{{ end }}{{ end }}{{ define "queue_detail_content" }}{{ if .PartialDataWarning }}partial warning{{ end }} {{ .Queue.DLQ }}{{ end }}{{ define "dashboard_stats" }}{{ .BrokerStatus }}|{{ .TotalReady }}|{{ .TotalRunning }}|{{ .TotalCompleted }}|{{ .TotalDLQ }}|{{ .PartialData }}{{ end }}`))
 	return BaseHandler{templates: templates, store: store, logger: log.NewLogger(), clientProvider: func() (*client.ChronoQueueClient, error) { return chronoClient, nil }}
 }
 
@@ -489,9 +638,11 @@ type workflowQueueService struct {
 	deleteSchemaRequest      *queueservicepb.DeleteSchemaRequest
 	deleteSchemaErr          error
 	listQueuesResponse       *queueservicepb.ListQueuesResponse
+	listQueuesErr            error
 	getQueueStateResponse    *queueservicepb.GetQueueStateResponse
 	getQueueStateErr         error
 	peekQueueResponse        *queueservicepb.PeekQueueMessagesResponse
+	peekQueueErr             error
 	getDLQStatsResponse      *queueservicepb.GetDLQStatsResponse
 	getDLQStatsErr           error
 	validateCalendarRequest  *queueservicepb.ValidateCalendarScheduleRequest
@@ -535,7 +686,7 @@ func (s *workflowQueueService) DeleteSchema(_ context.Context, request *queueser
 }
 
 func (s *workflowQueueService) ListQueues(context.Context, *queueservicepb.ListQueuesRequest, ...grpc.CallOption) (*queueservicepb.ListQueuesResponse, error) {
-	return s.listQueuesResponse, nil
+	return s.listQueuesResponse, s.listQueuesErr
 }
 
 func (s *workflowQueueService) GetQueueState(context.Context, *queueservicepb.GetQueueStateRequest, ...grpc.CallOption) (*queueservicepb.GetQueueStateResponse, error) {
@@ -543,7 +694,7 @@ func (s *workflowQueueService) GetQueueState(context.Context, *queueservicepb.Ge
 }
 
 func (s *workflowQueueService) PeekQueueMessages(context.Context, *queueservicepb.PeekQueueMessagesRequest, ...grpc.CallOption) (*queueservicepb.PeekQueueMessagesResponse, error) {
-	return s.peekQueueResponse, nil
+	return s.peekQueueResponse, s.peekQueueErr
 }
 
 func (s *workflowQueueService) GetDLQStats(context.Context, *queueservicepb.GetDLQStatsRequest, ...grpc.CallOption) (*queueservicepb.GetDLQStatsResponse, error) {

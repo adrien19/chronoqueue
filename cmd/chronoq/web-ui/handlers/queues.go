@@ -438,7 +438,7 @@ func (h *QueuesHandler) List(w http.ResponseWriter, r *http.Request) {
 		"Rows":      rows,
 	}
 	if partialData {
-		warning := "Some queue state or dead-letter statistics could not be loaded. Unknown values are left blank."
+		warning := "Some queue state or dead-letter statistics could not be loaded. Unknown values are shown as —."
 		if isHTMXRequest(r) {
 			data["PartialDataFragmentWarning"] = warning
 		} else {
@@ -687,7 +687,7 @@ func (h *QueuesHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		"QueueMessages": messages,
 	}
 	if partialData {
-		data["PartialDataWarning"] = "Some queue state or dead-letter statistics could not be loaded. Unknown values are left blank."
+		data["PartialDataWarning"] = "Some queue state or dead-letter statistics could not be loaded. Unknown values are shown as —."
 	}
 	h.render(w, "queue_detail_content", data)
 }

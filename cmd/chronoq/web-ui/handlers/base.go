@@ -45,12 +45,14 @@ type QueueRow struct {
 
 // LeaseRow is the view model for an inflight message in the lease monitor.
 type LeaseRow struct {
-	MessageID string
-	Queue     string
-	Status    string
-	Renewals  string
-	Duration  string
-	ExpiresIn string
+	MessageID     string
+	Queue         string
+	Status        string
+	Worker        string
+	Renewals      string
+	Duration      string
+	ExpiresIn     string
+	LastHeartbeat string
 }
 
 // DayOption is used to build the days-of-week checkboxes in schedule_new.
@@ -190,18 +192,6 @@ func consoleNav() []NavItem {
 func settingsNav() []NavItem {
 	return []NavItem{
 		{Section: "Advanced", Label: "Clusters", Href: "/settings/clusters", Key: "clusters"},
-		{Section: "Advanced", Label: "Partner Zones", Href: "/settings/partner-zones", Key: "partner-zones", Badge: "Preview"},
-		{Section: "Advanced", Label: "Certificates", Href: "/settings/certificates", Key: "certificates"},
-		{Section: "Advanced", Label: "Data Policies", Href: "/settings/policies", Key: "policies"},
-		{Section: "Your Organization", Label: "Users", Href: "/settings/members", Key: "members"},
-		{Section: "Your Organization", Label: "Groups", Href: "/settings/groups", Key: "groups"},
-		{Section: "Your Organization", Label: "SSO", Href: "/settings/sso", Key: "sso"},
-		{Section: "Your Organization", Label: "Audit Log", Href: "/settings/audit-log", Key: "audit-log"},
-		{Section: "Your Organization", Label: "Integrations", Href: "/settings/integrations", Key: "integrations"},
-		{Section: "Your Organization", Label: "Alerts", Href: "/settings/alerts", Key: "alerts"},
-		{Section: "Your Organization", Label: "API Keys", Href: "/settings/public-api-keys", Key: "api-keys"},
-		{Section: "Your Organization", Label: "Plan", Href: "/settings/plan", Key: "plan"},
-		{Section: "Account", Label: "Profile", Href: "/settings/profile", Key: "profile"},
 	}
 }
 
