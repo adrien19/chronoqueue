@@ -19,7 +19,7 @@ func TestParseQueueAdvancedOptions(t *testing.T) {
 		if config, err := parsePriorityConfig(r); err != nil || config != nil {
 			t.Fatalf("priority config = (%v, %v), want nil", config, err)
 		}
-		if policy, err := parseLeasePolicy(r); err != nil || policy.BaseLease != "" {
+		if policy, err := parseLeasePolicy(r.FormValue); err != nil || policy.BaseLease != "" {
 			t.Fatalf("lease policy = (%v, %v)", policy, err)
 		}
 		if policy, err := parseRetentionPolicy(r); err != nil || policy != nil {
@@ -38,7 +38,7 @@ func TestParseQueueAdvancedOptions(t *testing.T) {
 		if err != nil || config.GetPolicy() != queuepb.FairnessPolicy_HYBRID || config.GetPriorityWeights()[4] != 70 {
 			t.Fatalf("priority config = (%v, %v)", config, err)
 		}
-		lease, err := parseLeasePolicy(r)
+		lease, err := parseLeasePolicy(r.FormValue)
 		if err != nil || lease.BaseLease != "30s" || lease.ExtendStep != "10s" {
 			t.Fatalf("lease policy = (%v, %v)", lease, err)
 		}
@@ -54,7 +54,7 @@ func TestParseQueueAdvancedOptions(t *testing.T) {
 		parse  func(*testing.T, url.Values) error
 	}{
 		{name: "malformed duration", values: url.Values{"base_lease": {"later"}}, parse: func(_ *testing.T, values url.Values) error {
-			_, err := parseLeasePolicy(formRequest(values))
+			_, err := parseLeasePolicy(formRequest(values).FormValue)
 			return err
 		}},
 		{name: "missing weights", values: url.Values{"priority_policy": {"WEIGHTED"}}, parse: func(_ *testing.T, values url.Values) error {

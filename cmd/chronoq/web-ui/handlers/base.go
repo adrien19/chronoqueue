@@ -297,14 +297,7 @@ func (h *BaseHandler) writeRPCError(w http.ResponseWriter, r *http.Request, oper
 		h.renderError(w, mapped.statusCode, mapped.message)
 		return
 	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("HX-Reswap", "innerHTML")
-	// HTMX does not swap non-2xx responses by default.
-	w.WriteHeader(http.StatusOK)
-	if _, writeErr := fmt.Fprintf(w, `<div class="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">%s</div>`, html.EscapeString(mapped.message)); writeErr != nil {
-		h.logger.ErrorWithFields("failed to write RPC error fragment", "error", writeErr, "operation", operation)
-	}
+	h.writeInlineErrorFragment(w, mapped.message, true)
 }
 
 func (h *BaseHandler) writeInlineFormError(w http.ResponseWriter, r *http.Request, message string) {
@@ -312,13 +305,19 @@ func (h *BaseHandler) writeInlineFormError(w http.ResponseWriter, r *http.Reques
 		h.renderError(w, http.StatusBadRequest, message)
 		return
 	}
+	h.writeInlineErrorFragment(w, message, false)
+}
 
+func (h *BaseHandler) writeInlineErrorFragment(w http.ResponseWriter, message string, reswap bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if reswap {
+		w.Header().Set("HX-Reswap", "innerHTML")
+	}
 	// HTMX does not swap non-2xx responses by default.
 	w.WriteHeader(http.StatusOK)
 	escaped := html.EscapeString(message)
 	escaped = strings.ReplaceAll(escaped, "\n", "<br>")
 	if _, err := fmt.Fprintf(w, `<div class="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">%s</div>`, escaped); err != nil {
-		h.logger.ErrorWithFields("Failed to write inline form error", "error", err)
+		h.logger.ErrorWithFields("Failed to write inline error fragment", "error", err)
 	}
 }

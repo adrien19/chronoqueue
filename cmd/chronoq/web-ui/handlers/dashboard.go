@@ -238,6 +238,14 @@ func (h *DashboardHandler) buildQueueRows(ctx context.Context, activeClient *cli
 	totalPending, totalRunning, totalCompleted, totalDLQ int64,
 	partialData bool,
 ) {
+	return h.buildQueueRowsWithAssociations(ctx, activeClient, queues, buildQueueAssociations(queues))
+}
+
+func (h *DashboardHandler) buildQueueRowsWithAssociations(ctx context.Context, activeClient *client.ChronoQueueClient, queues []*pb_queue.Queue, associations queueAssociations) (
+	rows []QueueRow,
+	totalPending, totalRunning, totalCompleted, totalDLQ int64,
+	partialData bool,
+) {
 	type result struct {
 		row        QueueRow
 		pending    int64
@@ -248,7 +256,6 @@ func (h *DashboardHandler) buildQueueRows(ctx context.Context, activeClient *cli
 	}
 
 	results := make([]result, len(queues))
-	associations := buildQueueAssociations(queues)
 	var wg sync.WaitGroup
 
 	for i, q := range queues {

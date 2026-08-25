@@ -155,12 +155,12 @@ func parsePriorityConfig(r *http.Request) (*queue_pb.PriorityConfig, error) {
 	return config, nil
 }
 
-func parseLeasePolicy(r *http.Request) (client.LeasePolicyOptions, error) {
+func parseLeasePolicy(formValue func(string) string) (client.LeasePolicyOptions, error) {
 	policy := client.LeasePolicyOptions{
-		BaseLease: strings.TrimSpace(r.FormValue("base_lease")), MaxExtension: strings.TrimSpace(r.FormValue("max_extension")),
-		HeartbeatTimeout: strings.TrimSpace(r.FormValue("heartbeat_timeout")), ExtendStep: strings.TrimSpace(r.FormValue("extend_step")),
+		BaseLease: strings.TrimSpace(formValue("base_lease")), MaxExtension: strings.TrimSpace(formValue("max_extension")),
+		HeartbeatTimeout: strings.TrimSpace(formValue("heartbeat_timeout")), ExtendStep: strings.TrimSpace(formValue("extend_step")),
 	}
-	if raw := strings.TrimSpace(r.FormValue("max_renewals")); raw != "" {
+	if raw := strings.TrimSpace(formValue("max_renewals")); raw != "" {
 		value, err := strconv.ParseInt(raw, 10, 32)
 		if err != nil || value < 0 {
 			return client.LeasePolicyOptions{}, fmt.Errorf("maximum renewals must be a non-negative integer")
@@ -329,8 +329,22 @@ func parseBulkMessages(raw string) ([]client.MessageWithID, error) {
 				return nil, fmt.Errorf("message %d lease_duration must be a positive duration", index+1)
 			}
 		}
-		leaseRequest := formRequestForLeasePolicy(input.LeasePolicy.BaseLease, input.LeasePolicy.MaxExtension, input.LeasePolicy.HeartbeatTimeout, input.LeasePolicy.ExtendStep, input.LeasePolicy.MaxRenewals)
-		leasePolicy, err := parseLeasePolicy(leaseRequest)
+		leasePolicy, err := parseLeasePolicy(func(name string) string {
+			switch name {
+			case "base_lease":
+				return input.LeasePolicy.BaseLease
+			case "max_extension":
+				return input.LeasePolicy.MaxExtension
+			case "heartbeat_timeout":
+				return input.LeasePolicy.HeartbeatTimeout
+			case "extend_step":
+				return input.LeasePolicy.ExtendStep
+			case "max_renewals":
+				return strconv.FormatInt(int64(input.LeasePolicy.MaxRenewals), 10)
+			default:
+				return ""
+			}
+		})
 		if err != nil {
 			return nil, fmt.Errorf("message %d: %w", index+1, err)
 		}
@@ -348,10 +362,6 @@ func parseBulkMessages(raw string) ([]client.MessageWithID, error) {
 		}})
 	}
 	return messages, nil
-}
-
-func formRequestForLeasePolicy(baseLease, maxExtension, heartbeatTimeout, extendStep string, maxRenewals int32) *http.Request {
-	return &http.Request{Form: url.Values{"base_lease": {baseLease}, "max_extension": {maxExtension}, "heartbeat_timeout": {heartbeatTimeout}, "extend_step": {extendStep}, "max_renewals": {strconv.FormatInt(int64(maxRenewals), 10)}}}
 }
 
 type queueAssociations struct {
@@ -409,53 +419,17 @@ func (h *QueuesHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var rows []QueueRow
-	partialData := false
-	associations := buildQueueAssociations(queuesResp.GetQueues())
+	filteredQueues := make([]*queue_pb.Queue, 0, len(queuesResp.GetQueues()))
 	for _, q := range queuesResp.GetQueues() {
 		name := q.GetName()
 		if query != "" && !strings.Contains(strings.ToLower(name), strings.ToLower(query)) {
 			continue
 		}
-
-		stateResp, err := activeClient.GetQueueState(ctx, name)
-		if err != nil {
-			h.logger.ErrorWithFields("Failed to get queue state", "error", err, "queue", name)
-			partialData = true
-			rows = append(rows, QueueRow{Name: name, Href: "/queues/" + name, IsDLQ: len(associations.sourcesByDLQ[name]) > 0})
-			continue
-		}
-		counts := stateResp.GetStateCounts()
-		pending := int64(counts["PENDING"])
-		running := int64(counts["RUNNING"])
-		errored := int64(counts["ERRORED"])
-		delayed := int64(counts["INVISIBLE"])
-		dlqDisplay := "—"
-		var dlqCount int
-		if dlqName := associations.dlqBySource[name]; dlqName != "" {
-			dlqResp, err := activeClient.GetDLQStats(ctx, dlqName)
-			if err != nil {
-				h.logger.ErrorWithFields("Failed to get DLQ stats", "error", err, "queue", name, "dlq", dlqName)
-				partialData = true
-			} else {
-				dlqCount = int(dlqResp.GetMessageCount())
-				dlqDisplay = strconv.Itoa(dlqCount)
-			}
-		}
-
-		rows = append(rows, QueueRow{
-			Name:       name,
-			Ready:      fmt.Sprintf("%d", pending),
-			InFlight:   fmt.Sprintf("%d", running),
-			Delayed:    fmt.Sprintf("%d", delayed),
-			Errored:    fmt.Sprintf("%d", errored),
-			ErroredInt: int(errored),
-			DLQ:        dlqDisplay,
-			DLQInt:     dlqCount,
-			Href:       "/queues/" + name,
-			IsDLQ:      len(associations.sourcesByDLQ[name]) > 0,
-		})
+		filteredQueues = append(filteredQueues, q)
 	}
+	dashboardHandler := DashboardHandler{BaseHandler: h.BaseHandler}
+	associations := buildQueueAssociations(queuesResp.GetQueues())
+	rows, _, _, _, _, partialData := dashboardHandler.buildQueueRowsWithAssociations(ctx, activeClient, filteredQueues, associations)
 
 	data := map[string]any{
 		"PageTitle": "Queues",
@@ -465,14 +439,14 @@ func (h *QueuesHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	if partialData {
 		warning := "Some queue state or dead-letter statistics could not be loaded. Unknown values are left blank."
-		if r.Header.Get("HX-Request") == "true" {
+		if isHTMXRequest(r) {
 			data["PartialDataFragmentWarning"] = warning
 		} else {
 			data["PartialDataWarning"] = warning
 		}
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isHTMXRequest(r) {
 		h.renderFragment(w, "queue_table", data)
 		return
 	}
@@ -582,7 +556,7 @@ func (h *QueuesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		h.writeInlineFormError(w, r, err.Error())
 		return
 	}
-	leasePolicy, err := parseLeasePolicy(r)
+	leasePolicy, err := parseLeasePolicy(r.FormValue)
 	if err != nil {
 		h.writeInlineFormError(w, r, err.Error())
 		return
@@ -695,13 +669,15 @@ func (h *QueuesHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		queue.SourceQueue = sourceQueues[0]
 	}
 	queue.DLQName = associations.dlqBySource[queueName]
+	partialData := false
 	if queue.DLQName != "" {
 		dlqStats, err := activeClient.GetDLQStats(ctx, queue.DLQName)
 		if err != nil {
-			h.writeRPCError(w, r, "load DLQ statistics", err)
-			return
+			h.logger.ErrorWithFields("Failed to get DLQ stats", "error", err, "queue", queueName, "dlq", queue.DLQName)
+			partialData = true
+		} else {
+			queue.DLQ = fmt.Sprintf("%d", dlqStats.GetMessageCount())
 		}
-		queue.DLQ = fmt.Sprintf("%d", dlqStats.GetMessageCount())
 	}
 
 	data := map[string]any{
@@ -709,6 +685,9 @@ func (h *QueuesHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		"Active":        "queues",
 		"Queue":         queue,
 		"QueueMessages": messages,
+	}
+	if partialData {
+		data["PartialDataWarning"] = "Some queue state or dead-letter statistics could not be loaded. Unknown values are left blank."
 	}
 	h.render(w, "queue_detail_content", data)
 }
@@ -969,7 +948,7 @@ func (h *QueuesHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 		h.writeInlineFormError(w, r, err.Error())
 		return
 	}
-	messageLeasePolicy, err := parseLeasePolicy(r)
+	messageLeasePolicy, err := parseLeasePolicy(r.FormValue)
 	if err != nil {
 		h.writeInlineFormError(w, r, err.Error())
 		return
@@ -1054,6 +1033,11 @@ func (h *QueuesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		h.writeRPCError(w, r, "delete queue", err)
 		return
 	}
+	if isHTMXRequest(r) {
+		w.Header().Set("HX-Redirect", "/queues")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	http.Redirect(w, r, "/queues", http.StatusSeeOther)
 }
 
@@ -1079,7 +1063,13 @@ func (h *QueuesHandler) CancelMessage(w http.ResponseWriter, r *http.Request) {
 		h.writeRPCError(w, r, "cancel message", err)
 		return
 	}
-	http.Redirect(w, r, "/queues/"+url.PathEscape(queueName), http.StatusSeeOther)
+	redirectTarget := "/queues/" + url.PathEscape(queueName)
+	if isHTMXRequest(r) {
+		w.Header().Set("HX-Redirect", redirectTarget)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.Redirect(w, r, redirectTarget, http.StatusSeeOther)
 }
 
 // ValidateMessage validates payload JSON against selected schema in the post-message flow.
@@ -1306,7 +1296,7 @@ func (h *QueuesHandler) RequeueAll(w http.ResponseWriter, r *http.Request) {
 	queueName := r.PathValue("name")
 	if err := r.ParseForm(); err != nil {
 		h.logger.ErrorWithFields("Failed to parse requeue form", "error", err)
-		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		h.writeInlineFormError(w, r, "Invalid form data")
 		return
 	}
 	activeClient, ok := h.requireActiveClient(w)
@@ -1323,7 +1313,7 @@ func (h *QueuesHandler) RequeueAll(w http.ResponseWriter, r *http.Request) {
 			h.writeRPCError(w, r, "verify DLQ target", err)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.writeInlineFormError(w, r, err.Error())
 		return
 	}
 	const pageSize = int32(100)
@@ -1346,11 +1336,11 @@ func (h *QueuesHandler) RequeueAll(w http.ResponseWriter, r *http.Request) {
 			}
 			messageID := msg.GetMessageId()
 			if messageID == "" {
-				http.Error(w, "DLQ returned a message without an ID", http.StatusInternalServerError)
+				h.writeInlineFormError(w, r, "DLQ returned a message without an ID")
 				return
 			}
 			if _, exists := seen[messageID]; exists {
-				http.Error(w, "DLQ did not advance while requeueing messages", http.StatusInternalServerError)
+				h.writeInlineFormError(w, r, "DLQ did not advance while requeueing messages")
 				return
 			}
 			if _, err := activeClient.RequeueFromDLQ(ctx, queueName, messageID, sourceQueue); err != nil {
@@ -1362,7 +1352,7 @@ func (h *QueuesHandler) RequeueAll(w http.ResponseWriter, r *http.Request) {
 			pageRequeued++
 		}
 		if pageRequeued == 0 {
-			http.Error(w, "DLQ returned no requeueable messages", http.StatusInternalServerError)
+			h.writeInlineFormError(w, r, "DLQ returned no requeueable messages")
 			return
 		}
 		if len(msgs) < int(pageSize) {
@@ -1380,7 +1370,7 @@ func (h *QueuesHandler) RequeueMessage(w http.ResponseWriter, r *http.Request) {
 	messageID := r.PathValue("messageId")
 	if err := r.ParseForm(); err != nil {
 		h.logger.ErrorWithFields("Failed to parse requeue form", "error", err)
-		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		h.writeInlineFormError(w, r, "Invalid form data")
 		return
 	}
 
@@ -1398,7 +1388,7 @@ func (h *QueuesHandler) RequeueMessage(w http.ResponseWriter, r *http.Request) {
 			h.writeRPCError(w, r, "verify DLQ target", err)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.writeInlineFormError(w, r, err.Error())
 		return
 	}
 	if _, err := activeClient.RequeueFromDLQ(ctx, queueName, messageID, sourceQueue); err != nil {
@@ -1429,7 +1419,7 @@ func (h *QueuesHandler) DeleteDLQMessage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if !isDLQ {
-		http.Error(w, "Not a configured DLQ", http.StatusBadRequest)
+		h.writeInlineFormError(w, r, "Not a configured DLQ")
 		return
 	}
 	if _, err := activeClient.DeleteFromDLQ(ctx, queueName, messageID); err != nil {
@@ -1458,7 +1448,7 @@ func (h *QueuesHandler) Purge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !isDLQ {
-		http.Error(w, "Purge is only supported for configured DLQ queues", http.StatusBadRequest)
+		h.writeInlineFormError(w, r, "Purge is only supported for configured DLQ queues")
 		return
 	}
 

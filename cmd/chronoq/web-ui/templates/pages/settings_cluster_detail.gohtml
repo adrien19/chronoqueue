@@ -8,12 +8,12 @@
     <div><label class="mb-2 block text-sm font-medium text-zinc-200">ChronoQueue endpoint</label><input class="cq-input w-full" name="brokerAddress" value="{{ .Cluster.BrokerAddress }}" required></div>
     <div><label class="mb-2 block text-sm font-medium text-zinc-200">Transport</label><select class="cq-input w-full" name="transportMode"><option value="tls" {{ if eq .Cluster.TransportMode "tls" }}selected{{ end }}>TLS</option><option value="plaintext" {{ if eq .Cluster.TransportMode "plaintext" }}selected{{ end }}>Plaintext</option></select><p class="mt-2 text-xs text-zinc-500">Use plaintext only on a trusted private network.</p></div>
     <div class="grid gap-5 md:grid-cols-2">
-      <div><label class="mb-2 block text-sm font-medium text-zinc-200">TLS server name</label><input class="cq-input w-full" name="tlsServerName" value="{{ .Cluster.TLSServerName }}"></div>
-      <div><label class="mb-2 block text-sm font-medium text-zinc-200">CA certificate file</label><input class="cq-input w-full" name="caCertFile" value="{{ .Cluster.CACertFile }}"></div>
-      <div><label class="mb-2 block text-sm font-medium text-zinc-200">Client certificate file</label><input class="cq-input w-full" name="clientCertFile" value="{{ .Cluster.ClientCertFile }}"></div>
-      <div><label class="mb-2 block text-sm font-medium text-zinc-200">Client key file</label><input class="cq-input w-full" name="clientKeyFile" value="{{ .Cluster.ClientKeyFile }}"></div>
+      <div data-tls-field><label class="mb-2 block text-sm font-medium text-zinc-200">TLS server name</label><input class="cq-input w-full" name="tlsServerName" value="{{ .Cluster.TLSServerName }}"></div>
+      <div data-tls-field><label class="mb-2 block text-sm font-medium text-zinc-200">CA certificate file</label><input class="cq-input w-full" name="caCertFile" value="{{ .Cluster.CACertFile }}"></div>
+      <div data-tls-field><label class="mb-2 block text-sm font-medium text-zinc-200">Client certificate file</label><input class="cq-input w-full" name="clientCertFile" value="{{ .Cluster.ClientCertFile }}"></div>
+      <div data-tls-field><label class="mb-2 block text-sm font-medium text-zinc-200">Client key file</label><input class="cq-input w-full" name="clientKeyFile" value="{{ .Cluster.ClientKeyFile }}"></div>
     </div>
-    <label class="flex items-center gap-3"><input type="checkbox" name="skipTLSVerify" class="h-4 w-4 rounded" {{ if .Cluster.SkipTLSVerify }}checked{{ end }}><span class="text-sm text-zinc-200">Disable TLS certificate verification</span></label>
+    <label data-tls-field class="flex items-center gap-3"><input type="checkbox" name="skipTLSVerify" class="h-4 w-4 rounded" {{ if .Cluster.SkipTLSVerify }}checked{{ end }}><span class="text-sm text-zinc-200">Disable TLS certificate verification</span></label>
     <div><label class="mb-2 block text-sm font-medium text-zinc-200">API key environment variable</label><input class="cq-input w-full" name="apiKeyEnv" value="{{ .Cluster.APIKeyEnv }}" placeholder="CHRONOQUEUE_API_KEY"><p class="mt-2 text-xs text-zinc-500">The secret remains in the process environment and is never written to the cluster file.</p></div>
     <div class="flex items-center gap-4 border-t border-line pt-5"><button type="submit" class="cq-btn cq-btn-primary">Save changes</button><a href="/settings/clusters" class="cq-btn">Cancel</a></div>
   </form>

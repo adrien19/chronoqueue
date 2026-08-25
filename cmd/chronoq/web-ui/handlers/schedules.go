@@ -450,7 +450,10 @@ func (h *SchedulesHandler) PreviewCalendar(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	raw := strings.TrimSpace(r.FormValue("calendar_json"))
-	count, err := strconv.ParseInt(strings.TrimSpace(r.FormValue("preview_count")), 10, 32)
+	countRaw := strings.TrimSpace(r.FormValue("preview_count"))
+	if countRaw == "" {
+		countRaw = "10"
+	}
 	if raw == "" {
 		calendarSchedule, buildErr := h.buildCalendarSchedule(r.Context(), r)
 		if buildErr != nil {
@@ -464,6 +467,7 @@ func (h *SchedulesHandler) PreviewCalendar(w http.ResponseWriter, r *http.Reques
 		}
 		raw = string(calendarJSON)
 	}
+	count, err := strconv.ParseInt(countRaw, 10, 32)
 	if err != nil || count < 1 || count > 100 {
 		h.writeInlineFormError(w, r, "Preview count must be between 1 and 100")
 		return

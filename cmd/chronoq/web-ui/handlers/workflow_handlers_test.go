@@ -72,10 +72,11 @@ func TestQueueDeleteAndCancel(t *testing.T) {
 		invoke    func(*QueuesHandler, http.ResponseWriter, *http.Request)
 		path      string
 		wantCall  string
+		redirect  string
 	}{
-		{name: "delete success", invoke: (*QueuesHandler).Delete, path: "/queues/orders/delete", wantCall: "delete"},
+		{name: "delete success", invoke: (*QueuesHandler).Delete, path: "/queues/orders/delete", wantCall: "delete", redirect: "/queues"},
 		{name: "delete failure", serverErr: status.Error(codes.FailedPrecondition, "not empty"), invoke: (*QueuesHandler).Delete, path: "/queues/orders/delete", wantCall: "delete"},
-		{name: "cancel success", invoke: (*QueuesHandler).CancelMessage, path: "/api/queues/orders/messages/msg-1/cancel", wantCall: "cancel"},
+		{name: "cancel success", invoke: (*QueuesHandler).CancelMessage, path: "/api/queues/orders/messages/msg-1/cancel", wantCall: "cancel", redirect: "/queues/orders"},
 		{name: "cancel concurrent state change", serverErr: status.Error(codes.FailedPrecondition, "now running"), invoke: (*QueuesHandler).CancelMessage, path: "/api/queues/orders/messages/msg-1/cancel", wantCall: "cancel"},
 		{name: "cancel missing message", serverErr: status.Error(codes.NotFound, "missing"), invoke: (*QueuesHandler).CancelMessage, path: "/api/queues/orders/messages/msg-1/cancel", wantCall: "cancel"},
 	} {
@@ -92,13 +93,77 @@ func TestQueueDeleteAndCancel(t *testing.T) {
 			request.SetPathValue("name", "orders")
 			request.SetPathValue("messageId", "msg-1")
 			test.invoke(handler, recorder, request)
-			if test.serverErr == nil && recorder.Code != http.StatusSeeOther {
-				t.Fatalf("status = %d", recorder.Code)
+			if test.serverErr == nil && (recorder.Code != http.StatusOK || recorder.Header().Get("HX-Redirect") != test.redirect) {
+				t.Fatalf("response = (%d, %q), headers = %v", recorder.Code, recorder.Body.String(), recorder.Header())
 			}
 			if test.serverErr != nil && recorder.Code != http.StatusOK {
 				t.Fatalf("failure response = (%d, %q)", recorder.Code, recorder.Body.String())
 			}
+			if test.serverErr == nil && test.wantCall == "delete" && service.deleteQueueRequest.GetName() != "orders" {
+				t.Fatalf("delete request = %v", service.deleteQueueRequest)
+			}
+			if test.serverErr == nil && test.wantCall == "cancel" && (service.cancelMessageRequest.GetQueueName() != "orders" || service.cancelMessageRequest.GetMessageId() != "msg-1" || service.cancelMessageRequest.GetReason() != "operator request") {
+				t.Fatalf("cancel request = %v", service.cancelMessageRequest)
+			}
 		})
+	}
+}
+
+func TestQueueDeleteAndCancelKeepHTTPRedirects(t *testing.T) {
+	service := &workflowQueueService{}
+	handler := &QueuesHandler{BaseHandler: workflowBaseHandler(t, service)}
+	for _, test := range []struct {
+		name     string
+		path     string
+		location string
+		invoke   func(*QueuesHandler, http.ResponseWriter, *http.Request)
+	}{
+		{name: "delete", path: "/queues/orders/delete", location: "/queues", invoke: (*QueuesHandler).Delete},
+		{name: "cancel", path: "/api/queues/orders/messages/msg-1/cancel", location: "/queues/orders", invoke: (*QueuesHandler).CancelMessage},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(url.Values{"reason": {"operator request"}}.Encode()))
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			request.SetPathValue("name", "orders")
+			request.SetPathValue("messageId", "msg-1")
+			test.invoke(handler, recorder, request)
+			if recorder.Code != http.StatusSeeOther || recorder.Header().Get("Location") != test.location {
+				t.Fatalf("response = (%d, %q), headers = %v", recorder.Code, recorder.Body.String(), recorder.Header())
+			}
+		})
+	}
+}
+
+func TestQueueListAcceptsNormalizedHTMXHeader(t *testing.T) {
+	service := &workflowQueueService{
+		listQueuesResponse: &queueservicepb.ListQueuesResponse{Queues: []*queuepb.Queue{{Name: "orders"}}},
+		getQueueStateErr:   status.Error(codes.Unavailable, "private"),
+	}
+	handler := &QueuesHandler{BaseHandler: workflowBaseHandler(t, service)}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/queues", nil)
+	request.Header.Set("HX-Request", " TRUE ")
+	handler.List(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "fragment warning") || strings.Contains(recorder.Body.String(), "full warning") {
+		t.Fatalf("response = (%d, %q)", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestQueueDetailKeepsPageOnDLQStatsFailure(t *testing.T) {
+	service := &workflowQueueService{
+		listQueuesResponse:    &queueservicepb.ListQueuesResponse{Queues: []*queuepb.Queue{{Name: "orders", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "orders-dlq"}}}},
+		getQueueStateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int32{}},
+		peekQueueResponse:     &queueservicepb.PeekQueueMessagesResponse{},
+		getDLQStatsErr:        status.Error(codes.Unavailable, "private"),
+	}
+	handler := &QueuesHandler{BaseHandler: workflowBaseHandler(t, service)}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/queues/orders", nil)
+	request.SetPathValue("name", "orders")
+	handler.Detail(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "partial warning") || !strings.Contains(recorder.Body.String(), "—") {
+		t.Fatalf("response = (%d, %q)", recorder.Code, recorder.Body.String())
 	}
 }
 
@@ -282,9 +347,19 @@ func TestCalendarValidationPreviewSuccessAndFailures(t *testing.T) {
 			t.Fatalf("preview response = (%d, %q), request = %v", recorder.Code, recorder.Body.String(), service.previewCalendarRequest)
 		}
 		recorder = httptest.NewRecorder()
+		handler.PreviewCalendar(recorder, htmxFormRequest("/api/schedules/calendar/preview", url.Values{"calendar_json": {calendarJSON}}))
+		if recorder.Code != http.StatusOK || service.previewCalendarRequest.GetCount() != 10 {
+			t.Fatalf("default preview response = (%d, %q), request = %v", recorder.Code, recorder.Body.String(), service.previewCalendarRequest)
+		}
+		recorder = httptest.NewRecorder()
 		handler.PreviewCalendar(recorder, htmxFormRequest("/api/schedules/calendar/preview", url.Values{"calendar_json": {calendarJSON}, "preview_count": {"101"}}))
 		if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "between 1 and 100") {
 			t.Fatalf("invalid limit response = (%d, %q)", recorder.Code, recorder.Body.String())
+		}
+		recorder = httptest.NewRecorder()
+		handler.PreviewCalendar(recorder, htmxFormRequest("/api/schedules/calendar/preview", url.Values{"calendar_json": {calendarJSON}, "preview_count": {"many"}}))
+		if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "between 1 and 100") {
+			t.Fatalf("malformed limit response = (%d, %q)", recorder.Code, recorder.Body.String())
 		}
 	})
 
@@ -389,7 +464,7 @@ func workflowBaseHandler(t *testing.T, service *workflowQueueService) BaseHandle
 	}
 	store := clusterstore.NewStore("")
 	store.Seed("Local", "localhost:9000", true)
-	templates := template.Must(template.New("test").Parse(`{{ define "base" }}{{ .ErrorMessage }}{{ with .Schedule }}{{ .Metadata.State }}{{ end }}{{ end }}{{ define "bulk_message_results" }}{{ .SuccessfulCount }} succeeded; {{ .FailedCount }} failed{{ end }}{{ define "calendar_validation_result" }}{{ .ErrorMessage }}{{ end }}{{ define "calendar_preview_result" }}{{ .TotalCount }} runs{{ end }}`))
+	templates := template.Must(template.New("test").Parse(`{{ define "base" }}{{ .ErrorMessage }}{{ with .Schedule }}{{ .Metadata.State }}{{ end }}{{ if eq .ContentTemplate "queue_detail_content" }}{{ template "queue_detail_content" . }}{{ end }}{{ end }}{{ define "bulk_message_results" }}{{ .SuccessfulCount }} succeeded; {{ .FailedCount }} failed{{ end }}{{ define "calendar_validation_result" }}{{ .ErrorMessage }}{{ end }}{{ define "calendar_preview_result" }}{{ .TotalCount }} runs{{ end }}{{ define "queue_table" }}{{ if .PartialDataFragmentWarning }}fragment warning{{ end }}{{ if .PartialDataWarning }}full warning{{ end }}{{ range .Rows }}{{ .Name }}{{ end }}{{ end }}{{ define "queue_detail_content" }}{{ if .PartialDataWarning }}partial warning{{ end }} {{ .Queue.DLQ }}{{ end }}`))
 	return BaseHandler{templates: templates, store: store, logger: log.NewLogger(), clientProvider: func() (*client.ChronoQueueClient, error) { return chronoClient, nil }}
 }
 
@@ -404,7 +479,9 @@ type workflowQueueService struct {
 	queueservicepb.QueueServiceClient
 	createQueueRequest       *queueservicepb.CreateQueueRequest
 	createQueueErr           error
+	deleteQueueRequest       *queueservicepb.DeleteQueueRequest
 	deleteQueueErr           error
+	cancelMessageRequest     *queueservicepb.CancelMessageRequest
 	cancelMessageErr         error
 	bulkRequest              *queueservicepb.PostMessagesBulkRequest
 	bulkResponse             *queueservicepb.PostMessagesBulkResponse
@@ -412,6 +489,11 @@ type workflowQueueService struct {
 	deleteSchemaRequest      *queueservicepb.DeleteSchemaRequest
 	deleteSchemaErr          error
 	listQueuesResponse       *queueservicepb.ListQueuesResponse
+	getQueueStateResponse    *queueservicepb.GetQueueStateResponse
+	getQueueStateErr         error
+	peekQueueResponse        *queueservicepb.PeekQueueMessagesResponse
+	getDLQStatsResponse      *queueservicepb.GetDLQStatsResponse
+	getDLQStatsErr           error
 	validateCalendarRequest  *queueservicepb.ValidateCalendarScheduleRequest
 	validateCalendarResponse *queueservicepb.ValidateCalendarScheduleResponse
 	validateCalendarErr      error
@@ -432,11 +514,13 @@ func (s *workflowQueueService) CreateQueue(_ context.Context, request *queueserv
 	return &queueservicepb.CreateQueueResponse{Success: s.createQueueErr == nil}, s.createQueueErr
 }
 
-func (s *workflowQueueService) DeleteQueue(context.Context, *queueservicepb.DeleteQueueRequest, ...grpc.CallOption) (*queueservicepb.DeleteQueueResponse, error) {
+func (s *workflowQueueService) DeleteQueue(_ context.Context, request *queueservicepb.DeleteQueueRequest, _ ...grpc.CallOption) (*queueservicepb.DeleteQueueResponse, error) {
+	s.deleteQueueRequest = request
 	return &queueservicepb.DeleteQueueResponse{Success: s.deleteQueueErr == nil}, s.deleteQueueErr
 }
 
-func (s *workflowQueueService) CancelMessage(context.Context, *queueservicepb.CancelMessageRequest, ...grpc.CallOption) (*queueservicepb.CancelMessageResponse, error) {
+func (s *workflowQueueService) CancelMessage(_ context.Context, request *queueservicepb.CancelMessageRequest, _ ...grpc.CallOption) (*queueservicepb.CancelMessageResponse, error) {
+	s.cancelMessageRequest = request
 	return &queueservicepb.CancelMessageResponse{Success: s.cancelMessageErr == nil}, s.cancelMessageErr
 }
 
@@ -452,6 +536,18 @@ func (s *workflowQueueService) DeleteSchema(_ context.Context, request *queueser
 
 func (s *workflowQueueService) ListQueues(context.Context, *queueservicepb.ListQueuesRequest, ...grpc.CallOption) (*queueservicepb.ListQueuesResponse, error) {
 	return s.listQueuesResponse, nil
+}
+
+func (s *workflowQueueService) GetQueueState(context.Context, *queueservicepb.GetQueueStateRequest, ...grpc.CallOption) (*queueservicepb.GetQueueStateResponse, error) {
+	return s.getQueueStateResponse, s.getQueueStateErr
+}
+
+func (s *workflowQueueService) PeekQueueMessages(context.Context, *queueservicepb.PeekQueueMessagesRequest, ...grpc.CallOption) (*queueservicepb.PeekQueueMessagesResponse, error) {
+	return s.peekQueueResponse, nil
+}
+
+func (s *workflowQueueService) GetDLQStats(context.Context, *queueservicepb.GetDLQStatsRequest, ...grpc.CallOption) (*queueservicepb.GetDLQStatsResponse, error) {
+	return s.getDLQStatsResponse, s.getDLQStatsErr
 }
 
 func (s *workflowQueueService) ValidateCalendarSchedule(_ context.Context, request *queueservicepb.ValidateCalendarScheduleRequest, _ ...grpc.CallOption) (*queueservicepb.ValidateCalendarScheduleResponse, error) {
