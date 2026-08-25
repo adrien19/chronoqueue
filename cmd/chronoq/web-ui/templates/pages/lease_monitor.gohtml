@@ -13,22 +13,24 @@
     {{ if .Rows }}
     <div class="overflow-x-auto">
       <table class="cq-table">
-        <thead><tr><th>Message ID</th><th>State</th><th>Renewals</th><th>Duration</th><th>Expires in</th></tr></thead>
+        <thead><tr><th>Message ID</th><th>State</th><th>Worker</th><th>Renewals</th><th>Active for</th><th>Lease expires</th><th>Last heartbeat</th></tr></thead>
         <tbody>
           {{ range .Rows }}
           <tr>
             <td><span class="font-mono text-sm font-medium text-white">{{ .MessageID }}</span></td>
             <td><span class="{{ statusClass .Status }}">{{ .Status }}</span></td>
+            <td>{{ .Worker }}</td>
             <td>{{ .Renewals }}</td>
             <td>{{ .Duration }}</td>
             <td>{{ .ExpiresIn }}</td>
+            <td>{{ .LastHeartbeat }}</td>
           </tr>
           {{ end }}
         </tbody>
       </table>
     </div>
     {{ else }}
-    <p class="px-5 py-3 text-sm text-zinc-500">{{ .RunningCount }} message(s) running — details unavailable for high-volume queues.</p>
+    <p class="px-5 py-3 text-sm text-zinc-500">{{ .RunningCount }} message(s) running — none appeared in this queue's 200-message sample.</p>
     {{ end }}
   </div>
   {{ end }}
@@ -42,6 +44,7 @@
     <div>
       <h2 class="text-3xl font-semibold text-white">Lease monitor</h2>
       <p class="mt-1 text-sm text-zinc-500">Messages currently in RUNNING state — refreshes every 3s.</p>
+      <p class="mt-1 text-xs text-zinc-500">Best-effort view: each queue is sampled with a 200-message peek. This is not a complete worker inventory.</p>
     </div>
     {{ if .TotalRunning }}
     <span class="cq-badge cq-badge-warn">{{ .TotalRunning }} running</span>

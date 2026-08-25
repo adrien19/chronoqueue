@@ -79,6 +79,38 @@ func TestUIInlineScriptAllowedByHash(t *testing.T) {
 	}
 }
 
+func TestObservabilityAndSettingsTemplatesExposeTruthfulBoundaries(t *testing.T) {
+	tests := []struct {
+		path     string
+		contains []string
+		excludes []string
+	}{
+		{path: "templates/pages/home.gohtml", contains: []string{"Reachable"}, excludes: []string{"data-chart", "Healthy"}},
+		{path: "templates/partials/live_overview.gohtml", contains: []string{"Queue state snapshot", "running"}, excludes: []string{"No inflight messages"}},
+		{path: "templates/pages/lease_monitor.gohtml", contains: []string{"200-message peek", "not a complete worker inventory", "Last heartbeat"}},
+		{path: "templates/partials/sidebar.gohtml", contains: []string{"not part of the ChronoQueue server contract"}, excludes: []string{"/settings/members", "/settings/groups", "/settings/sso", "/settings/audit-log", "/settings/integrations", "/settings/public-api-keys", "/settings/profile"}},
+	}
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			contentBytes, err := content.ReadFile(test.path)
+			if err != nil {
+				t.Fatalf("read template: %v", err)
+			}
+			templateText := string(contentBytes)
+			for _, expected := range test.contains {
+				if !strings.Contains(templateText, expected) {
+					t.Errorf("template does not contain %q", expected)
+				}
+			}
+			for _, unexpected := range test.excludes {
+				if strings.Contains(templateText, unexpected) {
+					t.Errorf("template unexpectedly contains %q", unexpected)
+				}
+			}
+		})
+	}
+}
+
 func TestUIAuthMiddleware(t *testing.T) {
 	config := uiAuthConfig{enabled: true, username: "operator", password: "secret"}
 	handlerCalls := 0

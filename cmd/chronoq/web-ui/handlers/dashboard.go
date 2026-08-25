@@ -57,18 +57,30 @@ func (h *DashboardHandler) Index(w http.ResponseWriter, r *http.Request) {
 		queues = queuesResp.GetQueues()
 	}
 	rows, totalPending, totalRunning, totalCompleted, totalDLQ, partialData := h.buildQueueRows(ctx, activeClient, queues)
+	brokerStatus := "Reachable"
+	totalReadyDisplay := fmt.Sprintf("%d", totalPending)
+	totalRunningDisplay := fmt.Sprintf("%d", totalRunning)
+	totalCompletedDisplay := fmt.Sprintf("%d", totalCompleted)
+	totalDLQDisplay := fmt.Sprintf("%d", totalDLQ)
+	if partialData {
+		brokerStatus = "Partial data"
+		totalReadyDisplay = "—"
+		totalRunningDisplay = "—"
+		totalCompletedDisplay = "—"
+		totalDLQDisplay = "—"
+	}
 
 	data := map[string]any{
 		"PageTitle":      "Home",
 		"Active":         "home",
+		"PartialData":    partialData,
 		"Rows":           rows,
-		"BrokerStatus":   "Healthy",
-		"TotalReady":     fmt.Sprintf("%d", totalPending),
-		"TotalRunning":   fmt.Sprintf("%d", totalRunning),
-		"TotalCompleted": fmt.Sprintf("%d", totalCompleted),
-		"TotalPending":   fmt.Sprintf("%d", totalPending),
-		"TotalDLQ":       fmt.Sprintf("%d", totalDLQ),
-		"RatePoints":     []int{},
+		"BrokerStatus":   brokerStatus,
+		"TotalReady":     totalReadyDisplay,
+		"TotalRunning":   totalRunningDisplay,
+		"TotalCompleted": totalCompletedDisplay,
+		"TotalPending":   totalReadyDisplay,
+		"TotalDLQ":       totalDLQDisplay,
 	}
 	if partialData {
 		data["PartialDataWarning"] = "Some queue state or dead-letter statistics could not be loaded. Dashboard totals are incomplete."
@@ -98,15 +110,26 @@ func (h *DashboardHandler) DashboardStats(w http.ResponseWriter, r *http.Request
 		queues = queuesResp.GetQueues()
 	}
 	_, totalPending, totalRunning, totalCompleted, totalDLQ, partialData := h.buildQueueRows(ctx, activeClient, queues)
+	brokerStatus := "Reachable"
+	totalReadyDisplay := fmt.Sprintf("%d", totalPending)
+	totalRunningDisplay := fmt.Sprintf("%d", totalRunning)
+	totalCompletedDisplay := fmt.Sprintf("%d", totalCompleted)
+	totalDLQDisplay := fmt.Sprintf("%d", totalDLQ)
+	if partialData {
+		brokerStatus = "Partial data"
+		totalReadyDisplay = "—"
+		totalRunningDisplay = "—"
+		totalCompletedDisplay = "—"
+		totalDLQDisplay = "—"
+	}
 
 	data := map[string]any{
-		"BrokerStatus":   "Healthy",
-		"TotalReady":     fmt.Sprintf("%d", totalPending),
-		"TotalRunning":   fmt.Sprintf("%d", totalRunning),
-		"TotalCompleted": fmt.Sprintf("%d", totalCompleted),
-		"TotalPending":   fmt.Sprintf("%d", totalPending),
-		"TotalDLQ":       fmt.Sprintf("%d", totalDLQ),
-		"RatePoints":     []int{},
+		"BrokerStatus":   brokerStatus,
+		"TotalReady":     totalReadyDisplay,
+		"TotalRunning":   totalRunningDisplay,
+		"TotalCompleted": totalCompletedDisplay,
+		"TotalPending":   totalReadyDisplay,
+		"TotalDLQ":       totalDLQDisplay,
 		"PartialData":    partialData,
 	}
 	h.injectBaseData(data)
@@ -134,8 +157,9 @@ func (h *DashboardHandler) LiveOverview(w http.ResponseWriter, r *http.Request) 
 	}
 
 	type queueSummary struct {
-		Name  string
-		Ready string
+		Name    string
+		Ready   string
+		Running string
 	}
 
 	var summaries []queueSummary
@@ -152,8 +176,9 @@ func (h *DashboardHandler) LiveOverview(w http.ResponseWriter, r *http.Request) 
 		}
 		counts := stateResp.GetStateCounts()
 		summaries = append(summaries, queueSummary{
-			Name:  q.GetName(),
-			Ready: fmt.Sprintf("%d", counts["PENDING"]),
+			Name:    q.GetName(),
+			Ready:   fmt.Sprintf("%d", counts["PENDING"]),
+			Running: fmt.Sprintf("%d", counts["RUNNING"]),
 		})
 		if len(summaries) >= 5 {
 			break
@@ -167,9 +192,8 @@ func (h *DashboardHandler) LiveOverview(w http.ResponseWriter, r *http.Request) 
 	}
 
 	fragmentData := map[string]any{
-		"QueueSummary":    summaries,
-		"InflightSummary": []any{},
-		"PartialData":     partialData,
+		"QueueSummary": summaries,
+		"PartialData":  partialData,
 	}
 
 	var buf []byte
@@ -267,7 +291,7 @@ func (h *DashboardHandler) buildQueueRowsWithAssociations(ctx context.Context, a
 			stateResp, err := activeClient.GetQueueState(ctx, name)
 			if err != nil {
 				h.logger.ErrorWithFields("Failed to get queue state", "error", err, "queue", name)
-				results[idx].row = QueueRow{Name: name, Href: "/queues/" + name, IsDLQ: len(associations.sourcesByDLQ[name]) > 0}
+				results[idx].row = QueueRow{Name: name, Ready: "—", InFlight: "—", Delayed: "—", Errored: "—", DLQ: "—", Href: "/queues/" + name, IsDLQ: len(associations.sourcesByDLQ[name]) > 0}
 				results[idx].partial = true
 				return
 			}
