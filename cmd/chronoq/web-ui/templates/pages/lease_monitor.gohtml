@@ -1,5 +1,6 @@
 {{ define "lease_monitor_table" }}
 <div id="lease-table" hx-get="/fragments/lease-table" hx-trigger="every 3s" hx-swap="outerHTML">
+  {{ if .PartialData }}<div class="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" role="status">Some lease data could not be loaded.</div>{{ end }}
   {{ if not .Inflight }}
   <div class="cq-panel p-8 text-center text-zinc-500">No inflight messages found across queues.</div>
   {{ else }}

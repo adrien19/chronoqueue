@@ -25,7 +25,7 @@
       <tbody>
         {{ range .Schedules }}
         <tr id="schedule-row-{{ domID .ScheduleId }}">
-          <td class="font-medium text-white">{{ .ScheduleId }}</td>
+          <td class="font-medium text-white"><a class="hover:text-blue-300" href="/schedules/{{ .ScheduleId }}">{{ .ScheduleId }}</a></td>
           <td>
             {{ if .Metadata.GetCronSchedule }}
             <span class="cq-badge border-sky-500/25 bg-sky-500/10 text-sky-300">CRON</span>

@@ -6,7 +6,7 @@
   </div>
 
   <div class="cq-panel p-6">
-    <form hx-post="/api/schedules/create" hx-target="#form-result" class="space-y-6">
+    <form id="schedule-form" hx-post="/api/schedules/create" hx-target="#form-result" class="space-y-6">
 
       <div>
         <label class="mb-2 block text-sm font-medium text-zinc-200">Schedule ID <span class="text-red-400">*</span></label>
@@ -41,6 +41,7 @@
             <option value="MONTHLY">Monthly</option>
             <option value="WEEKLY">Weekly</option>
             <option value="DAILY">Daily</option>
+            <option value="YEARLY">Yearly</option>
             <option value="BUSINESS_DAYS">Business Days</option>
           </select>
         </div>
@@ -66,6 +67,26 @@
           <input class="cq-input w-32" type="number" name="day_of_month" min="1" max="31" placeholder="1">
           <p class="mt-1 text-xs text-zinc-500">For MONTHLY schedules (1-31)</p>
         </div>
+		<div class="grid grid-cols-2 gap-4">
+		  <div>
+			<label class="mb-2 block text-sm font-medium text-zinc-200">Yearly Month</label>
+			<input class="cq-input w-full" type="number" name="yearly_month" min="1" max="12" placeholder="1">
+			<p class="mt-1 text-xs text-zinc-500">For YEARLY schedules (1=January, 12=December).</p>
+		  </div>
+		  <div>
+			<label class="mb-2 block text-sm font-medium text-zinc-200">Yearly Day</label>
+			<input class="cq-input w-full" type="number" name="yearly_day" min="1" max="31" placeholder="1">
+			<p class="mt-1 text-xs text-zinc-500">Day of the selected month.</p>
+		  </div>
+		</div>
+		<label class="flex items-center gap-2 text-sm text-zinc-300"><input type="checkbox" class="rounded border-line bg-zinc-900 text-blue-500" name="adjust_for_leap_year" value="true">Run on February 28 when February 29 does not exist</label>
+		<div>
+		  <label class="mb-2 block text-sm font-medium text-zinc-200">Complete calendar schedule (protobuf JSON)</label>
+		  <textarea class="cq-input min-h-[220px] w-full font-mono text-sm" name="calendar_json" placeholder='{"type":"YEARLY","timezone":"America/New_York","rules":[{"yearly":{"month":2,"day":29,"adjustForLeapYear":true},"executionTimes":[{"hour":9}]}]}'></textarea>
+		  <p class="mt-1 text-xs text-zinc-500">When provided, this ordered rule set replaces the simple fields above and supports validity bounds, business calendars, exceptions, multiple rules, and all server-supported types except CUSTOM.</p>
+		</div>
+		<div class="flex items-end gap-3"><div><label class="mb-2 block text-sm text-zinc-200">Preview count</label><input class="cq-input w-28" type="number" name="preview_count" value="10" min="1" max="100"></div><button type="button" class="cq-btn" hx-post="/api/schedules/calendar/validate" hx-include="#schedule-form" hx-target="#calendar-result">Validate calendar</button><button type="button" class="cq-btn" hx-post="/api/schedules/calendar/preview" hx-include="#schedule-form" hx-target="#calendar-result">Preview</button></div>
+		<div id="calendar-result"></div>
       </div>
 
       <div>
@@ -73,6 +94,16 @@
         <input class="cq-input w-full" type="text" name="queue_name" required placeholder="my-queue">
         <p class="mt-1 text-xs text-zinc-500">Queue where messages will be posted. Created automatically if it doesn't exist.</p>
       </div>
+
+	  <details class="rounded-xl border border-line bg-zinc-950/40 p-5">
+		<summary class="cursor-pointer text-sm font-medium text-zinc-300">Scheduled message options</summary>
+		<div class="mt-4 space-y-4">
+		  <div class="grid grid-cols-3 gap-4"><div><label class="mb-2 block text-sm text-zinc-200">Priority</label><input class="cq-input w-full" type="number" name="priority" min="0" max="4" value="0"></div><div><label class="mb-2 block text-sm text-zinc-200">Maximum messages</label><input class="cq-input w-full" type="number" name="max_messages" min="1" placeholder="Unlimited"></div><div><label class="mb-2 block text-sm text-zinc-200">Lease duration</label><input class="cq-input w-full" name="lease_duration" placeholder="Queue default"></div></div>
+		  <div><label class="mb-2 block text-sm text-zinc-200">Payload metadata (JSON object)</label><textarea class="cq-input min-h-[80px] w-full font-mono text-sm" name="payload_metadata" placeholder='{"source":"scheduler"}'></textarea></div>
+		  <div><label class="mb-2 block text-sm text-zinc-200">Ordered binary headers</label><textarea class="cq-input min-h-[90px] w-full font-mono text-sm" name="headers" placeholder='[{"key":"trace-id","value_base64":"YWJj"}]'></textarea></div>
+		  <div class="grid grid-cols-3 gap-4"><div><label class="mb-2 block text-sm text-zinc-200">Content type</label><input class="cq-input w-full" name="content_type" placeholder="application/json"></div><div><label class="mb-2 block text-sm text-zinc-200">Schema ID</label><input class="cq-input w-full" name="schema_id"></div><div><label class="mb-2 block text-sm text-zinc-200">Schema version</label><input class="cq-input w-full" type="number" min="0" name="schema_version"></div></div>
+		</div>
+	  </details>
 
       <div>
         <label class="mb-2 block text-sm font-medium text-zinc-200">Message Payload (JSON)</label>
@@ -89,4 +120,12 @@
     </form>
   </div>
 </section>
+{{ end }}
+
+{{ define "calendar_validation_result" }}
+{{ if .Valid }}<div class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">Calendar schedule is valid.</div>{{ else }}<div class="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{{ .ErrorMessage }}{{ range .ValidationIssues }}<div>{{ .Field }}: {{ .Message }}</div>{{ end }}</div>{{ end }}
+{{ end }}
+
+{{ define "calendar_preview_result" }}
+<div class="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200"><div class="font-medium">{{ .TotalCount }} upcoming runs ({{ .Timezone }})</div><ol class="mt-2 list-decimal pl-5">{{ range .ExecutionTimes }}<li>{{ formatTime .AsTime }}</li>{{ end }}</ol></div>
 {{ end }}

@@ -88,6 +88,7 @@ type (
 		QueueName        string                        `json:"queueName,omitempty"`
 		MaxMessages      int64                         `json:"maxMessages,omitempty"`
 		LeaseDuration    string                        `json:"leaseDuration,omitempty"`
+		Priority         int64                         `json:"priority,omitempty"`
 	}
 
 	// DLQStats represents statistics about a Dead Letter Queue
@@ -105,6 +106,7 @@ type (
 		MaxExtension     string `json:"maxExtension,omitempty"`
 		HeartbeatTimeout string `json:"heartbeatTimeout,omitempty"`
 		ExtendStep       string `json:"extendStep,omitempty"`
+		MaxRenewals      int32  `json:"maxRenewals,omitempty"`
 	}
 
 	// RetentionPolicyOption configures message retention after acknowledgment
@@ -364,7 +366,7 @@ func parseDurationToProto(durationStr string) (*durationpb.Duration, error) {
 }
 
 func buildLeasePolicy(opts LeasePolicyOptions) (*common_pb.LeasePolicy, error) {
-	if opts.BaseLease == "" && opts.MaxExtension == "" && opts.HeartbeatTimeout == "" && opts.ExtendStep == "" {
+	if opts.BaseLease == "" && opts.MaxExtension == "" && opts.HeartbeatTimeout == "" && opts.ExtendStep == "" && opts.MaxRenewals == 0 {
 		return nil, nil
 	}
 
@@ -401,6 +403,10 @@ func buildLeasePolicy(opts LeasePolicyOptions) (*common_pb.LeasePolicy, error) {
 		}
 		lp.ExtendStep = d
 	}
+	if opts.MaxRenewals < 0 {
+		return nil, fmt.Errorf("max renewals must not be negative")
+	}
+	lp.MaxRenewals = opts.MaxRenewals
 
 	return lp, nil
 }
@@ -1007,14 +1013,18 @@ func (client *ChronoQueueClient) CreateSchedule(ctx context.Context, scheduleId 
 	metadata := &schedule_pb.Schedule_Metadata{
 		Headers: buildMessageHeaders(scheduleOptions.Headers),
 		Payload: &common_pb.Payload{
-			Metadata: scheduleOptions.Payload.Metadata,
-			Data:     scheduleOptions.Payload.Data,
+			Metadata:      scheduleOptions.Payload.Metadata,
+			Data:          scheduleOptions.Payload.Data,
+			ContentType:   scheduleOptions.Payload.ContentType,
+			SchemaId:      scheduleOptions.Payload.SchemaID,
+			SchemaVersion: scheduleOptions.Payload.SchemaVersion,
 		},
 		State:          schedule_pb.Schedule_Metadata_State(scheduleOptions.State),
 		QueueName:      scheduleOptions.QueueName,
 		HasMaxMessages: scheduleOptions.MaxMessages > 0,
 		MaxMessages:    scheduleOptions.MaxMessages,
 		LeaseDuration:  leaseDurationpb,
+		Priority:       scheduleOptions.Priority,
 	}
 
 	// Set schedule config (cron or calendar)

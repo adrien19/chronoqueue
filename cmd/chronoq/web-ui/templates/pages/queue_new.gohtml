@@ -45,6 +45,33 @@
         <p class="mt-1 text-xs text-zinc-500">How long a consumer holds a message lease (e.g. 30s, 5m, 1h).</p>
       </div>
 
+      <details class="rounded-xl border border-line bg-zinc-950/40 p-5">
+        <summary class="cursor-pointer text-sm font-medium text-zinc-300">Advanced delivery configuration</summary>
+        <div class="mt-4 space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div><label class="mb-2 block text-sm text-zinc-200">Maximum payload size (bytes)</label><input class="cq-input w-full" type="number" min="1" name="max_payload_size" placeholder="System default"></div>
+            <div><label class="mb-2 block text-sm text-zinc-200">Allowed content types</label><input class="cq-input w-full" name="allowed_content_types" placeholder="application/json, application/xml"><p class="mt-1 text-xs text-zinc-500">Comma-separated MIME types.</p></div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div><label class="mb-2 block text-sm text-zinc-200">Priority policy</label><select class="cq-input w-full" name="priority_policy"><option value="">Server default</option><option>STRICT</option><option>WEIGHTED</option><option>AGING</option><option>HYBRID</option></select></div>
+            <div><label class="mb-2 block text-sm text-zinc-200">Priority weights (JSON)</label><input class="cq-input w-full font-mono" name="priority_weights" placeholder='{"4":70,"2":20,"0":10}'></div>
+            <div><label class="mb-2 block text-sm text-zinc-200">Age boost threshold</label><input class="cq-input w-full" name="age_boost_threshold" placeholder="30m"></div>
+            <div><label class="mb-2 block text-sm text-zinc-200">Age boost multiplier</label><input class="cq-input w-full" type="number" min="1" name="age_boost_multiplier" placeholder="2"></div>
+          </div>
+          <div class="grid grid-cols-4 gap-4">
+            <div><label class="mb-2 block text-sm text-zinc-200">Base lease</label><input class="cq-input w-full" name="base_lease" placeholder="30s"></div>
+            <div><label class="mb-2 block text-sm text-zinc-200">Maximum extension</label><input class="cq-input w-full" name="max_extension" placeholder="5m"></div>
+            <div><label class="mb-2 block text-sm text-zinc-200">Heartbeat timeout</label><input class="cq-input w-full" name="heartbeat_timeout" placeholder="15s"></div>
+            <div><label class="mb-2 block text-sm text-zinc-200">Extension step</label><input class="cq-input w-full" name="extend_step" placeholder="10s"></div>
+          </div>
+		  <div><label class="mb-2 block text-sm text-zinc-200">Maximum renewals</label><input class="cq-input w-48" type="number" min="0" name="max_renewals" placeholder="0 (unlimited)"></div>
+          <div class="grid grid-cols-2 gap-4">
+            <div><label class="mb-2 block text-sm text-zinc-200">Message retention</label><select class="cq-input w-full" name="retention_mode"><option value="">Server default</option><option value="DELETE_IMMEDIATELY">Delete immediately</option><option value="RETAIN_DURATION">Retain for duration</option><option value="RETAIN_FOREVER">Retain forever</option></select></div>
+            <div><label class="mb-2 block text-sm text-zinc-200">Retention seconds</label><input class="cq-input w-full" type="number" min="1" name="retention_seconds" placeholder="2592000"></div>
+          </div>
+        </div>
+      </details>
+
       <div class="space-y-4 rounded-xl border border-line bg-zinc-950/40 p-5">
         <p class="text-sm font-medium text-zinc-300">Dead Letter Queue</p>
         <div class="grid grid-cols-2 gap-4">

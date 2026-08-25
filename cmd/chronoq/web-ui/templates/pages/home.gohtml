@@ -26,6 +26,7 @@
 
 {{ define "dashboard_stats" }}
 <div id="dashboard-stats" hx-get="/fragments/dashboard-stats" hx-trigger="every 5s" hx-swap="outerHTML">
+  {{ if .PartialData }}<div class="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" role="status">Some dashboard totals are incomplete.</div>{{ end }}
   <div class="grid grid-cols-[1.2fr_1.6fr] gap-4">
     <div class="cq-panel overflow-hidden">
       <div class="flex items-center justify-between px-5 py-4">

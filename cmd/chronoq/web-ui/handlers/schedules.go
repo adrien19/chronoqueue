@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/client"
 	clusterstore "github.com/adrien19/chronoqueue/cmd/chronoq/web-ui/cluster"
-	"github.com/adrien19/chronoqueue/pkg/calendar"
 	"github.com/adrien19/chronoqueue/pkg/log"
 )
 
@@ -42,19 +42,24 @@ func NewSchedulesHandler(
 
 // List renders the schedules listing page.
 func (h *SchedulesHandler) List(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	schedulesResp, err := h.activeClient().ListSchedules(ctx, "")
+	schedulesResp, err := activeClient.ListSchedules(ctx, "")
 	if err != nil {
-		h.logger.ErrorWithFields("Failed to list schedules", "error", err)
-		h.renderError(w, http.StatusInternalServerError, "Failed to load schedules")
+		h.writeRPCError(w, r, "list schedules", err)
 		return
 	}
 
-	queuesResp, err := h.activeClient().ListQueues(ctx, "")
+	queuesResp, err := activeClient.ListQueues(ctx, "")
+	partialDataWarning := ""
 	if err != nil {
 		h.logger.ErrorWithFields("Failed to list queues", "error", err)
+		partialDataWarning = "Queue availability could not be loaded. Schedule rows may have incomplete queue status."
 	}
 
 	existingQueues := make(map[string]bool)
@@ -73,11 +78,12 @@ func (h *SchedulesHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]any{
-		"PageTitle":        "Schedules",
-		"Active":           "schedules",
-		"Schedules":        schedulesResp.GetSchedules(),
-		"ExistingQueues":   existingQueues,
-		"HasMissingQueues": hasMissingQueues,
+		"PageTitle":          "Schedules",
+		"Active":             "schedules",
+		"Schedules":          schedulesResp.GetSchedules(),
+		"ExistingQueues":     existingQueues,
+		"HasMissingQueues":   hasMissingQueues,
+		"PartialDataWarning": partialDataWarning,
 	}
 	h.render(w, "schedules_content", data)
 }
@@ -100,51 +106,115 @@ func (h *SchedulesHandler) New(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "schedule_new_content", data)
 }
 
+// Detail renders schedule configuration and execution history.
+func (h *SchedulesHandler) Detail(w http.ResponseWriter, r *http.Request) {
+	scheduleID := r.PathValue("id")
+	if scheduleID == "" {
+		h.renderError(w, http.StatusBadRequest, "Schedule ID required")
+		return
+	}
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
+	limit := int64(100)
+	if raw := r.URL.Query().Get("history_limit"); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed < 1 || parsed > 1000 {
+			h.renderError(w, http.StatusBadRequest, "History limit must be between 1 and 1000")
+			return
+		}
+		limit = parsed
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	scheduleResponse, err := activeClient.GetSchedule(ctx, scheduleID)
+	if err != nil {
+		h.writeRPCError(w, r, "get schedule", err)
+		return
+	}
+	historyResponse, err := activeClient.GetScheduleHistory(ctx, scheduleID, limit)
+	if err != nil {
+		h.writeRPCError(w, r, "get schedule history", err)
+		return
+	}
+	h.render(w, "schedule_detail_content", map[string]any{"PageTitle": "Schedule: " + scheduleID, "Active": "schedules", "Schedule": scheduleResponse.GetSchedule(), "History": historyResponse.GetScheduleHistory(), "HistoryLimit": limit})
+}
+
 // Create handles schedule creation (HTMX POST).
 func (h *SchedulesHandler) Create(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		h.logger.ErrorWithFields("Failed to parse form", "error", err)
-		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		h.writeInlineFormError(w, r, "Invalid form data")
 		return
 	}
 
 	scheduleID := strings.TrimSpace(r.FormValue("schedule_id"))
 	scheduleType := r.FormValue("schedule_type")
-	queueName := r.FormValue("queue_name")
+	queueName := strings.TrimSpace(r.FormValue("queue_name"))
 	payloadData := r.FormValue("payload_data")
 
 	if scheduleID == "" || queueName == "" {
-		http.Error(w, "Schedule ID and Queue Name are required", http.StatusBadRequest)
+		h.writeInlineFormError(w, r, "Schedule ID and Queue Name are required")
 		return
 	}
 
 	if !isValidScheduleID(scheduleID) {
-		http.Error(w, "Schedule ID must not contain spaces, '/', '?', or '#'", http.StatusBadRequest)
+		h.writeInlineFormError(w, r, "Schedule ID must not contain spaces, '/', '?', or '#'")
 		return
 	}
 
 	if queueName == scheduleID {
-		http.Error(w, "Queue Name cannot be the same as Schedule ID", http.StatusBadRequest)
+		h.writeInlineFormError(w, r, "Queue Name cannot be the same as Schedule ID")
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	if err := h.ensureQueueExists(ctx, w, r, queueName, scheduleID); err != nil {
-		return
-	}
-
 	scheduleOpts, err := h.buildScheduleOptions(ctx, r, scheduleType, queueName, payloadData)
 	if err != nil {
 		h.logger.ErrorWithFields("Failed to build schedule options", "error", err, "schedule_id", scheduleID)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.writeInlineFormError(w, r, err.Error())
+		return
+	}
+	if scheduleOpts.CalendarSchedule != nil {
+		calendarJSON, marshalErr := protojson.Marshal(scheduleOpts.CalendarSchedule)
+		if marshalErr != nil {
+			h.writeInlineFormError(w, r, "Could not encode calendar schedule")
+			return
+		}
+		validation, validationErr := activeClient.ValidateCalendarSchedule(ctx, string(calendarJSON))
+		if validationErr != nil {
+			h.writeRPCError(w, r, "validate calendar schedule", validationErr)
+			return
+		}
+		if !validation.GetValid() {
+			message := validation.GetErrorMessage()
+			if message == "" {
+				messages := make([]string, 0, len(validation.GetValidationIssues()))
+				for _, issue := range validation.GetValidationIssues() {
+					messages = append(messages, issue.GetMessage())
+				}
+				message = strings.Join(messages, "\n")
+			}
+			if message == "" {
+				message = "Calendar schedule is invalid"
+			}
+			h.writeInlineFormError(w, r, message)
+			return
+		}
+	}
+	if err := h.ensureQueueExists(ctx, activeClient, w, r, queueName, scheduleID); err != nil {
 		return
 	}
 
-	if _, err := h.activeClient().CreateSchedule(ctx, scheduleID, *scheduleOpts); err != nil {
-		h.logger.ErrorWithFields("Failed to create schedule", "error", err, "schedule_id", scheduleID)
-		http.Error(w, fmt.Sprintf("Failed to create schedule: %v", err), http.StatusInternalServerError)
+	if _, err := activeClient.CreateSchedule(ctx, scheduleID, *scheduleOpts); err != nil {
+		h.writeRPCError(w, r, "create schedule", err)
 		return
 	}
 
@@ -156,13 +226,12 @@ func (h *SchedulesHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // ensureQueueExists checks queue existence, auto-creates if requested, or returns a warning fragment.
-func (h *SchedulesHandler) ensureQueueExists(ctx context.Context, w http.ResponseWriter, r *http.Request, queueName, scheduleID string) error {
+func (h *SchedulesHandler) ensureQueueExists(ctx context.Context, activeClient *client.ChronoQueueClient, w http.ResponseWriter, r *http.Request, queueName, scheduleID string) error {
 	autoCreate := r.FormValue("auto_create_queue") == "true"
 
-	queuesResp, err := h.activeClient().ListQueues(ctx, "")
+	queuesResp, err := activeClient.ListQueues(ctx, "")
 	if err != nil {
-		h.logger.ErrorWithFields("Failed to check queue existence", "error", err)
-		http.Error(w, "Failed to verify queue existence", http.StatusInternalServerError)
+		h.writeRPCError(w, r, "verify queue existence", err)
 		return err
 	}
 
@@ -180,14 +249,17 @@ func (h *SchedulesHandler) ensureQueueExists(ctx context.Context, w http.Respons
 	}
 
 	if !exists && autoCreate {
-		return h.autoCreateQueue(ctx, queueName, scheduleID)
+		if err := h.autoCreateQueue(ctx, activeClient, queueName, scheduleID); err != nil {
+			h.writeRPCError(w, r, "create schedule queue", err)
+			return err
+		}
 	}
 
 	return nil
 }
 
 // autoCreateQueue creates a queue with sensible defaults.
-func (h *SchedulesHandler) autoCreateQueue(ctx context.Context, queueName, scheduleID string) error {
+func (h *SchedulesHandler) autoCreateQueue(ctx context.Context, activeClient *client.ChronoQueueClient, queueName, scheduleID string) error {
 	h.logger.InfoWithFields("Auto-creating queue for schedule", "queue", queueName, "schedule", scheduleID)
 	opts := client.QueueOptions{
 		DequeueAttempts:     3,
@@ -195,7 +267,7 @@ func (h *SchedulesHandler) autoCreateQueue(ctx context.Context, queueName, sched
 		AutoCreateDLQ:       true,
 		DeadLetterQueueName: queueName + "-dlq",
 	}
-	if _, err := h.activeClient().CreateQueue(ctx, queueName, opts); err != nil {
+	if _, err := activeClient.CreateQueue(ctx, queueName, opts); err != nil {
 		h.logger.ErrorWithFields("Failed to auto-create queue", "error", err, "queue", queueName)
 		return fmt.Errorf("failed to create queue '%s': %w", queueName, err)
 	}
@@ -215,8 +287,8 @@ func (h *SchedulesHandler) renderQueueWarningDialog(w http.ResponseWriter, queue
       <p class="text-sm font-medium text-amber-200">Queue '%s' does not exist</p>
       <p class="mt-1 text-sm text-amber-300">The schedule will be created but messages won't be processed until the queue exists.</p>
       <div class="mt-3 flex gap-3">
-        <button type="button" onclick="(function(){var f=document.querySelector('form');var i=document.createElement('input');i.type='hidden';i.name='auto_create_queue';i.value='true';f.appendChild(i);htmx.trigger(f,'submit');})()"
-          class="cq-btn cq-btn-primary !text-xs">Create Queue &amp; Schedule</button>
+		<button type="button" hx-post="/api/schedules/create" hx-include="#schedule-form" hx-vals='{"auto_create_queue":"true"}' hx-target="#form-result"
+		  class="cq-btn cq-btn-primary !text-xs">Create Queue &amp; Schedule</button>
         <a href="/queues" class="cq-btn !text-xs">Create Queue First</a>
       </div>
     </div>
@@ -229,6 +301,10 @@ func (h *SchedulesHandler) renderQueueWarningDialog(w http.ResponseWriter, queue
 
 // Toggle handles pause/resume (HTMX POST).
 func (h *SchedulesHandler) Toggle(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	scheduleID := strings.TrimSpace(r.FormValue("schedule_id"))
 	action := r.FormValue("action")
 
@@ -248,17 +324,16 @@ func (h *SchedulesHandler) Toggle(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch action {
 	case "pause":
-		_, err = h.activeClient().PauseSchedule(ctx, scheduleID)
+		_, err = activeClient.PauseSchedule(ctx, scheduleID)
 	case "resume":
-		_, err = h.activeClient().ResumeSchedule(ctx, scheduleID)
+		_, err = activeClient.ResumeSchedule(ctx, scheduleID)
 	default:
 		http.Error(w, "Invalid action", http.StatusBadRequest)
 		return
 	}
 
 	if err != nil {
-		h.logger.ErrorWithFields("Failed to toggle schedule", "error", err, "schedule_id", scheduleID, "action", action)
-		http.Error(w, fmt.Sprintf("Failed to %s schedule: %v", action, err), http.StatusInternalServerError)
+		h.writeRPCError(w, r, action+" schedule", err)
 		return
 	}
 
@@ -308,6 +383,10 @@ func (h *SchedulesHandler) Toggle(w http.ResponseWriter, r *http.Request) {
 
 // Delete deletes a schedule (HTMX DELETE).
 func (h *SchedulesHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
 	scheduleID := r.PathValue("id")
 	if scheduleID == "" {
 		http.Error(w, "Schedule ID required", http.StatusBadRequest)
@@ -317,14 +396,90 @@ func (h *SchedulesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	if _, err := h.activeClient().DeleteSchedule(ctx, scheduleID); err != nil {
-		h.logger.ErrorWithFields("Failed to delete schedule", "error", err, "schedule_id", scheduleID)
-		http.Error(w, fmt.Sprintf("Failed to delete schedule: %v", err), http.StatusInternalServerError)
+	if _, err := activeClient.DeleteSchedule(ctx, scheduleID); err != nil {
+		h.writeRPCError(w, r, "delete schedule", err)
 		return
 	}
 
 	// Return empty string so HTMX removes the row
 	w.WriteHeader(http.StatusOK)
+}
+
+// ValidateCalendar validates the complete protobuf JSON calendar contract on the active server.
+func (h *SchedulesHandler) ValidateCalendar(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		h.writeInlineFormError(w, r, "Invalid form data")
+		return
+	}
+	raw := strings.TrimSpace(r.FormValue("calendar_json"))
+	if raw == "" {
+		calendarSchedule, err := h.buildCalendarSchedule(r.Context(), r)
+		if err != nil {
+			h.writeInlineFormError(w, r, err.Error())
+			return
+		}
+		calendarJSON, err := protojson.Marshal(calendarSchedule)
+		if err != nil {
+			h.writeInlineFormError(w, r, "Could not encode calendar schedule")
+			return
+		}
+		raw = string(calendarJSON)
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	response, err := activeClient.ValidateCalendarSchedule(ctx, raw)
+	if err != nil {
+		h.writeRPCError(w, r, "validate calendar schedule", err)
+		return
+	}
+	h.renderFragment(w, "calendar_validation_result", response)
+}
+
+// PreviewCalendar returns upcoming execution times from the active server.
+func (h *SchedulesHandler) PreviewCalendar(w http.ResponseWriter, r *http.Request) {
+	activeClient, ok := h.requireActiveClient(w)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		h.writeInlineFormError(w, r, "Invalid form data")
+		return
+	}
+	raw := strings.TrimSpace(r.FormValue("calendar_json"))
+	countRaw := strings.TrimSpace(r.FormValue("preview_count"))
+	if countRaw == "" {
+		countRaw = "10"
+	}
+	if raw == "" {
+		calendarSchedule, buildErr := h.buildCalendarSchedule(r.Context(), r)
+		if buildErr != nil {
+			h.writeInlineFormError(w, r, buildErr.Error())
+			return
+		}
+		calendarJSON, marshalErr := protojson.Marshal(calendarSchedule)
+		if marshalErr != nil {
+			h.writeInlineFormError(w, r, "Could not encode calendar schedule")
+			return
+		}
+		raw = string(calendarJSON)
+	}
+	count, err := strconv.ParseInt(countRaw, 10, 32)
+	if err != nil || count < 1 || count > 100 {
+		h.writeInlineFormError(w, r, "Preview count must be between 1 and 100")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	response, err := activeClient.PreviewCalendarSchedule(ctx, raw, int32(count))
+	if err != nil {
+		h.writeRPCError(w, r, "preview calendar schedule", err)
+		return
+	}
+	h.renderFragment(w, "calendar_preview_result", response)
 }
 
 // buildScheduleOptions constructs schedule options from form data.
@@ -347,6 +502,45 @@ func (h *SchedulesHandler) buildScheduleOptions(ctx context.Context, r *http.Req
 		QueueName: queueName,
 		Payload:   client.Payload{Data: payloadStruct},
 		State:     client.State(schedule_pb.Schedule_Metadata_SCHEDULED),
+	}
+	metadata, err := parsePayloadMetadata(r.FormValue("payload_metadata"))
+	if err != nil {
+		return nil, err
+	}
+	headers, err := parseMessageHeaders(r.FormValue("headers"))
+	if err != nil {
+		return nil, err
+	}
+	opts.Payload.Metadata = metadata
+	opts.Payload.ContentType = strings.TrimSpace(r.FormValue("content_type"))
+	opts.Payload.SchemaID = strings.TrimSpace(r.FormValue("schema_id"))
+	if raw := strings.TrimSpace(r.FormValue("schema_version")); raw != "" {
+		version, err := strconv.ParseInt(raw, 10, 32)
+		if err != nil || version < 0 {
+			return nil, fmt.Errorf("schema version must be a non-negative integer")
+		}
+		opts.Payload.SchemaVersion = int32(version)
+	}
+	opts.Headers = headers
+	if raw := strings.TrimSpace(r.FormValue("priority")); raw != "" {
+		priority, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || priority < 0 || priority > 4 {
+			return nil, fmt.Errorf("priority must be between 0 and 4")
+		}
+		opts.Priority = priority
+	}
+	if raw := strings.TrimSpace(r.FormValue("max_messages")); raw != "" {
+		maximum, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || maximum <= 0 {
+			return nil, fmt.Errorf("maximum messages must be a positive integer")
+		}
+		opts.MaxMessages = maximum
+	}
+	opts.LeaseDuration = strings.TrimSpace(r.FormValue("lease_duration"))
+	if opts.LeaseDuration != "" {
+		if duration, err := time.ParseDuration(opts.LeaseDuration); err != nil || duration <= 0 {
+			return nil, fmt.Errorf("lease duration must be a positive duration")
+		}
 	}
 
 	switch scheduleType {
@@ -372,6 +566,16 @@ func (h *SchedulesHandler) buildScheduleOptions(ctx context.Context, r *http.Req
 }
 
 func (h *SchedulesHandler) buildCalendarSchedule(ctx context.Context, r *http.Request) (*schedule_pb.CalendarSchedule, error) {
+	if raw := strings.TrimSpace(r.FormValue("calendar_json")); raw != "" {
+		var schedule schedule_pb.CalendarSchedule
+		if err := protojson.Unmarshal([]byte(raw), &schedule); err != nil {
+			return nil, fmt.Errorf("invalid calendar schedule JSON: %w", err)
+		}
+		if schedule.GetType() == schedule_pb.CalendarSchedule_CUSTOM {
+			return nil, fmt.Errorf("CUSTOM calendar schedules are not supported")
+		}
+		return &schedule, nil
+	}
 	timezone := r.FormValue("timezone")
 	if timezone == "" {
 		timezone = "UTC"
@@ -392,11 +596,6 @@ func (h *SchedulesHandler) buildCalendarSchedule(ctx context.Context, r *http.Re
 		Type:     h.mapCalendarTypeToEnum(calendarType),
 		Timezone: timezone,
 		Rules:    []*schedule_pb.CalendarRule{rule},
-	}
-
-	engine := calendar.NewDefaultEngine()
-	if err := engine.ValidateSchedule(ctx, cal); err != nil {
-		return nil, fmt.Errorf("calendar schedule validation failed: %w", err)
 	}
 
 	return cal, nil
@@ -462,6 +661,20 @@ func (h *SchedulesHandler) buildCalendarRule(r *http.Request, calendarType strin
 			ExecutionTimes: executionTimes,
 		}, nil
 
+	case "YEARLY":
+		month, day, err := h.parseYearlyDate(r.FormValue("yearly_month"), r.FormValue("yearly_day"))
+		if err != nil {
+			return nil, err
+		}
+		return &schedule_pb.CalendarRule{
+			Rule: &schedule_pb.CalendarRule_Yearly{Yearly: &schedule_pb.YearlyRule{
+				Month:             month,
+				Day:               day,
+				AdjustForLeapYear: r.FormValue("adjust_for_leap_year") == "true",
+			}},
+			ExecutionTimes: executionTimes,
+		}, nil
+
 	case "BUSINESS_DAYS":
 		return &schedule_pb.CalendarRule{
 			Rule:           &schedule_pb.CalendarRule_BusinessDays{BusinessDays: &schedule_pb.BusinessDaysRule{}},
@@ -499,6 +712,18 @@ func (h *SchedulesHandler) parseDayOfMonth(s string) (int32, error) {
 	return int32(d), nil
 }
 
+func (h *SchedulesHandler) parseYearlyDate(monthRaw, dayRaw string) (int32, int32, error) {
+	month, err := strconv.Atoi(monthRaw)
+	if err != nil || month < 1 || month > 12 {
+		return 0, 0, fmt.Errorf("invalid yearly month %q: must be an integer 1–12", monthRaw)
+	}
+	day, err := strconv.Atoi(dayRaw)
+	if err != nil || day < 1 || day > 31 {
+		return 0, 0, fmt.Errorf("invalid yearly day %q: must be an integer 1–31", dayRaw)
+	}
+	return int32(month), int32(day), nil
+}
+
 // isValidScheduleID returns false when the ID contains characters that break
 // URL routing, gRPC path construction, or DOM selectors.
 func isValidScheduleID(id string) bool {
@@ -513,6 +738,8 @@ func (h *SchedulesHandler) mapCalendarTypeToEnum(t string) schedule_pb.CalendarS
 		return schedule_pb.CalendarSchedule_WEEKLY
 	case "DAILY":
 		return schedule_pb.CalendarSchedule_DAILY
+	case "YEARLY":
+		return schedule_pb.CalendarSchedule_YEARLY
 	case "BUSINESS_DAYS":
 		return schedule_pb.CalendarSchedule_BUSINESS_DAYS
 	default:

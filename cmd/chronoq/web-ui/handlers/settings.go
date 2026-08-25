@@ -72,10 +72,16 @@ func (h *SettingsHandler) ClusterCreate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	c := cluster.Cluster{
-		Name:          strings.TrimSpace(r.FormValue("name")),
-		Description:   strings.TrimSpace(r.FormValue("description")),
-		BrokerAddress: strings.TrimSpace(r.FormValue("brokerAddress")),
-		SkipSSLCheck:  r.FormValue("skipSSLCheck") == "on",
+		Name:           strings.TrimSpace(r.FormValue("name")),
+		Description:    strings.TrimSpace(r.FormValue("description")),
+		BrokerAddress:  strings.TrimSpace(r.FormValue("brokerAddress")),
+		TransportMode:  strings.TrimSpace(r.FormValue("transportMode")),
+		SkipTLSVerify:  r.FormValue("skipTLSVerify") == "on",
+		TLSServerName:  strings.TrimSpace(r.FormValue("tlsServerName")),
+		CACertFile:     strings.TrimSpace(r.FormValue("caCertFile")),
+		ClientCertFile: strings.TrimSpace(r.FormValue("clientCertFile")),
+		ClientKeyFile:  strings.TrimSpace(r.FormValue("clientKeyFile")),
+		APIKeyEnv:      strings.TrimSpace(r.FormValue("apiKeyEnv")),
 	}
 	if c.Name == "" || c.BrokerAddress == "" {
 		h.settingsPage(w, r, "clusters", "Add Cluster", "settings_cluster_new_content", map[string]any{
@@ -85,8 +91,9 @@ func (h *SettingsHandler) ClusterCreate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.store.Add(c); err != nil {
+		h.logger.ErrorWithFields("Failed to add cluster", "error", err)
 		h.settingsPage(w, r, "clusters", "Add Cluster", "settings_cluster_new_content", map[string]any{
-			"Error": err.Error(),
+			"Error": "Could not save the cluster configuration",
 			"Form":  c,
 		})
 		return
@@ -102,16 +109,23 @@ func (h *SettingsHandler) ClusterUpdate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	updated := cluster.Cluster{
-		Name:          strings.TrimSpace(r.FormValue("name")),
-		Description:   strings.TrimSpace(r.FormValue("description")),
-		BrokerAddress: strings.TrimSpace(r.FormValue("brokerAddress")),
-		SkipSSLCheck:  r.FormValue("skipSSLCheck") == "on",
+		Name:           strings.TrimSpace(r.FormValue("name")),
+		Description:    strings.TrimSpace(r.FormValue("description")),
+		BrokerAddress:  strings.TrimSpace(r.FormValue("brokerAddress")),
+		TransportMode:  strings.TrimSpace(r.FormValue("transportMode")),
+		SkipTLSVerify:  r.FormValue("skipTLSVerify") == "on",
+		TLSServerName:  strings.TrimSpace(r.FormValue("tlsServerName")),
+		CACertFile:     strings.TrimSpace(r.FormValue("caCertFile")),
+		ClientCertFile: strings.TrimSpace(r.FormValue("clientCertFile")),
+		ClientKeyFile:  strings.TrimSpace(r.FormValue("clientKeyFile")),
+		APIKeyEnv:      strings.TrimSpace(r.FormValue("apiKeyEnv")),
 	}
 	if err := h.store.Update(slug, updated); err != nil {
-		c, _ := h.store.Get(slug)
+		h.logger.ErrorWithFields("Failed to update cluster", "error", err, "slug", slug)
+		updated.Slug = slug
 		h.settingsPage(w, r, "clusters", "Edit Cluster", "settings_cluster_detail_content", map[string]any{
-			"Cluster": c,
-			"Error":   err.Error(),
+			"Cluster": &updated,
+			"Error":   "Could not save the cluster configuration",
 		})
 		return
 	}
@@ -123,7 +137,7 @@ func (h *SettingsHandler) ClusterDelete(w http.ResponseWriter, r *http.Request) 
 	slug := r.PathValue("slug")
 	if err := h.store.Delete(slug); err != nil {
 		h.logger.ErrorWithFields("Failed to delete cluster", "error", err, "slug", slug)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Could not delete the cluster configuration", http.StatusBadRequest)
 		return
 	}
 	http.Redirect(w, r, "/settings/clusters", http.StatusSeeOther)
@@ -133,7 +147,8 @@ func (h *SettingsHandler) ClusterDelete(w http.ResponseWriter, r *http.Request) 
 func (h *SettingsHandler) ClusterSwitch(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 	if err := h.store.SetActive(slug); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.logger.ErrorWithFields("Failed to switch cluster", "error", err, "slug", slug)
+		http.Error(w, "Could not switch the active cluster", http.StatusBadRequest)
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)

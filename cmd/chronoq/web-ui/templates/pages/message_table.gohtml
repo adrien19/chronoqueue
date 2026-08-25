@@ -1,7 +1,7 @@
 {{ define "message_table" }}
 <div class="overflow-x-auto">
 <table class="cq-table">
-  <thead><tr><th>ID</th><th>State</th><th>Priority</th><th>Attempts</th><th>Created at</th><th>Deliver at</th>{{ if $.Queue.IsDLQ }}<th></th>{{ end }}</tr></thead>
+  <thead><tr><th>ID</th><th>State</th><th>Priority</th><th>Attempts</th><th>Scheduled delivery</th><th></th></tr></thead>
   <tbody>
   {{ range .QueueMessages }}
   <tr>
@@ -14,24 +14,33 @@
     <td><span class="{{ statusClass .State }}">{{ .State }}</span></td>
     <td>{{ .Priority }}</td>
     <td>{{ .AttemptCount }}</td>
-    <td>{{ formatTime .CreatedAt }}</td>
-    <td>{{ if .DeliverAt }}{{ formatTime (derefTime .DeliverAt) }}{{ else }}<span class="text-zinc-600">—</span>{{ end }}</td>
-    {{ if $.Queue.IsDLQ }}
+    <td>{{ if .ScheduledAt }}{{ formatTime (derefTime .ScheduledAt) }}{{ else }}<span class="text-zinc-600">—</span>{{ end }}</td>
     <td>
+	  {{ if $.Queue.IsDLQ }}
       <div class="flex items-center gap-2">
         <form method="POST" action="/api/queues/{{ $.Queue.Name }}/messages/{{ .Id }}/requeue" data-confirm="Requeue this message?">
+		  {{ if gt (len $.Queue.SourceQueues) 1 }}
+		  <select name="target_queue" required class="cq-input !py-1 text-xs">
+			<option value="">Select target</option>
+			{{ range $.Queue.SourceQueues }}<option value="{{ . }}">{{ . }}</option>{{ end }}
+		  </select>
+		  {{ end }}
           <button type="submit" class="cq-btn cq-btn-primary !px-2 !py-1 text-xs">Requeue</button>
         </form>
         <form method="POST" action="/api/queues/{{ $.Queue.Name }}/messages/{{ .Id }}/dlq-delete" data-confirm="Permanently delete this message?">
           <button type="submit" class="cq-btn !px-2 !py-1 text-xs text-red-400 hover:text-red-300">Delete</button>
         </form>
       </div>
+	  {{ else if .Cancelable }}
+	  <form method="POST" action="/api/queues/{{ $.Queue.Name }}/messages/{{ .Id }}/cancel" data-confirm="Cancel this message?">
+		<button type="submit" class="cq-btn !px-2 !py-1 text-xs text-amber-300">Cancel</button>
+	  </form>
+	  {{ end }}
     </td>
-    {{ end }}
   </tr>
   {{ end }}
   {{ if not .QueueMessages }}
-  <tr><td colspan="{{ if $.Queue.IsDLQ }}7{{ else }}6{{ end }}" class="py-8 text-center text-zinc-500">No messages found.</td></tr>
+  <tr><td colspan="6" class="py-8 text-center text-zinc-500">No messages found.</td></tr>
   {{ end }}
   </tbody>
 </table>

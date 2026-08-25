@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
@@ -66,6 +67,12 @@ type capturingQueueServiceClient struct {
 	queueservice_pb.QueueServiceClient
 	bulkRequest     *queueservice_pb.PostMessagesBulkRequest
 	scheduleRequest *queueservice_pb.CreateScheduleRequest
+	queueRequest    *queueservice_pb.CreateQueueRequest
+}
+
+func (c *capturingQueueServiceClient) CreateQueue(_ context.Context, request *queueservice_pb.CreateQueueRequest, _ ...grpc.CallOption) (*queueservice_pb.CreateQueueResponse, error) {
+	c.queueRequest = request
+	return &queueservice_pb.CreateQueueResponse{Success: true}, nil
 }
 
 func (c *capturingQueueServiceClient) PostMessagesBulk(_ context.Context, request *queueservice_pb.PostMessagesBulkRequest, _ ...grpc.CallOption) (*queueservice_pb.PostMessagesBulkResponse, error) {
@@ -857,7 +864,7 @@ func TestPostMessagesBulkPropagatesHeaders(t *testing.T) {
 	require.Empty(t, service.bulkRequest.GetMessages()[1].GetMetadata().GetHeaders())
 }
 
-func TestCreateSchedulePropagatesHeaders(t *testing.T) {
+func TestCreateSchedulePropagatesProducerOptions(t *testing.T) {
 	service := &capturingQueueServiceClient{}
 	chronoqueueClient := &ChronoQueueClient{service: service, opts: ClientOptions{DefaultRPCTimeout: time.Second}}
 
@@ -865,6 +872,15 @@ func TestCreateSchedulePropagatesHeaders(t *testing.T) {
 		QueueName:     "queue",
 		CronSchedule:  "*/5 * * * *",
 		LeaseDuration: "3s",
+		Priority:      4,
+		MaxMessages:   25,
+		Payload: Payload{
+			Metadata:      map[string]*structpb.Value{"tenant": structpb.NewStringValue("acme")},
+			Data:          mustStruct(t, map[string]any{"order": "123"}),
+			ContentType:   "application/json",
+			SchemaID:      "order-schema",
+			SchemaVersion: 2,
+		},
 		Headers: []MessageHeader{
 			{Key: "trace-id", Value: []byte{0x00, 0xff}},
 			{Key: "trace-id", Value: []byte("second")},
@@ -878,6 +894,48 @@ func TestCreateSchedulePropagatesHeaders(t *testing.T) {
 	require.Equal(t, []byte{0x00, 0xff}, headers[0].GetValue())
 	require.Equal(t, "trace-id", headers[1].GetKey())
 	require.Equal(t, []byte("second"), headers[1].GetValue())
+	metadata := service.scheduleRequest.GetSchedule().GetMetadata()
+	require.Equal(t, int64(4), metadata.GetPriority())
+	require.True(t, metadata.GetHasMaxMessages())
+	require.Equal(t, int64(25), metadata.GetMaxMessages())
+	require.Equal(t, "acme", metadata.GetPayload().GetMetadata()["tenant"].GetStringValue())
+	require.Equal(t, "application/json", metadata.GetPayload().GetContentType())
+	require.Equal(t, "order-schema", metadata.GetPayload().GetSchemaId())
+	require.Equal(t, int32(2), metadata.GetPayload().GetSchemaVersion())
+}
+
+func TestCreateQueuePropagatesAdvancedConfiguration(t *testing.T) {
+	service := &capturingQueueServiceClient{}
+	chronoqueueClient := &ChronoQueueClient{service: service, opts: ClientOptions{DefaultRPCTimeout: time.Second}}
+	_, err := chronoqueueClient.CreateQueue(context.Background(), "orders", QueueOptions{
+		LeaseDuration: "30s", MaxPayloadSize: 4096, AllowedContentTypes: []string{"application/json"},
+		PriorityConfig:  &queue_pb.PriorityConfig{Policy: queue_pb.FairnessPolicy_HYBRID, PriorityWeights: map[int32]int32{4: 70}, AgeBoostThreshold: durationpb.New(30 * time.Minute), AgeBoostMultiplier: 2},
+		LeasePolicy:     LeasePolicyOptions{BaseLease: "30s", MaxExtension: "5m", HeartbeatTimeout: "15s", ExtendStep: "10s", MaxRenewals: 5},
+		RetentionPolicy: &RetentionPolicyOption{Mode: RETENTION_RETAIN_DURATION, RetentionSeconds: 3600},
+	})
+	require.NoError(t, err)
+	metadata := service.queueRequest.GetMetadata()
+	require.Equal(t, int32(4096), metadata.GetMaxPayloadSize())
+	require.Equal(t, []string{"application/json"}, metadata.GetAllowedContentTypes())
+	require.Equal(t, queue_pb.FairnessPolicy_HYBRID, metadata.GetPriorityConfig().GetPolicy())
+	require.Equal(t, int32(70), metadata.GetPriorityConfig().GetPriorityWeights()[4])
+	require.Equal(t, 30*time.Second, metadata.GetLeasePolicy().GetBaseLease().AsDuration())
+	require.Equal(t, int32(5), metadata.GetLeasePolicy().GetMaxRenewals())
+	require.Equal(t, queue_pb.MessageRetentionPolicy_RETAIN_DURATION, metadata.GetMessageRetentionPolicy().GetMode())
+	require.Equal(t, int64(3600), metadata.GetMessageRetentionPolicy().GetRetentionSeconds())
+}
+
+func TestBuildLeasePolicyRejectsNegativeMaxRenewals(t *testing.T) {
+	if _, err := buildLeasePolicy(LeasePolicyOptions{MaxRenewals: -1}); err == nil {
+		t.Fatal("expected negative max renewals error")
+	}
+}
+
+func mustStruct(t *testing.T, value map[string]any) *structpb.Struct {
+	t.Helper()
+	result, err := structpb.NewStruct(value)
+	require.NoError(t, err)
+	return result
 }
 
 func TestChronoQueueClient_manageHeartbeats(t *testing.T) {

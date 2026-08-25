@@ -18,6 +18,9 @@
       {{ end }}
       <main class="cq-content">
         {{ template "topbar" . }}
+        {{ if .PartialDataWarning }}
+          <div class="mb-5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" role="status">{{ .PartialDataWarning }}</div>
+        {{ end }}
         {{ if eq .ContentTemplate "home_content" }}
           {{ template "home_content" . }}
         {{ else if eq .ContentTemplate "queues_content" }}

@@ -18,6 +18,9 @@
             Source: {{ .Queue.SourceQueue }}
           </a>
           {{ end }}
+		  {{ if gt (len .Queue.SourceQueues) 1 }}
+		  <span class="text-sm text-zinc-400">Shared by {{ len .Queue.SourceQueues }} source queues</span>
+		  {{ end }}
         </div>
         {{ end }}
       </div>
@@ -29,19 +32,33 @@
         </a>
         {{ end }}
         {{ if .Queue.IsDLQ }}
-        <form method="POST" action="/queues/{{ .Queue.Name }}/requeue-all" data-confirm="Requeue all messages from DLQ back to {{ .Queue.SourceQueue }}?">
+        <form method="POST" action="/queues/{{ .Queue.Name }}/requeue-all" data-confirm="{{ if .Queue.SourceQueue }}Requeue all messages from DLQ back to {{ .Queue.SourceQueue }}?{{ else }}Requeue all messages from DLQ to the selected target queue?{{ end }}">
+		  {{ if gt (len .Queue.SourceQueues) 1 }}
+		  <select name="target_queue" required class="cq-input">
+			<option value="">Select target queue</option>
+			{{ range .Queue.SourceQueues }}<option value="{{ . }}">{{ . }}</option>{{ end }}
+		  </select>
+		  {{ end }}
           <button class="cq-btn cq-btn-primary" type="submit">Requeue all</button>
         </form>
         {{ end }}
+		{{ if .Queue.IsDLQ }}
         <form method="POST" action="/queues/{{ .Queue.Name }}/purge" data-confirm="Purge ALL messages from this queue? This cannot be undone.">
           <button class="cq-btn" type="submit">Purge</button>
         </form>
+		{{ end }}
+		{{ if not .Queue.IsDLQ }}
+		<form method="POST" action="/queues/{{ .Queue.Name }}/delete" data-confirm="Permanently delete queue '{{ .Queue.Name }}' and its data? This cannot be undone.">
+		  <button class="cq-btn border-red-500/30 text-red-300" type="submit">Delete queue</button>
+		</form>
+		{{ end }}
       </div>
     </div>
-    <div class="mt-6 grid grid-cols-5 gap-3">
+    <div class="mt-6 grid grid-cols-6 gap-3">
       <div class="cq-panel-soft p-4"><div class="cq-label">Ready</div><div class="mt-2 text-2xl font-semibold text-blue-300">{{ .Queue.Ready }}</div></div>
       <div class="cq-panel-soft p-4"><div class="cq-label">Inflight</div><div class="mt-2 text-2xl font-semibold text-white">{{ .Queue.InFlight }}</div></div>
-      <div class="cq-panel-soft p-4"><div class="cq-label">Retries</div><div class="mt-2 text-2xl font-semibold text-amber-300">{{ .Queue.Retries }}</div></div>
+      <div class="cq-panel-soft p-4"><div class="cq-label">Delayed</div><div class="mt-2 text-2xl font-semibold text-amber-300">{{ .Queue.Delayed }}</div></div>
+      <div class="cq-panel-soft p-4"><div class="cq-label">Errored</div><div class="mt-2 text-2xl font-semibold text-red-300">{{ .Queue.Errored }}</div></div>
       <div class="cq-panel-soft p-4"><div class="cq-label">DLQ</div><div class="mt-2 text-2xl font-semibold text-red-300">{{ .Queue.DLQ }}</div></div>
       <div class="cq-panel-soft p-4"><div class="cq-label">Completed</div><div class="mt-2 text-2xl font-semibold text-white">{{ .Queue.Completed }}</div></div>
     </div>
@@ -53,6 +70,7 @@
       <div class="flex items-center gap-3">
         <span class="text-sm text-zinc-500">showing up to 100</span>
         {{ if not .Queue.IsDLQ }}
+        <a href="/queues/{{ .Queue.Name }}/messages/bulk" class="cq-btn">Bulk post</a>
         <a href="/queues/{{ .Queue.Name }}/messages/new" class="cq-btn cq-btn-primary">New message</a>
         {{ end }}
       </div>
