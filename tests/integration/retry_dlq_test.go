@@ -29,6 +29,50 @@ import (
 	"github.com/adrien19/chronoqueue/tests/helpers"
 )
 
+func waitForMessage(t *testing.T, ctx context.Context, client queueservice_pb.QueueServiceClient, queueName string) *queueservice_pb.GetNextMessageResponse {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		response, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{QueueName: queueName, LeaseDuration: durationpb.New(5 * time.Second)})
+		require.NoError(t, err)
+		if response.GetMessage() != nil {
+			return response
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.FailNow(t, "message did not become claimable", "queue=%s", queueName)
+	return nil
+}
+
+func failNextMessage(t *testing.T, ctx context.Context, client queueservice_pb.QueueServiceClient, queueName, messageID string) {
+	t.Helper()
+	claimed := waitForMessage(t, ctx, client, queueName)
+	require.Equal(t, messageID, claimed.GetMessage().GetMessageId())
+	_, err := client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{
+		QueueName: queueName,
+		MessageId: messageID,
+		State:     message_pb.Message_Metadata_ERRORED,
+		WorkerId:  claimed.WorkerId,
+		AttemptId: claimed.AttemptId,
+	})
+	require.NoError(t, err)
+}
+
+func postAndFailMessage(t *testing.T, ctx context.Context, client queueservice_pb.QueueServiceClient, queueName string) string {
+	t.Helper()
+	messageID := helpers.GenerateUniqueMessageID(t)
+	_, err := client.PostMessage(ctx, &queueservice_pb.PostMessageRequest{
+		QueueName: queueName,
+		Message: &message_pb.Message{MessageId: messageID, Metadata: &message_pb.Message_Metadata{
+			Payload:     &common_pb.Payload{Data: createStruct(t, map[string]interface{}{"test": "dlq_operation"}), ContentType: "application/json"},
+			MaxAttempts: 1,
+		}},
+	})
+	require.NoError(t, err)
+	failNextMessage(t, ctx, client, queueName, messageID)
+	return messageID
+}
+
 // TestRetrySystem_ImmediateRetry validates that a NACK makes a retriable message immediately claimable.
 //
 // Test Scenario: TC-R-002 from TESTING_GUIDE.md
@@ -167,29 +211,8 @@ func TestRetrySystem_MaxRetriesReached(t *testing.T) {
 
 	// Act - Fail message 3 times
 	for attempt := 0; attempt < 3; attempt++ {
-		t.Logf("Failing attempt %d", attempt+1)
-
-		// Wait for message to become available
-		time.Sleep(2 * time.Second)
-
-		getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
-			QueueName:     queueName,
-			LeaseDuration: durationpb.New(3 * time.Second),
-		})
-
-		if err != nil || getResp.Message == nil {
-			t.Logf("Message not available yet, waiting...")
-			continue
-		}
-
-		t.Logf("Got message, attempts left: %d", getResp.Message.Metadata.AttemptsLeft)
-
-		// Let lease expire (simulating failure)
-		time.Sleep(4 * time.Second)
+		failNextMessage(t, ctx, client, queueName, msgID)
 	}
-
-	// Wait for DLQ processing
-	time.Sleep(5 * time.Second)
 
 	// Assert - Check DLQ for the failed message
 	dlqResp, err := client.GetDLQMessages(ctx, &queueservice_pb.GetDLQMessagesRequest{
@@ -197,12 +220,9 @@ func TestRetrySystem_MaxRetriesReached(t *testing.T) {
 		Limit:   10,
 	})
 
-	if err == nil && len(dlqResp.Messages) > 0 {
-		t.Logf("Found %d messages in DLQ", len(dlqResp.Messages))
-		// Success - message is in DLQ
-	} else {
-		t.Logf("Warning: Message may not be in DLQ yet or DLQ processing pending")
-	}
+	require.NoError(t, err)
+	require.Len(t, dlqResp.Messages, 1)
+	require.Equal(t, msgID, dlqResp.Messages[0].GetMessageId())
 }
 
 // TestDLQ_AutomaticCreation validates automatic DLQ creation
@@ -300,18 +320,7 @@ func TestDLQ_RequeueMessage(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Get and fail the message
-	getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
-		QueueName:     queueName,
-		LeaseDuration: durationpb.New(2 * time.Second),
-	})
-	if err == nil && getResp.Message != nil {
-		// Let lease expire
-		time.Sleep(3 * time.Second)
-	}
-
-	// Wait for DLQ processing
-	time.Sleep(3 * time.Second)
+	failNextMessage(t, ctx, client, queueName, msgID)
 
 	// Get message from DLQ
 	dlqResp, err := client.GetDLQMessages(ctx, &queueservice_pb.GetDLQMessagesRequest{
@@ -319,10 +328,8 @@ func TestDLQ_RequeueMessage(t *testing.T) {
 		Limit:   10,
 	})
 
-	if err != nil || len(dlqResp.Messages) == 0 {
-		t.Skip("Message not in DLQ yet, skipping requeue test")
-		return
-	}
+	require.NoError(t, err)
+	require.Len(t, dlqResp.Messages, 1)
 
 	dlqMessage := dlqResp.Messages[0]
 	t.Logf("Found message in DLQ: %s", dlqMessage.MessageId)
@@ -334,23 +341,11 @@ func TestDLQ_RequeueMessage(t *testing.T) {
 		TargetQueue: queueName,
 	})
 
-	// Assert
-	if err == nil && requeueResp.Success {
-		t.Log("Message successfully requeued from DLQ")
-
-		// Verify message is back in main queue
-		time.Sleep(1 * time.Second)
-		getResp2, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
-			QueueName:     queueName,
-			LeaseDuration: durationpb.New(30 * time.Second),
-		})
-
-		if err == nil && getResp2.Message != nil {
-			t.Logf("Requeued message retrieved from main queue: %s", getResp2.Message.MessageId)
-		}
-	} else {
-		t.Logf("Requeue operation status: %v, error: %v", requeueResp, err)
-	}
+	require.NoError(t, err)
+	require.True(t, requeueResp.GetSuccess())
+	getResp2 := waitForMessage(t, ctx, client, queueName)
+	require.Equal(t, msgID, getResp2.GetMessage().GetMessageId())
+	require.Equal(t, int32(1), getResp2.GetMessage().GetMetadata().GetAttemptsLeft())
 }
 
 // TestDLQ_DeleteMessage validates permanent message deletion from DLQ
@@ -383,18 +378,18 @@ func TestDLQ_DeleteMessage(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Simulate message in DLQ (simplified - in real test would fail a message)
-	// For this test, we'll create the scenario and document the expected behavior
-	t.Log("DLQ delete message test - expecting DeleteFromDLQ API to work")
+	messageID := postAndFailMessage(t, ctx, client, queueName)
 
 	// Act - Attempt to delete from DLQ
 	deleteResp, err := client.DeleteFromDLQ(ctx, &queueservice_pb.DeleteFromDLQRequest{
 		DlqName:   dlqName,
-		MessageId: "test-message-id",
+		MessageId: messageID,
 	})
-
-	// Assert - Should handle gracefully even if message doesn't exist
-	t.Logf("Delete from DLQ response: success=%v, error=%v", deleteResp.GetSuccess(), err)
+	require.NoError(t, err)
+	require.True(t, deleteResp.GetSuccess())
+	messages, err := client.GetDLQMessages(ctx, &queueservice_pb.GetDLQMessagesRequest{DlqName: dlqName, Limit: 10})
+	require.NoError(t, err)
+	require.Empty(t, messages.GetMessages())
 }
 
 // TestDLQ_PurgeAll validates bulk DLQ purge operation
@@ -424,6 +419,8 @@ func TestDLQ_PurgeAll(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
+	postAndFailMessage(t, ctx, client, queueName)
+	postAndFailMessage(t, ctx, client, queueName)
 
 	// Act - Purge DLQ
 	purgeResp, err := client.PurgeDLQ(ctx, &queueservice_pb.PurgeDLQRequest{
@@ -432,7 +429,10 @@ func TestDLQ_PurgeAll(t *testing.T) {
 
 	// Assert
 	require.NoError(t, err, "Purge DLQ should succeed")
-	t.Logf("Purge DLQ response: success=%v", purgeResp.Success)
+	require.True(t, purgeResp.GetSuccess())
+	messages, err := client.GetDLQMessages(ctx, &queueservice_pb.GetDLQMessagesRequest{DlqName: dlqName, Limit: 10})
+	require.NoError(t, err)
+	require.Empty(t, messages.GetMessages())
 }
 
 // TestDLQ_GetStatistics validates DLQ statistics retrieval
@@ -462,22 +462,18 @@ func TestDLQ_GetStatistics(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
+	postAndFailMessage(t, ctx, client, queueName)
 
 	// Act - Get DLQ statistics
 	statsResp, err := client.GetDLQStats(ctx, &queueservice_pb.GetDLQStatsRequest{
 		DlqName: dlqName,
 	})
 
-	// Assert - DLQ stats should either succeed (for empty DLQ) or return error if stream doesn't exist yet
-	if err != nil {
-		// Empty DLQ stream may not exist yet, which is acceptable
-		assert.Contains(t, err.Error(), "no such key", "Error should indicate DLQ stream doesn't exist")
-		t.Logf("DLQ stream not yet created (expected for empty DLQ): %v", err)
-	} else {
-		// Stats retrieved successfully
-		require.NotNil(t, statsResp, "Stats response should not be nil")
-		t.Logf("DLQ stats: %+v", statsResp)
-	}
+	require.NoError(t, err)
+	require.Equal(t, dlqName, statsResp.GetName())
+	require.EqualValues(t, 1, statsResp.GetMessageCount())
+	require.Positive(t, statsResp.GetCreatedAt())
+	require.Positive(t, statsResp.GetUpdatedAt())
 }
 
 // Helper functions

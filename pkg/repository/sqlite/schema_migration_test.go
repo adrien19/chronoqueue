@@ -110,6 +110,23 @@ func TestSchemaMigration_RollsBackFailedVersion(t *testing.T) {
 	assert.True(t, columns["last_run"], "the pre-migration schema must be preserved")
 }
 
+func TestSchemaMigration_RejectsFutureVersionAndRepeatedCurrentMigration(t *testing.T) {
+	ctx := context.Background()
+	db, err := OpenConnection(ctx, DefaultConnectionConfig(filepath.Join(t.TempDir(), "migration.db")))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+	manager := NewSchemaManager()
+	require.NoError(t, manager.Initialize(ctx, db))
+	require.NoError(t, manager.Migrate(ctx, db, latestVersion))
+	require.NoError(t, manager.Migrate(ctx, db, latestVersion))
+
+	_, err = db.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES (?, ?)`, latestVersion+1, "future release")
+	require.NoError(t, err)
+	require.ErrorContains(t, manager.Migrate(ctx, db, latestVersion), "newer than supported")
+	require.ErrorContains(t, manager.Initialize(ctx, db), "newer than supported")
+}
+
 func assertSQLiteColumns(t *testing.T, ctx context.Context, db queryer, table string, expected ...string) {
 	t.Helper()
 	columns := sqliteColumns(t, ctx, db, table)

@@ -32,6 +32,21 @@ import (
 	"github.com/adrien19/chronoqueue/tests/helpers"
 )
 
+func waitForE2EMessage(t *testing.T, ctx context.Context, client queueservice_pb.QueueServiceClient, queueName string) *queueservice_pb.GetNextMessageResponse {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		response, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{QueueName: queueName, LeaseDuration: durationpb.New(10 * time.Second)})
+		require.NoError(t, err)
+		if response.GetMessage() != nil {
+			return response
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.FailNow(t, "message did not become claimable", "queue=%s", queueName)
+	return nil
+}
+
 // TestE2E_CompleteMessageWorkflow validates entire message lifecycle
 //
 // Test Scenario: E2E-001 from TESTING_GUIDE.md
@@ -115,15 +130,7 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 	t.Log("Step 3: Consuming and acknowledging 8 messages...")
 	successfulCount := 0
 	for i := 0; i < 8; i++ {
-		getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
-			QueueName:     queueName,
-			LeaseDuration: durationpb.New(10 * time.Second),
-		})
-
-		if err != nil || getResp.Message == nil {
-			t.Logf("  Message %d: not available yet", i)
-			continue
-		}
+		getResp := waitForE2EMessage(t, ctx, client, queueName)
 
 		t.Logf("  Message %d: %s (priority: %d)", i, getResp.Message.MessageId, getResp.Message.Metadata.Priority)
 
@@ -140,33 +147,23 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 	}
 	t.Logf("✓ Successfully processed %d messages", successfulCount)
 
-	// Step 4: Get next 2 messages and let them fail (lease expiration)
+	// Step 4: Exhaust the final two messages with explicit failures.
 	t.Log("Step 4: Processing 2 messages that will fail...")
 	failedMessages := make([]string, 0, 2)
 	for i := 0; i < 2; i++ {
-		getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
-			QueueName:     queueName,
-			LeaseDuration: durationpb.New(5 * time.Second),
-		})
-
-		if err != nil || getResp.Message == nil {
-			t.Logf("  Failed message %d: not available", i)
-			continue
-		}
-
-		t.Logf("  Failing message: %s (letting lease expire)", getResp.Message.MessageId)
+		getResp := waitForE2EMessage(t, ctx, client, queueName)
 		failedMessages = append(failedMessages, getResp.Message.MessageId)
-
-		// Let lease expire (simulating failure)
-		time.Sleep(6 * time.Second)
+		for attempt := 0; attempt < 2; attempt++ {
+			_, err = client.AcknowledgeMessage(ctx, &queueservice_pb.AcknowledgeMessageRequest{QueueName: queueName, MessageId: getResp.Message.MessageId, State: message_pb.Message_Metadata_ERRORED, AttemptId: getResp.AttemptId, WorkerId: getResp.WorkerId})
+			require.NoError(t, err)
+			if attempt == 0 {
+				getResp = waitForE2EMessage(t, ctx, client, queueName)
+			}
+		}
 	}
 
 	// Log captured failed messages so the slice is actually used and staticcheck won't warn.
 	t.Logf("Captured failed messages: %v", failedMessages)
-
-	// Wait for retry and DLQ processing
-	t.Log("Waiting for retry and DLQ processing...")
-	time.Sleep(10 * time.Second)
 
 	// Step 5: Check DLQ for failed messages
 	t.Log("Step 5: Checking DLQ for failed messages...")
@@ -175,11 +172,12 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 		Limit:   10,
 	})
 
-	if err == nil && len(dlqResp.Messages) > 0 {
+	require.NoError(t, err)
+	require.Len(t, dlqResp.GetMessages(), 2)
+	{
 		t.Logf("✓ Found %d messages in DLQ", len(dlqResp.Messages))
 
-		// Step 6: Requeue one message from DLQ
-		if len(dlqResp.Messages) > 0 {
+		{
 			t.Log("Step 6: Requeuing message from DLQ...")
 			requeueMsg := dlqResp.Messages[0]
 
@@ -189,19 +187,17 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 				TargetQueue: queueName,
 			})
 
-			if err == nil && requeueResp.Success {
+			require.NoError(t, err)
+			require.True(t, requeueResp.GetSuccess())
+			{
 				t.Logf("✓ Requeued message: %s", requeueMsg.MessageId)
 
 				// Step 7: Process requeued message
-				time.Sleep(2 * time.Second)
 				t.Log("Step 7: Processing requeued message...")
 
-				getResp, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{
-					QueueName:     queueName,
-					LeaseDuration: durationpb.New(10 * time.Second),
-				})
-
-				if err == nil && getResp.Message != nil {
+				getResp := waitForE2EMessage(t, ctx, client, queueName)
+				require.Equal(t, requeueMsg.GetMessageId(), getResp.GetMessage().GetMessageId())
+				{
 					t.Logf("✓ Retrieved requeued message: %s", getResp.Message.MessageId)
 
 					// Acknowledge it with attempt_id
@@ -218,8 +214,6 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 				}
 			}
 		}
-	} else {
-		t.Log("Note: DLQ messages may not be available yet (timing-dependent)")
 	}
 
 	// Step 8: Check final queue state
@@ -228,11 +222,9 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 		QueueName: queueName,
 	})
 
-	if err == nil {
-		t.Logf("✓ Final queue state:")
-		for state, count := range stateResp.StateCounts {
-			t.Logf("  %s: %d", state, count)
-		}
+	require.NoError(t, err)
+	for state, count := range stateResp.StateCounts {
+		t.Logf("  %s: %d", state, count)
 	}
 
 	// Summary
@@ -242,7 +234,7 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 	t.Logf("Messages in DLQ: %d", len(dlqResp.GetMessages()))
 	t.Logf("========================\n")
 
-	assert.GreaterOrEqual(t, successfulCount, 8, "At least 8 messages should be completed")
+	require.Equal(t, 9, successfulCount)
 }
 
 // TestE2E_HighPriorityAlertSystem validates priority queue for urgent messages

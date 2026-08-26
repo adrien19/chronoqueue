@@ -35,6 +35,13 @@ groups:
           severity: warning
         annotations:
           summary: ChronoQueue is waiting for database connections
+      - alert: ChronoQueueEncryptionKeyRefreshFailures
+        expr: increase(chronoqueue_encryption_key_refresh_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: ChronoQueue cannot refresh its encryption keys
 
   - name: chronoqueue_message_processing
     interval: 30s

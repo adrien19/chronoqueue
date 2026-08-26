@@ -99,7 +99,7 @@ go tool cover -html=coverage.out
 | **Queue Operations** | 5+ | Queue CRUD, listing, state management |
 | **Message Lifecycle** | 10+ | Post, get, acknowledge, lease, heartbeat, peek |
 | **Priority Queues** | 5+ | Priority ordering, FIFO within priority |
-| **Retry & DLQ** | 8+ | Exponential backoff, DLQ operations, requeue |
+| **Retry & DLQ** | 8+ | Immediate retry, DLQ operations, requeue |
 | **Scheduling** | 8+ | Cron expressions, calendar rules, management |
 | **Schema Registry** | 9+ | Register, validate, version, delete |
 | **E2E Workflows** | 3+ | Complete real-world scenarios |
@@ -117,7 +117,7 @@ Test individual features with real PostgreSQL/SQLite and ChronoQueue containers:
 - ✅ **Queue Management**: Create, delete, list queues
 - ✅ **Message Operations**: Post, get, acknowledge, renew lease
 - ✅ **Priority Handling**: Priority-based message ordering
-- ✅ **Retry System**: Exponential backoff, max retries
+- ✅ **Retry System**: Immediate retry, max retries
 - ✅ **Dead Letter Queue**: Auto-creation, requeue, purge
 - ✅ **Scheduling**: Cron and calendar-based scheduling
 - ✅ **Schema Registry**: JSON Schema validation

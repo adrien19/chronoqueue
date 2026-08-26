@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -13,7 +14,7 @@ import (
 	"github.com/adrien19/chronoqueue/cmd/chronoq/outputs"
 )
 
-var versionHTTPClient = &http.Client{Timeout: 10 * time.Second}
+var serverHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 // NewServerCommand creates the server command group
 func NewServerCommand() *cobra.Command {
@@ -36,25 +37,34 @@ func newServerHealthCommand() *cobra.Command {
 		Short: "Check server health",
 		Long:  `Check if the ChronoQueue server is healthy and responding.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			server, _ := cmd.Flags().GetString("server")
-
-			// For now, just attempt a connection
-			opts, err := GetClientOptions(cmd)
+			server, err := cmd.Flags().GetString("http-server")
 			if err != nil {
-				return fmt.Errorf("failed to get client options: %w", err)
+				return fmt.Errorf("get HTTP server address: %w", err)
 			}
-
-			client, err := CreateClient(opts)
+			requestContext := cmd.Context()
+			if requestContext == nil {
+				requestContext = context.Background()
+			}
+			request, err := http.NewRequestWithContext(requestContext, http.MethodGet, strings.TrimRight(server, "/")+"/ready", nil)
 			if err != nil {
-				outputs.PrintError(fmt.Sprintf("Server at %s is not healthy: %v", server, err))
-				return nil
+				return fmt.Errorf("create readiness request: %w", err)
 			}
-			defer client.Close()
-
-			outputs.PrintSuccess(fmt.Sprintf("Server at %s is healthy", server))
+			response, err := serverHTTPClient.Do(request)
+			if err != nil {
+				return fmt.Errorf("server at %s is not ready: %w", server, err)
+			}
+			closeErr := response.Body.Close()
+			if response.StatusCode != http.StatusOK {
+				return errors.Join(fmt.Errorf("server at %s is not ready: returned %s", server, response.Status), closeErr)
+			}
+			if closeErr != nil {
+				return fmt.Errorf("close readiness response: %w", closeErr)
+			}
+			outputs.PrintSuccess(fmt.Sprintf("Server at %s is ready", server))
 			return nil
 		},
 	}
+	cmd.Flags().String("http-server", "http://localhost:8080", "ChronoQueue HTTP server URL")
 
 	return cmd
 }
@@ -78,7 +88,7 @@ func newServerVersionCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("create version request: %w", err)
 			}
-			response, err := versionHTTPClient.Do(request)
+			response, err := serverHTTPClient.Do(request)
 			if err != nil {
 				return fmt.Errorf("query server version: %w", err)
 			}
