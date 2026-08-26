@@ -12,7 +12,7 @@ This directory contains Docker Compose configurations for deploying ChronoQueue 
 
 ## Storage Backend Selection
 
-ChronoQueue supports three storage backends:
+ChronoQueue supports two storage backends:
 
 | Backend | Status | Metrics | Use Case |
 |---------|--------|---------|----------|

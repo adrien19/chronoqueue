@@ -399,15 +399,12 @@ chronoqueue message get exclusive-work \
 ✅ **Output Formats**: Support for table, JSON, and YAML output formats  
 ✅ **TLS Support**: Full TLS and mTLS capabilities for secure connections  
 
-## Performance Optimizations
+## Implementation Characteristics
 
-The CLI and server include several performance optimizations:
-
-- **SQL Indexes**: Optimized database queries with proper indexing for O(log n) performance
-- **Connection Pooling**: Efficient database connection management
-- **Prepared Statements**: Cached query execution plans for improved performance
-- **ACID Transactions**: PostgreSQL/SQLite transactions for data consistency
-- **Background Services**: Efficient scheduled message activation and lease reclamation
+- **SQL Indexes**: Frequently queried queue, message, schedule, and DLQ columns are indexed
+- **Connection Pooling**: Database connections use the configured Go SQL connection pool
+- **Transactions**: Multi-step repository operations use PostgreSQL or SQLite transactions where atomicity is required
+- **Background Services**: Scheduled-message activation and lease reclamation run as background services
 
 ## Architecture
 

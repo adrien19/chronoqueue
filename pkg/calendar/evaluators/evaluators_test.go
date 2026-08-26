@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	schedule "github.com/adrien19/chronoqueue/api/schedule/v1"
+	"github.com/adrien19/chronoqueue/pkg/calendar/types"
 )
 
 // TestBasicRuleEvaluators tests the basic functionality of each rule evaluator
@@ -127,7 +128,7 @@ func TestRuleEvaluatorRegistry(t *testing.T) {
 
 	// Test that all expected evaluators are registered
 	registeredTypes := registry.GetRegisteredTypes()
-	expectedTypes := []string{"monthly", "weekly", "daily", "yearly", "custom"}
+	expectedTypes := []string{"monthly", "weekly", "daily", "yearly"}
 
 	for _, expectedType := range expectedTypes {
 		found := false
@@ -142,7 +143,9 @@ func TestRuleEvaluatorRegistry(t *testing.T) {
 
 	// Test evaluator info
 	info := registry.GetEvaluatorInfo()
-	assert.True(t, len(info) >= 5, "Should have at least 5 evaluators registered")
+	assert.Len(t, info, len(expectedTypes))
+	_, err := registry.GetEvaluator(types.RuleTypeCustom)
+	require.ErrorContains(t, err, "no evaluator found for rule type: custom")
 
 	for _, evaluatorInfo := range info {
 		assert.NotEmpty(t, evaluatorInfo.Name, "Evaluator should have a name")
