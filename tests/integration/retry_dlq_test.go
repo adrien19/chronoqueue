@@ -31,14 +31,23 @@ import (
 
 func waitForMessage(t *testing.T, ctx context.Context, client queueservice_pb.QueueServiceClient, queueName string) *queueservice_pb.GetNextMessageResponse {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		response, err := client.GetNextMessage(ctx, &queueservice_pb.GetNextMessageRequest{QueueName: queueName, LeaseDuration: durationpb.New(5 * time.Second)})
-		require.NoError(t, err)
+	pollCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	for pollCtx.Err() == nil {
+		response, err := client.GetNextMessage(pollCtx, &queueservice_pb.GetNextMessageRequest{QueueName: queueName, LeaseDuration: durationpb.New(5 * time.Second)})
+		if err != nil {
+			if pollCtx.Err() != nil {
+				break
+			}
+			require.NoError(t, err)
+		}
 		if response.GetMessage() != nil {
 			return response
 		}
-		time.Sleep(100 * time.Millisecond)
+		select {
+		case <-time.After(100 * time.Millisecond):
+		case <-pollCtx.Done():
+		}
 	}
 	require.FailNow(t, "message did not become claimable", "queue=%s", queueName)
 	return nil

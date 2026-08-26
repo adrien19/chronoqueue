@@ -239,7 +239,7 @@ type QueueMetadata struct {
 	// dead_letter_queue_name: Name of the DLQ for messages that exhaust retries.
 	// Messages that fail after max_attempts are moved here for investigation.
 	// Optional when auto_create_dlq is false; the named queue must already exist.
-	// Access DLQ messages via DLQ APIs: GetDLQMessage, ListDLQMessages, RequeueDLQMessage.
+	// Access DLQ messages via DLQ APIs: GetDLQMessages and RequeueDLQMessage.
 	DeadLetterQueueName string `protobuf:"bytes,6,opt,name=dead_letter_queue_name,json=deadLetterQueueName,proto3" json:"dead_letter_queue_name,omitempty"`
 	// auto_create_dlq: If true, ChronoQueue creates "{source_queue}_dlq" and stores
 	// that computed name in dead_letter_queue_name. Any supplied name is replaced.

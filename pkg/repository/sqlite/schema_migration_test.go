@@ -120,6 +120,7 @@ func TestSchemaMigration_RejectsFutureVersionAndRepeatedCurrentMigration(t *test
 	require.NoError(t, manager.Initialize(ctx, db))
 	require.NoError(t, manager.Migrate(ctx, db, latestVersion))
 	require.NoError(t, manager.Migrate(ctx, db, latestVersion))
+	require.ErrorContains(t, manager.Migrate(ctx, db, latestVersion+1), "newer than supported")
 
 	_, err = db.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES (?, ?)`, latestVersion+1, "future release")
 	require.NoError(t, err)

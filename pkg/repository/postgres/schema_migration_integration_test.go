@@ -83,6 +83,7 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 	require.Error(t, err)
 
 	require.NoError(t, manager.Migrate(ctx, db, latestVersion))
+	require.ErrorContains(t, manager.Migrate(ctx, db, latestVersion+1), "newer than supported")
 	_, err = db.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES ($1, $2)`, latestVersion+1, "future release")
 	require.NoError(t, err)
 	require.ErrorContains(t, manager.Migrate(ctx, db, latestVersion), "newer than supported")

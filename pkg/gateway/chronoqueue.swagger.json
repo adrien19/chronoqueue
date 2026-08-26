@@ -2430,7 +2430,7 @@
         },
         "deadLetterQueueName": {
           "type": "string",
-          "description": "dead_letter_queue_name: Name of the DLQ for messages that exhaust retries.\nMessages that fail after max_attempts are moved here for investigation.\nOptional when auto_create_dlq is false; the named queue must already exist.\nAccess DLQ messages via DLQ APIs: GetDLQMessage, ListDLQMessages, RequeueDLQMessage."
+          "description": "dead_letter_queue_name: Name of the DLQ for messages that exhaust retries.\nMessages that fail after max_attempts are moved here for investigation.\nOptional when auto_create_dlq is false; the named queue must already exist.\nAccess DLQ messages via DLQ APIs: GetDLQMessages and RequeueDLQMessage."
         },
         "autoCreateDlq": {
           "type": "boolean",

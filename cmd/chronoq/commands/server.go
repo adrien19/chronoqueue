@@ -41,6 +41,15 @@ func newServerHealthCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("get HTTP server address: %w", err)
 			}
+			if !cmd.Flags().Changed("http-server") && cmd.Flags().Changed("server") {
+				server, err = cmd.Flags().GetString("server")
+				if err != nil {
+					return fmt.Errorf("get deprecated server address: %w", err)
+				}
+			}
+			if !strings.Contains(server, "://") {
+				server = "http://" + server
+			}
 			requestContext := cmd.Context()
 			if requestContext == nil {
 				requestContext = context.Background()
@@ -65,6 +74,10 @@ func newServerHealthCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("http-server", "http://localhost:8080", "ChronoQueue HTTP server URL")
+	cmd.Flags().String("server", "", "Deprecated alias for --http-server")
+	if err := cmd.Flags().MarkDeprecated("server", "use --http-server instead"); err != nil {
+		panic(fmt.Sprintf("mark --server deprecated: %v", err))
+	}
 
 	return cmd
 }

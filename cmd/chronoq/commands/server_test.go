@@ -48,6 +48,7 @@ func TestNewServerHealthCommand(t *testing.T) {
 	assert.Equal(t, "Check server health", cmd.Short)
 	assert.Contains(t, cmd.Long, "Check if the ChronoQueue server is healthy")
 	assert.NotNil(t, cmd.RunE)
+	assert.Equal(t, "use --http-server instead", cmd.Flags().Lookup("server").Deprecated)
 }
 
 func TestNewServerVersionCommand(t *testing.T) {
@@ -70,7 +71,6 @@ func TestServerHealthCommand_Execution(t *testing.T) {
 	cmd := newServerHealthCommand()
 
 	// Set up common client flags that are expected
-	cmd.Flags().String("server", "localhost:9000", "Server address")
 	cmd.Flags().Bool("insecure", false, "Use insecure connection")
 	cmd.Flags().String("cert-file", "", "Client certificate file")
 	cmd.Flags().String("key-file", "", "Client key file")
@@ -80,6 +80,33 @@ func TestServerHealthCommand_Execution(t *testing.T) {
 
 	err := cmd.RunE(cmd, []string{})
 	require.NoError(t, err)
+}
+
+func TestServerHealthCommand_DeprecatedServerAlias(t *testing.T) {
+	originalClient := serverHTTPClient
+	serverHTTPClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		assert.Equal(t, "http://chronoqueue.test:8081/ready", request.URL.String())
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("ready"))}, nil
+	})}
+	t.Cleanup(func() { serverHTTPClient = originalClient })
+
+	cmd := newServerHealthCommand()
+	require.NoError(t, cmd.Flags().Set("server", "chronoqueue.test:8081"))
+	require.NoError(t, cmd.RunE(cmd, nil))
+}
+
+func TestServerHealthCommand_HTTPServerTakesPrecedenceOverDeprecatedAlias(t *testing.T) {
+	originalClient := serverHTTPClient
+	serverHTTPClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		assert.Equal(t, "http://preferred.test/ready", request.URL.String())
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("ready"))}, nil
+	})}
+	t.Cleanup(func() { serverHTTPClient = originalClient })
+
+	cmd := newServerHealthCommand()
+	require.NoError(t, cmd.Flags().Set("server", "http://deprecated.test"))
+	require.NoError(t, cmd.Flags().Set("http-server", "http://preferred.test"))
+	require.NoError(t, cmd.RunE(cmd, nil))
 }
 
 func TestServerHealthCommand_ReturnsReadinessFailure(t *testing.T) {
