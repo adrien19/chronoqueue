@@ -47,7 +47,7 @@ tests/
 ### Prerequisites
 
 1. **Docker** must be running (for Testcontainers)
-2. **Go 1.26.5+** installed
+2. **Go 1.26.6+** installed
 3. **ChronoQueue dependencies** installed: `go mod download`
 
 ### Run All Tests

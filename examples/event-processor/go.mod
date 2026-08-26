@@ -1,6 +1,6 @@
 module github.com/adrien19/chronoqueue/examples/event-processor
 
-go 1.26.5
+go 1.26.6
 
 replace github.com/adrien19/chronoqueue => ../..
 
