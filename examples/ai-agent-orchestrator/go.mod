@@ -1,6 +1,6 @@
 module github.com/adrien19/chronoqueue/examples/ai-agent-orchestrator
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/adrien19/chronoqueue v0.0.0

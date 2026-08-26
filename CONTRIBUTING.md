@@ -36,7 +36,7 @@ The **dev container** is the recommended approach for developing ChronoQueue. It
 - ✅ **Consistency**: Same environment for all developers and CI
 - ✅ **Isolation**: No conflicts with your local system
 - ✅ **Quick Setup**: Ready to code in minutes
-- ✅ **Includes**: Go 1.26.5, PostgreSQL, SQLite, Docker, kubectl, all dev tools
+- ✅ **Includes**: Go 1.26.6, PostgreSQL, SQLite, Docker, kubectl, all dev tools
 
 **Setup Steps:**
 
@@ -74,7 +74,7 @@ The **dev container** is the recommended approach for developing ChronoQueue. It
 
    ```bash
    # Check Go version
-   go version  # Should show Go 1.26.5
+   go version  # Should show Go 1.26.6
 
    # Check tools are installed
    make check-linter
@@ -95,7 +95,7 @@ If you cannot use dev containers, you can set up manually:
 
 **Prerequisites:**
 
-- Go 1.26.5 or later
+- Go 1.26.6 or later
 - Docker and Docker Compose
 - PostgreSQL 14+ or SQLite 3.35+ (for storage)
 - Make

@@ -2,7 +2,7 @@
 # Pure Go build - no CGO, fully static binary, cross-platform compatible
 # For SQLite support, use Dockerfile.sqlite instead
 
-FROM golang:1.26.5-alpine3.24 AS builder
+FROM golang:1.26.6-alpine3.24 AS builder
 
 # Set working directory
 WORKDIR /build
