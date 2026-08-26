@@ -11,7 +11,7 @@ import (
 
 func (s *Storage) GetDLQMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error) {
 	query := s.ph(`
-        SELECT metadata_pb
+        SELECT metadata_pb, state, attempts_left
         FROM cq_messages
         WHERE queue_name = ? AND state = ?
         ORDER BY updated_at DESC
@@ -22,35 +22,52 @@ func (s *Storage) GetDLQMessages(ctx context.Context, queueName string, limit in
 	if err != nil {
 		return nil, fmt.Errorf("query DLQ messages: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
 	var messages []*messagepb.Message
+	var scanErr error
 	for rows.Next() {
 		var messageBytes []byte
-		if err := rows.Scan(&messageBytes); err != nil {
-			return nil, fmt.Errorf("scan message: %w", err)
+		var state messagepb.Message_Metadata_State
+		var attemptsLeft int32
+		if err := rows.Scan(&messageBytes, &state, &attemptsLeft); err != nil {
+			scanErr = fmt.Errorf("scan message: %w", err)
+			break
 		}
-
 		msg, err := s.Serializer.UnmarshalMessage(messageBytes)
 		if err != nil {
-			return nil, fmt.Errorf("unmarshal message: %w", err)
+			scanErr = fmt.Errorf("unmarshal message: %w", err)
+			break
 		}
+		if msg.GetMetadata() == nil {
+			scanErr = fmt.Errorf("DLQ message %q has no metadata", msg.GetMessageId())
+			break
+		}
+		msg.Metadata.State = state
+		msg.Metadata.AttemptsLeft = attemptsLeft
 
 		messages = append(messages, msg)
 	}
 
-	return messages, rows.Err()
+	if scanErr == nil {
+		scanErr = rows.Err()
+	}
+	closeErr := rows.Close()
+	if scanErr != nil {
+		return nil, scanErr
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close DLQ message rows: %w", closeErr)
+	}
+	return messages, nil
 }
 
 // RetryDLQMessage moves a message from DLQ back to pending.
-func (s *Storage) RetryDLQMessage(ctx context.Context, queueName string, messageId string) error {
-	dlqName := queueName + "-dlq" // DLQ naming convention
-
+func (s *Storage) RetryDLQMessage(ctx context.Context, dlqName string, messageId string, targetQueueName string, resetRetries bool) error {
 	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		var messageBytes []byte
 		var oldState messagepb.Message_Metadata_State
-		query := s.ph(`SELECT metadata_pb, state FROM cq_messages WHERE message_id = ? AND queue_name = ?`)
-		err := tx.QueryRowContext(ctx, query, messageId, queueName).Scan(&messageBytes, &oldState)
+		var attemptsLeft int32
+		query := s.ph(`SELECT metadata_pb, state, attempts_left FROM cq_messages WHERE message_id = ? AND queue_name = ?`)
+		err := tx.QueryRowContext(ctx, query, messageId, dlqName).Scan(&messageBytes, &oldState, &attemptsLeft)
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("message not found: %s", messageId)
 		}
@@ -67,25 +84,28 @@ func (s *Storage) RetryDLQMessage(ctx context.Context, queueName string, message
 			return fmt.Errorf("unmarshal message: %w", err)
 		}
 
+		if resetRetries {
+			attemptsLeft = msg.GetMetadata().GetMaxAttempts()
+		}
 		updateQuery := s.ph(`
             UPDATE cq_messages
-            SET state = ?,
+            SET queue_name = ?, state = ?,
                 attempts_left = ?,
                 updated_at = ?
 			WHERE message_id = ? AND queue_name = ?
         `)
-		_, err = tx.ExecContext(ctx, updateQuery, messagepb.Message_Metadata_PENDING, msg.GetMetadata().GetMaxAttempts(), s.nowMs(), messageId, queueName)
+		_, err = tx.ExecContext(ctx, updateQuery, targetQueueName, messagepb.Message_Metadata_PENDING, attemptsLeft, s.nowMs(), messageId, dlqName)
 		if err != nil {
 			return fmt.Errorf("update message: %w", err)
 		}
 
-		return s.StateManager.UpdateCounters(ctx, tx, queueName, oldState, messagepb.Message_Metadata_PENDING)
+		return s.StateManager.MoveCounter(ctx, tx, dlqName, oldState, targetQueueName, messagepb.Message_Metadata_PENDING)
 	})
 
 	if err == nil {
 		// Record successful DLQ retry
-		metrics.IncrementDLQRetry(dlqName, queueName)
-		metrics.RecordStateTransition(queueName, "ERRORED", "PENDING")
+		metrics.IncrementDLQRetry(dlqName, targetQueueName)
+		metrics.RecordStateTransition(targetQueueName, "ERRORED", "PENDING")
 	}
 
 	return err
@@ -121,19 +141,17 @@ func (s *Storage) DeleteDLQMessage(ctx context.Context, queueName string, messag
 			return fmt.Errorf("message not found: %s", messageId)
 		}
 
-		return s.StateManager.UpdateCounters(ctx, tx, queueName, oldState, messagepb.Message_Metadata_COMPLETED)
+		return s.StateManager.RemoveCounter(ctx, tx, queueName, oldState)
 	})
 }
 
 // PurgeDLQ deletes all errored messages for a queue and returns the count deleted.
 func (s *Storage) PurgeDLQ(ctx context.Context, queueName string) (int64, error) {
-	dlqName := queueName + "_dlq"
-
 	var deletedCount int64
 	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		countQuery := s.ph(`SELECT COUNT(*) FROM cq_messages WHERE queue_name = ? AND state = ?`)
 		var count int64
-		if err := tx.QueryRowContext(ctx, countQuery, dlqName, int(messagepb.Message_Metadata_ERRORED)).Scan(&count); err != nil {
+		if err := tx.QueryRowContext(ctx, countQuery, queueName, int(messagepb.Message_Metadata_ERRORED)).Scan(&count); err != nil {
 			return fmt.Errorf("count DLQ messages: %w", err)
 		}
 
@@ -143,7 +161,7 @@ func (s *Storage) PurgeDLQ(ctx context.Context, queueName string) (int64, error)
 		}
 
 		deleteQuery := s.ph(`DELETE FROM cq_messages WHERE queue_name = ? AND state = ?`)
-		result, err := tx.ExecContext(ctx, deleteQuery, dlqName, int(messagepb.Message_Metadata_ERRORED))
+		result, err := tx.ExecContext(ctx, deleteQuery, queueName, int(messagepb.Message_Metadata_ERRORED))
 		if err != nil {
 			return fmt.Errorf("delete DLQ messages: %w", err)
 		}
@@ -156,7 +174,7 @@ func (s *Storage) PurgeDLQ(ctx context.Context, queueName string) (int64, error)
 		deletedCount = rows
 
 		for i := int64(0); i < rows; i++ {
-			if err := s.StateManager.UpdateCounters(ctx, tx, dlqName, messagepb.Message_Metadata_ERRORED, messagepb.Message_Metadata_COMPLETED); err != nil {
+			if err := s.StateManager.RemoveCounter(ctx, tx, queueName, messagepb.Message_Metadata_ERRORED); err != nil {
 				return fmt.Errorf("update state counters: %w", err)
 			}
 		}

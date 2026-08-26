@@ -238,12 +238,11 @@ type QueueMetadata struct {
 	ExclusivityKey string `protobuf:"bytes,4,opt,name=exclusivity_key,json=exclusivityKey,proto3" json:"exclusivity_key,omitempty"`
 	// dead_letter_queue_name: Name of the DLQ for messages that exhaust retries.
 	// Messages that fail after max_attempts are moved here for investigation.
-	// Naming convention: "{original-queue}-dlq" or "{original-queue}-errors"
+	// Optional when auto_create_dlq is false; the named queue must already exist.
 	// Access DLQ messages via DLQ APIs: GetDLQMessage, ListDLQMessages, RequeueDLQMessage.
 	DeadLetterQueueName string `protobuf:"bytes,6,opt,name=dead_letter_queue_name,json=deadLetterQueueName,proto3" json:"dead_letter_queue_name,omitempty"`
-	// auto_create_dlq: If true, ChronoQueue automatically creates the DLQ if it doesn't exist.
-	// Recommended: true for production (ensures no messages are lost).
-	// Set to false if you want to manually control DLQ creation and configuration.
+	// auto_create_dlq: If true, ChronoQueue creates "{source_queue}_dlq" and stores
+	// that computed name in dead_letter_queue_name. Any supplied name is replaced.
 	AutoCreateDlq bool `protobuf:"varint,7,opt,name=auto_create_dlq,json=autoCreateDlq,proto3" json:"auto_create_dlq,omitempty"`
 	// schema_id: Default schema for validating messages posted to this queue.
 	// All messages must conform to this schema (if schema_required is true).

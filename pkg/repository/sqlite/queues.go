@@ -16,8 +16,9 @@ func (s *Storage) CreateQueue(ctx context.Context, queue *queuepb.Queue) error {
 		return fmt.Errorf("marshal queue: %w", err)
 	}
 
-	query := `INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-	_, err = s.DB.ExecContext(ctx, query, queue.Name, queueBytes)
+	query := `INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES (?, ?, ?, ?)`
+	nowMs := s.nowMs()
+	_, err = s.DB.ExecContext(ctx, query, queue.Name, queueBytes, nowMs, nowMs)
 	if err != nil {
 		if isUniqueConstraintError(err) {
 			return domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("queue %q already exists", queue.Name), err)

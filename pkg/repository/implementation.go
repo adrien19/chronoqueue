@@ -258,6 +258,9 @@ func (impl *implementation) CreateQueue(ctx context.Context, request *queueservi
 	if metadata.DefaultMaxAttempts == 0 {
 		metadata.DefaultMaxAttempts = validator.DefaultMaxRetryAttempts
 	}
+	if metadata.GetAutoCreateDlq() {
+		metadata.DeadLetterQueueName = request.GetName() + "_dlq"
+	}
 	if err := validator.ValidateQueue(request.GetName(), metadata); err != nil {
 		var configErr *validator.ConfigurationError
 		if errors.As(err, &configErr) {
@@ -272,6 +275,13 @@ func (impl *implementation) CreateQueue(ctx context.Context, request *queueservi
 
 	if err := impl.backend.CreateQueue(ctx, queue); err != nil {
 		return nil, err
+	}
+	if metadata.GetAutoCreateDlq() {
+		dlq := &queuepb.Queue{Name: metadata.GetDeadLetterQueueName(), Metadata: &queuepb.QueueMetadata{}}
+		if err := impl.backend.CreateQueue(ctx, dlq); err != nil {
+			rollbackErr := impl.backend.DeleteQueue(ctx, queue.GetName())
+			return nil, errors.Join(fmt.Errorf("create automatic DLQ %q: %w", dlq.GetName(), err), wrapShutdownError("rollback source queue", rollbackErr))
+		}
 	}
 
 	// Update metrics
@@ -1197,7 +1207,7 @@ func (impl *implementation) GetDLQMessages(ctx context.Context, dlqName string, 
 
 // RequeueFromDLQ moves a message from DLQ back to the original queue
 func (impl *implementation) RequeueFromDLQ(ctx context.Context, dlqName string, messageID string, targetQueueName string, resetRetries bool) error {
-	return impl.backend.RetryDLQMessage(ctx, dlqName, messageID)
+	return impl.backend.RetryDLQMessage(ctx, dlqName, messageID, targetQueueName, resetRetries)
 }
 
 // DeleteFromDLQ permanently deletes a message from DLQ

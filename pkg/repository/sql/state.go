@@ -44,6 +44,24 @@ func (sm *StateManager) UpdateCounters(
 	return nil
 }
 
+// MoveCounter transfers one message between queues without inventing an intermediate state.
+func (sm *StateManager) MoveCounter(ctx context.Context, tx *sql.Tx, sourceQueue string, sourceState messagepb.Message_Metadata_State, targetQueue string, targetState messagepb.Message_Metadata_State) error {
+	if err := sm.decrementCounter(ctx, tx, sourceQueue, sourceState); err != nil {
+		return fmt.Errorf("decrement %s counter: %w", sourceState.String(), err)
+	}
+	if err := sm.incrementCounter(ctx, tx, targetQueue, targetState); err != nil {
+		return fmt.Errorf("increment %s counter: %w", targetState.String(), err)
+	}
+	return nil
+}
+
+func (sm *StateManager) RemoveCounter(ctx context.Context, tx *sql.Tx, queueName string, state messagepb.Message_Metadata_State) error {
+	if err := sm.decrementCounter(ctx, tx, queueName, state); err != nil {
+		return fmt.Errorf("decrement %s counter: %w", state.String(), err)
+	}
+	return nil
+}
+
 // decrementCounter decrements the counter for a specific state
 func (sm *StateManager) decrementCounter(
 	ctx context.Context,
