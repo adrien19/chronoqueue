@@ -67,21 +67,23 @@ type peekCall struct {
 }
 
 type stubBackend struct {
-	queueMetadata  *queuepb.QueueMetadata
-	createdQueues  []*queuepb.Queue
-	claims         []claimCall
-	peekCalls      []peekCall
-	queues         []*queuepb.Queue
-	schedules      []*schedulepb.Schedule
-	queuePrefix    string
-	schedulePrefix string
-	enqueued       []enqueuedCall
-	enqueueErr     error
-	enqueueErrs    []error // per-message errors for bulk operations
-	enqueueTxErr   error   // transaction-level error for bulk operations
-	cancelled      []cancelledCall
-	cancelErr      error
-	pingErr        error
+	queueMetadata   *queuepb.QueueMetadata
+	createdQueues   []*queuepb.Queue
+	createQueueErrs []error
+	deletedQueues   []string
+	claims          []claimCall
+	peekCalls       []peekCall
+	queues          []*queuepb.Queue
+	schedules       []*schedulepb.Schedule
+	queuePrefix     string
+	schedulePrefix  string
+	enqueued        []enqueuedCall
+	enqueueErr      error
+	enqueueErrs     []error // per-message errors for bulk operations
+	enqueueTxErr    error   // transaction-level error for bulk operations
+	cancelled       []cancelledCall
+	cancelErr       error
+	pingErr         error
 }
 
 type stubEngine struct {
@@ -151,6 +153,9 @@ func TestImplementationPing(t *testing.T) {
 
 func (b *stubBackend) CreateQueue(ctx context.Context, queue *queuepb.Queue) error {
 	b.createdQueues = append(b.createdQueues, queue)
+	if call := len(b.createdQueues) - 1; call < len(b.createQueueErrs) {
+		return b.createQueueErrs[call]
+	}
 	return nil
 }
 
@@ -169,7 +174,12 @@ func (b *stubBackend) ListQueuesWithPrefix(ctx context.Context, prefix string) (
 	b.queuePrefix = prefix
 	return b.queues, nil
 }
-func (b *stubBackend) DeleteQueue(ctx context.Context, name string) error { return nil }
+
+func (b *stubBackend) DeleteQueue(ctx context.Context, name string) error {
+	b.deletedQueues = append(b.deletedQueues, name)
+	return nil
+}
+
 func (b *stubBackend) EnqueueMessage(ctx context.Context, queueName string, message *messagepb.Message) error {
 	b.enqueued = append(b.enqueued, enqueuedCall{queue: queueName, message: message})
 	return b.enqueueErr
@@ -264,7 +274,7 @@ func (b *stubBackend) GetDLQMessages(ctx context.Context, dlqName string, limit 
 	return nil, nil
 }
 
-func (b *stubBackend) RetryDLQMessage(ctx context.Context, dlqName string, messageId string) error {
+func (b *stubBackend) RetryDLQMessage(ctx context.Context, dlqName string, messageId string, targetQueueName string, resetRetries bool) error {
 	return nil
 }
 
@@ -354,6 +364,54 @@ func TestCreateQueue_RequiresExclusiveKey(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, backend.createdQueues, 1)
+}
+
+func TestCreateQueue_AutoCreatesComputedDLQName(t *testing.T) {
+	request := &queueservicepb.CreateQueueRequest{
+		Name: "orders",
+		Metadata: &queuepb.QueueMetadata{
+			AutoCreateDlq:       true,
+			DeadLetterQueueName: "ignored-user-name",
+		},
+	}
+
+	t.Run("success", func(t *testing.T) {
+		backend := &stubBackend{}
+		impl := &implementation{backend: backend}
+
+		_, err := impl.CreateQueue(context.Background(), request)
+		require.NoError(t, err)
+		require.Len(t, backend.createdQueues, 2)
+		require.Equal(t, "orders_dlq", backend.createdQueues[0].GetMetadata().GetDeadLetterQueueName())
+		require.Equal(t, "orders_dlq", backend.createdQueues[1].GetName())
+		require.Empty(t, backend.deletedQueues)
+	})
+
+	t.Run("DLQ creation failure rolls back source queue", func(t *testing.T) {
+		createDLQErr := errors.New("create DLQ")
+		backend := &stubBackend{createQueueErrs: []error{nil, createDLQErr}}
+		impl := &implementation{backend: backend}
+
+		_, err := impl.CreateQueue(context.Background(), request)
+		require.ErrorIs(t, err, createDLQErr)
+		require.Len(t, backend.createdQueues, 2)
+		require.Equal(t, "orders_dlq", backend.createdQueues[0].GetMetadata().GetDeadLetterQueueName())
+		require.Equal(t, "orders_dlq", backend.createdQueues[1].GetName())
+		require.Equal(t, []string{"orders"}, backend.deletedQueues)
+	})
+}
+
+func TestCreateQueue_PreservesOptionalUserDLQName(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend}
+
+	_, err := impl.CreateQueue(context.Background(), &queueservicepb.CreateQueueRequest{
+		Name:     "orders",
+		Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "failed-orders"},
+	})
+	require.NoError(t, err)
+	require.Len(t, backend.createdQueues, 1)
+	require.Equal(t, "failed-orders", backend.createdQueues[0].GetMetadata().GetDeadLetterQueueName())
 }
 
 func TestGetQueueMessage_ForwardsExclusivityKey(t *testing.T) {

@@ -171,6 +171,8 @@ func NewMetricsRegistry() *MetricsRegistry {
 		messagesCleanedUpTotal,
 	)
 
+	registry.MustRegister(encryptionKeyRefreshFailures)
+
 	return &MetricsRegistry{
 		registry: registry,
 	}

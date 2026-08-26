@@ -12,6 +12,7 @@ import (
 
 	"github.com/adrien19/chronoqueue/internal/encryption/adapters"
 	"github.com/adrien19/chronoqueue/pkg/log"
+	"github.com/adrien19/chronoqueue/pkg/metrics"
 )
 
 const defaultRefreshDuration = 1 * time.Hour
@@ -97,6 +98,7 @@ func NewEncryptionKeyManagerWithConfig(logger *log.Logger, config Config) (*Encr
 
 	err := manager.refreshKey()
 	if err != nil {
+		metrics.IncrementEncryptionKeyRefreshFailures()
 		return nil, err
 	}
 	// Start the background routine to refresh the key
@@ -134,6 +136,7 @@ func (m *EncryptionKeyManager) GetDecryptionKeys(keyID string) ([][]byte, error)
 	}
 
 	if err := m.refreshKey(); err != nil {
+		metrics.IncrementEncryptionKeyRefreshFailures()
 		return nil, fmt.Errorf("refresh encryption keys: %w", err)
 	}
 	keys = m.cachedDecryptionKeys(keyID)
@@ -209,6 +212,7 @@ func (m *EncryptionKeyManager) keyRefresher() {
 	for range ticker.C {
 		err := m.refreshKey()
 		if err != nil {
+			metrics.IncrementEncryptionKeyRefreshFailures()
 			m.logger.WarnWithFields("Error refreshing encryption key", "error", err)
 		}
 	}

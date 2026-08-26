@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -942,10 +943,10 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 	dialer := dialer()
 
 	type fields struct {
-		sendHeartbeatCallCounter int
-		retryCount               int
-		failedCalls              int
-		successfulCalls          int
+		sendHeartbeatCallCounter atomic.Int32
+		retryCount               atomic.Int32
+		failedCalls              atomic.Int32
+		successfulCalls          atomic.Int32
 	}
 
 	type args struct {
@@ -969,16 +970,11 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 				queueName: "validQueue",
 				messageId: "validMessageId",
 			},
-			fields: fields{
-				sendHeartbeatCallCounter: 0,
-				retryCount:               0,
-				failedCalls:              0,
-				successfulCalls:          0,
-			},
+			fields: fields{},
 			setup: func(f *fields, client *ChronoQueueClient) {
 				// Override SendMessageHeartbeat to always succeed
 				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
-					f.sendHeartbeatCallCounter++
+					f.sendHeartbeatCallCounter.Add(1)
 					return &queueservice_pb.SendMessageHeartBeatResponse{}, nil
 				}
 				client.opts.MaxHeartbeatRetryCount = 1
@@ -986,7 +982,7 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 			validate: func(t *testing.T, f *fields, client *ChronoQueueClient) {
 				// Validate that SendMessageHeartbeat was called
 				time.Sleep(time.Second)
-				if f.sendHeartbeatCallCounter == 0 {
+				if f.sendHeartbeatCallCounter.Load() == 0 {
 					t.Error("SendMessageHeartbeat was never called!")
 				}
 			},
@@ -998,23 +994,17 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 				queueName: "validQueue",
 				messageId: "validMessageId",
 			},
-			fields: fields{
-				sendHeartbeatCallCounter: 0,
-				retryCount:               0,
-				failedCalls:              0,
-				successfulCalls:          0,
-			},
+			fields: fields{},
 			setup: func(f *fields, client *ChronoQueueClient) {
 				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
-					f.sendHeartbeatCallCounter++ // Increment call counter each time method is invoked
+					f.sendHeartbeatCallCounter.Add(1)
 
-					if f.retryCount == 0 {
-						f.failedCalls++ // Increment failed calls counter
-						f.retryCount++  // Increment retry counter
+					if f.retryCount.CompareAndSwap(0, 1) {
+						f.failedCalls.Add(1)
 						return nil, errors.New("forced error")
 					}
 
-					f.successfulCalls++ // Increment successful calls counter
+					f.successfulCalls.Add(1)
 					return &queueservice_pb.SendMessageHeartBeatResponse{}, nil
 				}
 			},
@@ -1023,12 +1013,12 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 				time.Sleep(2 * time.Second)
 
 				// Validate that SendMessageHeartbeat was called, failed initially, but succeeded upon retry
-				if f.failedCalls != 1 {
-					t.Errorf("SendMessageHeartbeat did not fail as expected: got %v failures, want 1", f.failedCalls)
+				if f.failedCalls.Load() != 1 {
+					t.Errorf("SendMessageHeartbeat did not fail as expected: got %v failures, want 1", f.failedCalls.Load())
 				}
 				// time.Sleep(time.Second)
-				if f.successfulCalls != 1 {
-					t.Errorf("SendMessageHeartbeat did not succeed upon retry: got %v successes, want 1", f.successfulCalls)
+				if f.successfulCalls.Load() != 1 {
+					t.Errorf("SendMessageHeartbeat did not succeed upon retry: got %v successes, want 1", f.successfulCalls.Load())
 				}
 			},
 		},
@@ -1039,15 +1029,10 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 				queueName: "validQueue",
 				messageId: "validMessageId",
 			},
-			fields: fields{
-				sendHeartbeatCallCounter: 0,
-				retryCount:               0,
-				failedCalls:              0,
-				successfulCalls:          0,
-			},
+			fields: fields{},
 			setup: func(f *fields, client *ChronoQueueClient) {
 				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
-					f.sendHeartbeatCallCounter++
+					f.sendHeartbeatCallCounter.Add(1)
 					return nil, errors.New("forced error")
 				}
 				client.opts.MaxHeartbeatRetryCount = 1
@@ -1058,8 +1043,8 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 				time.Sleep(2 * time.Second)
 
 				// Validate that the call counter reached max retries
-				if f.sendHeartbeatCallCounter != client.opts.MaxHeartbeatRetryCount {
-					t.Errorf("Unexpected number of retries. Got: %d, Expected: %d", f.sendHeartbeatCallCounter, client.opts.MaxHeartbeatRetryCount)
+				if f.sendHeartbeatCallCounter.Load() != int32(client.opts.MaxHeartbeatRetryCount) {
+					t.Errorf("Unexpected number of retries. Got: %d, Expected: %d", f.sendHeartbeatCallCounter.Load(), client.opts.MaxHeartbeatRetryCount)
 				}
 			},
 		},
@@ -1070,16 +1055,11 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 				queueName: "validQueue",
 				messageId: "validMessageId",
 			},
-			fields: fields{
-				sendHeartbeatCallCounter: 0,
-				retryCount:               0,
-				failedCalls:              0,
-				successfulCalls:          0,
-			},
+			fields: fields{},
 			setup: func(f *fields, client *ChronoQueueClient) {
 				// Setup a call counter and ensure it is reset
 				client.opts.SendMessageHeartbeatFunc = func(ctx context.Context, queueName, messageId string) (*queueservice_pb.SendMessageHeartBeatResponse, error) {
-					f.sendHeartbeatCallCounter++
+					f.sendHeartbeatCallCounter.Add(1)
 					return &queueservice_pb.SendMessageHeartBeatResponse{}, nil
 				}
 			},
@@ -1094,20 +1074,21 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 				time.Sleep(200 * time.Millisecond)
 
 				// Capture the call count after the context is cancelled
-				finalCallCount := f.sendHeartbeatCallCounter
+				finalCallCount := f.sendHeartbeatCallCounter.Load()
 
 				// Allow more time to ensure no further heartbeats are sent
 				time.Sleep(500 * time.Millisecond)
 
 				// Validate that the call count did not increase after the context was cancelled
-				if f.sendHeartbeatCallCounter != finalCallCount {
-					t.Errorf("SendMessageHeartbeat was called after context cancellation. Final count: %d, Current count: %d", finalCallCount, f.sendHeartbeatCallCounter)
+				if f.sendHeartbeatCallCounter.Load() != finalCallCount {
+					t.Errorf("SendMessageHeartbeat was called after context cancellation. Final count: %d, Current count: %d", finalCallCount, f.sendHeartbeatCallCounter.Load())
 				}
 			},
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for i := range tests {
+		tc := &tests[i]
+		t.Run(tc.name, func(t *testing.T) {
 			opts := ClientOptions{
 				Connector: testConnector(dialer),
 			}
@@ -1118,15 +1099,15 @@ func TestChronoQueueClient_manageHeartbeats(t *testing.T) {
 			defer client.Close()
 
 			// Setup client as per test case
-			tt.setup(&tt.fields, client)
+			tc.setup(&tc.fields, client)
 
 			// Use a separate goroutine as manageHeartbeats is blocking
-			go client.manageHeartbeats(tt.args.ctx, tt.args.queueName, tt.args.messageId, tt.args.attemptID, tt.args.workerID)
+			go client.manageHeartbeats(tc.args.ctx, tc.args.queueName, tc.args.messageId, tc.args.attemptID, tc.args.workerID)
 
 			// Add a small sleep to allow for asynchronous operations to execute
 			// Note: This might need to be adjusted based on actual behavior
 			time.Sleep(100 * time.Millisecond) // Validate the scenario as per test case
-			tt.validate(t, &tt.fields, client)
+			tc.validate(t, &tc.fields, client)
 		})
 	}
 }

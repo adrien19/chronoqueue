@@ -114,7 +114,7 @@ type QueueServiceClient interface {
 	//	    "metadata": {
 	//	      "default_max_attempts": 3,
 	//	      "lease_duration": "5m",
-	//	      "dead_letter_queue_name": "order-dlq",
+	//	      "dead_letter_queue_name": "order-processing_dlq",
 	//	      "auto_create_dlq": true
 	//	    }
 	//	  }
@@ -616,15 +616,13 @@ type QueueServiceClient interface {
 	//
 	//	POST /v1/dlq/order-dlq:purge
 	//
-	// Returns: Count of deleted messages
+	// Returns: Whether the purge succeeded
 	PurgeDLQ(ctx context.Context, in *PurgeDLQRequest, opts ...grpc.CallOption) (*PurgeDLQResponse, error)
 	// GetDLQStats returns statistics about a dead letter queue.
 	//
 	// Provides:
 	// - Message count
-	// - Age of oldest message
-	// - Common error types
-	// - Failure rate trends
+	// - Queue creation and update timestamps
 	//
 	// Use for:
 	// - Monitoring DLQ health
@@ -1133,7 +1131,7 @@ type QueueServiceServer interface {
 	//	    "metadata": {
 	//	      "default_max_attempts": 3,
 	//	      "lease_duration": "5m",
-	//	      "dead_letter_queue_name": "order-dlq",
+	//	      "dead_letter_queue_name": "order-processing_dlq",
 	//	      "auto_create_dlq": true
 	//	    }
 	//	  }
@@ -1635,15 +1633,13 @@ type QueueServiceServer interface {
 	//
 	//	POST /v1/dlq/order-dlq:purge
 	//
-	// Returns: Count of deleted messages
+	// Returns: Whether the purge succeeded
 	PurgeDLQ(context.Context, *PurgeDLQRequest) (*PurgeDLQResponse, error)
 	// GetDLQStats returns statistics about a dead letter queue.
 	//
 	// Provides:
 	// - Message count
-	// - Age of oldest message
-	// - Common error types
-	// - Failure rate trends
+	// - Queue creation and update timestamps
 	//
 	// Use for:
 	// - Monitoring DLQ health

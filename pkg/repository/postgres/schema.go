@@ -39,6 +39,9 @@ func (m *SchemaManager) Initialize(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("check schema version: %w", err)
 	}
+	if exists && version > latestVersion {
+		return fmt.Errorf("database schema version %d is newer than supported version %d", version, latestVersion)
+	}
 	if exists && version > 0 {
 		return nil
 	}
@@ -73,9 +76,15 @@ func (m *SchemaManager) Initialize(ctx context.Context, db *sql.DB) error {
 }
 
 func (m *SchemaManager) Migrate(ctx context.Context, db *sql.DB, targetVersion uint) error {
+	if targetVersion > latestVersion {
+		return fmt.Errorf("target schema version %d is newer than supported version %d", targetVersion, latestVersion)
+	}
 	current, exists, err := m.GetVersion(ctx, db)
 	if err != nil {
 		return fmt.Errorf("get schema version: %w", err)
+	}
+	if exists && current > latestVersion {
+		return fmt.Errorf("database schema version %d is newer than supported version %d", current, latestVersion)
 	}
 
 	if !exists {

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -47,6 +48,7 @@ func TestNewServerHealthCommand(t *testing.T) {
 	assert.Equal(t, "Check server health", cmd.Short)
 	assert.Contains(t, cmd.Long, "Check if the ChronoQueue server is healthy")
 	assert.NotNil(t, cmd.RunE)
+	assert.Equal(t, "use --http-server instead", cmd.Flags().Lookup("server").Deprecated)
 }
 
 func TestNewServerVersionCommand(t *testing.T) {
@@ -60,10 +62,15 @@ func TestNewServerVersionCommand(t *testing.T) {
 }
 
 func TestServerHealthCommand_Execution(t *testing.T) {
+	originalClient := serverHTTPClient
+	serverHTTPClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		assert.Equal(t, "/ready", request.URL.Path)
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("ready"))}, nil
+	})}
+	t.Cleanup(func() { serverHTTPClient = originalClient })
 	cmd := newServerHealthCommand()
 
 	// Set up common client flags that are expected
-	cmd.Flags().String("server", "localhost:9000", "Server address")
 	cmd.Flags().Bool("insecure", false, "Use insecure connection")
 	cmd.Flags().String("cert-file", "", "Client certificate file")
 	cmd.Flags().String("key-file", "", "Client key file")
@@ -71,18 +78,88 @@ func TestServerHealthCommand_Execution(t *testing.T) {
 	cmd.Flags().Duration("timeout", 0, "Request timeout")
 	cmd.Flags().Bool("verbose", false, "Verbose output")
 
-	// Since the health command tries to connect to a server,
-	// we expect it to fail in the test environment, but it shouldn't panic
 	err := cmd.RunE(cmd, []string{})
+	require.NoError(t, err)
+}
 
-	// We expect this to fail since there's no server running in tests
-	// The important thing is that it doesn't panic and handles the error gracefully
-	t.Logf("Health command execution result: err=%v", err)
+func TestServerHealthCommand_DeprecatedServerAlias(t *testing.T) {
+	originalClient := serverHTTPClient
+	serverHTTPClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		assert.Equal(t, "http://chronoqueue.test:8081/ready", request.URL.String())
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("ready"))}, nil
+	})}
+	t.Cleanup(func() { serverHTTPClient = originalClient })
+
+	cmd := newServerHealthCommand()
+	require.NoError(t, cmd.Flags().Set("server", "chronoqueue.test:8081"))
+	require.NoError(t, cmd.RunE(cmd, nil))
+}
+
+func TestServerHealthCommand_HTTPServerTakesPrecedenceOverDeprecatedAlias(t *testing.T) {
+	originalClient := serverHTTPClient
+	serverHTTPClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		assert.Equal(t, "http://preferred.test/ready", request.URL.String())
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("ready"))}, nil
+	})}
+	t.Cleanup(func() { serverHTTPClient = originalClient })
+
+	cmd := newServerHealthCommand()
+	require.NoError(t, cmd.Flags().Set("server", "http://deprecated.test"))
+	require.NoError(t, cmd.Flags().Set("http-server", "http://preferred.test"))
+	require.NoError(t, cmd.RunE(cmd, nil))
+}
+
+func TestServerHealthCommand_ReturnsReadinessFailure(t *testing.T) {
+	originalClient := serverHTTPClient
+	serverHTTPClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		return nil, errors.New("server unavailable")
+	})}
+	t.Cleanup(func() { serverHTTPClient = originalClient })
+
+	cmd := newServerHealthCommand()
+	err := cmd.RunE(cmd, nil)
+	require.ErrorContains(t, err, "server unavailable")
+}
+
+func TestServerHealthCommand_ReturnsNonOKReadinessResponse(t *testing.T) {
+	originalClient := serverHTTPClient
+	serverHTTPClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		assert.Equal(t, "/ready", request.URL.Path)
+		return &http.Response{
+			StatusCode: http.StatusServiceUnavailable,
+			Status:     "503 Service Unavailable",
+			Body:       io.NopCloser(strings.NewReader("not ready")),
+		}, nil
+	})}
+	t.Cleanup(func() { serverHTTPClient = originalClient })
+
+	cmd := newServerHealthCommand()
+	err := cmd.RunE(cmd, nil)
+	require.ErrorContains(t, err, "returned 503 Service Unavailable")
+}
+
+func TestServerHealthCommand_ReturnsResponseCloseFailure(t *testing.T) {
+	closeErr := errors.New("close response")
+	originalClient := serverHTTPClient
+	serverHTTPClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		assert.Equal(t, "/ready", request.URL.Path)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Body:       closeErrorBody{Reader: strings.NewReader("ready"), err: closeErr},
+		}, nil
+	})}
+	t.Cleanup(func() { serverHTTPClient = originalClient })
+
+	cmd := newServerHealthCommand()
+	err := cmd.RunE(cmd, nil)
+	require.ErrorIs(t, err, closeErr)
+	require.ErrorContains(t, err, "close readiness response")
 }
 
 func TestServerVersionCommand_Execution(t *testing.T) {
-	originalClient := versionHTTPClient
-	versionHTTPClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+	originalClient := serverHTTPClient
+	serverHTTPClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
 		assert.Equal(t, "/ready", request.URL.Path)
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -90,7 +167,7 @@ func TestServerVersionCommand_Execution(t *testing.T) {
 			Body:       io.NopCloser(strings.NewReader(`{"version":"2.0.1","git_commit":"abc123","build_date":"2026-08-23"}`)),
 		}, nil
 	})}
-	t.Cleanup(func() { versionHTTPClient = originalClient })
+	t.Cleanup(func() { serverHTTPClient = originalClient })
 
 	cmd := newServerVersionCommand()
 
@@ -112,6 +189,15 @@ type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return f(request)
+}
+
+type closeErrorBody struct {
+	io.Reader
+	err error
+}
+
+func (b closeErrorBody) Close() error {
+	return b.err
 }
 
 func TestServerCommand_SubcommandStructure(t *testing.T) {

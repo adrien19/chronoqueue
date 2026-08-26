@@ -25,7 +25,6 @@ func NewRegistry() *Registry {
 	registry.RegisterEvaluator(NewWeeklyEvaluator())
 	registry.RegisterEvaluator(NewDailyEvaluator())
 	registry.RegisterEvaluator(NewYearlyEvaluator())
-	registry.RegisterEvaluator(NewCustomEvaluator())
 
 	return registry
 }
@@ -159,7 +158,7 @@ func (r *Registry) getEvaluatorDescription(ruleType types.RuleType) string {
 	case types.RuleTypeBusinessDays:
 		return "Handles business day scheduling with business calendar integration and day offsets"
 	case types.RuleTypeCustom:
-		return "Handles custom scheduling rules with pluggable processors"
+		return "Reserved custom scheduling rule type"
 	default:
 		return "Unknown evaluator type"
 	}

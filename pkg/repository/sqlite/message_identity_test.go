@@ -35,7 +35,7 @@ func TestRetryDLQMessage_IsScopedToQueue(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	require.NoError(t, storage.RetryDLQMessage(ctx, "queue-b", "shared-id"))
+	require.NoError(t, storage.RetryDLQMessage(ctx, "queue-b", "shared-id", "queue-b", true))
 	var queueAState, queueBState messagepb.Message_Metadata_State
 	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT state FROM cq_messages WHERE queue_name = ? AND message_id = ?`, "queue-a", "shared-id").Scan(&queueAState))
 	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT state FROM cq_messages WHERE queue_name = ? AND message_id = ?`, "queue-b", "shared-id").Scan(&queueBState))
@@ -49,12 +49,28 @@ func TestRetryDLQMessage_RejectsNonDLQMessage(t *testing.T) {
 	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "queue-a", Metadata: &queuepb.QueueMetadata{}}))
 	require.NoError(t, storage.EnqueueMessage(ctx, "queue-a", reclaimTestMessage("pending-id", 1, 1)))
 
-	err := storage.RetryDLQMessage(ctx, "queue-a", "pending-id")
+	err := storage.RetryDLQMessage(ctx, "queue-a", "pending-id", "queue-a", true)
 	require.ErrorContains(t, err, "message is not in DLQ state")
 
 	var state messagepb.Message_Metadata_State
 	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT state FROM cq_messages WHERE queue_name = ? AND message_id = ?`, "queue-a", "pending-id").Scan(&state))
 	require.Equal(t, messagepb.Message_Metadata_PENDING, state)
+}
+
+func TestRetryDLQMessage_PreservesPersistedAttemptsWhenNotReset(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "dlq-retry-attempts.db"))
+	for _, queueName := range []string{"queue-dlq", "queue-target"} {
+		require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
+	}
+	require.NoError(t, storage.EnqueueMessage(ctx, "queue-dlq", reclaimTestMessage("stale-attempts", 3, 5)))
+	_, err := storage.DB.ExecContext(ctx, `UPDATE cq_messages SET state = ?, attempts_left = ? WHERE queue_name = ? AND message_id = ?`, messagepb.Message_Metadata_ERRORED, 1, "queue-dlq", "stale-attempts")
+	require.NoError(t, err)
+
+	require.NoError(t, storage.RetryDLQMessage(ctx, "queue-dlq", "stale-attempts", "queue-target", false))
+	var attemptsLeft int32
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT attempts_left FROM cq_messages WHERE queue_name = ? AND message_id = ?`, "queue-target", "stale-attempts").Scan(&attemptsLeft))
+	require.EqualValues(t, 1, attemptsLeft)
 }
 
 func TestDeleteDLQMessage_IsScopedToQueue(t *testing.T) {

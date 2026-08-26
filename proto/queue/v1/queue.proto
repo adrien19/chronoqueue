@@ -74,13 +74,12 @@ message QueueMetadata {
 
     // dead_letter_queue_name: Name of the DLQ for messages that exhaust retries.
     // Messages that fail after max_attempts are moved here for investigation.
-    // Naming convention: "{original-queue}-dlq" or "{original-queue}-errors"
-    // Access DLQ messages via DLQ APIs: GetDLQMessage, ListDLQMessages, RequeueDLQMessage.
+    // Optional when auto_create_dlq is false; the named queue must already exist.
+    // Access DLQ messages via DLQ APIs: GetDLQMessages and RequeueDLQMessage.
   string dead_letter_queue_name = 6;
 
-    // auto_create_dlq: If true, ChronoQueue automatically creates the DLQ if it doesn't exist.
-    // Recommended: true for production (ensures no messages are lost).
-    // Set to false if you want to manually control DLQ creation and configuration.
+    // auto_create_dlq: If true, ChronoQueue creates "{source_queue}_dlq" and stores
+    // that computed name in dead_letter_queue_name. Any supplied name is replaced.
   bool auto_create_dlq = 7;
 
     // schema_id: Default schema for validating messages posted to this queue.

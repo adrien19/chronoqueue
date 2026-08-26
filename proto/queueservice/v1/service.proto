@@ -66,7 +66,7 @@ service QueueService {
     //       "metadata": {
     //         "default_max_attempts": 3,
     //         "lease_duration": "5m",
-    //         "dead_letter_queue_name": "order-dlq",
+    //         "dead_letter_queue_name": "order-processing_dlq",
     //         "auto_create_dlq": true
     //       }
     //     }
@@ -673,7 +673,7 @@ service QueueService {
     // Example:
     //   POST /v1/dlq/order-dlq:purge
     //
-    // Returns: Count of deleted messages
+    // Returns: Whether the purge succeeded
   rpc PurgeDLQ(PurgeDLQRequest) returns (PurgeDLQResponse) {
     option (google.api.http) = {
       post: "/v1/dlq/{dlq_name=*}:purge"
@@ -685,9 +685,7 @@ service QueueService {
     //
     // Provides:
     // - Message count
-    // - Age of oldest message
-    // - Common error types
-    // - Failure rate trends
+    // - Queue creation and update timestamps
     //
     // Use for:
     // - Monitoring DLQ health

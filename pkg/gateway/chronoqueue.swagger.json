@@ -216,7 +216,7 @@
     "/v1/dlq/{dlqName}/stats": {
       "get": {
         "summary": "GetDLQStats returns statistics about a dead letter queue.",
-        "description": "Provides:\n- Message count\n- Age of oldest message\n- Common error types\n- Failure rate trends\n\nUse for:\n- Monitoring DLQ health\n- Alerting on DLQ growth\n- Identifying systemic issues\n\nExample:\n  GET /v1/dlq/order-dlq/stats\n\nReturns: DLQ statistics",
+        "description": "Provides:\n- Message count\n- Queue creation and update timestamps\n\nUse for:\n- Monitoring DLQ health\n- Alerting on DLQ growth\n- Identifying systemic issues\n\nExample:\n  GET /v1/dlq/order-dlq/stats\n\nReturns: DLQ statistics",
         "operationId": "QueueService_GetDLQStats",
         "responses": {
           "200": {
@@ -249,7 +249,7 @@
     "/v1/dlq/{dlqName}:purge": {
       "post": {
         "summary": "PurgeDLQ removes all messages from a dead letter queue.",
-        "description": "Use when:\n- Cleaning up after incident\n- Clearing test data\n- DLQ too large to manage individually\n\nWARNING: This is irreversible. All DLQ messages are permanently deleted.\n\nExample:\n  POST /v1/dlq/order-dlq:purge\n\nReturns: Count of deleted messages",
+        "description": "Use when:\n- Cleaning up after incident\n- Clearing test data\n- DLQ too large to manage individually\n\nWARNING: This is irreversible. All DLQ messages are permanently deleted.\n\nExample:\n  POST /v1/dlq/order-dlq:purge\n\nReturns: Whether the purge succeeded",
         "operationId": "QueueService_PurgeDLQ",
         "responses": {
           "200": {
@@ -320,7 +320,7 @@
       },
       "post": {
         "summary": "CreateQueue creates a new queue with specified configuration.",
-        "description": "Use to:\n- Define retry behavior (max_attempts, lease_duration)\n- Set up dead letter queue for failed messages\n- Configure priority handling\n- Enforce message schemas\n\nExample:\n  POST /v1/queues\n  {\n    \"queue\": {\n      \"name\": \"order-processing\",\n      \"metadata\": {\n        \"default_max_attempts\": 3,\n        \"lease_duration\": \"5m\",\n        \"dead_letter_queue_name\": \"order-dlq\",\n        \"auto_create_dlq\": true\n      }\n    }\n  }\n\nReturns: Queue details\nErrors:\n  - AlreadyExists: Queue with this name exists\n  - InvalidArgument: Invalid configuration (negative lease_duration, etc.)",
+        "description": "Use to:\n- Define retry behavior (max_attempts, lease_duration)\n- Set up dead letter queue for failed messages\n- Configure priority handling\n- Enforce message schemas\n\nExample:\n  POST /v1/queues\n  {\n    \"queue\": {\n      \"name\": \"order-processing\",\n      \"metadata\": {\n        \"default_max_attempts\": 3,\n        \"lease_duration\": \"5m\",\n        \"dead_letter_queue_name\": \"order-processing_dlq\",\n        \"auto_create_dlq\": true\n      }\n    }\n  }\n\nReturns: Queue details\nErrors:\n  - AlreadyExists: Queue with this name exists\n  - InvalidArgument: Invalid configuration (negative lease_duration, etc.)",
         "operationId": "QueueService_CreateQueue",
         "responses": {
           "200": {
@@ -2430,11 +2430,11 @@
         },
         "deadLetterQueueName": {
           "type": "string",
-          "description": "dead_letter_queue_name: Name of the DLQ for messages that exhaust retries.\nMessages that fail after max_attempts are moved here for investigation.\nNaming convention: \"{original-queue}-dlq\" or \"{original-queue}-errors\"\nAccess DLQ messages via DLQ APIs: GetDLQMessage, ListDLQMessages, RequeueDLQMessage."
+          "description": "dead_letter_queue_name: Name of the DLQ for messages that exhaust retries.\nMessages that fail after max_attempts are moved here for investigation.\nOptional when auto_create_dlq is false; the named queue must already exist.\nAccess DLQ messages via DLQ APIs: GetDLQMessages and RequeueDLQMessage."
         },
         "autoCreateDlq": {
           "type": "boolean",
-          "description": "auto_create_dlq: If true, ChronoQueue automatically creates the DLQ if it doesn't exist.\nRecommended: true for production (ensures no messages are lost).\nSet to false if you want to manually control DLQ creation and configuration."
+          "description": "auto_create_dlq: If true, ChronoQueue creates \"{source_queue}_dlq\" and stores\nthat computed name in dead_letter_queue_name. Any supplied name is replaced."
         },
         "schemaId": {
           "type": "string",

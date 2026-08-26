@@ -74,7 +74,12 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 	var newState messagepb.Message_Metadata_State
 	var newAttemptsLeft int32
 	attemptID := message.GetMetadata().GetCurrentAttempt().GetAttemptId()
-	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+	queueMetadata, err := s.GetQueueMetadata(ctx, queueName)
+	if err != nil {
+		return fmt.Errorf("get queue metadata: %w", err)
+	}
+	dlqName := queueMetadata.GetDeadLetterQueueName()
+	err = s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		updateQuery := s.ph(`
             UPDATE cq_messages
             SET state = CASE WHEN max_attempts = -1 OR attempts_left > 1 THEN ?::integer ELSE ?::integer END,
@@ -122,6 +127,20 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 			return fmt.Errorf("update message: %w", err)
 		}
 
+		if newState == messagepb.Message_Metadata_ERRORED && dlqName != "" {
+			result, err := tx.ExecContext(ctx, s.ph(`UPDATE cq_messages SET queue_name = ? WHERE queue_name = ? AND message_id = ? AND state = ?`), dlqName, queueName, message.GetMessageId(), newState)
+			if err != nil {
+				return fmt.Errorf("move message to DLQ: %w", err)
+			}
+			rows, err := result.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("get moved rows: %w", err)
+			}
+			if rows != 1 {
+				return fmt.Errorf("move message to DLQ: expected one row, moved %d", rows)
+			}
+			return s.StateManager.MoveCounter(ctx, tx, queueName, messagepb.Message_Metadata_RUNNING, dlqName, newState)
+		}
 		return s.StateManager.UpdateCounters(ctx, tx, queueName, messagepb.Message_Metadata_RUNNING, newState)
 	})
 	if err != nil {

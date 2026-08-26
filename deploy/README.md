@@ -12,7 +12,7 @@ This directory contains Docker Compose configurations for deploying ChronoQueue 
 
 ## Storage Backend Selection
 
-ChronoQueue supports three storage backends:
+ChronoQueue supports two storage backends:
 
 | Backend | Status | Metrics | Use Case |
 |---------|--------|---------|----------|
@@ -295,11 +295,14 @@ docker volume ls | grep chronoqueue
 ### Backup Data
 
 ```bash
-# Backup PostgreSQL
-docker run --rm -v postgres-data:/data -v $(pwd):/backup ubuntu tar czf /backup/postgres-backup.tar.gz -C /data .
+# Backup PostgreSQL with a transactionally consistent logical dump
+docker compose -f docker-compose.postgres.yaml exec -T postgres \
+  pg_dump --format=custom --username=chronoqueue --dbname=chronoqueue > chronoqueue.dump
 
-# Backup SQLite
-docker run --rm -v sqlite-data:/data -v $(pwd):/backup ubuntu tar czf /backup/sqlite-backup.tar.gz -C /data .
+# Backup SQLite while the only writer is stopped
+docker compose -f docker-compose.sqlite.yaml stop chronoqueuesvc
+docker compose -f docker-compose.sqlite.yaml cp chronoqueuesvc:/data/chronoqueue.db chronoqueue-backup.db
+docker compose -f docker-compose.sqlite.yaml start chronoqueuesvc
 
 # Backup Prometheus data
 docker run --rm -v prometheus-data:/data -v $(pwd):/backup ubuntu tar czf /backup/prometheus-backup.tar.gz -C /data .
@@ -311,11 +314,27 @@ docker run --rm -v grafana-data:/data -v $(pwd):/backup ubuntu tar czf /backup/g
 ### Restore Data
 
 ```bash
-# Restore PostgreSQL
-docker run --rm -v postgres-data:/data -v $(pwd):/backup ubuntu tar xzf /backup/postgres-backup.tar.gz -C /data
+# Stop ChronoQueue and all other external database writers before restoring
+docker compose -f docker-compose.postgres.yaml stop chronoqueuesvc
+# Stop external producers, workers, and administrative clients that write to this database.
 
-# Similar for other volumes
+# Restore PostgreSQL into the empty database, then restart ChronoQueue
+docker compose -f docker-compose.postgres.yaml exec -T postgres \
+  pg_restore --clean --if-exists --no-owner --username=chronoqueue --dbname=chronoqueue < chronoqueue.dump
+docker compose -f docker-compose.postgres.yaml start chronoqueuesvc
+# Restart the external producers, workers, and administrative clients stopped above.
+
+# Restore SQLite only while ChronoQueue is stopped
+docker compose -f docker-compose.sqlite.yaml stop chronoqueuesvc
+docker compose -f docker-compose.sqlite.yaml cp chronoqueue-backup.db chronoqueuesvc:/data/chronoqueue.db
+docker compose -f docker-compose.sqlite.yaml start chronoqueuesvc
 ```
+
+### v2 Upgrade and Rollback
+
+Version 2 is the first supported ChronoQueue release, so there is no supported pre-v2 database schema to migrate. Internal schema versions 1–6 are development history, not released compatibility targets.
+
+Before upgrading between supported v2 releases, stop message producers and workers, take a logical PostgreSQL dump or SQLite offline file backup as above, and verify the backup is readable. Start the new binary against the database; startup applies forward-only migrations and rejects databases created by a newer binary. To roll back, stop ChronoQueue, deploy the previous binary, and restore the backup taken before the upgrade. Do not run an older binary against a database after a newer binary has migrated it.
 
 ## Alerting
 

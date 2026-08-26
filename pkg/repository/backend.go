@@ -51,7 +51,7 @@ type BackendStorage interface {
 
 	// DLQ Operations
 	GetDLQMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error)
-	RetryDLQMessage(ctx context.Context, queueName string, messageId string) error
+	RetryDLQMessage(ctx context.Context, dlqName string, messageId string, targetQueueName string, resetRetries bool) error
 	DeleteDLQMessage(ctx context.Context, queueName string, messageId string) error
 	PurgeDLQ(ctx context.Context, queueName string) (int64, error)
 }

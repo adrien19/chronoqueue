@@ -1,14 +1,14 @@
 # ChronoQueue Examples
 
-This directory contains sample applications demonstrating how ChronoQueue can be integrated into various real-world use cases. Each example showcases different features and best practices for building queue-based applications.
+This directory contains demonstrations of how ChronoQueue can be integrated into different queue-based applications. Examples may use mocks or placeholders and are not production deployment templates.
 
 ## 📚 Available Examples
 
 ### 1. [Interview Evaluation Platform](./interview-platform/)
 
-**Status**: 📝 Planning Phase
+**Status**: 📝 In development
 
-A comprehensive sample application demonstrating **all ChronoQueue features** through a practical interview evaluation system.
+An interview evaluation application that exercises selected ChronoQueue workflows. Some application behavior, including activity tracking, analytics, notifications, and report storage, is mocked or represented by placeholders.
 
 **Features Demonstrated**:
 
@@ -31,12 +31,12 @@ A comprehensive sample application demonstrating **all ChronoQueue features** th
 
 ## 🚀 Getting Started
 
-Each example contains:
+Examples may contain:
 
 - **README.md** - Overview and setup instructions
 - **Architecture documentation** - Design decisions and patterns
 - **Demo scripts** - Interactive demonstrations of features
-- **Complete source code** - Production-ready examples
+- **Source code** - Demonstration code whose documented mocks and limitations should be reviewed before reuse
 
 ### Prerequisites
 

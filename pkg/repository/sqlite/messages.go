@@ -538,6 +538,7 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 // NackMessage marks a message as failed
 func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error {
 	var movedToDLQ bool
+	var exhausted bool
 	var dlqName string
 
 	// Fetch queue metadata outside transaction to avoid connection pool contention
@@ -546,6 +547,11 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 		return fmt.Errorf("get queue metadata: %w", err)
 	}
 	retentionPolicy := queueMeta.GetMessageRetentionPolicy()
+	dlqName = queueMeta.GetDeadLetterQueueName()
+	terminalQueueName := queueName
+	if dlqName != "" {
+		terminalQueueName = dlqName
+	}
 
 	err = s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		var messageBytes []byte
@@ -571,11 +577,13 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 		newState := messagepb.Message_Metadata_PENDING
 		newAttemptsLeft := attemptsLeft - 1
 		if newAttemptsLeft <= 0 {
+			exhausted = true
 			newState = messagepb.Message_Metadata_ERRORED
-			movedToDLQ = true
-			dlqName = queueName + "-dlq"
-
+			movedToDLQ = dlqName != ""
 			shouldDelete, deletedAt := s.calculateDeletion(retentionPolicy)
+			if dlqName != "" {
+				shouldDelete, deletedAt = false, nil
+			}
 
 			if shouldDelete {
 				deleteQuery := `
@@ -596,7 +604,7 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 			} else {
 				updateQuery := `
 					UPDATE cq_messages
-					SET state = ?,
+					SET queue_name = ?, state = ?,
 						attempts_left = ?,
 						completed_at = ?,
 						deleted_at = ?,
@@ -617,6 +625,7 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 				`
 				result, updateErr := tx.ExecContext(
 					ctx, updateQuery,
+					terminalQueueName,
 					newState,
 					newAttemptsLeft,
 					nowMs,
@@ -663,13 +672,18 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 			}
 		}
 
+		if movedToDLQ && dlqName != "" {
+			return s.StateManager.MoveCounter(ctx, tx, queueName, oldState, dlqName, newState)
+		}
 		return s.StateManager.UpdateCounters(ctx, tx, queueName, oldState, newState)
 	})
 
 	if err == nil {
-		if movedToDLQ {
+		if exhausted {
 			metrics.RecordStateTransition(queueName, "RUNNING", "ERRORED")
-			metrics.IncrementDLQIngestion(dlqName, queueName, "max_attempts")
+			if movedToDLQ {
+				metrics.IncrementDLQIngestion(dlqName, queueName, "max_attempts")
+			}
 		} else {
 			metrics.RecordStateTransition(queueName, "RUNNING", "PENDING")
 		}
