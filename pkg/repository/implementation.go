@@ -56,6 +56,7 @@ func NewSQLiteStorage(ctx context.Context, config *sqlite.Config) (Storage, erro
 	if err != nil {
 		return nil, fmt.Errorf("create sqlite storage: %w", err)
 	}
+	storage.SetSchemaRegistry(config.SchemaRegistry)
 
 	// Create context for background services
 	bgCtx, cancel := context.WithCancel(context.Background())
@@ -116,6 +117,7 @@ func NewPostgresStorage(ctx context.Context, config *postgres.Config) (Storage, 
 	if err != nil {
 		return nil, fmt.Errorf("create postgres storage: %w", err)
 	}
+	storage.SetSchemaRegistry(config.SchemaRegistry)
 
 	bgCtx, cancel := context.WithCancel(context.Background())
 

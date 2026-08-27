@@ -25,31 +25,16 @@ func (s *Server) initializePostgresStorage(ctx context.Context) error {
 		RootCertFile:   s.config.PostgresRootCertFile,
 	}
 
-	storage, err := repository.NewPostgresStorage(ctx, &postgresrepository.Config{
-		Conn:              connConfig,
-		Logger:            s.logger,
-		KeyManager:        s.encryptionKeyManager,
-		SchedulerInterval: time.Duration(s.config.SchedulerIntervalMs) * time.Millisecond,
-		ReclaimInterval:   time.Duration(s.config.ReclaimIntervalMs) * time.Millisecond,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create Postgres repository: %w", err)
-	}
-
-	s.database = storage
-	s.logger.InfoWithFields(
-		"Postgres repository initialized",
-		"host", s.config.PostgresHost,
-		"port", s.config.PostgresPort,
-		"database", s.config.PostgresDBName,
-		"user", s.config.PostgresUser,
-		"sslmode", s.config.PostgresSSLMode,
-	)
-
 	db, err := postgresrepository.OpenConnection(ctx, &connConfig)
 	if err != nil {
 		return fmt.Errorf("failed to open connection for schema registry: %w", err)
 	}
+	closeRegistryDB := true
+	defer func() {
+		if closeRegistryDB {
+			_ = db.Close()
+		}
+	}()
 
 	registry, err := schema.NewPostgresRegistry(db, s.logger)
 	if err != nil {
@@ -59,6 +44,30 @@ func (s *Server) initializePostgresStorage(ctx context.Context) error {
 	// Store schema registry for use by ChronoQueueServer
 	s.schemaRegistry = registry
 	s.logger.Info("Postgres schema registry initialized")
+
+	storage, err := repository.NewPostgresStorage(ctx, &postgresrepository.Config{
+		Conn:              connConfig,
+		Logger:            s.logger,
+		KeyManager:        s.encryptionKeyManager,
+		SchedulerInterval: time.Duration(s.config.SchedulerIntervalMs) * time.Millisecond,
+		ReclaimInterval:   time.Duration(s.config.ReclaimIntervalMs) * time.Millisecond,
+		SchemaRegistry:    s.schemaRegistry,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create Postgres repository: %w", err)
+	}
+
+	s.database = storage
+	s.schemaRegistryDB = db
+	closeRegistryDB = false
+	s.logger.InfoWithFields(
+		"Postgres repository initialized",
+		"host", s.config.PostgresHost,
+		"port", s.config.PostgresPort,
+		"database", s.config.PostgresDBName,
+		"user", s.config.PostgresUser,
+		"sslmode", s.config.PostgresSSLMode,
+	)
 
 	return nil
 }

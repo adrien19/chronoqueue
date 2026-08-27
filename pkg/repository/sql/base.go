@@ -3,10 +3,12 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"sync"
 
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/adrien19/chronoqueue/pkg/repository/common"
+	"github.com/adrien19/chronoqueue/pkg/schema"
 )
 
 // BaseSQL provides common SQL storage functionality shared across SQL backends.
@@ -20,6 +22,23 @@ type BaseSQL struct {
 	Clock        *Clock
 	StateManager *StateManager
 	LeaseRuntime *LeaseRuntimeCalculator
+
+	schemaRegistryMu sync.RWMutex
+	schemaRegistry   schema.Registry
+}
+
+// SetSchemaRegistry configures schema validation for messages emitted by background services.
+func (b *BaseSQL) SetSchemaRegistry(registry schema.Registry) {
+	b.schemaRegistryMu.Lock()
+	defer b.schemaRegistryMu.Unlock()
+	b.schemaRegistry = registry
+}
+
+// SchemaRegistry returns the registry used to validate messages emitted by background services.
+func (b *BaseSQL) SchemaRegistry() schema.Registry {
+	b.schemaRegistryMu.RLock()
+	defer b.schemaRegistryMu.RUnlock()
+	return b.schemaRegistry
 }
 
 // NewBaseSQL creates a new BaseSQL instance

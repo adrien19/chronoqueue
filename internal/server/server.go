@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"database/sql"
 	"fmt"
 	"net"
 	"net/http"
@@ -35,6 +36,7 @@ type Server struct {
 	grpcServer           *chronoqueue.ChronoQueueServer
 	database             repository.Storage
 	schemaRegistry       schema.Registry // Schema registry for message validation
+	schemaRegistryDB     *sql.DB
 }
 
 // New creates a new server instance with the given configuration
@@ -89,7 +91,13 @@ func (s *Server) Start(ctx context.Context) error {
 	default:
 		return fmt.Errorf("unsupported storage type: %s", s.config.StorageType)
 	}
-
+	if s.schemaRegistryDB != nil {
+		defer func() {
+			if err := s.schemaRegistryDB.Close(); err != nil {
+				s.logger.ErrorWithFields("Failed to close schema registry database", "error", err)
+			}
+		}()
+	}
 	// Initialize gRPC server with storage and schema registry
 	s.grpcServer = chronoqueue.NewChronoQueueServer(s.database, s.schemaRegistry, s.logger)
 

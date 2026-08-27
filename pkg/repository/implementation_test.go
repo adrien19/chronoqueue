@@ -566,6 +566,28 @@ func TestCreateQueueMessage_ValidatorNil(t *testing.T) {
 	}
 }
 
+func TestCreateQueueMessage_InheritsUnlimitedRetriesThroughAdmissionValidator(t *testing.T) {
+	payload, err := structpb.NewStruct(map[string]any{"task": "run"})
+	require.NoError(t, err)
+	queueMetadata := &queuepb.QueueMetadata{DefaultMaxAttempts: validator.InfiniteRetries}
+	backend := &stubBackend{queueMetadata: queueMetadata}
+	impl := &implementation{backend: backend}
+	message := &messagepb.Message{
+		MessageId: "unlimited-retries",
+		Metadata: &messagepb.Message_Metadata{
+			Payload: &commonpb.Payload{Data: payload, ContentType: "application/json"},
+		},
+	}
+
+	_, err = impl.CreateQueueMessage(context.Background(), &queueservicepb.PostMessageRequest{
+		QueueName: "queue-unlimited",
+		Message:   message,
+	}, validator.NewPayloadValidator(queueMetadata, nil))
+	require.NoError(t, err)
+	require.Equal(t, int32(validator.InfiniteRetries), backend.enqueued[0].message.GetMetadata().GetMaxAttempts())
+	require.Equal(t, int32(validator.InfiniteRetries), backend.enqueued[0].message.GetMetadata().GetAttemptsLeft())
+}
+
 func TestCreateQueueMessage_RequiresMetadata(t *testing.T) {
 	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{}}
 	impl := &implementation{backend: backend}

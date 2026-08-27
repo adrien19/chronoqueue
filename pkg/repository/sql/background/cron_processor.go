@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/robfig/cron/v3"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
@@ -191,6 +192,13 @@ func (c *CronProcessorService) processSchedule(ctx context.Context, scheduleID s
 		if schedule.Metadata == nil {
 			schedule.Metadata = &schedulepb.Schedule_Metadata{}
 		}
+		count := int64(0)
+		if execCount.Valid {
+			count = execCount.Int64
+		}
+		if schedule.Metadata.GetHasMaxMessages() && count >= schedule.Metadata.GetMaxMessages() {
+			return c.pauseAtMessageLimit(ctx, tx, schedule, scheduleID, c.nowFn(), count)
+		}
 
 		cronSchedule, err := c.parseCronExpression(cronExpr.String)
 		if err != nil {
@@ -221,6 +229,9 @@ func (c *CronProcessorService) processSchedule(ctx context.Context, scheduleID s
 
 		messageID, err := c.createCronMessage(ctx, tx, queueName, schedule, now)
 		if err != nil {
+			if isScheduledMessageValidationError(err) {
+				return c.markScheduleError(ctx, tx, schedule, scheduleID, err.Error())
+			}
 			if err.Error() == "queue not found" {
 				c.base.Logger.ErrorWithFields("Queue for cron schedule not found", "schedule_id", scheduleID, "queue", queueName)
 				return nil
@@ -228,16 +239,23 @@ func (c *CronProcessorService) processSchedule(ctx context.Context, scheduleID s
 			return fmt.Errorf("create message: %w", err)
 		}
 
-		count := int64(0)
-		if execCount.Valid {
-			count = execCount.Int64
-		}
 		count++
 
 		schedule.Metadata.MessageIds = append(schedule.Metadata.MessageIds, messageID)
 		schedule.Metadata.LastRun = timestamppb.New(now)
-		schedule.Metadata.NextRun = timestamppb.New(c.calculateNextCronRun(cronSchedule, now))
-		schedule.Metadata.StateMessage = ""
+		var nextRunMs any
+		if schedule.Metadata.GetHasMaxMessages() && count >= schedule.Metadata.GetMaxMessages() {
+			nextRunTime := c.calculateNextCronRun(cronSchedule, now)
+			schedule.Metadata.State = schedulepb.Schedule_Metadata_PAUSED
+			schedule.Metadata.StateMessage = "maximum message count reached"
+			schedule.Metadata.NextRun = timestamppb.New(nextRunTime)
+			nextRunMs = nextRunTime.UnixMilli()
+		} else {
+			nextRunTime := c.calculateNextCronRun(cronSchedule, now)
+			schedule.Metadata.NextRun = timestamppb.New(nextRunTime)
+			schedule.Metadata.StateMessage = ""
+			nextRunMs = nextRunTime.UnixMilli()
+		}
 		schedule.Metadata.UpdatedAt = timestamppb.New(now)
 
 		if err := repositorycommon.EncryptSchedulePayload(schedule, c.base.KeyManager); err != nil {
@@ -249,7 +267,6 @@ func (c *CronProcessorService) processSchedule(ctx context.Context, scheduleID s
 			return fmt.Errorf("marshal schedule: %w", err)
 		}
 
-		nextRunMs := schedule.Metadata.GetNextRun().AsTime().UnixMilli()
 		updateQuery := fmt.Sprintf(
 			`
             UPDATE cq_schedules
@@ -279,6 +296,24 @@ func (c *CronProcessorService) processSchedule(ctx context.Context, scheduleID s
 
 		return nil
 	})
+}
+
+func (c *CronProcessorService) pauseAtMessageLimit(ctx context.Context, tx *sql.Tx, schedule *schedulepb.Schedule, scheduleID string, now time.Time, count int64) error {
+	schedule.Metadata.State = schedulepb.Schedule_Metadata_PAUSED
+	schedule.Metadata.StateMessage = "maximum message count reached"
+	schedule.Metadata.NextRun = nil
+	schedule.Metadata.UpdatedAt = timestamppb.New(now)
+	if err := repositorycommon.EncryptSchedulePayload(schedule, c.base.KeyManager); err != nil {
+		return fmt.Errorf("encrypt schedule payload: %w", err)
+	}
+	updatedBytes, err := c.base.Serializer.MarshalSchedule(schedule)
+	if err != nil {
+		return fmt.Errorf("marshal schedule: %w", err)
+	}
+	query := fmt.Sprintf(`UPDATE cq_schedules SET metadata_pb = %s, state = %s, next_run = NULL, updated_at = %s, execution_count = %s WHERE id = %s`,
+		c.base.Dialect.Placeholder(1), c.base.Dialect.Placeholder(2), c.base.Dialect.Placeholder(3), c.base.Dialect.Placeholder(4), c.base.Dialect.Placeholder(5))
+	_, err = tx.ExecContext(ctx, query, updatedBytes, schedule.Metadata.GetState(), now.UnixMilli(), count, scheduleID)
+	return err
 }
 
 func (c *CronProcessorService) updateNextRun(ctx context.Context, tx *sql.Tx, schedule *schedulepb.Schedule, scheduleID string, nextRun time.Time, lastRun sql.NullInt64) error {
@@ -379,6 +414,9 @@ func (c *CronProcessorService) createCronMessage(ctx context.Context, tx *sql.Tx
 	}
 
 	leasePolicy := queueMeta.GetLeasePolicy()
+	if leasePolicy != nil {
+		leasePolicy = proto.Clone(leasePolicy).(*commonpb.LeasePolicy)
+	}
 	if meta.GetLeaseDuration() != nil {
 		if leasePolicy == nil {
 			leasePolicy = &commonpb.LeasePolicy{}
@@ -390,7 +428,7 @@ func (c *CronProcessorService) createCronMessage(ctx context.Context, tx *sql.Tx
 		MessageId: messageID,
 		Metadata: &messagepb.Message_Metadata{
 			Headers:       cloneHeaders(meta.GetHeaders()),
-			Payload:       meta.GetPayload(),
+			Payload:       clonePayload(meta.GetPayload()),
 			State:         messagepb.Message_Metadata_INVISIBLE,
 			AttemptsLeft:  int32(maxAttempts),
 			MaxAttempts:   int32(maxAttempts),
@@ -399,6 +437,9 @@ func (c *CronProcessorService) createCronMessage(ctx context.Context, tx *sql.Tx
 			LeasePolicy:   leasePolicy,
 			LeaseDuration: meta.GetLeaseDuration(),
 		},
+	}
+	if err := validateScheduledMessage(ctx, c.base, queueMeta, message); err != nil {
+		return "", err
 	}
 
 	if err := repositorycommon.EncryptMessagePayload(message, c.base.KeyManager); err != nil {

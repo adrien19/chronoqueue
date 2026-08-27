@@ -8,6 +8,7 @@ import (
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/pkg/log"
 	repositorysql "github.com/adrien19/chronoqueue/pkg/repository/sql"
+	"github.com/adrien19/chronoqueue/pkg/schema"
 )
 
 // Storage implements the persistence.Storage interface for SQLite
@@ -23,6 +24,7 @@ type Config struct {
 	KeyManager        *keymanager.EncryptionKeyManager
 	SchedulerInterval time.Duration
 	ReclaimInterval   time.Duration
+	SchemaRegistry    schema.Registry
 }
 
 // NewStorage creates a new SQLite storage instance
