@@ -18,7 +18,7 @@ var (
 
 	// dlqIngestionRate tracks messages being moved to DLQ
 	// The reason label helps identify why messages failed
-	// Reasons: max_attempts (exhausted retries), lease_timeout (worker died), nack (explicit failure)
+	// Reasons: max_attempts, lease_timeout, heartbeat_timeout, or nack
 	dlqIngestionRate = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "chronoqueue_dlq_ingestion_total",
@@ -45,7 +45,7 @@ func SetDLQMessagesTotal(dlqName, sourceQueue string, count float64) {
 }
 
 // IncrementDLQIngestion records a message being moved to DLQ
-// Reason should be: "max_attempts", "lease_timeout", or "nack"
+// Reason should be: "max_attempts", "lease_timeout", "heartbeat_timeout", or "nack".
 func IncrementDLQIngestion(dlqName, sourceQueue, reason string) {
 	dlqIngestionRate.WithLabelValues(dlqName, sourceQueue, reason).Inc()
 }

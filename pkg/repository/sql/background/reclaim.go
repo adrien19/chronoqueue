@@ -51,7 +51,7 @@ type ReclaimableBackend interface {
 	// - Metrics recording
 	//
 	// Used by: ReclaimService during periodic scans
-	ReclaimExpiredMessage(ctx context.Context, queueName string, message *messagepb.Message) error
+	ReclaimExpiredMessage(ctx context.Context, queueName string, message *messagepb.Message) (*sqlbase.ReclaimResult, error)
 }
 
 // ReclaimService handles expired lease reclamation for SQL storage backends.
@@ -138,10 +138,8 @@ func (r *ReclaimService) reclaimExpiredMessages(ctx context.Context) error {
 		return fmt.Errorf("list queues: %w", err)
 	}
 
-	nowMs := r.base.Clock.NowMs()
-
 	for _, queueName := range queues {
-		if err := r.reclaimQueueMessages(ctx, queueName, nowMs); err != nil {
+		if err := r.reclaimQueueMessages(ctx, queueName); err != nil {
 			r.base.Logger.ErrorWithFields(
 				"Failed to reclaim messages for queue",
 				"queue", queueName,
@@ -154,7 +152,7 @@ func (r *ReclaimService) reclaimExpiredMessages(ctx context.Context) error {
 }
 
 // reclaimQueueMessages processes expired messages for a specific queue.
-func (r *ReclaimService) reclaimQueueMessages(ctx context.Context, queueName string, nowMs int64) error {
+func (r *ReclaimService) reclaimQueueMessages(ctx context.Context, queueName string) error {
 	// Phase 1: Find expired messages using the backend interface
 	expiredMessages, err := r.backend.FindExpiredMessages(ctx, queueName, 100)
 	if err != nil {
@@ -189,13 +187,8 @@ func (r *ReclaimService) reclaimQueueMessages(ctx context.Context, queueName str
 			"max_attempts", meta.GetMaxAttempts(),
 		)
 
-		// Pre-compute expected state transition for metrics tracking
-		// Backend will decrement AttemptsLeft by 1, then check if <= 0
-		newAttemptsLeft := meta.GetAttemptsLeft() - 1
-		transitionsToErrored := newAttemptsLeft <= 0 && meta.GetMaxAttempts() != -1
-
-		// Use backend interface to reclaim the message
-		if err := r.backend.ReclaimExpiredMessage(ctx, queueName, msg); err != nil {
+		result, err := r.backend.ReclaimExpiredMessage(ctx, queueName, msg)
+		if err != nil {
 			r.base.Logger.ErrorWithFields(
 				"Failed to reclaim message",
 				"message_id", msg.GetMessageId(),
@@ -204,22 +197,27 @@ func (r *ReclaimService) reclaimQueueMessages(ctx context.Context, queueName str
 			continue
 		}
 
-		// Determine what happened for metrics based on pre-computed state
-		if transitionsToErrored {
+		if result.State == messagepb.Message_Metadata_ERRORED {
 			errored++
-			// Record metrics for DLQ ingestion
-			dlqName := queueName + "-dlq"
-			metrics.IncrementDLQIngestion(dlqName, queueName, "lease_timeout")
-			metrics.IncrementLeaseExpirations(queueName, "lease")
-			metrics.IncrementBackgroundServiceProcessedMessages("reclaim", queueName)
+			if result.DLQTarget != "" {
+				expiryCause := "heartbeat_timeout"
+				if result.LeaseExpired {
+					expiryCause = "lease_timeout"
+				}
+				metrics.IncrementDLQIngestion(result.DLQTarget, queueName, expiryCause)
+			}
 			metrics.RecordStateTransition(queueName, "RUNNING", "ERRORED")
 		} else {
 			reclaimed++
-			// Record metrics for lease expiration and requeue
-			metrics.IncrementLeaseExpirations(queueName, "lease")
-			metrics.IncrementBackgroundServiceProcessedMessages("reclaim", queueName)
-			metrics.RecordStateTransition(queueName, "RUNNING", "PENDING")
+			metrics.RecordStateTransition(queueName, "RUNNING", result.State.String())
 		}
+		if result.LeaseExpired {
+			metrics.IncrementLeaseExpirations(queueName, "lease")
+		}
+		if result.HeartbeatExpired {
+			metrics.IncrementHeartbeatTimeouts(queueName)
+		}
+		metrics.IncrementBackgroundServiceProcessedMessages("reclaim", queueName)
 	}
 
 	if reclaimed > 0 || errored > 0 {

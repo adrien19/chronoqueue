@@ -64,7 +64,8 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 		go func(storage *Storage, message *messagepb.Message) {
 			defer wg.Done()
 			<-start
-			errs <- storage.ReclaimExpiredMessage(ctx, queueName, message)
+			_, reclaimErr := storage.ReclaimExpiredMessage(ctx, queueName, message)
+			errs <- reclaimErr
 		}(storage, candidate)
 	}
 	close(start)
@@ -89,7 +90,8 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 	expired, err = first.FindExpiredMessages(ctx, queueName, 10)
 	require.NoError(t, err)
 	require.Len(t, expired, 1)
-	require.NoError(t, first.ReclaimExpiredMessage(ctx, queueName, expired[0]))
+	_, err = first.ReclaimExpiredMessage(ctx, queueName, expired[0])
+	require.NoError(t, err)
 
 	peeked, err := first.PeekMessages(ctx, queueName, 10)
 	require.NoError(t, err)
@@ -105,7 +107,8 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 	require.NoError(t, err)
 
 	legacyMessage := &messagepb.Message{MessageId: claimed.GetMessageId()}
-	require.NoError(t, first.ReclaimExpiredMessage(ctx, queueName, legacyMessage))
+	_, err = first.ReclaimExpiredMessage(ctx, queueName, legacyMessage)
+	require.NoError(t, err)
 	var state messagepb.Message_Metadata_State
 	var attemptsLeft int32
 	require.NoError(t, first.DB.QueryRowContext(ctx, `SELECT state, attempts_left FROM cq_messages WHERE message_id = $1`, claimed.GetMessageId()).Scan(&state, &attemptsLeft))

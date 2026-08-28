@@ -68,6 +68,14 @@ func (s *MetricsReporterService) reportMetrics(ctx context.Context) {
 		duration := time.Since(start)
 		metrics.ObserveBackgroundServiceIterationDuration("metrics_reporter", duration.Seconds())
 	}()
+	dbStats := s.baseSQL.DB.Stats()
+	backend := "sqlite"
+	if s.baseSQL.Dialect.SupportsSkipLocked() {
+		backend = "postgres"
+	}
+	metrics.SetDBConnectionsActive(backend, float64(dbStats.InUse))
+	metrics.SetDBConnectionsIdle(backend, float64(dbStats.Idle))
+	metrics.SetDBConnectionsWait(backend, float64(dbStats.WaitCount))
 
 	// Query all queue names from the database
 	query := "SELECT name FROM cq_queues ORDER BY name"
@@ -95,6 +103,10 @@ func (s *MetricsReporterService) reportMetrics(ctx context.Context) {
 			metrics.IncrementBackgroundServiceIterations("metrics_reporter", "error")
 			return
 		}
+		if err := s.updateDLQMetrics(ctx, queueName); err != nil {
+			metrics.IncrementBackgroundServiceIterations("metrics_reporter", "error")
+			return
+		}
 	}
 
 	s.mu.Lock()
@@ -104,15 +116,34 @@ func (s *MetricsReporterService) reportMetrics(ctx context.Context) {
 	metrics.IncrementBackgroundServiceIterations("metrics_reporter", "success")
 }
 
+func (s *MetricsReporterService) updateDLQMetrics(ctx context.Context, sourceQueue string) error {
+	placeholder := s.baseSQL.Dialect.Placeholder(1)
+	var queueBytes []byte
+	if err := s.baseSQL.DB.QueryRowContext(ctx, `SELECT metadata_pb FROM cq_queues WHERE name = `+placeholder, sourceQueue).Scan(&queueBytes); err != nil {
+		return fmt.Errorf("query queue metadata: %w", err)
+	}
+	queue, err := s.baseSQL.Serializer.UnmarshalQueue(queueBytes)
+	if err != nil {
+		return fmt.Errorf("unmarshal queue metadata: %w", err)
+	}
+	dlqName := queue.GetMetadata().GetDeadLetterQueueName()
+	if dlqName == "" {
+		return nil
+	}
+	var count int64
+	query := `SELECT COUNT(*) FROM cq_messages WHERE queue_name = ` + placeholder + ` AND state = ` + s.baseSQL.Dialect.Placeholder(2)
+	if err := s.baseSQL.DB.QueryRowContext(ctx, query, dlqName, messagepb.Message_Metadata_ERRORED).Scan(&count); err != nil {
+		return fmt.Errorf("count DLQ messages: %w", err)
+	}
+	metrics.SetDLQMessagesTotal(dlqName, sourceQueue, float64(count))
+	return nil
+}
+
 // updateQueueStateMetrics queries and updates messagesByState metrics for a specific queue
 func (s *MetricsReporterService) updateQueueStateMetrics(ctx context.Context, queueName string) error {
 	// Query message counts by state for this queue
 	// Use ? for SQLite, $1 for Postgres
-	placeholder := "$1"
-	if !s.baseSQL.Dialect.SupportsReturning() {
-		// SQLite doesn't support RETURNING, use ? placeholder
-		placeholder = "?"
-	}
+	placeholder := s.baseSQL.Dialect.Placeholder(1)
 
 	query := `
 		SELECT state, COUNT(*) as count

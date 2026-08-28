@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
 )
 
@@ -70,14 +71,14 @@ func (s *Storage) RetryDLQMessage(ctx context.Context, dlqName string, messageId
 		query := `SELECT metadata_pb, state, attempts_left FROM cq_messages WHERE message_id = ? AND queue_name = ?`
 		err := tx.QueryRowContext(ctx, query, messageId, dlqName).Scan(&messageBytes, &oldState, &attemptsLeft)
 		if err == sql.ErrNoRows {
-			return fmt.Errorf("message not found: %s", messageId)
+			return domainerror.New(domainerror.NotFound, fmt.Sprintf("message not found: %s", messageId), err)
 		}
 		if err != nil {
 			return fmt.Errorf("query message: %w", err)
 		}
 
 		if oldState != messagepb.Message_Metadata_ERRORED {
-			return fmt.Errorf("message is not in DLQ state")
+			return domainerror.New(domainerror.FailedPrecondition, "message is not in DLQ state", nil)
 		}
 
 		msg, err := s.Serializer.UnmarshalMessage(messageBytes)
@@ -121,14 +122,14 @@ func (s *Storage) DeleteDLQMessage(ctx context.Context, queueName string, messag
 		var oldState messagepb.Message_Metadata_State
 		err := tx.QueryRowContext(ctx, `SELECT state FROM cq_messages WHERE message_id = ? AND queue_name = ?`, messageId, queueName).Scan(&oldState)
 		if err == sql.ErrNoRows {
-			return fmt.Errorf("message not found: %s", messageId)
+			return domainerror.New(domainerror.NotFound, fmt.Sprintf("message not found: %s", messageId), err)
 		}
 		if err != nil {
 			return fmt.Errorf("query message state: %w", err)
 		}
 
 		if oldState != messagepb.Message_Metadata_ERRORED {
-			return fmt.Errorf("message is not in DLQ state")
+			return domainerror.New(domainerror.FailedPrecondition, "message is not in DLQ state", nil)
 		}
 
 		// Delete message
@@ -143,7 +144,7 @@ func (s *Storage) DeleteDLQMessage(ctx context.Context, queueName string, messag
 			return fmt.Errorf("get rows affected: %w", err)
 		}
 		if rows == 0 {
-			return fmt.Errorf("message not found: %s", messageId)
+			return domainerror.New(domainerror.NotFound, fmt.Sprintf("message not found: %s", messageId), err)
 		}
 
 		// Update state counts

@@ -175,6 +175,8 @@ pkg/repository/
 
 ### Database Schema
 
+The SQL below records the illustrative design considered when this ADR was accepted. It is historical, is not a migration contract, and intentionally may differ from the current versioned schemas under `pkg/repository/postgres` and `pkg/repository/sqlite`. Those implementations are authoritative.
+
 #### Core Tables
 
 ```sql

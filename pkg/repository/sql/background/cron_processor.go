@@ -233,8 +233,7 @@ func (c *CronProcessorService) processSchedule(ctx context.Context, scheduleID s
 				return c.markScheduleError(ctx, tx, schedule, scheduleID, err.Error())
 			}
 			if err.Error() == "queue not found" {
-				c.base.Logger.ErrorWithFields("Queue for cron schedule not found", "schedule_id", scheduleID, "queue", queueName)
-				return nil
+				return c.markScheduleError(ctx, tx, schedule, scheduleID, err.Error())
 			}
 			return fmt.Errorf("create message: %w", err)
 		}

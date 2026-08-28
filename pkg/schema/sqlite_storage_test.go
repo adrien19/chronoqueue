@@ -115,6 +115,36 @@ func TestSQLiteRegistry_Register(t *testing.T) {
 	})
 }
 
+func TestSQLiteRegistryRejectsUnsupportedContentType(t *testing.T) {
+	registry, cleanup := setupTestSQLiteRegistry(t)
+	defer cleanup()
+
+	_, err := registry.Register(context.Background(), &schema_pb.Schema{
+		SchemaId: "avro-schema", Name: "Avro", ContentType: "avro", Content: `{"type":"record"}`,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported schema content type")
+}
+
+func TestSQLiteRegistryRoundTripsMetadata(t *testing.T) {
+	registry, cleanup := setupTestSQLiteRegistry(t)
+	defer cleanup()
+	ctx := context.Background()
+	want := map[string]string{"owner": "checkout", "contact": "checkout@example.com"}
+	_, err := registry.Register(ctx, &schema_pb.Schema{
+		SchemaId: "metadata-schema", Name: "Metadata", Content: `{"type":"object"}`, Metadata: want,
+	})
+	require.NoError(t, err)
+
+	got, err := registry.Get(ctx, "metadata-schema", 1)
+	require.NoError(t, err)
+	require.Equal(t, want, got.GetMetadata())
+	listed, err := registry.List(ctx)
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	require.Equal(t, want, listed[0].GetMetadata())
+}
+
 func TestSQLiteRegistry_Get(t *testing.T) {
 	registry, cleanup := setupTestSQLiteRegistry(t)
 	defer cleanup()

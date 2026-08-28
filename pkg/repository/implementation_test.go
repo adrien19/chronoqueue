@@ -68,6 +68,7 @@ type peekCall struct {
 
 type stubBackend struct {
 	queueMetadata   *queuepb.QueueMetadata
+	getQueueErr     error
 	createdQueues   []*queuepb.Queue
 	createQueueErrs []error
 	deletedQueues   []string
@@ -160,6 +161,9 @@ func (b *stubBackend) CreateQueue(ctx context.Context, queue *queuepb.Queue) err
 }
 
 func (b *stubBackend) GetQueue(ctx context.Context, name string) (*queuepb.Queue, error) {
+	if b.getQueueErr != nil {
+		return nil, b.getQueueErr
+	}
 	return &queuepb.Queue{Name: name, Metadata: b.queueMetadata}, nil
 }
 
@@ -314,6 +318,46 @@ func TestCreateSchedule_ValidatesCronExpression(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, backend.schedules, 1)
+}
+
+func TestCreateScheduleRequiresExistingTargetQueue(t *testing.T) {
+	backend := &stubBackend{getQueueErr: domainerror.New(domainerror.NotFound, "queue not found", nil)}
+	impl := &implementation{backend: backend}
+	_, err := impl.CreateSchedule(context.Background(), &queueservicepb.CreateScheduleRequest{Schedule: &schedulepb.Schedule{
+		ScheduleId: "missing-target",
+		Metadata: &schedulepb.Schedule_Metadata{
+			QueueName: "missing", ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "*/5 * * * *"},
+		},
+	}})
+	require.Equal(t, codes.NotFound, status.Code(domainerror.ToGRPC(err)))
+	require.Empty(t, backend.schedules)
+}
+
+func TestMissingQueueStateAndDLQStatsReturnNotFound(t *testing.T) {
+	backend := &stubBackend{getQueueErr: domainerror.New(domainerror.NotFound, "queue not found", nil)}
+	impl := &implementation{backend: backend}
+	_, err := impl.GetQueueState(context.Background(), &queueservicepb.GetQueueStateRequest{QueueName: "missing"})
+	require.Equal(t, codes.NotFound, status.Code(domainerror.ToGRPC(err)))
+	_, err = impl.GetDLQStats(context.Background(), "missing-dlq")
+	require.Equal(t, codes.NotFound, status.Code(domainerror.ToGRPC(err)))
+	_, err = impl.GetDLQMessages(context.Background(), "missing-dlq", 10)
+	require.Equal(t, codes.NotFound, status.Code(domainerror.ToGRPC(err)))
+	err = impl.PurgeDLQ(context.Background(), "missing-dlq")
+	require.Equal(t, codes.NotFound, status.Code(domainerror.ToGRPC(err)))
+	err = impl.RequeueFromDLQ(context.Background(), "missing-dlq", "message", "target", false)
+	require.Equal(t, codes.NotFound, status.Code(domainerror.ToGRPC(err)))
+	err = impl.DeleteFromDLQ(context.Background(), "missing-dlq", "message")
+	require.Equal(t, codes.NotFound, status.Code(domainerror.ToGRPC(err)))
+}
+
+func TestRequeueFromDLQRequiresTargetQueue(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend}
+
+	err := impl.RequeueFromDLQ(context.Background(), "orders-dlq", "message", "", false)
+
+	require.Equal(t, codes.InvalidArgument, status.Code(domainerror.ToGRPC(err)))
+	require.ErrorContains(t, err, "target queue name is required")
 }
 
 func TestCreateSchedule_ValidatesHeaders(t *testing.T) {

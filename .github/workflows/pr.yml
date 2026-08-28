@@ -75,6 +75,12 @@ jobs:
             exit 1
           fi
 
+      - name: Validate deployment Compose files
+        run: |
+          docker compose -f deploy/docker-compose.postgres.yaml config --quiet
+          docker compose -f deploy/docker-compose.sqlite.yaml config --quiet
+          docker compose -f deploy/docker-compose.monitoring.yaml config --quiet
+
       - name: Check for direct commits to protected branches
         run: |
           if [[ "${{ github.base_ref }}" == "main" ]] || [[ "${{ github.base_ref }}" == "develop" ]]; then

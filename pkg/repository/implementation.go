@@ -334,6 +334,9 @@ func (impl *implementation) GetQueueState(ctx context.Context, request *queueser
 	if request == nil || request.GetQueueName() == "" {
 		return nil, domainerror.New(domainerror.InvalidArgument, "queue name is required", nil)
 	}
+	if _, err := impl.backend.GetQueue(ctx, request.GetQueueName()); err != nil {
+		return nil, err
+	}
 
 	baseSQL := impl.getSQLBackend()
 	if baseSQL == nil {
@@ -1013,6 +1016,9 @@ func (impl *implementation) CreateSchedule(ctx context.Context, request *queuese
 	if meta.GetQueueName() == "" {
 		return nil, domainerror.New(domainerror.InvalidArgument, "schedule queue name is required", nil)
 	}
+	if _, err := impl.backend.GetQueue(ctx, meta.GetQueueName()); err != nil {
+		return nil, err
+	}
 	if meta.GetScheduleConfig() == nil {
 		return nil, domainerror.New(domainerror.InvalidArgument, "schedule configuration is required", nil)
 	}
@@ -1204,27 +1210,48 @@ func (impl *implementation) GetCalendarSchedulePreview(ctx context.Context, cale
 
 // GetDLQMessages retrieves messages from the dead letter queue
 func (impl *implementation) GetDLQMessages(ctx context.Context, dlqName string, limit int32) ([]*messagepb.Message, error) {
+	if _, err := impl.backend.GetQueue(ctx, dlqName); err != nil {
+		return nil, err
+	}
 	return impl.backend.GetDLQMessages(ctx, dlqName, limit)
 }
 
 // RequeueFromDLQ moves a message from DLQ back to the original queue
 func (impl *implementation) RequeueFromDLQ(ctx context.Context, dlqName string, messageID string, targetQueueName string, resetRetries bool) error {
+	if targetQueueName == "" {
+		return domainerror.New(domainerror.InvalidArgument, "target queue name is required", nil)
+	}
+	if _, err := impl.backend.GetQueue(ctx, dlqName); err != nil {
+		return err
+	}
+	if _, err := impl.backend.GetQueue(ctx, targetQueueName); err != nil {
+		return err
+	}
 	return impl.backend.RetryDLQMessage(ctx, dlqName, messageID, targetQueueName, resetRetries)
 }
 
 // DeleteFromDLQ permanently deletes a message from DLQ
 func (impl *implementation) DeleteFromDLQ(ctx context.Context, dlqName string, messageID string) error {
+	if _, err := impl.backend.GetQueue(ctx, dlqName); err != nil {
+		return err
+	}
 	return impl.backend.DeleteDLQMessage(ctx, dlqName, messageID)
 }
 
 // PurgeDLQ removes all messages from a DLQ
 func (impl *implementation) PurgeDLQ(ctx context.Context, dlqName string) error {
+	if _, err := impl.backend.GetQueue(ctx, dlqName); err != nil {
+		return err
+	}
 	_, err := impl.backend.PurgeDLQ(ctx, dlqName)
 	return err
 }
 
 // GetDLQStats returns statistics about a DLQ
 func (impl *implementation) GetDLQStats(ctx context.Context, dlqName string) (*DLQStats, error) {
+	if _, err := impl.backend.GetQueue(ctx, dlqName); err != nil {
+		return nil, err
+	}
 	baseSQL := impl.getSQLBackend()
 	if baseSQL == nil {
 		return nil, fmt.Errorf("DLQ stats not supported for this backend")
@@ -1244,15 +1271,6 @@ func (impl *implementation) GetDLQStats(ctx context.Context, dlqName string) (*D
 	metaQuery := fmt.Sprintf(`SELECT created_at, updated_at FROM cq_queues WHERE name = %s`,
 		baseSQL.Dialect.Placeholder(1))
 	err = baseSQL.DB.QueryRowContext(ctx, metaQuery, dlqName).Scan(&createdAt, &updatedAt)
-	if err == sql.ErrNoRows {
-		// DLQ doesn't exist yet (no queue created)
-		return &DLQStats{
-			Name:         dlqName,
-			MessageCount: 0,
-			CreatedAt:    0,
-			UpdatedAt:    0,
-		}, nil
-	}
 	if err != nil {
 		return nil, fmt.Errorf("query DLQ metadata: %w", err)
 	}

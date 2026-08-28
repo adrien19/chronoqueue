@@ -120,7 +120,7 @@ type QueueServiceClient interface {
 	//	  }
 	//	}
 	//
-	// Returns: Queue details
+	// Returns: success status
 	// Errors:
 	//   - AlreadyExists: Queue with this name exists
 	//   - InvalidArgument: Invalid configuration (negative lease_duration, etc.)
@@ -140,7 +140,7 @@ type QueueServiceClient interface {
 	//
 	//	DELETE /v1/queues/order-processing
 	//
-	// Returns: Empty response
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Queue doesn't exist
 	DeleteQueue(ctx context.Context, in *DeleteQueueRequest, opts ...grpc.CallOption) (*DeleteQueueResponse, error)
@@ -161,8 +161,7 @@ type QueueServiceClient interface {
 	//
 	// Provides:
 	// - Message counts by state (PENDING, RUNNING, COMPLETED, ERRORED)
-	// - Rate metrics (messages/sec, processing time)
-	// - DLQ size
+	// - Earliest active lease or heartbeat deadline
 	//
 	// Use for:
 	// - Health checks
@@ -174,14 +173,10 @@ type QueueServiceClient interface {
 	//	GET /v1/queues/order-processing/state
 	//	Response:
 	//	{
-	//	  "pending_count": 150,
-	//	  "running_count": 10,
-	//	  "completed_count": 5420,
-	//	  "errored_count": 3,
-	//	  "dlq_count": 2
+	//	  "state_counts": {"PENDING": 150, "RUNNING": 10, "COMPLETED": 5420, "ERRORED": 3}
 	//	}
 	//
-	// Returns: QueueState with counts and metrics
+	// Returns: state counts and the earliest active deadline
 	GetQueueState(ctx context.Context, in *GetQueueStateRequest, opts ...grpc.CallOption) (*GetQueueStateResponse, error)
 	// PostMessage adds a new message to a queue.
 	//
@@ -195,7 +190,7 @@ type QueueServiceClient interface {
 	// - Delayed execution (scheduled_time)
 	// - Priority ordering
 	// - Schema validation
-	// - Deduplication (idempotency_key)
+	// - Deduplication by message_id within the queue
 	// - Exclusive processing (exclusivity_key)
 	//
 	// Example - immediate execution:
@@ -221,11 +216,11 @@ type QueueServiceClient interface {
 	//	  }
 	//	}
 	//
-	// Returns: Message with assigned message_id
+	// The caller must provide message_id. Returns success status.
 	// Errors:
 	//   - NotFound: Queue doesn't exist
 	//   - InvalidArgument: Schema validation failed, invalid scheduled_time
-	//   - AlreadyExists: Duplicate idempotency_key (within dedup window)
+	//   - AlreadyExists: Duplicate message_id in the queue
 	PostMessage(ctx context.Context, in *PostMessageRequest, opts ...grpc.CallOption) (*PostMessageResponse, error)
 	// PostMessagesBulk posts multiple messages to a queue in a single operation.
 	//
@@ -294,7 +289,7 @@ type QueueServiceClient interface {
 	//
 	// Effects:
 	// - Message moves to COMPLETED state
-	// - Message removed from queue
+	// - Message retained or removed according to the queue retention policy
 	// - Queue stats updated
 	//
 	// Important: attempt_id and worker_id from GetNextMessage are required and
@@ -304,7 +299,7 @@ type QueueServiceClient interface {
 	//
 	//	POST /v1/queues/order-processing/messages/msg-123:acknowledge
 	//
-	// Returns: Empty response
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Message doesn't exist or already acknowledged
 	//   - DeadlineExceeded: Lease already expired
@@ -335,7 +330,7 @@ type QueueServiceClient interface {
 	//	foreach messageId in userMessages:
 	//	    CancelMessage(queueName, messageId)
 	//
-	// Returns: Empty response
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Message doesn't exist
 	//   - FailedPrecondition: Message is RUNNING, COMPLETED, ERRORED, or already CANCELED
@@ -373,7 +368,7 @@ type QueueServiceClient interface {
 	//	close(done)
 	//	acknowledgeMessage(msg.MessageId)
 	//
-	// Returns: Updated message with new lease expiration
+	// Returns: remaining lease time and current state
 	// Errors:
 	//   - NotFound: Message doesn't exist or already completed
 	//   - FailedPrecondition: Message not in RUNNING state
@@ -398,8 +393,8 @@ type QueueServiceClient interface {
 	PeekQueueMessages(ctx context.Context, in *PeekQueueMessagesRequest, opts ...grpc.CallOption) (*PeekQueueMessagesResponse, error)
 	// SendMessageHeartBeat indicates a worker is still processing a message.
 	//
-	// Alternative to RenewMessageLease with similar purpose but lighter weight.
-	// Useful for tracking worker health without extending lease.
+	// Alternative to RenewMessageLease that records worker liveness and extends
+	// the lease to the configured heartbeat timeout.
 	// attempt_id and worker_id from GetNextMessage are required and must identify
 	// the active, unexpired lease.
 	//
@@ -407,10 +402,12 @@ type QueueServiceClient interface {
 	//
 	//	POST /v1/queues/order-processing/messages:heartbeat
 	//	{
-	//	  "message_ids": ["msg-123", "msg-456"]
+	//	  "message_id": "msg-123",
+	//	  "attempt_id": "attempt-123",
+	//	  "worker_id": "worker-1"
 	//	}
 	//
-	// Returns: Empty response
+	// Returns: remaining lease time and current state
 	SendMessageHeartBeat(ctx context.Context, in *SendMessageHeartBeatRequest, opts ...grpc.CallOption) (*SendMessageHeartBeatResponse, error)
 	// CreateSchedule creates a recurring message posting schedule.
 	//
@@ -441,7 +438,7 @@ type QueueServiceClient interface {
 	//	  }
 	//	}
 	//
-	// Returns: Created schedule with next_run time
+	// Returns: success status
 	// Errors:
 	//   - AlreadyExists: schedule_id already in use
 	//   - InvalidArgument: Invalid cron expression or calendar rule
@@ -457,7 +454,7 @@ type QueueServiceClient interface {
 	//
 	//	DELETE /v1/schedules/daily-sales-report
 	//
-	// Returns: Empty response
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Schedule doesn't exist
 	DeleteSchedule(ctx context.Context, in *DeleteScheduleRequest, opts ...grpc.CallOption) (*DeleteScheduleResponse, error)
@@ -525,22 +522,24 @@ type QueueServiceClient interface {
 	//
 	//	POST /v1/schedules/daily-sales-report:pause
 	//
-	// Returns: Updated schedule
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Schedule doesn't exist
+	//   - FailedPrecondition: Schedule not in SCHEDULED state
 	PauseSchedule(ctx context.Context, in *PauseScheduleRequest, opts ...grpc.CallOption) (*PauseScheduleResponse, error)
 	// ResumeSchedule reactivates a paused schedule.
 	//
 	// Effects:
 	// - Schedule state → SCHEDULED
-	// - Resumes creating messages on next scheduled time
+	// - Resets the max_messages execution counter
+	// - Retains next_run; an overdue run is eligible immediately after resume
 	// - Does NOT backfill missed executions during pause
 	//
 	// Example:
 	//
 	//	POST /v1/schedules/daily-sales-report:resume
 	//
-	// Returns: Updated schedule with next_run
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Schedule doesn't exist
 	//   - FailedPrecondition: Schedule not in PAUSED state
@@ -563,7 +562,7 @@ type QueueServiceClient interface {
 	//
 	// Returns: List of failed messages with error details
 	GetDLQMessages(ctx context.Context, in *GetDLQMessagesRequest, opts ...grpc.CallOption) (*GetDLQMessagesResponse, error)
-	// RequeueFromDLQ moves a message from DLQ back to its original queue.
+	// RequeueFromDLQ moves a message from DLQ to the required target queue.
 	//
 	// Use after:
 	// - Fixing bugs that caused failures
@@ -572,19 +571,21 @@ type QueueServiceClient interface {
 	//
 	// Effects:
 	// - Message removed from DLQ
-	// - Message added back to original queue as PENDING
+	// - Message added to target_queue as PENDING
 	// - attempts_left reset (or set to specified value)
 	//
 	// Example:
 	//
 	//	POST /v1/dlq/order-dlq/messages/msg-123:requeue
 	//	{
-	//	  "max_attempts": 3  // Give it 3 more tries
+	//	  "target_queue": "orders"
 	//	}
 	//
 	// Returns: Requeued message
 	// Errors:
 	//   - NotFound: Message not in DLQ
+	//   - NotFound: Target queue does not exist
+	//   - InvalidArgument: target_queue is empty
 	RequeueFromDLQ(ctx context.Context, in *RequeueFromDLQRequest, opts ...grpc.CallOption) (*RequeueFromDLQResponse, error)
 	// DeleteFromDLQ permanently removes a message from the DLQ.
 	//
@@ -599,7 +600,7 @@ type QueueServiceClient interface {
 	//
 	//	DELETE /v1/dlq/order-dlq/messages/msg-123
 	//
-	// Returns: Empty response
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Message not in DLQ
 	DeleteFromDLQ(ctx context.Context, in *DeleteFromDLQRequest, opts ...grpc.CallOption) (*DeleteFromDLQResponse, error)
@@ -1137,7 +1138,7 @@ type QueueServiceServer interface {
 	//	  }
 	//	}
 	//
-	// Returns: Queue details
+	// Returns: success status
 	// Errors:
 	//   - AlreadyExists: Queue with this name exists
 	//   - InvalidArgument: Invalid configuration (negative lease_duration, etc.)
@@ -1157,7 +1158,7 @@ type QueueServiceServer interface {
 	//
 	//	DELETE /v1/queues/order-processing
 	//
-	// Returns: Empty response
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Queue doesn't exist
 	DeleteQueue(context.Context, *DeleteQueueRequest) (*DeleteQueueResponse, error)
@@ -1178,8 +1179,7 @@ type QueueServiceServer interface {
 	//
 	// Provides:
 	// - Message counts by state (PENDING, RUNNING, COMPLETED, ERRORED)
-	// - Rate metrics (messages/sec, processing time)
-	// - DLQ size
+	// - Earliest active lease or heartbeat deadline
 	//
 	// Use for:
 	// - Health checks
@@ -1191,14 +1191,10 @@ type QueueServiceServer interface {
 	//	GET /v1/queues/order-processing/state
 	//	Response:
 	//	{
-	//	  "pending_count": 150,
-	//	  "running_count": 10,
-	//	  "completed_count": 5420,
-	//	  "errored_count": 3,
-	//	  "dlq_count": 2
+	//	  "state_counts": {"PENDING": 150, "RUNNING": 10, "COMPLETED": 5420, "ERRORED": 3}
 	//	}
 	//
-	// Returns: QueueState with counts and metrics
+	// Returns: state counts and the earliest active deadline
 	GetQueueState(context.Context, *GetQueueStateRequest) (*GetQueueStateResponse, error)
 	// PostMessage adds a new message to a queue.
 	//
@@ -1212,7 +1208,7 @@ type QueueServiceServer interface {
 	// - Delayed execution (scheduled_time)
 	// - Priority ordering
 	// - Schema validation
-	// - Deduplication (idempotency_key)
+	// - Deduplication by message_id within the queue
 	// - Exclusive processing (exclusivity_key)
 	//
 	// Example - immediate execution:
@@ -1238,11 +1234,11 @@ type QueueServiceServer interface {
 	//	  }
 	//	}
 	//
-	// Returns: Message with assigned message_id
+	// The caller must provide message_id. Returns success status.
 	// Errors:
 	//   - NotFound: Queue doesn't exist
 	//   - InvalidArgument: Schema validation failed, invalid scheduled_time
-	//   - AlreadyExists: Duplicate idempotency_key (within dedup window)
+	//   - AlreadyExists: Duplicate message_id in the queue
 	PostMessage(context.Context, *PostMessageRequest) (*PostMessageResponse, error)
 	// PostMessagesBulk posts multiple messages to a queue in a single operation.
 	//
@@ -1311,7 +1307,7 @@ type QueueServiceServer interface {
 	//
 	// Effects:
 	// - Message moves to COMPLETED state
-	// - Message removed from queue
+	// - Message retained or removed according to the queue retention policy
 	// - Queue stats updated
 	//
 	// Important: attempt_id and worker_id from GetNextMessage are required and
@@ -1321,7 +1317,7 @@ type QueueServiceServer interface {
 	//
 	//	POST /v1/queues/order-processing/messages/msg-123:acknowledge
 	//
-	// Returns: Empty response
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Message doesn't exist or already acknowledged
 	//   - DeadlineExceeded: Lease already expired
@@ -1352,7 +1348,7 @@ type QueueServiceServer interface {
 	//	foreach messageId in userMessages:
 	//	    CancelMessage(queueName, messageId)
 	//
-	// Returns: Empty response
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Message doesn't exist
 	//   - FailedPrecondition: Message is RUNNING, COMPLETED, ERRORED, or already CANCELED
@@ -1390,7 +1386,7 @@ type QueueServiceServer interface {
 	//	close(done)
 	//	acknowledgeMessage(msg.MessageId)
 	//
-	// Returns: Updated message with new lease expiration
+	// Returns: remaining lease time and current state
 	// Errors:
 	//   - NotFound: Message doesn't exist or already completed
 	//   - FailedPrecondition: Message not in RUNNING state
@@ -1415,8 +1411,8 @@ type QueueServiceServer interface {
 	PeekQueueMessages(context.Context, *PeekQueueMessagesRequest) (*PeekQueueMessagesResponse, error)
 	// SendMessageHeartBeat indicates a worker is still processing a message.
 	//
-	// Alternative to RenewMessageLease with similar purpose but lighter weight.
-	// Useful for tracking worker health without extending lease.
+	// Alternative to RenewMessageLease that records worker liveness and extends
+	// the lease to the configured heartbeat timeout.
 	// attempt_id and worker_id from GetNextMessage are required and must identify
 	// the active, unexpired lease.
 	//
@@ -1424,10 +1420,12 @@ type QueueServiceServer interface {
 	//
 	//	POST /v1/queues/order-processing/messages:heartbeat
 	//	{
-	//	  "message_ids": ["msg-123", "msg-456"]
+	//	  "message_id": "msg-123",
+	//	  "attempt_id": "attempt-123",
+	//	  "worker_id": "worker-1"
 	//	}
 	//
-	// Returns: Empty response
+	// Returns: remaining lease time and current state
 	SendMessageHeartBeat(context.Context, *SendMessageHeartBeatRequest) (*SendMessageHeartBeatResponse, error)
 	// CreateSchedule creates a recurring message posting schedule.
 	//
@@ -1458,7 +1456,7 @@ type QueueServiceServer interface {
 	//	  }
 	//	}
 	//
-	// Returns: Created schedule with next_run time
+	// Returns: success status
 	// Errors:
 	//   - AlreadyExists: schedule_id already in use
 	//   - InvalidArgument: Invalid cron expression or calendar rule
@@ -1474,7 +1472,7 @@ type QueueServiceServer interface {
 	//
 	//	DELETE /v1/schedules/daily-sales-report
 	//
-	// Returns: Empty response
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Schedule doesn't exist
 	DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error)
@@ -1542,22 +1540,24 @@ type QueueServiceServer interface {
 	//
 	//	POST /v1/schedules/daily-sales-report:pause
 	//
-	// Returns: Updated schedule
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Schedule doesn't exist
+	//   - FailedPrecondition: Schedule not in SCHEDULED state
 	PauseSchedule(context.Context, *PauseScheduleRequest) (*PauseScheduleResponse, error)
 	// ResumeSchedule reactivates a paused schedule.
 	//
 	// Effects:
 	// - Schedule state → SCHEDULED
-	// - Resumes creating messages on next scheduled time
+	// - Resets the max_messages execution counter
+	// - Retains next_run; an overdue run is eligible immediately after resume
 	// - Does NOT backfill missed executions during pause
 	//
 	// Example:
 	//
 	//	POST /v1/schedules/daily-sales-report:resume
 	//
-	// Returns: Updated schedule with next_run
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Schedule doesn't exist
 	//   - FailedPrecondition: Schedule not in PAUSED state
@@ -1580,7 +1580,7 @@ type QueueServiceServer interface {
 	//
 	// Returns: List of failed messages with error details
 	GetDLQMessages(context.Context, *GetDLQMessagesRequest) (*GetDLQMessagesResponse, error)
-	// RequeueFromDLQ moves a message from DLQ back to its original queue.
+	// RequeueFromDLQ moves a message from DLQ to the required target queue.
 	//
 	// Use after:
 	// - Fixing bugs that caused failures
@@ -1589,19 +1589,21 @@ type QueueServiceServer interface {
 	//
 	// Effects:
 	// - Message removed from DLQ
-	// - Message added back to original queue as PENDING
+	// - Message added to target_queue as PENDING
 	// - attempts_left reset (or set to specified value)
 	//
 	// Example:
 	//
 	//	POST /v1/dlq/order-dlq/messages/msg-123:requeue
 	//	{
-	//	  "max_attempts": 3  // Give it 3 more tries
+	//	  "target_queue": "orders"
 	//	}
 	//
 	// Returns: Requeued message
 	// Errors:
 	//   - NotFound: Message not in DLQ
+	//   - NotFound: Target queue does not exist
+	//   - InvalidArgument: target_queue is empty
 	RequeueFromDLQ(context.Context, *RequeueFromDLQRequest) (*RequeueFromDLQResponse, error)
 	// DeleteFromDLQ permanently removes a message from the DLQ.
 	//
@@ -1616,7 +1618,7 @@ type QueueServiceServer interface {
 	//
 	//	DELETE /v1/dlq/order-dlq/messages/msg-123
 	//
-	// Returns: Empty response
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Message not in DLQ
 	DeleteFromDLQ(context.Context, *DeleteFromDLQRequest) (*DeleteFromDLQResponse, error)

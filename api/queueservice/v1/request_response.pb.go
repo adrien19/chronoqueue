@@ -2247,12 +2247,13 @@ func (x *GetDLQMessagesResponse) GetMessages() []*v11.Message {
 	return nil
 }
 
-// Requeue message from DLQ back to original queue
+// Requeue message from a DLQ to a required target queue.
 type RequeueFromDLQRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DlqName       string                 `protobuf:"bytes,1,opt,name=dlq_name,json=dlqName,proto3" json:"dlq_name,omitempty"`
-	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
-	TargetQueue   string                 `protobuf:"bytes,3,opt,name=target_queue,json=targetQueue,proto3" json:"target_queue,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	DlqName   string                 `protobuf:"bytes,1,opt,name=dlq_name,json=dlqName,proto3" json:"dlq_name,omitempty"`
+	MessageId string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	// Existing queue that will receive the requeued message.
+	TargetQueue   string `protobuf:"bytes,3,opt,name=target_queue,json=targetQueue,proto3" json:"target_queue,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

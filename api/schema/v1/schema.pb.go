@@ -243,18 +243,11 @@ type Schema struct {
 	// Example: "v2: Added optional 'discountCode' field. Removed deprecated 'legacyField'."
 	Description string `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
 	// content: The actual validation schema.
-	// Format depends on content_type.
-	// For "json-schema": JSON Schema Draft 7 (https://json-schema.org/)
-	// For "protobuf": Base64-encoded FileDescriptorSet
+	// JSON Schema Draft 7 document (https://json-schema.org/).
 	// Size limit: 1MB
 	Content string `protobuf:"bytes,5,opt,name=content,proto3" json:"content,omitempty"`
 	// content_type: Schema format identifier.
-	// Supported values:
-	//
-	//	"json-schema" (default): JSON Schema Draft 7
-	//	"protobuf": Protocol Buffers schema
-	//	"avro": Apache Avro schema
-	//
+	// Supported value: "json-schema" (default), using JSON Schema Draft 7.
 	// ChronoQueue validates content syntax when registering schema.
 	ContentType string `protobuf:"bytes,6,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
 	// created_at: When this schema version was registered (Unix milliseconds).

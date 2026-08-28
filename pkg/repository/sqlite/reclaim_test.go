@@ -52,7 +52,8 @@ func TestReclaimExpiredMessage_UsesAuthoritativeAttemptsAndFencesAttempt(t *test
 		go func(storage *Storage, message *messagepb.Message) {
 			defer wg.Done()
 			<-start
-			errs <- storage.ReclaimExpiredMessage(ctx, queueName, message)
+			_, reclaimErr := storage.ReclaimExpiredMessage(ctx, queueName, message)
+			errs <- reclaimErr
 		}(storage, candidate)
 	}
 	close(start)
@@ -78,7 +79,8 @@ func TestReclaimExpiredMessage_UsesAuthoritativeAttemptsAndFencesAttempt(t *test
 	expired, err = first.FindExpiredMessages(ctx, queueName, 10)
 	require.NoError(t, err)
 	require.Len(t, expired, 1)
-	require.NoError(t, first.ReclaimExpiredMessage(ctx, queueName, expired[0]))
+	_, err = first.ReclaimExpiredMessage(ctx, queueName, expired[0])
+	require.NoError(t, err)
 
 	peeked, err := first.PeekMessages(ctx, queueName, 10)
 	require.NoError(t, err)
@@ -94,7 +96,8 @@ func TestReclaimExpiredMessage_UsesAuthoritativeAttemptsAndFencesAttempt(t *test
 	require.NoError(t, err)
 
 	legacyMessage := &messagepb.Message{MessageId: claimed.GetMessageId()}
-	require.NoError(t, first.ReclaimExpiredMessage(ctx, queueName, legacyMessage))
+	_, err = first.ReclaimExpiredMessage(ctx, queueName, legacyMessage)
+	require.NoError(t, err)
 	var state messagepb.Message_Metadata_State
 	var attemptsLeft int32
 	require.NoError(t, first.DB.QueryRowContext(ctx, `SELECT state, attempts_left FROM cq_messages WHERE message_id = ?`, claimed.GetMessageId()).Scan(&state, &attemptsLeft))
@@ -117,7 +120,8 @@ func TestReclaimExpiredMessage_PreservesInfiniteRetries(t *testing.T) {
 	expired, err := storage.FindExpiredMessages(ctx, queueName, 10)
 	require.NoError(t, err)
 	require.Len(t, expired, 1)
-	require.NoError(t, storage.ReclaimExpiredMessage(ctx, queueName, expired[0]))
+	_, err = storage.ReclaimExpiredMessage(ctx, queueName, expired[0])
+	require.NoError(t, err)
 
 	peeked, err := storage.PeekMessages(ctx, queueName, 10)
 	require.NoError(t, err)

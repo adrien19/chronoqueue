@@ -47,6 +47,7 @@ func (s *SQLiteRegistry) initSchema(ctx context.Context) error {
 		description  TEXT,
 		content      TEXT NOT NULL,
 		content_type TEXT NOT NULL DEFAULT 'json-schema',
+		metadata_json TEXT NOT NULL DEFAULT '{}',
 		is_active    INTEGER NOT NULL DEFAULT 1,
 		created_at   INTEGER NOT NULL,
 		updated_at   INTEGER NOT NULL,
@@ -64,15 +65,48 @@ func (s *SQLiteRegistry) initSchema(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create schema tables: %w", err)
 	}
+	if err := s.ensureMetadataColumn(ctx); err != nil {
+		return err
+	}
 
 	s.logger.Info("Schema registry tables initialized")
 	return nil
 }
 
+func (s *SQLiteRegistry) ensureMetadataColumn(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(cq_schemas)`)
+	if err != nil {
+		return fmt.Errorf("inspect schema table: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return fmt.Errorf("scan schema table column: %w", err)
+		}
+		if name == "metadata_json" {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate schema table columns: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE cq_schemas ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}'`); err != nil {
+		return fmt.Errorf("add schema metadata column: %w", err)
+	}
+	return nil
+}
+
 // Register registers a new schema or creates a new version
 func (s *SQLiteRegistry) Register(ctx context.Context, schema *schema_pb.Schema) (SchemaMetadata, error) {
+	if schema.ContentType != "" && schema.ContentType != "json-schema" {
+		return SchemaMetadata{}, domainerror.InvalidWithFields("unsupported schema content type", []domainerror.FieldViolation{{Field: "content_type", Description: "must be json-schema"}}, nil)
+	}
 	// Validate schema content
-	if err := validateSchemaContent(schema.Content); err != nil {
+	if err := validateSchemaContent(schema.ContentType, schema.Content); err != nil {
 		return SchemaMetadata{}, domainerror.New(domainerror.InvalidArgument, "invalid schema content", err)
 	}
 
@@ -95,24 +129,28 @@ func (s *SQLiteRegistry) Register(ctx context.Context, schema *schema_pb.Schema)
 	if schema.ContentType == "" {
 		schema.ContentType = "json-schema"
 	}
+	metadataJSON, err := encodeMetadata(schema.Metadata)
+	if err != nil {
+		return SchemaMetadata{}, err
+	}
 
 	var insertResult sql.Result
 	if schema.Version == 0 {
 		err = tx.QueryRowContext(ctx, `
 		INSERT INTO cq_schemas (
 			schema_id, version, name, description, content,
-			content_type, is_active, created_at, updated_at
-		) SELECT ?, COALESCE(MAX(version), 0) + 1, ?, ?, ?, ?, ?, ?, ?
+			content_type, metadata_json, is_active, created_at, updated_at
+		) SELECT ?, COALESCE(MAX(version), 0) + 1, ?, ?, ?, ?, ?, ?, ?, ?
 		FROM cq_schemas WHERE schema_id = ?
 		RETURNING version
-	`, schema.SchemaId, schema.Name, schema.Description, schema.Content, schema.ContentType, 1,
+	`, schema.SchemaId, schema.Name, schema.Description, schema.Content, schema.ContentType, metadataJSON, 1,
 			schema.CreatedAt, schema.UpdatedAt, schema.SchemaId).Scan(&schema.Version)
 	} else {
 		insertResult, err = tx.ExecContext(ctx, `
 		INSERT INTO cq_schemas (
 			schema_id, version, name, description, content, 
-			content_type, is_active, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			content_type, metadata_json, is_active, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(schema_id, version) DO NOTHING
 	`,
 			schema.SchemaId,
@@ -121,6 +159,7 @@ func (s *SQLiteRegistry) Register(ctx context.Context, schema *schema_pb.Schema)
 			schema.Description,
 			schema.Content,
 			schema.ContentType,
+			metadataJSON,
 			1, // is_active = true
 			schema.CreatedAt,
 			schema.UpdatedAt,
@@ -167,10 +206,11 @@ func (s *SQLiteRegistry) Get(ctx context.Context, schemaID string, version int32
 
 	var schema schema_pb.Schema
 	var isActive int
+	var metadataJSON string
 
 	err := s.db.QueryRowContext(ctx, `
 		SELECT schema_id, version, name, description, content, 
-		       content_type, is_active, created_at, updated_at
+		       content_type, metadata_json, is_active, created_at, updated_at
 		FROM cq_schemas
 		WHERE schema_id = ? AND version = ?
 	`, schemaID, version).Scan(
@@ -180,6 +220,7 @@ func (s *SQLiteRegistry) Get(ctx context.Context, schemaID string, version int32
 		&schema.Description,
 		&schema.Content,
 		&schema.ContentType,
+		&metadataJSON,
 		&isActive,
 		&schema.CreatedAt,
 		&schema.UpdatedAt,
@@ -193,6 +234,10 @@ func (s *SQLiteRegistry) Get(ctx context.Context, schemaID string, version int32
 	}
 
 	schema.IsActive = isActive == 1
+	schema.Metadata, err = decodeMetadata(metadataJSON)
+	if err != nil {
+		return nil, err
+	}
 
 	return &schema, nil
 }
@@ -201,10 +246,11 @@ func (s *SQLiteRegistry) Get(ctx context.Context, schemaID string, version int32
 func (s *SQLiteRegistry) GetLatest(ctx context.Context, schemaID string) (*schema_pb.Schema, error) {
 	var schema schema_pb.Schema
 	var isActive int
+	var metadataJSON string
 
 	err := s.db.QueryRowContext(ctx, `
 		SELECT schema_id, version, name, description, content, 
-		       content_type, is_active, created_at, updated_at
+		       content_type, metadata_json, is_active, created_at, updated_at
 		FROM cq_schemas
 		WHERE schema_id = ?
 		ORDER BY version DESC
@@ -216,6 +262,7 @@ func (s *SQLiteRegistry) GetLatest(ctx context.Context, schemaID string) (*schem
 		&schema.Description,
 		&schema.Content,
 		&schema.ContentType,
+		&metadataJSON,
 		&isActive,
 		&schema.CreatedAt,
 		&schema.UpdatedAt,
@@ -229,6 +276,10 @@ func (s *SQLiteRegistry) GetLatest(ctx context.Context, schemaID string) (*schem
 	}
 
 	schema.IsActive = isActive == 1
+	schema.Metadata, err = decodeMetadata(metadataJSON)
+	if err != nil {
+		return nil, err
+	}
 
 	return &schema, nil
 }
@@ -256,7 +307,7 @@ func (s *SQLiteRegistry) ListWithOptions(ctx context.Context, options ListOption
 		), latest AS (
 			SELECT * FROM ranked WHERE row_number = 1
 		)
-		SELECT schema_id, version, name, description, content, content_type,
+		SELECT schema_id, version, name, description, content, content_type, metadata_json,
 		       is_active, created_at, updated_at, version_count, first_created_at,
 		       last_updated_at, COUNT(*) OVER ()
 		FROM latest
@@ -282,6 +333,7 @@ func (s *SQLiteRegistry) ListWithOptions(ctx context.Context, options ListOption
 		var versionCount int32
 		var firstCreatedAt int64
 		var lastUpdatedAt int64
+		var metadataJSON string
 
 		err := rows.Scan(
 			&schema.SchemaId,
@@ -290,6 +342,7 @@ func (s *SQLiteRegistry) ListWithOptions(ctx context.Context, options ListOption
 			&schema.Description,
 			&schema.Content,
 			&schema.ContentType,
+			&metadataJSON,
 			&isActive,
 			&schema.CreatedAt,
 			&schema.UpdatedAt,
@@ -304,6 +357,10 @@ func (s *SQLiteRegistry) ListWithOptions(ctx context.Context, options ListOption
 		}
 
 		schema.IsActive = isActive == 1
+		schema.Metadata, err = decodeMetadata(metadataJSON)
+		if err != nil {
+			return ListResult{}, err
+		}
 		schemas = append(schemas, &schema)
 		metadata[schema.SchemaId] = SchemaMetadata{SchemaID: schema.SchemaId, LatestVersion: schema.Version, TotalVersions: versionCount, CreatedAt: time.UnixMilli(firstCreatedAt), UpdatedAt: time.UnixMilli(lastUpdatedAt)}
 	}
