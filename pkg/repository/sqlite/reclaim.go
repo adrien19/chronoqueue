@@ -90,36 +90,10 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 	err = s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		nowMs := s.Clock.NowMs()
 		var leaseExpiry, heartbeatExpiry sql.NullInt64
-		if err := tx.QueryRowContext(ctx, `
-			SELECT lease_expiry, heartbeat_expiry
-			FROM cq_messages
-			WHERE queue_name = ? AND message_id = ? AND state = ?
-			  AND ((? = '' AND current_attempt_id IS NULL) OR (? <> '' AND current_attempt_id = ?))
-			  AND deleted_at IS NULL
-		`, queueName, message.GetMessageId(), messagepb.Message_Metadata_RUNNING, attemptID, attemptID, attemptID).Scan(&leaseExpiry, &heartbeatExpiry); err != nil {
-			if err == sql.ErrNoRows {
-				return fmt.Errorf("message is no longer expired")
-			}
-			return fmt.Errorf("query message expiry: %w", err)
-		}
-		result.LeaseExpired = leaseExpiry.Valid && leaseExpiry.Int64 <= nowMs
-		result.HeartbeatExpired = heartbeatExpiry.Valid && heartbeatExpiry.Int64 > 0 && heartbeatExpiry.Int64 <= nowMs
-		if !result.LeaseExpired && !result.HeartbeatExpired {
-			return fmt.Errorf("message is no longer expired")
-		}
-
 		updateQuery := `
 			UPDATE cq_messages
 			SET state = CASE WHEN max_attempts = -1 OR attempts_left > 1 THEN ? ELSE ? END,
 				attempts_left = CASE WHEN max_attempts = -1 THEN -1 ELSE attempts_left - 1 END,
-				current_attempt_id = NULL,
-				current_worker_id = NULL,
-				lease_started_at = NULL,
-				lease_expiry = NULL,
-				lease_extension_used = 0,
-				lease_renewal_count = 0,
-				last_heartbeat_at = NULL,
-				heartbeat_expiry = NULL,
 				updated_at = CURRENT_TIMESTAMP
 			WHERE queue_name = ?
 			  AND message_id = ?
@@ -130,7 +104,7 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 				OR (heartbeat_expiry IS NOT NULL AND heartbeat_expiry > 0 AND heartbeat_expiry <= ?)
 			  )
 			  AND deleted_at IS NULL
-			RETURNING state, attempts_left
+			RETURNING state, attempts_left, lease_expiry, heartbeat_expiry
 		`
 		err := tx.QueryRowContext(
 			ctx,
@@ -145,12 +119,37 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 			attemptID,
 			nowMs,
 			nowMs,
-		).Scan(&newState, &newAttemptsLeft)
+		).Scan(&newState, &newAttemptsLeft, &leaseExpiry, &heartbeatExpiry)
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("message is no longer expired")
 		}
 		if err != nil {
 			return fmt.Errorf("update message: %w", err)
+		}
+		result.LeaseExpired = leaseExpiry.Valid && leaseExpiry.Int64 <= nowMs
+		result.HeartbeatExpired = heartbeatExpiry.Valid && heartbeatExpiry.Int64 > 0 && heartbeatExpiry.Int64 <= nowMs
+
+		clearResult, err := tx.ExecContext(ctx, `
+			UPDATE cq_messages
+			SET current_attempt_id = NULL,
+				current_worker_id = NULL,
+				lease_started_at = NULL,
+				lease_expiry = NULL,
+				lease_extension_used = 0,
+				lease_renewal_count = 0,
+				last_heartbeat_at = NULL,
+				heartbeat_expiry = NULL
+			WHERE queue_name = ? AND message_id = ?
+		`, queueName, message.GetMessageId())
+		if err != nil {
+			return fmt.Errorf("clear message lease: %w", err)
+		}
+		rows, err := clearResult.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("get cleared lease rows: %w", err)
+		}
+		if rows != 1 {
+			return fmt.Errorf("clear message lease: expected one row, cleared %d", rows)
 		}
 
 		if newState == messagepb.Message_Metadata_ERRORED && dlqName != "" {
