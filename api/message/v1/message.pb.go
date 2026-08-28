@@ -13,6 +13,7 @@ package message
 
 import (
 	v1 "github.com/adrien19/chronoqueue/api/common/v1"
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -547,10 +548,10 @@ var File_proto_message_v1_message_proto protoreflect.FileDescriptor
 
 const file_proto_message_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"\x1eproto/message/v1/message.proto\x12\x1achronoqueue.api.message.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cproto/common/v1/common.proto\"\xd8\v\n" +
-	"\aMessage\x12\x1d\n" +
+	"\x1eproto/message/v1/message.proto\x12\x1achronoqueue.api.message.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%proto/google/api/field_behavior.proto\x1a\x1cproto/common/v1/common.proto\"\xdd\v\n" +
+	"\aMessage\x12\"\n" +
 	"\n" +
-	"message_id\x18\x01 \x01(\tR\tmessageId\x12H\n" +
+	"message_id\x18\x01 \x01(\tB\x03\xe0A\x02R\tmessageId\x12H\n" +
 	"\bmetadata\x18\x03 \x01(\v2,.chronoqueue.api.message.v1.Message.MetadataR\bmetadata\x1a\xe3\n" +
 	"\n" +
 	"\bMetadata\x12<\n" +

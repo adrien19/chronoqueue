@@ -23,6 +23,14 @@ func (s *Server) initializeSQLiteStorage(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to open connection for schema registry: %w", err)
 	}
+	closeRegistryDB := true
+	defer func() {
+		if closeRegistryDB {
+			if closeErr := db.Close(); closeErr != nil {
+				s.logger.DPanic("failed to close SQLite schema registry database: ", closeErr)
+			}
+		}
+	}()
 
 	sqliteRegistry, err := schema.NewSQLiteRegistry(db, s.logger)
 	if err != nil {
@@ -53,6 +61,8 @@ func (s *Server) initializeSQLiteStorage(ctx context.Context) error {
 
 	// Set the repository as the database
 	s.database = storage
+	s.schemaRegistryDB = db
+	closeRegistryDB = false
 	s.logger.Info("SQLite storage backend ready")
 
 	return nil

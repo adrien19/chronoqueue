@@ -160,7 +160,7 @@ type QueueServiceClient interface {
 	// GetQueueState returns current queue statistics and health.
 	//
 	// Provides:
-	// - Message counts by state (PENDING, RUNNING, COMPLETED, ERRORED)
+	// - Message counts by state (INVISIBLE, PENDING, RUNNING, COMPLETED, CANCELED, ERRORED)
 	// - Earliest active lease or heartbeat deadline
 	//
 	// Use for:
@@ -173,7 +173,7 @@ type QueueServiceClient interface {
 	//	GET /v1/queues/order-processing/state
 	//	Response:
 	//	{
-	//	  "state_counts": {"PENDING": 150, "RUNNING": 10, "COMPLETED": 5420, "ERRORED": 3}
+	//	  "stateCounts": {"INVISIBLE": 0, "PENDING": 150, "RUNNING": 10, "COMPLETED": 5420, "CANCELED": 0, "ERRORED": 3}
 	//	}
 	//
 	// Returns: state counts and the earliest active deadline
@@ -198,6 +198,7 @@ type QueueServiceClient interface {
 	//	POST /v1/queues/order-processing/messages
 	//	{
 	//	  "message": {
+	//	    "messageId": "order-123",
 	//	    "metadata": {
 	//	      "payload": {"data": "..."},
 	//	      "priority": 4
@@ -209,14 +210,15 @@ type QueueServiceClient interface {
 	//
 	//	{
 	//	  "message": {
+	//	    "messageId": "email-123",
 	//	    "metadata": {
 	//	      "payload": {"data": "..."},
-	//	      "scheduled_time": "2024-12-01T15:00:00Z"
+	//	      "scheduledTime": "2024-12-01T15:00:00Z"
 	//	    }
 	//	  }
 	//	}
 	//
-	// The caller must provide message_id. Returns success status.
+	// The caller must provide messageId. Returns success status.
 	// Errors:
 	//   - NotFound: Queue doesn't exist
 	//   - InvalidArgument: Schema validation failed, invalid scheduled_time
@@ -402,9 +404,9 @@ type QueueServiceClient interface {
 	//
 	//	POST /v1/queues/order-processing/messages:heartbeat
 	//	{
-	//	  "message_id": "msg-123",
-	//	  "attempt_id": "attempt-123",
-	//	  "worker_id": "worker-1"
+	//	  "messageId": "msg-123",
+	//	  "attemptId": "attempt-123",
+	//	  "workerId": "worker-1"
 	//	}
 	//
 	// Returns: remaining lease time and current state
@@ -571,21 +573,21 @@ type QueueServiceClient interface {
 	//
 	// Effects:
 	// - Message removed from DLQ
-	// - Message added to target_queue as PENDING
-	// - attempts_left reset (or set to specified value)
+	// - Message added to targetQueue as PENDING
+	// - attempts_left always reset
 	//
 	// Example:
 	//
 	//	POST /v1/dlq/order-dlq/messages/msg-123:requeue
 	//	{
-	//	  "target_queue": "orders"
+	//	  "targetQueue": "orders"
 	//	}
 	//
-	// Returns: Requeued message
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Message not in DLQ
 	//   - NotFound: Target queue does not exist
-	//   - InvalidArgument: target_queue is empty
+	//   - InvalidArgument: targetQueue is empty
 	RequeueFromDLQ(ctx context.Context, in *RequeueFromDLQRequest, opts ...grpc.CallOption) (*RequeueFromDLQResponse, error)
 	// DeleteFromDLQ permanently removes a message from the DLQ.
 	//
@@ -1178,7 +1180,7 @@ type QueueServiceServer interface {
 	// GetQueueState returns current queue statistics and health.
 	//
 	// Provides:
-	// - Message counts by state (PENDING, RUNNING, COMPLETED, ERRORED)
+	// - Message counts by state (INVISIBLE, PENDING, RUNNING, COMPLETED, CANCELED, ERRORED)
 	// - Earliest active lease or heartbeat deadline
 	//
 	// Use for:
@@ -1191,7 +1193,7 @@ type QueueServiceServer interface {
 	//	GET /v1/queues/order-processing/state
 	//	Response:
 	//	{
-	//	  "state_counts": {"PENDING": 150, "RUNNING": 10, "COMPLETED": 5420, "ERRORED": 3}
+	//	  "stateCounts": {"INVISIBLE": 0, "PENDING": 150, "RUNNING": 10, "COMPLETED": 5420, "CANCELED": 0, "ERRORED": 3}
 	//	}
 	//
 	// Returns: state counts and the earliest active deadline
@@ -1216,6 +1218,7 @@ type QueueServiceServer interface {
 	//	POST /v1/queues/order-processing/messages
 	//	{
 	//	  "message": {
+	//	    "messageId": "order-123",
 	//	    "metadata": {
 	//	      "payload": {"data": "..."},
 	//	      "priority": 4
@@ -1227,14 +1230,15 @@ type QueueServiceServer interface {
 	//
 	//	{
 	//	  "message": {
+	//	    "messageId": "email-123",
 	//	    "metadata": {
 	//	      "payload": {"data": "..."},
-	//	      "scheduled_time": "2024-12-01T15:00:00Z"
+	//	      "scheduledTime": "2024-12-01T15:00:00Z"
 	//	    }
 	//	  }
 	//	}
 	//
-	// The caller must provide message_id. Returns success status.
+	// The caller must provide messageId. Returns success status.
 	// Errors:
 	//   - NotFound: Queue doesn't exist
 	//   - InvalidArgument: Schema validation failed, invalid scheduled_time
@@ -1420,9 +1424,9 @@ type QueueServiceServer interface {
 	//
 	//	POST /v1/queues/order-processing/messages:heartbeat
 	//	{
-	//	  "message_id": "msg-123",
-	//	  "attempt_id": "attempt-123",
-	//	  "worker_id": "worker-1"
+	//	  "messageId": "msg-123",
+	//	  "attemptId": "attempt-123",
+	//	  "workerId": "worker-1"
 	//	}
 	//
 	// Returns: remaining lease time and current state
@@ -1589,21 +1593,21 @@ type QueueServiceServer interface {
 	//
 	// Effects:
 	// - Message removed from DLQ
-	// - Message added to target_queue as PENDING
-	// - attempts_left reset (or set to specified value)
+	// - Message added to targetQueue as PENDING
+	// - attempts_left always reset
 	//
 	// Example:
 	//
 	//	POST /v1/dlq/order-dlq/messages/msg-123:requeue
 	//	{
-	//	  "target_queue": "orders"
+	//	  "targetQueue": "orders"
 	//	}
 	//
-	// Returns: Requeued message
+	// Returns: success status
 	// Errors:
 	//   - NotFound: Message not in DLQ
 	//   - NotFound: Target queue does not exist
-	//   - InvalidArgument: target_queue is empty
+	//   - InvalidArgument: targetQueue is empty
 	RequeueFromDLQ(context.Context, *RequeueFromDLQRequest) (*RequeueFromDLQResponse, error)
 	// DeleteFromDLQ permanently removes a message from the DLQ.
 	//

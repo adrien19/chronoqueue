@@ -26,11 +26,13 @@ func TestReclaimMetricsReflectPersistedExpiryCause(t *testing.T) {
 		dlqTarget            string
 		wantLeaseDelta       float64
 		wantHeartbeatDelta   float64
+		reclamationFails     bool
 	}{
 		{name: "lease expiry", leaseExpired: true, wantLeaseDelta: 1},
 		{name: "heartbeat expiry", wantHeartbeatDelta: 1},
 		{name: "lease expiry to errored", leaseExpired: true, transitionsToErrored: true, wantLeaseDelta: 1},
 		{name: "heartbeat expiry to configured dlq", transitionsToErrored: true, dlqTarget: "custom-dead-letters", wantHeartbeatDelta: 1},
+		{name: "reclamation failure", leaseExpired: true, reclamationFails: true},
 	}
 
 	for _, tt := range tests {
@@ -90,9 +92,31 @@ func TestReclaimMetricsReflectPersistedExpiryCause(t *testing.T) {
 			}
 			dlqMetric := fmt.Sprintf(`chronoqueue_dlq_ingestion_total{dlq_name="%s",reason="%s",source_queue="%s"}`, metricDLQTarget, dlqReason, queueName)
 			dlqBefore := metricValue(t, registry, dlqMetric)
+			transitionState := "PENDING"
+			if tt.transitionsToErrored {
+				transitionState = "ERRORED"
+			}
+			transitionMetric := fmt.Sprintf(`chronoqueue_message_state_transitions_total{from_state="RUNNING",queue_name="%s",to_state="%s"}`, queueName, transitionState)
+			processedMetric := fmt.Sprintf(`chronoqueue_background_service_processed_messages_total{queue_name="%s",service="reclaim"}`, queueName)
+			transitionBefore := metricValue(t, registry, transitionMetric)
+			processedBefore := metricValue(t, registry, processedMetric)
+			if tt.reclamationFails {
+				_, err = storage.DB.ExecContext(ctx, `CREATE TRIGGER fail_reclamation BEFORE UPDATE ON cq_messages BEGIN SELECT RAISE(FAIL, 'forced reclamation failure'); END`)
+				require.NoError(t, err)
+			}
 			service := NewReclaimService(storage, storage.BaseSQL, time.Second)
 
-			require.NoError(t, service.reclaimQueueMessages(ctx, queueName))
+			err = service.reclaimQueueMessages(ctx, queueName)
+			if tt.reclamationFails {
+				require.ErrorContains(t, err, "forced reclamation failure")
+				require.Equal(t, leaseBefore, metricValue(t, registry, leaseMetric))
+				require.Equal(t, heartbeatBefore, metricValue(t, registry, heartbeatMetric))
+				require.Equal(t, dlqBefore, metricValue(t, registry, dlqMetric))
+				require.Equal(t, transitionBefore, metricValue(t, registry, transitionMetric))
+				require.Equal(t, processedBefore, metricValue(t, registry, processedMetric))
+				return
+			}
+			require.NoError(t, err)
 
 			require.Equal(t, leaseBefore+tt.wantLeaseDelta, metricValue(t, registry, leaseMetric))
 			require.Equal(t, heartbeatBefore+tt.wantHeartbeatDelta, metricValue(t, registry, heartbeatMetric))

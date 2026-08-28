@@ -282,7 +282,6 @@ func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string
 func (c *CalendarService) pauseAtMessageLimit(ctx context.Context, tx *sql.Tx, schedule *schedulepb.Schedule, scheduleID string, nowMs, execCount int64) error {
 	schedule.Metadata.State = schedulepb.Schedule_Metadata_PAUSED
 	schedule.Metadata.StateMessage = "maximum message count reached"
-	schedule.Metadata.NextRun = nil
 	schedule.Metadata.UpdatedAt = timestamppb.New(time.UnixMilli(nowMs))
 	if err := repositorycommon.EncryptSchedulePayload(schedule, c.base.KeyManager); err != nil {
 		return fmt.Errorf("encrypt schedule payload: %w", err)
@@ -291,7 +290,7 @@ func (c *CalendarService) pauseAtMessageLimit(ctx context.Context, tx *sql.Tx, s
 	if err != nil {
 		return fmt.Errorf("marshal schedule: %w", err)
 	}
-	query := fmt.Sprintf(`UPDATE cq_schedules SET metadata_pb = %s, state = %s, next_run = NULL, updated_at = %s, execution_count = %s WHERE id = %s`,
+	query := fmt.Sprintf(`UPDATE cq_schedules SET metadata_pb = %s, state = %s, updated_at = %s, execution_count = %s WHERE id = %s`,
 		c.base.Dialect.Placeholder(1), c.base.Dialect.Placeholder(2), c.base.Dialect.Placeholder(3), c.base.Dialect.Placeholder(4), c.base.Dialect.Placeholder(5))
 	_, err = tx.ExecContext(ctx, query, updatedBytes, schedule.Metadata.GetState(), nowMs, execCount, scheduleID)
 	return err

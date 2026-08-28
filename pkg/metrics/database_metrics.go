@@ -55,12 +55,11 @@ var (
 		[]string{"backend"},
 	)
 
-	// dbConnectionsWait tracks connections waiting for availability
-	// Non-zero values indicate connection pool is too small
-	dbConnectionsWait = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "chronoqueue_db_connections_wait",
-			Help: "Number of connections waiting for availability",
+	// dbConnectionsWaitTotal tracks cumulative waits for availability.
+	dbConnectionsWaitTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "chronoqueue_db_connections_wait_total",
+			Help: "Total number of connections that waited for availability",
 		},
 		[]string{"backend"},
 	)
@@ -91,8 +90,7 @@ func SetDBConnectionsIdle(backend string, count float64) {
 	dbConnectionsIdle.WithLabelValues(backend).Set(count)
 }
 
-// SetDBConnectionsWait sets the current count of connections waiting
-// Call this periodically using sql.DB.Stats().WaitCount
-func SetDBConnectionsWait(backend string, count float64) {
-	dbConnectionsWait.WithLabelValues(backend).Set(count)
+// AddDBConnectionsWait records newly observed waits from sql.DBStats.WaitCount.
+func AddDBConnectionsWait(backend string, count float64) {
+	dbConnectionsWaitTotal.WithLabelValues(backend).Add(count)
 }

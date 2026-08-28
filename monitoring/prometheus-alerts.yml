@@ -29,12 +29,13 @@ groups:
         annotations:
           summary: ChronoQueue schedule activation is delayed
       - alert: ChronoQueueDatabaseSaturation
-        expr: chronoqueue_db_connections_wait > 0
+        expr: rate(chronoqueue_db_connections_wait_total[5m]) > 0.1
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: ChronoQueue is waiting for database connections
+          summary: ChronoQueue has sustained database connection contention
+          description: "Database connection waits have exceeded 0.1 waits/second for 10 minutes on {{ $labels.backend }}."
       - alert: ChronoQueueEncryptionKeyRefreshFailures
         expr: increase(chronoqueue_encryption_key_refresh_failures_total[5m]) > 0
         for: 1m
@@ -250,14 +251,14 @@ groups:
 
       # Alert when connection pool is exhausted
       - alert: DatabaseConnectionPoolExhausted
-        expr: chronoqueue_db_connections_wait > 0
+        expr: rate(chronoqueue_db_connections_wait_total[5m]) > 1
         for: 2m
         labels:
           severity: critical
           component: database
         annotations:
           summary: "Database connection pool exhausted for {{ $labels.backend }}"
-          description: "{{ $value }} connections are waiting for availability. Increase connection pool size or investigate connection leaks."
+          description: "Database connection waits have exceeded 1 wait/second for 2 minutes. Increase connection pool size or investigate connection leaks."
 
       # Alert when connection pool has low idle connections during high load
       - alert: LowIdleConnections

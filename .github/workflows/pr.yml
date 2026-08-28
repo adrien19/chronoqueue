@@ -76,6 +76,10 @@ jobs:
           fi
 
       - name: Validate deployment Compose files
+        env:
+          CHRONOQUEUE_UI_AUTH_USERNAME: ci-user
+          CHRONOQUEUE_UI_AUTH_PASSWORD: ci-password
+          WORKSPACE_FOLDER: /tmp/chronoqueue-workspace
         run: |
           docker compose -f deploy/docker-compose.postgres.yaml config --quiet
           docker compose -f deploy/docker-compose.sqlite.yaml config --quiet

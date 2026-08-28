@@ -171,6 +171,7 @@ func (r *ReclaimService) reclaimQueueMessages(ctx context.Context, queueName str
 
 	// Phase 2: Process each message using the backend interface
 	var reclaimed, errored int
+	var reclaimErr error
 
 	for _, msg := range expiredMessages {
 		meta := msg.GetMetadata()
@@ -194,6 +195,9 @@ func (r *ReclaimService) reclaimQueueMessages(ctx context.Context, queueName str
 				"message_id", msg.GetMessageId(),
 				"error", err,
 			)
+			if reclaimErr == nil {
+				reclaimErr = fmt.Errorf("reclaim message %q: %w", msg.GetMessageId(), err)
+			}
 			continue
 		}
 
@@ -229,7 +233,7 @@ func (r *ReclaimService) reclaimQueueMessages(ctx context.Context, queueName str
 		)
 	}
 
-	return nil
+	return reclaimErr
 }
 
 // listQueueNames returns all queue names in the system

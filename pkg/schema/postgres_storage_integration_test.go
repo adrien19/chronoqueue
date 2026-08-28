@@ -47,4 +47,9 @@ func TestPostgresRegistryRoundTripsMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, listed, 1)
 	require.Equal(t, want, listed[0].GetMetadata())
+
+	_, err = db.ExecContext(ctx, `UPDATE cq_schemas SET metadata_json = '{' WHERE schema_id = $1 AND version = $2`, "events", 1)
+	require.NoError(t, err)
+	_, err = registry.Get(ctx, "events", 1)
+	require.ErrorContains(t, err, "decode schema metadata")
 }

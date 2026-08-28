@@ -22,6 +22,7 @@ type DLQStats struct {
 // All storage backends (SQLite and Postgres) must implement this interface.
 type Storage interface {
 	Ping(ctx context.Context) error
+	Close() error
 
 	// Queue Operations
 	CreateQueue(ctx context.Context, request *queueservicepb.CreateQueueRequest) (*queueservicepb.CreateQueueResponse, error)

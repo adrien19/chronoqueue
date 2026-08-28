@@ -6,14 +6,14 @@ import (
 
 // DLQ metrics track dead letter queue health and message failures
 var (
-	// dlqMessagesTotal tracks the current number of messages in each DLQ
+	// dlqMessagesTotal tracks the current number of messages in each DLQ.
 	// This is a gauge that should be updated periodically or after DLQ operations
 	dlqMessagesTotal = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "chronoqueue_dlq_messages_total",
 			Help: "Total number of messages in dead letter queues",
 		},
-		[]string{"dlq_name", "source_queue"},
+		[]string{"dlq_name"},
 	)
 
 	// dlqIngestionRate tracks messages being moved to DLQ
@@ -40,8 +40,8 @@ var (
 
 // SetDLQMessagesTotal sets the current count of messages in a DLQ
 // Call this after DLQ operations or periodically via GetDLQStats
-func SetDLQMessagesTotal(dlqName, sourceQueue string, count float64) {
-	dlqMessagesTotal.WithLabelValues(dlqName, sourceQueue).Set(count)
+func SetDLQMessagesTotal(dlqName string, count float64) {
+	dlqMessagesTotal.WithLabelValues(dlqName).Set(count)
 }
 
 // IncrementDLQIngestion records a message being moved to DLQ

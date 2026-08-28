@@ -78,7 +78,11 @@ func (s *SQLiteRegistry) ensureMetadataColumn(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("inspect schema table: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			s.logger.DPanic("failed to close schema table info rows: ", closeErr)
+		}
+	}()
 	for rows.Next() {
 		var cid int
 		var name, columnType string

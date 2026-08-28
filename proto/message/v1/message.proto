@@ -10,6 +10,7 @@ option go_package = "github.com/adrien19/chronoqueue/api/message/v1;message";
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "proto/google/api/field_behavior.proto";
 import "proto/common/v1/common.proto";
 
 // Message represents a unit of work in ChronoQueue.
@@ -50,7 +51,7 @@ message Message {
     // Must be unique per queue. Used for deduplication and idempotency.
     // Posting the same message_id to the same queue again returns ALREADY_EXISTS.
     // Recommended format: UUID, task ID, or "{entity_type}:{entity_id}".
-  string message_id = 1;
+  string message_id = 1 [(google.api.field_behavior) = REQUIRED];
 
     // Metadata contains all message execution and lifecycle information.
   message Metadata {

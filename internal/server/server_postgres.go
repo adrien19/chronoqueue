@@ -32,7 +32,9 @@ func (s *Server) initializePostgresStorage(ctx context.Context) error {
 	closeRegistryDB := true
 	defer func() {
 		if closeRegistryDB {
-			_ = db.Close()
+			if closeErr := db.Close(); closeErr != nil {
+				s.logger.DPanic("failed to close Postgres schema registry database: ", closeErr)
+			}
 		}
 	}()
 

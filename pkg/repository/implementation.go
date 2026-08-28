@@ -968,6 +968,7 @@ func (impl *implementation) RenewMessageLease(ctx context.Context, request *queu
 
 	return &queueservicepb.RenewMessageLeaseResponse{
 		RemainingTime: remainingTime,
+		State:         messagepb.Message_Metadata_RUNNING,
 	}, nil
 }
 

@@ -259,7 +259,8 @@ func (s *Storage) ResumeSchedule(ctx context.Context, scheduleId string) error {
 		}
 		schedule.Metadata.State = schedulepb.Schedule_Metadata_SCHEDULED
 		schedule.Metadata.StateMessage = ""
-		schedule.Metadata.UpdatedAt = timestamppb.New(time.UnixMilli(s.nowMs()))
+		nowMs := s.nowMs()
+		schedule.Metadata.UpdatedAt = timestamppb.New(time.UnixMilli(nowMs))
 
 		// Marshal updated schedule
 		updatedBytes, err := s.Serializer.MarshalSchedule(schedule)
@@ -269,7 +270,7 @@ func (s *Storage) ResumeSchedule(ctx context.Context, scheduleId string) error {
 
 		// Update database
 		updateQuery := `UPDATE cq_schedules SET state = ?, metadata_pb = ?, execution_count = 0, updated_at = ? WHERE id = ?`
-		result, err := tx.ExecContext(ctx, updateQuery, schedulepb.Schedule_Metadata_SCHEDULED, updatedBytes, s.nowMs(), scheduleId)
+		result, err := tx.ExecContext(ctx, updateQuery, schedulepb.Schedule_Metadata_SCHEDULED, updatedBytes, nowMs, scheduleId)
 		if err != nil {
 			return fmt.Errorf("update schedule: %w", err)
 		}

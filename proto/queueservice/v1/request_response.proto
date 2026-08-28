@@ -53,6 +53,7 @@ option go_package = "github.com/adrien19/chronoqueue/api/queueservice/v1;queuese
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
+import "proto/google/api/field_behavior.proto";
 
 import "proto/queue/v1/queue.proto";
 import "proto/message/v1/message.proto";
@@ -339,7 +340,7 @@ message RequeueFromDLQRequest {
   string dlq_name     = 1;
   string message_id   = 2;
   // Existing queue that will receive the requeued message.
-  string target_queue = 3;
+  string target_queue = 3 [(google.api.field_behavior) = REQUIRED];
 }
 
 message RequeueFromDLQResponse {

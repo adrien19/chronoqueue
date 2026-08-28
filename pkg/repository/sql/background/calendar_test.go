@@ -188,7 +188,7 @@ func TestCalendarServiceEnforcesMaxMessages(t *testing.T) {
 	require.Contains(t, updated.GetMetadata().GetStateMessage(), "maximum message count")
 }
 
-func TestCalendarServiceClearsNextRunWhenAlreadyAtMessageLimit(t *testing.T) {
+func TestCalendarServiceRetainsNextRunAndExecutesAfterResume(t *testing.T) {
 	ctx := context.Background()
 	storage := newTestStorage(t)
 	t.Cleanup(func() { require.NoError(t, storage.Close()) })
@@ -198,6 +198,7 @@ func TestCalendarServiceClearsNextRunWhenAlreadyAtMessageLimit(t *testing.T) {
 	schedule := &schedulepb.Schedule{ScheduleId: "calendar-already-limited", Metadata: &schedulepb.Schedule_Metadata{
 		State: schedulepb.Schedule_Metadata_SCHEDULED, QueueName: queue.Name, NextRun: timestamppb.New(due),
 		HasMaxMessages: true, MaxMessages: 1,
+		Payload:        &commonpb.Payload{Data: &structpb.Struct{}, ContentType: "application/json"},
 		ScheduleConfig: &schedulepb.Schedule_Metadata_CalendarSchedule{CalendarSchedule: &schedulepb.CalendarSchedule{}},
 	}}
 	require.NoError(t, storage.CreateSchedule(ctx, schedule))
@@ -208,11 +209,17 @@ func TestCalendarServiceClearsNextRunWhenAlreadyAtMessageLimit(t *testing.T) {
 
 	var nextRun sql.NullInt64
 	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT next_run FROM cq_schedules WHERE id = ?`, schedule.ScheduleId).Scan(&nextRun))
-	require.False(t, nextRun.Valid)
+	require.True(t, nextRun.Valid)
 	updated, err := storage.GetSchedule(ctx, schedule.ScheduleId)
 	require.NoError(t, err)
 	require.Equal(t, schedulepb.Schedule_Metadata_PAUSED, updated.GetMetadata().GetState())
-	require.Nil(t, updated.GetMetadata().GetNextRun())
+	require.NotNil(t, updated.GetMetadata().GetNextRun())
+
+	require.NoError(t, storage.ResumeSchedule(ctx, schedule.ScheduleId))
+	require.NoError(t, NewCalendarService(storage.BaseSQL, &stubCalendarEngine{}, time.Second).RunOnce(ctx))
+	var messageCount int
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_messages WHERE queue_name = ?`, queue.Name).Scan(&messageCount))
+	require.Equal(t, 1, messageCount)
 }
 
 func TestCalendarServiceRejectsMessageOutsideQueueAdmissionContract(t *testing.T) {

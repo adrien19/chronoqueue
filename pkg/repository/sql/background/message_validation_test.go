@@ -17,6 +17,12 @@ import (
 
 type rejectingSchemaRegistry struct{}
 
+type acceptingSchemaRegistry struct{ rejectingSchemaRegistry }
+
+func (acceptingSchemaRegistry) Validate(context.Context, string, int32, []byte) (*schemapb.ValidationResult, error) {
+	return &schemapb.ValidationResult{Valid: true}, nil
+}
+
 func (rejectingSchemaRegistry) Register(context.Context, *schemapb.Schema) (schemas.SchemaMetadata, error) {
 	return schemas.SchemaMetadata{}, nil
 }
@@ -62,4 +68,23 @@ func TestValidateScheduledMessageUsesConfiguredSchemaRegistry(t *testing.T) {
 		}},
 	})
 	require.ErrorContains(t, err, "schema rejected payload")
+}
+
+func TestValidateScheduledMessageAcceptsValidRequiredSchema(t *testing.T) {
+	base := &repositorysql.BaseSQL{}
+	base.SetSchemaRegistry(acceptingSchemaRegistry{})
+	payload, err := structpb.NewStruct(map[string]any{"value": "valid"})
+	require.NoError(t, err)
+
+	err = validateScheduledMessage(context.Background(), base, &queuepb.QueueMetadata{
+		SchemaRequired: true,
+		SchemaId:       "required-schema",
+	}, &messagepb.Message{
+		MessageId: "scheduled-message",
+		Metadata: &messagepb.Message_Metadata{Payload: &commonpb.Payload{
+			Data:        payload,
+			ContentType: "application/json",
+		}},
+	})
+	require.NoError(t, err)
 }

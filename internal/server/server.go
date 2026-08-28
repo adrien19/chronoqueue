@@ -91,6 +91,13 @@ func (s *Server) Start(ctx context.Context) error {
 	default:
 		return fmt.Errorf("unsupported storage type: %s", s.config.StorageType)
 	}
+	if s.database != nil {
+		defer func() {
+			if err := s.database.Close(); err != nil {
+				s.logger.ErrorWithFields("Failed to close database", "error", err)
+			}
+		}()
+	}
 	if s.schemaRegistryDB != nil {
 		defer func() {
 			if err := s.schemaRegistryDB.Close(); err != nil {

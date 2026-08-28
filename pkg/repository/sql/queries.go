@@ -119,14 +119,19 @@ func (qb *QueryBuilder) BuildCountByStateQuery() string {
 	`, qb.dialect.Placeholder(1))
 }
 
-// BuildFindEarliestDeadlineQuery builds a query to find the earliest lease expiry
+// BuildFindEarliestDeadlineQuery builds a query to find the earliest active expiry.
 func (qb *QueryBuilder) BuildFindEarliestDeadlineQuery() string {
 	return fmt.Sprintf(`
-		SELECT MIN(lease_expiry) as earliest
+		SELECT MIN(CASE
+			WHEN heartbeat_expiry IS NOT NULL AND heartbeat_expiry > 0
+				AND (lease_expiry IS NULL OR lease_expiry <= 0 OR heartbeat_expiry < lease_expiry)
+			THEN heartbeat_expiry
+			ELSE lease_expiry
+		END) as earliest
 		FROM cq_messages
 		WHERE queue_name = %s
 		  AND state = 2
-		  AND lease_expiry IS NOT NULL
+		  AND (lease_expiry IS NOT NULL OR heartbeat_expiry IS NOT NULL)
 	`, qb.dialect.Placeholder(1))
 }
 
