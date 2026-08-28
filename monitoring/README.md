@@ -89,7 +89,7 @@ The Grafana dashboard includes the following sections:
 
 ## Prometheus Alerts
 
-The `prometheus-alerts.yml` file contains 20+ production-ready alerts organized into groups:
+The `prometheus-alerts.yml` file contains 20+ baseline alerts that must be tuned and validated against production traffic:
 
 ### chronoqueue_message_processing
 
@@ -204,7 +204,6 @@ services:
 
   chronoqueue:
     # Your ChronoQueue service
-    ports:
     ports:
       - "9000:9000"  # gRPC
       - "8080:8080"  # HTTP/REST API and metrics endpoint

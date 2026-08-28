@@ -94,17 +94,12 @@ message Schema {
     string description = 4;
     
     // content: The actual validation schema.
-    // Format depends on content_type.
-    // For "json-schema": JSON Schema Draft 7 (https://json-schema.org/)
-    // For "protobuf": Base64-encoded FileDescriptorSet
+    // JSON Schema Draft 7 document (https://json-schema.org/).
     // Size limit: 1MB
     string content = 5;
     
     // content_type: Schema format identifier.
-    // Supported values:
-    //   "json-schema" (default): JSON Schema Draft 7
-    //   "protobuf": Protocol Buffers schema
-    //   "avro": Apache Avro schema
+    // Supported value: "json-schema" (default), using JSON Schema Draft 7.
     // ChronoQueue validates content syntax when registering schema.
     string content_type = 6;
     

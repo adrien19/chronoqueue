@@ -74,7 +74,8 @@ func TestExclusiveQueue_SerializesClaimsAndRecoversAfterReclaim(t *testing.T) {
 	expired, err := first.FindExpiredMessages(ctx, queueName, 10)
 	require.NoError(t, err)
 	require.Len(t, expired, 1)
-	require.NoError(t, first.ReclaimExpiredMessage(ctx, queueName, expired[0]))
+	_, err = first.ReclaimExpiredMessage(ctx, queueName, expired[0])
+	require.NoError(t, err)
 
 	reclaimed, err := second.ClaimMessage(ctx, queueName, "worker-3", "attempt-3", key)
 	require.NoError(t, err)

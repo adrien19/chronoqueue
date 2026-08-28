@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"testing"
 	"time"
@@ -135,6 +136,7 @@ func TestCalendarServicePausesWhenNoFutureRuns(t *testing.T) {
 			State:          schedulepb.Schedule_Metadata_SCHEDULED,
 			QueueName:      "q2",
 			NextRun:        timestamppb.New(now),
+			Payload:        &commonpb.Payload{Data: &structpb.Struct{}, ContentType: "application/json"},
 			ScheduleConfig: &schedulepb.Schedule_Metadata_CalendarSchedule{CalendarSchedule: &schedulepb.CalendarSchedule{}},
 		},
 	}
@@ -152,6 +154,99 @@ func TestCalendarServicePausesWhenNoFutureRuns(t *testing.T) {
 	var count int
 	require.NoError(t, storage.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM cq_messages WHERE queue_name = ?", "q2").Scan(&count))
 	require.Equal(t, 1, count)
+}
+
+func TestCalendarServiceEnforcesMaxMessages(t *testing.T) {
+	ctx := context.Background()
+	storage := newTestStorage(t)
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+	queue := &queuepb.Queue{Name: "calendar-limited", Metadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 1}}
+	require.NoError(t, storage.CreateQueue(ctx, queue))
+	due := time.Now().Add(-time.Minute)
+	next := due.Add(time.Second)
+	payload, err := structpb.NewStruct(map[string]any{"ok": true})
+	require.NoError(t, err)
+	schedule := &schedulepb.Schedule{ScheduleId: "calendar-limited", Metadata: &schedulepb.Schedule_Metadata{
+		State: schedulepb.Schedule_Metadata_SCHEDULED, QueueName: queue.Name, NextRun: timestamppb.New(due),
+		HasMaxMessages: true, MaxMessages: 2, Payload: &commonpb.Payload{Data: payload},
+		ScheduleConfig: &schedulepb.Schedule_Metadata_CalendarSchedule{CalendarSchedule: &schedulepb.CalendarSchedule{}},
+	}}
+	require.NoError(t, storage.CreateSchedule(ctx, schedule))
+	service := NewCalendarService(storage.BaseSQL, &stubCalendarEngine{nextRun: &next}, time.Second)
+	require.NoError(t, service.RunOnce(ctx))
+	require.NoError(t, service.RunOnce(ctx))
+	require.NoError(t, service.RunOnce(ctx))
+
+	var messageCount, executionCount int64
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_messages WHERE queue_name = ?`, queue.Name).Scan(&messageCount))
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT execution_count FROM cq_schedules WHERE id = ?`, schedule.ScheduleId).Scan(&executionCount))
+	require.Equal(t, int64(2), messageCount)
+	require.Equal(t, int64(2), executionCount)
+	updated, err := storage.GetSchedule(ctx, schedule.ScheduleId)
+	require.NoError(t, err)
+	require.Equal(t, schedulepb.Schedule_Metadata_PAUSED, updated.GetMetadata().GetState())
+	require.Contains(t, updated.GetMetadata().GetStateMessage(), "maximum message count")
+}
+
+func TestCalendarServiceRetainsNextRunAndExecutesAfterResume(t *testing.T) {
+	ctx := context.Background()
+	storage := newTestStorage(t)
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+	queue := &queuepb.Queue{Name: "calendar-already-limited", Metadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 1}}
+	require.NoError(t, storage.CreateQueue(ctx, queue))
+	due := time.Now().Add(-time.Minute)
+	schedule := &schedulepb.Schedule{ScheduleId: "calendar-already-limited", Metadata: &schedulepb.Schedule_Metadata{
+		State: schedulepb.Schedule_Metadata_SCHEDULED, QueueName: queue.Name, NextRun: timestamppb.New(due),
+		HasMaxMessages: true, MaxMessages: 1,
+		Payload:        &commonpb.Payload{Data: &structpb.Struct{}, ContentType: "application/json"},
+		ScheduleConfig: &schedulepb.Schedule_Metadata_CalendarSchedule{CalendarSchedule: &schedulepb.CalendarSchedule{}},
+	}}
+	require.NoError(t, storage.CreateSchedule(ctx, schedule))
+	_, err := storage.DB.ExecContext(ctx, `UPDATE cq_schedules SET execution_count = 1 WHERE id = ?`, schedule.ScheduleId)
+	require.NoError(t, err)
+
+	require.NoError(t, NewCalendarService(storage.BaseSQL, &stubCalendarEngine{}, time.Second).RunOnce(ctx))
+
+	var nextRun sql.NullInt64
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT next_run FROM cq_schedules WHERE id = ?`, schedule.ScheduleId).Scan(&nextRun))
+	require.True(t, nextRun.Valid)
+	updated, err := storage.GetSchedule(ctx, schedule.ScheduleId)
+	require.NoError(t, err)
+	require.Equal(t, schedulepb.Schedule_Metadata_PAUSED, updated.GetMetadata().GetState())
+	require.NotNil(t, updated.GetMetadata().GetNextRun())
+
+	require.NoError(t, storage.ResumeSchedule(ctx, schedule.ScheduleId))
+	require.NoError(t, NewCalendarService(storage.BaseSQL, &stubCalendarEngine{}, time.Second).RunOnce(ctx))
+	var messageCount int
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_messages WHERE queue_name = ?`, queue.Name).Scan(&messageCount))
+	require.Equal(t, 1, messageCount)
+}
+
+func TestCalendarServiceRejectsMessageOutsideQueueAdmissionContract(t *testing.T) {
+	ctx := context.Background()
+	storage := newTestStorage(t)
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+	queue := &queuepb.Queue{Name: "calendar-validation", Metadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 1, MaxPayloadSize: 1}}
+	require.NoError(t, storage.CreateQueue(ctx, queue))
+	due := time.Now().Add(-time.Minute)
+	next := due.Add(time.Hour)
+	payload, err := structpb.NewStruct(map[string]any{"too": "large"})
+	require.NoError(t, err)
+	schedule := &schedulepb.Schedule{ScheduleId: "calendar-validation", Metadata: &schedulepb.Schedule_Metadata{
+		State: schedulepb.Schedule_Metadata_SCHEDULED, QueueName: queue.Name, NextRun: timestamppb.New(due),
+		Payload:        &commonpb.Payload{Data: payload, ContentType: "application/json"},
+		ScheduleConfig: &schedulepb.Schedule_Metadata_CalendarSchedule{CalendarSchedule: &schedulepb.CalendarSchedule{}},
+	}}
+	require.NoError(t, storage.CreateSchedule(ctx, schedule))
+	require.NoError(t, NewCalendarService(storage.BaseSQL, &stubCalendarEngine{nextRun: &next}, time.Second).RunOnce(ctx))
+
+	var messageCount int
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_messages WHERE queue_name = ?`, queue.Name).Scan(&messageCount))
+	require.Zero(t, messageCount)
+	updated, err := storage.GetSchedule(ctx, schedule.ScheduleId)
+	require.NoError(t, err)
+	require.Equal(t, schedulepb.Schedule_Metadata_ERRORED, updated.GetMetadata().GetState())
+	require.Contains(t, updated.GetMetadata().GetStateMessage(), "scheduled message validation failed")
 }
 
 func TestCalendarServiceSkipsCronOnlySchedules(t *testing.T) {
@@ -209,6 +304,7 @@ func TestCalendarServiceDoesNotRecordConflictingMessage(t *testing.T) {
 			State:          schedulepb.Schedule_Metadata_SCHEDULED,
 			QueueName:      queue.Name,
 			NextRun:        timestamppb.New(now),
+			Payload:        &commonpb.Payload{Data: &structpb.Struct{}, ContentType: "application/json"},
 			ScheduleConfig: &schedulepb.Schedule_Metadata_CalendarSchedule{CalendarSchedule: &schedulepb.CalendarSchedule{}},
 		},
 	}

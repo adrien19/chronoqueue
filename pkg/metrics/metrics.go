@@ -160,7 +160,7 @@ func NewMetricsRegistry() *MetricsRegistry {
 		dbTransactionDuration,
 		dbConnectionsActive,
 		dbConnectionsIdle,
-		dbConnectionsWait,
+		dbConnectionsWaitTotal,
 	)
 
 	// Register background service metrics

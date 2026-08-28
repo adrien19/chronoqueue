@@ -48,13 +48,13 @@ The metrics are organized into separate files by domain:
 **DLQ Message Count** (`chronoqueue_dlq_messages_total`)
 
 - Current number of messages in each DLQ
-- Labels: `dlq_name`, `source_queue`
+- Labels: `dlq_name`
 
 **DLQ Ingestion Rate** (`chronoqueue_dlq_ingestion_total`)
 
 - Messages moved to DLQ with failure reason
 - Labels: `dlq_name`, `source_queue`, `reason`
-- Reasons: `max_attempts`, `lease_timeout`, `nack`
+- Reasons: `max_attempts`, `lease_timeout`, `heartbeat_timeout`, `nack`
 
 **DLQ Retry Count** (`chronoqueue_dlq_retry_total`)
 
@@ -116,7 +116,7 @@ The metrics are organized into separate files by domain:
 
 - `chronoqueue_db_connections_active` - Active connections
 - `chronoqueue_db_connections_idle` - Idle connections
-- `chronoqueue_db_connections_wait` - Connections waiting for availability
+- `chronoqueue_db_connections_wait_total` - Cumulative connections that waited for availability
 - Labels: `backend`
 
 ### Background Service Metrics
@@ -282,4 +282,3 @@ The repository layer should call these metric functions at appropriate points:
 3. **DLQ operations** - `RetryDLQMessage`, `DeleteDLQMessage`
 4. **Background services** - Scheduler and Reclaim service iterations
 5. **Periodic updates** - Queue state, DLQ counts, connection pool stats
-

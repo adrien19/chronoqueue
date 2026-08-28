@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
@@ -143,7 +144,7 @@ func (c *CalendarService) collectDueSchedules(ctx context.Context, nowMs int64) 
 func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string, nowMs int64) error {
 	return c.base.WithTransaction(ctx, &sqlbase.TxOptions{Timeout: 5 * time.Second}, func(tx *sql.Tx) error {
 		query := fmt.Sprintf(`
-			SELECT metadata_pb, state, queue_name, next_run
+			SELECT metadata_pb, state, queue_name, next_run, execution_count
 			FROM cq_schedules
 			WHERE id = %s
 		`, c.base.Dialect.Placeholder(1))
@@ -157,9 +158,10 @@ func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string
 			scheduleState int32
 			queueName     string
 			nextRun       sql.NullInt64
+			execCount     int64
 		)
 
-		if err := tx.QueryRowContext(ctx, query, scheduleID).Scan(&scheduleBytes, &scheduleState, &queueName, &nextRun); err != nil {
+		if err := tx.QueryRowContext(ctx, query, scheduleID).Scan(&scheduleBytes, &scheduleState, &queueName, &nextRun, &execCount); err != nil {
 			if err == sql.ErrNoRows {
 				return nil
 			}
@@ -184,6 +186,9 @@ func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string
 
 		if schedule.Metadata == nil {
 			schedule.Metadata = &schedulepb.Schedule_Metadata{}
+		}
+		if schedule.Metadata.GetHasMaxMessages() && execCount >= schedule.Metadata.GetMaxMessages() {
+			return c.pauseAtMessageLimit(ctx, tx, schedule, scheduleID, nowMs, execCount)
 		}
 
 		// Skip cron-only schedules; cron processor owns them and sets next_run
@@ -210,20 +215,35 @@ func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string
 
 		schedule.Metadata.MessageIds = append(schedule.Metadata.MessageIds, messageID)
 		schedule.Metadata.LastRun = timestamppb.New(runTime)
-
-		nextRunTime, err := c.engine.CalculateNextRun(ctx, schedule.Metadata.GetCalendarSchedule(), runTime)
-		if err != nil {
-			return c.markScheduleError(ctx, tx, schedule, scheduleID, err.Error())
-		}
+		execCount++
 
 		var nextRunMs any
-		if nextRunTime == nil {
+		if schedule.Metadata.GetHasMaxMessages() && execCount >= schedule.Metadata.GetMaxMessages() {
+			nextRunTime, err := c.engine.CalculateNextRun(ctx, schedule.Metadata.GetCalendarSchedule(), runTime)
+			if err != nil {
+				return c.markScheduleError(ctx, tx, schedule, scheduleID, err.Error())
+			}
 			schedule.Metadata.State = schedulepb.Schedule_Metadata_PAUSED
-			schedule.Metadata.StateMessage = "no future runs"
-			schedule.Metadata.NextRun = nil
+			schedule.Metadata.StateMessage = "maximum message count reached"
+			if nextRunTime == nil {
+				schedule.Metadata.NextRun = nil
+			} else {
+				schedule.Metadata.NextRun = timestamppb.New(*nextRunTime)
+				nextRunMs = nextRunTime.UnixMilli()
+			}
 		} else {
-			schedule.Metadata.NextRun = timestamppb.New(*nextRunTime)
-			nextRunMs = nextRunTime.UnixMilli()
+			nextRunTime, err := c.engine.CalculateNextRun(ctx, schedule.Metadata.GetCalendarSchedule(), runTime)
+			if err != nil {
+				return c.markScheduleError(ctx, tx, schedule, scheduleID, err.Error())
+			}
+			if nextRunTime == nil {
+				schedule.Metadata.State = schedulepb.Schedule_Metadata_PAUSED
+				schedule.Metadata.StateMessage = "no future runs"
+				schedule.Metadata.NextRun = nil
+			} else {
+				schedule.Metadata.NextRun = timestamppb.New(*nextRunTime)
+				nextRunMs = nextRunTime.UnixMilli()
+			}
 		}
 
 		schedule.Metadata.UpdatedAt = timestamppb.New(time.UnixMilli(nowMs))
@@ -243,11 +263,12 @@ func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string
 			    state = %s,
 			    next_run = %s,
 			    last_run = %s,
-			    updated_at = %s
+			    updated_at = %s,
+			    execution_count = %s
 			WHERE id = %s
-		`, c.base.Dialect.Placeholder(1), c.base.Dialect.Placeholder(2), c.base.Dialect.Placeholder(3), c.base.Dialect.Placeholder(4), c.base.Dialect.Placeholder(5), c.base.Dialect.Placeholder(6))
+		`, c.base.Dialect.Placeholder(1), c.base.Dialect.Placeholder(2), c.base.Dialect.Placeholder(3), c.base.Dialect.Placeholder(4), c.base.Dialect.Placeholder(5), c.base.Dialect.Placeholder(6), c.base.Dialect.Placeholder(7))
 
-		if _, err := tx.ExecContext(ctx, updateQuery, updatedBytes, schedule.Metadata.GetState(), nextRunMs, runTime.UnixMilli(), nowMs, scheduleID); err != nil {
+		if _, err := tx.ExecContext(ctx, updateQuery, updatedBytes, schedule.Metadata.GetState(), nextRunMs, runTime.UnixMilli(), nowMs, execCount, scheduleID); err != nil {
 			return fmt.Errorf("update schedule: %w", err)
 		}
 
@@ -256,6 +277,23 @@ func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string
 
 		return nil
 	})
+}
+
+func (c *CalendarService) pauseAtMessageLimit(ctx context.Context, tx *sql.Tx, schedule *schedulepb.Schedule, scheduleID string, nowMs, execCount int64) error {
+	schedule.Metadata.State = schedulepb.Schedule_Metadata_PAUSED
+	schedule.Metadata.StateMessage = "maximum message count reached"
+	schedule.Metadata.UpdatedAt = timestamppb.New(time.UnixMilli(nowMs))
+	if err := repositorycommon.EncryptSchedulePayload(schedule, c.base.KeyManager); err != nil {
+		return fmt.Errorf("encrypt schedule payload: %w", err)
+	}
+	updatedBytes, err := c.base.Serializer.MarshalSchedule(schedule)
+	if err != nil {
+		return fmt.Errorf("marshal schedule: %w", err)
+	}
+	query := fmt.Sprintf(`UPDATE cq_schedules SET metadata_pb = %s, state = %s, updated_at = %s, execution_count = %s WHERE id = %s`,
+		c.base.Dialect.Placeholder(1), c.base.Dialect.Placeholder(2), c.base.Dialect.Placeholder(3), c.base.Dialect.Placeholder(4), c.base.Dialect.Placeholder(5))
+	_, err = tx.ExecContext(ctx, query, updatedBytes, schedule.Metadata.GetState(), nowMs, execCount, scheduleID)
+	return err
 }
 
 func (c *CalendarService) markScheduleError(ctx context.Context, tx *sql.Tx, schedule *schedulepb.Schedule, scheduleID string, msg string) error {
@@ -326,6 +364,9 @@ func (c *CalendarService) createScheduledMessage(ctx context.Context, tx *sql.Tx
 	}
 
 	leasePolicy := queueMeta.GetLeasePolicy()
+	if leasePolicy != nil {
+		leasePolicy = proto.Clone(leasePolicy).(*commonpb.LeasePolicy)
+	}
 	if meta.GetLeaseDuration() != nil {
 		if leasePolicy == nil {
 			leasePolicy = &commonpb.LeasePolicy{}
@@ -337,7 +378,7 @@ func (c *CalendarService) createScheduledMessage(ctx context.Context, tx *sql.Tx
 		MessageId: messageID,
 		Metadata: &messagepb.Message_Metadata{
 			Headers:       cloneHeaders(meta.GetHeaders()),
-			Payload:       meta.GetPayload(),
+			Payload:       clonePayload(meta.GetPayload()),
 			State:         messagepb.Message_Metadata_INVISIBLE,
 			AttemptsLeft:  int32(maxAttempts),
 			MaxAttempts:   int32(maxAttempts),
@@ -346,6 +387,9 @@ func (c *CalendarService) createScheduledMessage(ctx context.Context, tx *sql.Tx
 			LeasePolicy:   leasePolicy,
 			LeaseDuration: meta.GetLeaseDuration(),
 		},
+	}
+	if err := validateScheduledMessage(ctx, c.base, queueMeta, message); err != nil {
+		return "", err
 	}
 
 	if err := repositorycommon.EncryptMessagePayload(message, c.base.KeyManager); err != nil {
@@ -399,4 +443,11 @@ func (c *CalendarService) createScheduledMessage(ctx context.Context, tx *sql.Tx
 	}
 
 	return messageID, nil
+}
+
+func clonePayload(payload *commonpb.Payload) *commonpb.Payload {
+	if payload == nil {
+		return nil
+	}
+	return proto.Clone(payload).(*commonpb.Payload)
 }

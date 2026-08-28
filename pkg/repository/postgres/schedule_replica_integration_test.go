@@ -11,10 +11,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	postgrescontainer "github.com/testcontainers/testcontainers-go/modules/postgres"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/background"
 )
 
@@ -39,12 +44,15 @@ func TestCronSchedule_ExecutesOnceAcrossPostgresReplicas(t *testing.T) {
 	queue := &queuepb.Queue{Name: "cron-replicas", Metadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 1}}
 	require.NoError(t, first.CreateQueue(ctx, queue))
 	now := time.Date(2025, time.January, 5, 10, 0, 0, 0, time.UTC)
+	payload, err := structpb.NewStruct(map[string]any{"source": "cron-replicas"})
+	require.NoError(t, err)
 	require.NoError(t, first.CreateSchedule(ctx, &schedulepb.Schedule{
 		ScheduleId: "cron-replicas",
 		Metadata: &schedulepb.Schedule_Metadata{
 			State:          schedulepb.Schedule_Metadata_SCHEDULED,
 			QueueName:      queue.Name,
 			NextRun:        timestamppb.New(now),
+			Payload:        &commonpb.Payload{Data: payload, ContentType: "application/json"},
 			ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "*/2 * * * *"},
 		},
 	}))
@@ -74,4 +82,16 @@ func TestCronSchedule_ExecutesOnceAcrossPostgresReplicas(t *testing.T) {
 	var count int
 	require.NoError(t, first.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_messages WHERE queue_name = $1`, queue.Name).Scan(&count))
 	require.Equal(t, 1, count)
+
+	_, err = first.DB.ExecContext(ctx, `UPDATE cq_schedules SET execution_count = 4 WHERE id = $1`, "cron-replicas")
+	require.NoError(t, err)
+	require.NoError(t, first.PauseSchedule(ctx, "cron-replicas"))
+	var executionCount int64
+	require.NoError(t, first.DB.QueryRowContext(ctx, `SELECT execution_count FROM cq_schedules WHERE id = $1`, "cron-replicas").Scan(&executionCount))
+	require.Equal(t, int64(4), executionCount)
+	err = first.PauseSchedule(ctx, "cron-replicas")
+	require.Equal(t, codes.FailedPrecondition, status.Code(domainerror.ToGRPC(err)))
+	require.NoError(t, first.ResumeSchedule(ctx, "cron-replicas"))
+	require.NoError(t, first.DB.QueryRowContext(ctx, `SELECT execution_count FROM cq_schedules WHERE id = $1`, "cron-replicas").Scan(&executionCount))
+	require.Zero(t, executionCount)
 }

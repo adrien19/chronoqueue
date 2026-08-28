@@ -1635,8 +1635,8 @@
                     "refId": "B"
                 },
                 {
-                    "expr": "chronoqueue_db_connections_wait",
-                    "legendFormat": "{{backend}} - waiting",
+                    "expr": "rate(chronoqueue_db_connections_wait_total[5m])",
+                    "legendFormat": "{{backend}} - waits/sec",
                     "refId": "C"
                 }
             ],

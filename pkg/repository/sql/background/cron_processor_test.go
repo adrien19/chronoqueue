@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"testing"
 	"time"
@@ -83,7 +84,7 @@ func TestCronProcessorExecutesSchedule(t *testing.T) {
 			QueueName:      queue.Name,
 			NextRun:        timestamppb.New(baseTime),
 			Priority:       4,
-			Payload:        &commonpb.Payload{Data: payloadData},
+			Payload:        &commonpb.Payload{Data: payloadData, ContentType: "application/json"},
 			ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "*/2 * * * *"},
 		},
 	}
@@ -120,6 +121,105 @@ func TestCronProcessorExecutesSchedule(t *testing.T) {
 	require.Equal(t, int64(3), executionCount)
 	require.Equal(t, baseTime.Add(6*time.Minute).UnixMilli(), nextRunMs)
 	require.Equal(t, baseTime.Add(4*time.Minute).UnixMilli(), lastRunMs)
+}
+
+func TestCronProcessorEnforcesMaxMessagesAndResumeResetsLimit(t *testing.T) {
+	ctx := context.Background()
+	storage := newTestStorage(t)
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+	queue := &queuepb.Queue{Name: "cron-limited", Metadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 1}}
+	require.NoError(t, storage.CreateQueue(ctx, queue))
+	currentTime := time.Date(2026, time.August, 27, 10, 0, 0, 0, time.UTC)
+	payload, err := structpb.NewStruct(map[string]any{"ok": true})
+	require.NoError(t, err)
+	schedule := &schedulepb.Schedule{ScheduleId: "cron-limited", Metadata: &schedulepb.Schedule_Metadata{
+		State: schedulepb.Schedule_Metadata_SCHEDULED, QueueName: queue.Name, NextRun: timestamppb.New(currentTime),
+		HasMaxMessages: true, MaxMessages: 2, Payload: &commonpb.Payload{Data: payload},
+		ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "* * * * *"},
+	}}
+	require.NoError(t, storage.CreateSchedule(ctx, schedule))
+	service := NewCronProcessorService(storage.BaseSQL, time.Second)
+	service.nowFn = func() time.Time { return currentTime }
+	require.NoError(t, service.RunOnce(ctx))
+	currentTime = currentTime.Add(time.Minute)
+	require.NoError(t, service.RunOnce(ctx))
+	currentTime = currentTime.Add(time.Minute)
+	require.NoError(t, service.RunOnce(ctx))
+
+	var messageCount, executionCount int64
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_messages WHERE queue_name = ?`, queue.Name).Scan(&messageCount))
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT execution_count FROM cq_schedules WHERE id = ?`, schedule.ScheduleId).Scan(&executionCount))
+	require.Equal(t, int64(2), messageCount)
+	require.Equal(t, int64(2), executionCount)
+	updated, err := storage.GetSchedule(ctx, schedule.ScheduleId)
+	require.NoError(t, err)
+	require.Equal(t, schedulepb.Schedule_Metadata_PAUSED, updated.GetMetadata().GetState())
+
+	require.NoError(t, storage.ResumeSchedule(ctx, schedule.ScheduleId))
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT execution_count FROM cq_schedules WHERE id = ?`, schedule.ScheduleId).Scan(&executionCount))
+	require.Zero(t, executionCount)
+}
+
+func TestCronProcessorClearsNextRunWhenAlreadyAtMessageLimit(t *testing.T) {
+	ctx := context.Background()
+	storage := newTestStorage(t)
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+	queue := &queuepb.Queue{Name: "cron-already-limited", Metadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 1}}
+	require.NoError(t, storage.CreateQueue(ctx, queue))
+	due := time.Now().Add(-time.Minute)
+	schedule := &schedulepb.Schedule{ScheduleId: "cron-already-limited", Metadata: &schedulepb.Schedule_Metadata{
+		State: schedulepb.Schedule_Metadata_SCHEDULED, QueueName: queue.Name, NextRun: timestamppb.New(due),
+		HasMaxMessages: true, MaxMessages: 1,
+		ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "* * * * *"},
+	}}
+	require.NoError(t, storage.CreateSchedule(ctx, schedule))
+	_, err := storage.DB.ExecContext(ctx, `UPDATE cq_schedules SET execution_count = 1 WHERE id = ?`, schedule.ScheduleId)
+	require.NoError(t, err)
+
+	service := NewCronProcessorService(storage.BaseSQL, time.Second)
+	service.nowFn = time.Now
+	require.NoError(t, service.RunOnce(ctx))
+
+	var nextRun sql.NullInt64
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT next_run FROM cq_schedules WHERE id = ?`, schedule.ScheduleId).Scan(&nextRun))
+	require.False(t, nextRun.Valid)
+	var messageCount, executionCount int64
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_messages WHERE queue_name = ?`, queue.Name).Scan(&messageCount))
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT execution_count FROM cq_schedules WHERE id = ?`, schedule.ScheduleId).Scan(&executionCount))
+	require.Zero(t, messageCount)
+	require.Equal(t, int64(1), executionCount)
+	updated, err := storage.GetSchedule(ctx, schedule.ScheduleId)
+	require.NoError(t, err)
+	require.Equal(t, schedulepb.Schedule_Metadata_PAUSED, updated.GetMetadata().GetState())
+	require.Nil(t, updated.GetMetadata().GetNextRun())
+}
+
+func TestCronProcessorRejectsMessageOutsideQueueAdmissionContract(t *testing.T) {
+	ctx := context.Background()
+	storage := newTestStorage(t)
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+	queue := &queuepb.Queue{Name: "cron-validation", Metadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 1, MaxPayloadSize: 1}}
+	require.NoError(t, storage.CreateQueue(ctx, queue))
+	now := time.Date(2026, time.August, 27, 10, 0, 0, 0, time.UTC)
+	payload, err := structpb.NewStruct(map[string]any{"too": "large"})
+	require.NoError(t, err)
+	schedule := &schedulepb.Schedule{ScheduleId: "cron-validation", Metadata: &schedulepb.Schedule_Metadata{
+		State: schedulepb.Schedule_Metadata_SCHEDULED, QueueName: queue.Name, NextRun: timestamppb.New(now),
+		Payload:        &commonpb.Payload{Data: payload, ContentType: "application/json"},
+		ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "* * * * *"},
+	}}
+	require.NoError(t, storage.CreateSchedule(ctx, schedule))
+	service := NewCronProcessorService(storage.BaseSQL, time.Second)
+	service.nowFn = func() time.Time { return now }
+	require.NoError(t, service.RunOnce(ctx))
+
+	var messageCount int
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_messages WHERE queue_name = ?`, queue.Name).Scan(&messageCount))
+	require.Zero(t, messageCount)
+	updated, err := storage.GetSchedule(ctx, schedule.ScheduleId)
+	require.NoError(t, err)
+	require.Equal(t, schedulepb.Schedule_Metadata_ERRORED, updated.GetMetadata().GetState())
+	require.Contains(t, updated.GetMetadata().GetStateMessage(), "scheduled message validation failed")
 }
 
 func TestCronProcessorMarksInvalidExpression(t *testing.T) {
@@ -180,6 +280,7 @@ func TestCronProcessorCoalescesMissedRunAndRecoversAfterRestart(t *testing.T) {
 			State:          schedulepb.Schedule_Metadata_SCHEDULED,
 			QueueName:      queue.Name,
 			NextRun:        timestamppb.New(firstDue),
+			Payload:        &commonpb.Payload{Data: &structpb.Struct{}, ContentType: "application/json"},
 			ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "*/2 * * * *"},
 		},
 	}
@@ -221,6 +322,7 @@ func TestCronProcessorDoesNotRecordConflictingMessage(t *testing.T) {
 			State:          schedulepb.Schedule_Metadata_SCHEDULED,
 			QueueName:      queue.Name,
 			NextRun:        timestamppb.New(now),
+			Payload:        &commonpb.Payload{Data: &structpb.Struct{}, ContentType: "application/json"},
 			ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "*/2 * * * *"},
 		},
 	}

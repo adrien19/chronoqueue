@@ -58,6 +58,7 @@ import (
 	v1 "github.com/adrien19/chronoqueue/api/queue/v1"
 	v12 "github.com/adrien19/chronoqueue/api/schedule/v1"
 	v13 "github.com/adrien19/chronoqueue/api/schema/v1"
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -2247,12 +2248,13 @@ func (x *GetDLQMessagesResponse) GetMessages() []*v11.Message {
 	return nil
 }
 
-// Requeue message from DLQ back to original queue
+// Requeue message from a DLQ to a required target queue.
 type RequeueFromDLQRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DlqName       string                 `protobuf:"bytes,1,opt,name=dlq_name,json=dlqName,proto3" json:"dlq_name,omitempty"`
-	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
-	TargetQueue   string                 `protobuf:"bytes,3,opt,name=target_queue,json=targetQueue,proto3" json:"target_queue,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	DlqName   string                 `protobuf:"bytes,1,opt,name=dlq_name,json=dlqName,proto3" json:"dlq_name,omitempty"`
+	MessageId string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	// Existing queue that will receive the requeued message.
+	TargetQueue   string `protobuf:"bytes,3,opt,name=target_queue,json=targetQueue,proto3" json:"target_queue,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3772,7 +3774,7 @@ var File_proto_queueservice_v1_request_response_proto protoreflect.FileDescripto
 
 const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	",proto/queueservice/v1/request_response.proto\x12\x1fchronoqueue.api.queueservice.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1aproto/queue/v1/queue.proto\x1a\x1eproto/message/v1/message.proto\x1a proto/schedule/v1/schedule.proto\x1a\x1cproto/schema/v1/schema.proto\"\x7f\n" +
+	",proto/queueservice/v1/request_response.proto\x12\x1fchronoqueue.api.queueservice.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a%proto/google/api/field_behavior.proto\x1a\x1aproto/queue/v1/queue.proto\x1a\x1eproto/message/v1/message.proto\x1a proto/schedule/v1/schedule.proto\x1a\x1cproto/schema/v1/schema.proto\"\x7f\n" +
 	"\x12CreateQueueRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12H\n" +
 	"\bmetadata\x18\x02 \x01(\v2'.chronoqueue.api.queue.v1.QueueMetadataH\x00R\bmetadata\x88\x01\x01B\v\n" +
@@ -3949,12 +3951,12 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\bdlq_name\x18\x01 \x01(\tR\adlqName\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\"Y\n" +
 	"\x16GetDLQMessagesResponse\x12?\n" +
-	"\bmessages\x18\x01 \x03(\v2#.chronoqueue.api.message.v1.MessageR\bmessages\"t\n" +
+	"\bmessages\x18\x01 \x03(\v2#.chronoqueue.api.message.v1.MessageR\bmessages\"y\n" +
 	"\x15RequeueFromDLQRequest\x12\x19\n" +
 	"\bdlq_name\x18\x01 \x01(\tR\adlqName\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x02 \x01(\tR\tmessageId\x12!\n" +
-	"\ftarget_queue\x18\x03 \x01(\tR\vtargetQueue\"2\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\x12&\n" +
+	"\ftarget_queue\x18\x03 \x01(\tB\x03\xe0A\x02R\vtargetQueue\"2\n" +
 	"\x16RequeueFromDLQResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"P\n" +
 	"\x14DeleteFromDLQRequest\x12\x19\n" +

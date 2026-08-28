@@ -188,13 +188,16 @@ func (s *Storage) PauseSchedule(ctx context.Context, scheduleId string) error {
 		// Get current schedule to update state in metadata
 		var scheduleBytes []byte
 		var currentState int32
-		query := s.ph(`SELECT metadata_pb, state FROM cq_schedules WHERE id = ?`)
+		query := s.ph(`SELECT metadata_pb, state FROM cq_schedules WHERE id = ? FOR UPDATE`)
 		err := tx.QueryRowContext(ctx, query, scheduleId).Scan(&scheduleBytes, &currentState)
 		if err == sql.ErrNoRows {
 			return domainerror.New(domainerror.NotFound, fmt.Sprintf("schedule %q not found", scheduleId), err)
 		}
 		if err != nil {
 			return fmt.Errorf("query schedule: %w", err)
+		}
+		if schedulepb.Schedule_Metadata_State(currentState) != schedulepb.Schedule_Metadata_SCHEDULED {
+			return domainerror.New(domainerror.FailedPrecondition, "schedule is not scheduled", nil)
 		}
 
 		// Unmarshal schedule to update metadata
@@ -208,6 +211,8 @@ func (s *Storage) PauseSchedule(ctx context.Context, scheduleId string) error {
 			schedule.Metadata = &schedulepb.Schedule_Metadata{}
 		}
 		schedule.Metadata.State = schedulepb.Schedule_Metadata_PAUSED
+		nowMs := s.nowMs()
+		schedule.Metadata.UpdatedAt = timestamppb.New(time.UnixMilli(nowMs))
 
 		// Marshal updated schedule
 		updatedBytes, err := s.Serializer.MarshalSchedule(schedule)
@@ -217,7 +222,7 @@ func (s *Storage) PauseSchedule(ctx context.Context, scheduleId string) error {
 
 		// Update database
 		updateQuery := s.ph(`UPDATE cq_schedules SET state = ?, metadata_pb = ?, updated_at = ? WHERE id = ?`)
-		result, err := tx.ExecContext(ctx, updateQuery, schedulepb.Schedule_Metadata_PAUSED, updatedBytes, s.nowMs(), scheduleId)
+		result, err := tx.ExecContext(ctx, updateQuery, schedulepb.Schedule_Metadata_PAUSED, updatedBytes, nowMs, scheduleId)
 		if err != nil {
 			return fmt.Errorf("update schedule: %w", err)
 		}
@@ -240,7 +245,7 @@ func (s *Storage) ResumeSchedule(ctx context.Context, scheduleId string) error {
 		// Get current schedule to update state in metadata
 		var scheduleBytes []byte
 		var currentState int32
-		query := s.ph(`SELECT metadata_pb, state FROM cq_schedules WHERE id = ?`)
+		query := s.ph(`SELECT metadata_pb, state FROM cq_schedules WHERE id = ? FOR UPDATE`)
 		err := tx.QueryRowContext(ctx, query, scheduleId).Scan(&scheduleBytes, &currentState)
 		if err == sql.ErrNoRows {
 			return domainerror.New(domainerror.NotFound, fmt.Sprintf("schedule %q not found", scheduleId), err)
@@ -263,6 +268,9 @@ func (s *Storage) ResumeSchedule(ctx context.Context, scheduleId string) error {
 			schedule.Metadata = &schedulepb.Schedule_Metadata{}
 		}
 		schedule.Metadata.State = schedulepb.Schedule_Metadata_SCHEDULED
+		schedule.Metadata.StateMessage = ""
+		nowMs := s.nowMs()
+		schedule.Metadata.UpdatedAt = timestamppb.New(time.UnixMilli(nowMs))
 
 		// Marshal updated schedule
 		updatedBytes, err := s.Serializer.MarshalSchedule(schedule)
@@ -271,8 +279,8 @@ func (s *Storage) ResumeSchedule(ctx context.Context, scheduleId string) error {
 		}
 
 		// Update database
-		updateQuery := s.ph(`UPDATE cq_schedules SET state = ?, metadata_pb = ?, updated_at = ? WHERE id = ?`)
-		result, err := tx.ExecContext(ctx, updateQuery, schedulepb.Schedule_Metadata_SCHEDULED, updatedBytes, s.nowMs(), scheduleId)
+		updateQuery := s.ph(`UPDATE cq_schedules SET state = ?, metadata_pb = ?, updated_at = ?, execution_count = 0 WHERE id = ?`)
+		result, err := tx.ExecContext(ctx, updateQuery, schedulepb.Schedule_Metadata_SCHEDULED, updatedBytes, nowMs, scheduleId)
 		if err != nil {
 			return fmt.Errorf("update schedule: %w", err)
 		}

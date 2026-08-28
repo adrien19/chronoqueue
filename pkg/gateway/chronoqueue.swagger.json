@@ -128,7 +128,7 @@
     "/v1/dlq/{dlqName}/messages/{messageId}": {
       "delete": {
         "summary": "DeleteFromDLQ permanently removes a message from the DLQ.",
-        "description": "Use when:\n- Message is not recoverable\n- Data is no longer relevant\n- Cleaning up test data\n\nWARNING: This is permanent. Message cannot be recovered.\n\nExample:\n  DELETE /v1/dlq/order-dlq/messages/msg-123\n\nReturns: Empty response\nErrors:\n  - NotFound: Message not in DLQ",
+        "description": "Use when:\n- Message is not recoverable\n- Data is no longer relevant\n- Cleaning up test data\n\nWARNING: This is permanent. Message cannot be recovered.\n\nExample:\n  DELETE /v1/dlq/order-dlq/messages/msg-123\n\nReturns: success status\nErrors:\n  - NotFound: Message not in DLQ",
         "operationId": "QueueService_DeleteFromDLQ",
         "responses": {
           "200": {
@@ -167,8 +167,8 @@
     },
     "/v1/dlq/{dlqName}/messages/{messageId}:requeue": {
       "post": {
-        "summary": "RequeueFromDLQ moves a message from DLQ back to its original queue.",
-        "description": "Use after:\n- Fixing bugs that caused failures\n- Resolving external service outages\n- Correcting data issues\n\nEffects:\n- Message removed from DLQ\n- Message added back to original queue as PENDING\n- attempts_left reset (or set to specified value)\n\nExample:\n  POST /v1/dlq/order-dlq/messages/msg-123:requeue\n  {\n    \"max_attempts\": 3  // Give it 3 more tries\n  }\n\nReturns: Requeued message\nErrors:\n  - NotFound: Message not in DLQ",
+        "summary": "RequeueFromDLQ moves a message from DLQ to the required target queue.",
+        "description": "Use after:\n- Fixing bugs that caused failures\n- Resolving external service outages\n- Correcting data issues\n\nEffects:\n- Message removed from DLQ\n- Message added to targetQueue as PENDING\n- attempts_left always reset\n\nExample:\n  POST /v1/dlq/order-dlq/messages/msg-123:requeue\n  {\n    \"targetQueue\": \"orders\"\n  }\n\nReturns: success status\nErrors:\n  - NotFound: Message not in DLQ\n  - NotFound: Target queue does not exist\n  - InvalidArgument: targetQueue is empty",
         "operationId": "QueueService_RequeueFromDLQ",
         "responses": {
           "200": {
@@ -320,7 +320,7 @@
       },
       "post": {
         "summary": "CreateQueue creates a new queue with specified configuration.",
-        "description": "Use to:\n- Define retry behavior (max_attempts, lease_duration)\n- Set up dead letter queue for failed messages\n- Configure priority handling\n- Enforce message schemas\n\nExample:\n  POST /v1/queues\n  {\n    \"queue\": {\n      \"name\": \"order-processing\",\n      \"metadata\": {\n        \"default_max_attempts\": 3,\n        \"lease_duration\": \"5m\",\n        \"dead_letter_queue_name\": \"order-processing_dlq\",\n        \"auto_create_dlq\": true\n      }\n    }\n  }\n\nReturns: Queue details\nErrors:\n  - AlreadyExists: Queue with this name exists\n  - InvalidArgument: Invalid configuration (negative lease_duration, etc.)",
+        "description": "Use to:\n- Define retry behavior (max_attempts, lease_duration)\n- Set up dead letter queue for failed messages\n- Configure priority handling\n- Enforce message schemas\n\nExample:\n  POST /v1/queues\n  {\n    \"queue\": {\n      \"name\": \"order-processing\",\n      \"metadata\": {\n        \"default_max_attempts\": 3,\n        \"lease_duration\": \"5m\",\n        \"dead_letter_queue_name\": \"order-processing_dlq\",\n        \"auto_create_dlq\": true\n      }\n    }\n  }\n\nReturns: success status\nErrors:\n  - AlreadyExists: Queue with this name exists\n  - InvalidArgument: Invalid configuration (negative lease_duration, etc.)",
         "operationId": "QueueService_CreateQueue",
         "responses": {
           "200": {
@@ -354,7 +354,7 @@
     "/v1/queues/{name}": {
       "delete": {
         "summary": "DeleteQueue permanently deletes a queue and all its messages.",
-        "description": "WARNING: This operation is irreversible. All pending and running messages are lost.\n\nUse when:\n- Decommissioning a feature\n- Cleaning up test queues\n- Removing unused queues\n\nBest practice: Drain queue first (stop posting, wait for workers to finish).\n\nExample:\n  DELETE /v1/queues/order-processing\n\nReturns: Empty response\nErrors:\n  - NotFound: Queue doesn't exist",
+        "description": "WARNING: This operation is irreversible. All pending and running messages are lost.\n\nUse when:\n- Decommissioning a feature\n- Cleaning up test queues\n- Removing unused queues\n\nBest practice: Drain queue first (stop posting, wait for workers to finish).\n\nExample:\n  DELETE /v1/queues/order-processing\n\nReturns: success status\nErrors:\n  - NotFound: Queue doesn't exist",
         "operationId": "QueueService_DeleteQueue",
         "responses": {
           "200": {
@@ -387,7 +387,7 @@
     "/v1/queues/{queueName}/messages": {
       "post": {
         "summary": "PostMessage adds a new message to a queue.",
-        "description": "Use for:\n- Asynchronous task execution\n- Event-driven workflows\n- Job scheduling\n- Load leveling\n\nFeatures:\n- Delayed execution (scheduled_time)\n- Priority ordering\n- Schema validation\n- Deduplication (idempotency_key)\n- Exclusive processing (exclusivity_key)\n\nExample - immediate execution:\n  POST /v1/queues/order-processing/messages\n  {\n    \"message\": {\n      \"metadata\": {\n        \"payload\": {\"data\": \"...\"},\n        \"priority\": 4\n      }\n    }\n  }\n\nExample - delayed execution (send email in 1 hour):\n  {\n    \"message\": {\n      \"metadata\": {\n        \"payload\": {\"data\": \"...\"},\n        \"scheduled_time\": \"2024-12-01T15:00:00Z\"\n      }\n    }\n  }\n\nReturns: Message with assigned message_id\nErrors:\n  - NotFound: Queue doesn't exist\n  - InvalidArgument: Schema validation failed, invalid scheduled_time\n  - AlreadyExists: Duplicate idempotency_key (within dedup window)",
+        "description": "Use for:\n- Asynchronous task execution\n- Event-driven workflows\n- Job scheduling\n- Load leveling\n\nFeatures:\n- Delayed execution (scheduled_time)\n- Priority ordering\n- Schema validation\n- Deduplication by message_id within the queue\n- Exclusive processing (exclusivity_key)\n\nExample - immediate execution:\n  POST /v1/queues/order-processing/messages\n  {\n    \"message\": {\n      \"messageId\": \"order-123\",\n      \"metadata\": {\n        \"payload\": {\"data\": \"...\"},\n        \"priority\": 4\n      }\n    }\n  }\n\nExample - delayed execution (send email in 1 hour):\n  {\n    \"message\": {\n      \"messageId\": \"email-123\",\n      \"metadata\": {\n        \"payload\": {\"data\": \"...\"},\n        \"scheduledTime\": \"2024-12-01T15:00:00Z\"\n      }\n    }\n  }\n\nThe caller must provide messageId. Returns success status.\nErrors:\n  - NotFound: Queue doesn't exist\n  - InvalidArgument: Schema validation failed, invalid scheduled_time\n  - AlreadyExists: Duplicate message_id in the queue",
         "operationId": "QueueService_PostMessage",
         "responses": {
           "200": {
@@ -428,7 +428,7 @@
     "/v1/queues/{queueName}/messages/{messageId}:acknowledge": {
       "post": {
         "summary": "AcknowledgeMessage marks a message as successfully processed.",
-        "description": "Call this after successfully processing a message retrieved by GetNextMessage.\n\nEffects:\n- Message moves to COMPLETED state\n- Message removed from queue\n- Queue stats updated\n\nImportant: attempt_id and worker_id from GetNextMessage are required and\nmust identify the active, unexpired lease.\n\nExample:\n  POST /v1/queues/order-processing/messages/msg-123:acknowledge\n\nReturns: Empty response\nErrors:\n  - NotFound: Message doesn't exist or already acknowledged\n  - DeadlineExceeded: Lease already expired",
+        "description": "Call this after successfully processing a message retrieved by GetNextMessage.\n\nEffects:\n- Message moves to COMPLETED state\n- Message retained or removed according to the queue retention policy\n- Queue stats updated\n\nImportant: attempt_id and worker_id from GetNextMessage are required and\nmust identify the active, unexpired lease.\n\nExample:\n  POST /v1/queues/order-processing/messages/msg-123:acknowledge\n\nReturns: success status\nErrors:\n  - NotFound: Message doesn't exist or already acknowledged\n  - DeadlineExceeded: Lease already expired",
         "operationId": "QueueService_AcknowledgeMessage",
         "responses": {
           "200": {
@@ -476,7 +476,7 @@
     "/v1/queues/{queueName}/messages/{messageId}:cancel": {
       "post": {
         "summary": "CancelMessage cancels a pending message before it has been processed.",
-        "description": "Use when:\n- Business logic invalidates the need for a message (order cancelled, user unsubscribed)\n- Scheduled messages no longer needed (event rescheduled, task no longer relevant)\n- Cleanup operations (purge old scheduled notifications)\n\nProducer-side operation: Only messages in INVISIBLE or PENDING state can be cancelled.\nMessages already being processed (RUNNING) cannot be cancelled - use application-level\ncancellation logic instead.\n\nEffects:\n- Message moves to CANCELED state\n- Message removed from processing queue\n- Message retained based on retention policy (soft delete)\n- Queue stats updated\n\nExample - cancel scheduled reminder:\n  POST /v1/queues/notifications/messages/reminder-456:cancel\n\nExample - cancel all pending messages for a user:\n  foreach messageId in userMessages:\n      CancelMessage(queueName, messageId)\n\nReturns: Empty response\nErrors:\n  - NotFound: Message doesn't exist\n  - FailedPrecondition: Message is RUNNING, COMPLETED, ERRORED, or already CANCELED",
+        "description": "Use when:\n- Business logic invalidates the need for a message (order cancelled, user unsubscribed)\n- Scheduled messages no longer needed (event rescheduled, task no longer relevant)\n- Cleanup operations (purge old scheduled notifications)\n\nProducer-side operation: Only messages in INVISIBLE or PENDING state can be cancelled.\nMessages already being processed (RUNNING) cannot be cancelled - use application-level\ncancellation logic instead.\n\nEffects:\n- Message moves to CANCELED state\n- Message removed from processing queue\n- Message retained based on retention policy (soft delete)\n- Queue stats updated\n\nExample - cancel scheduled reminder:\n  POST /v1/queues/notifications/messages/reminder-456:cancel\n\nExample - cancel all pending messages for a user:\n  foreach messageId in userMessages:\n      CancelMessage(queueName, messageId)\n\nReturns: success status\nErrors:\n  - NotFound: Message doesn't exist\n  - FailedPrecondition: Message is RUNNING, COMPLETED, ERRORED, or already CANCELED",
         "operationId": "QueueService_CancelMessage",
         "responses": {
           "200": {
@@ -524,7 +524,7 @@
     "/v1/queues/{queueName}/messages/{messageId}:renewLease": {
       "post": {
         "summary": "RenewMessageLease extends the processing time for a message.",
-        "description": "Use when:\n- Processing takes longer than expected\n- Long-running batch operations\n- External API calls with unpredictable latency\n\nCall periodically during processing to prevent lease expiration.\nattempt_id and worker_id from GetNextMessage are required and must identify\nthe active, unexpired lease.\n\nExample pattern (heartbeat-style lease renewal):\n  msg := getNextMessage()\n  done := make(chan bool)\n\n  go func() {\n      ticker := time.NewTicker(leaseDuration / 2)\n      defer ticker.Stop()\n      for {\n          select {\n          case \u003c-ticker.C:\n              renewMessageLease(msg.MessageId)\n          case \u003c-done:\n              return\n          }\n      }\n  }()\n\n  processMessage(msg)\n  close(done)\n  acknowledgeMessage(msg.MessageId)\n\nReturns: Updated message with new lease expiration\nErrors:\n  - NotFound: Message doesn't exist or already completed\n  - FailedPrecondition: Message not in RUNNING state",
+        "description": "Use when:\n- Processing takes longer than expected\n- Long-running batch operations\n- External API calls with unpredictable latency\n\nCall periodically during processing to prevent lease expiration.\nattempt_id and worker_id from GetNextMessage are required and must identify\nthe active, unexpired lease.\n\nExample pattern (heartbeat-style lease renewal):\n  msg := getNextMessage()\n  done := make(chan bool)\n\n  go func() {\n      ticker := time.NewTicker(leaseDuration / 2)\n      defer ticker.Stop()\n      for {\n          select {\n          case \u003c-ticker.C:\n              renewMessageLease(msg.MessageId)\n          case \u003c-done:\n              return\n          }\n      }\n  }()\n\n  processMessage(msg)\n  close(done)\n  acknowledgeMessage(msg.MessageId)\n\nReturns: remaining lease time and current state\nErrors:\n  - NotFound: Message doesn't exist or already completed\n  - FailedPrecondition: Message not in RUNNING state",
         "operationId": "QueueService_RenewMessageLease",
         "responses": {
           "200": {
@@ -654,7 +654,7 @@
     "/v1/queues/{queueName}/messages:heartbeat": {
       "post": {
         "summary": "SendMessageHeartBeat indicates a worker is still processing a message.",
-        "description": "Alternative to RenewMessageLease with similar purpose but lighter weight.\nUseful for tracking worker health without extending lease.\nattempt_id and worker_id from GetNextMessage are required and must identify\nthe active, unexpired lease.\n\nExample:\n  POST /v1/queues/order-processing/messages:heartbeat\n  {\n    \"message_ids\": [\"msg-123\", \"msg-456\"]\n  }\n\nReturns: Empty response",
+        "description": "Alternative to RenewMessageLease that records worker liveness and extends\nthe lease to the configured heartbeat timeout.\nattempt_id and worker_id from GetNextMessage are required and must identify\nthe active, unexpired lease.\n\nExample:\n  POST /v1/queues/order-processing/messages:heartbeat\n  {\n    \"messageId\": \"msg-123\",\n    \"attemptId\": \"attempt-123\",\n    \"workerId\": \"worker-1\"\n  }\n\nReturns: remaining lease time and current state",
         "operationId": "QueueService_SendMessageHeartBeat",
         "responses": {
           "200": {
@@ -749,7 +749,7 @@
     "/v1/queues/{queueName}/state": {
       "get": {
         "summary": "GetQueueState returns current queue statistics and health.",
-        "description": "Provides:\n- Message counts by state (PENDING, RUNNING, COMPLETED, ERRORED)\n- Rate metrics (messages/sec, processing time)\n- DLQ size\n\nUse for:\n- Health checks\n- Autoscaling decisions (scale workers based on PENDING count)\n- Alerting (high ERRORED count, DLQ growth)\n\nExample:\n  GET /v1/queues/order-processing/state\n  Response:\n  {\n    \"pending_count\": 150,\n    \"running_count\": 10,\n    \"completed_count\": 5420,\n    \"errored_count\": 3,\n    \"dlq_count\": 2\n  }\n\nReturns: QueueState with counts and metrics",
+        "description": "Provides:\n- Message counts by state (INVISIBLE, PENDING, RUNNING, COMPLETED, CANCELED, ERRORED)\n- Earliest active lease or heartbeat deadline\n\nUse for:\n- Health checks\n- Autoscaling decisions (scale workers based on PENDING count)\n- Alerting (high ERRORED count, DLQ growth)\n\nExample:\n  GET /v1/queues/order-processing/state\n  Response:\n  {\n    \"stateCounts\": {\"INVISIBLE\": 0, \"PENDING\": 150, \"RUNNING\": 10, \"COMPLETED\": 5420, \"CANCELED\": 0, \"ERRORED\": 3}\n  }\n\nReturns: state counts and the earliest active deadline",
         "operationId": "QueueService_GetQueueState",
         "responses": {
           "200": {
@@ -812,7 +812,7 @@
       },
       "post": {
         "summary": "CreateSchedule creates a recurring message posting schedule.",
-        "description": "Use for:\n- Cron-style job scheduling (daily reports, hourly cleanup)\n- Business calendar scheduling (first business day of month)\n- Recurring notifications (reminders, alerts)\n- Periodic batch processing\n\nSupports:\n- Simple cron expressions: \"0 9 * * 1-5\" (weekdays at 9 AM)\n- Complex calendar rules: \"last Friday of each quarter\"\n- Timezone-aware scheduling\n- Holiday handling\n\nExample - daily report at 8 AM EST:\n  POST /v1/schedules\n  {\n    \"schedule\": {\n      \"schedule_id\": \"daily-sales-report\",\n      \"metadata\": {\n        \"cron_schedule\": \"0 8 * * *\",\n        \"timezone\": \"America/New_York\",\n        \"queue_name\": \"reports\",\n        \"payload\": {...}\n      }\n    }\n  }\n\nReturns: Created schedule with next_run time\nErrors:\n  - AlreadyExists: schedule_id already in use\n  - InvalidArgument: Invalid cron expression or calendar rule",
+        "description": "Use for:\n- Cron-style job scheduling (daily reports, hourly cleanup)\n- Business calendar scheduling (first business day of month)\n- Recurring notifications (reminders, alerts)\n- Periodic batch processing\n\nSupports:\n- Simple cron expressions: \"0 9 * * 1-5\" (weekdays at 9 AM)\n- Complex calendar rules: \"last Friday of each quarter\"\n- Timezone-aware scheduling\n- Holiday handling\n\nExample - daily report at 8 AM EST:\n  POST /v1/schedules\n  {\n    \"schedule\": {\n      \"schedule_id\": \"daily-sales-report\",\n      \"metadata\": {\n        \"cron_schedule\": \"0 8 * * *\",\n        \"timezone\": \"America/New_York\",\n        \"queue_name\": \"reports\",\n        \"payload\": {...}\n      }\n    }\n  }\n\nReturns: success status\nErrors:\n  - AlreadyExists: schedule_id already in use\n  - InvalidArgument: Invalid cron expression or calendar rule",
         "operationId": "QueueService_CreateSchedule",
         "responses": {
           "200": {
@@ -877,7 +877,7 @@
       },
       "delete": {
         "summary": "DeleteSchedule permanently removes a schedule.",
-        "description": "Effects:\n- Schedule stops creating new messages\n- Existing messages already posted remain in queue\n- Schedule history is preserved\n\nExample:\n  DELETE /v1/schedules/daily-sales-report\n\nReturns: Empty response\nErrors:\n  - NotFound: Schedule doesn't exist",
+        "description": "Effects:\n- Schedule stops creating new messages\n- Existing messages already posted remain in queue\n- Schedule history is preserved\n\nExample:\n  DELETE /v1/schedules/daily-sales-report\n\nReturns: success status\nErrors:\n  - NotFound: Schedule doesn't exist",
         "operationId": "QueueService_DeleteSchedule",
         "responses": {
           "200": {
@@ -950,7 +950,7 @@
     "/v1/schedules/{scheduleId}:pause": {
       "post": {
         "summary": "PauseSchedule temporarily stops a schedule from creating messages.",
-        "description": "Use when:\n- Temporarily disabling a feature\n- During maintenance windows\n- Debugging issues\n\nEffects:\n- Schedule state → PAUSED\n- No new messages created\n- Can be resumed later with ResumeSchedule\n\nExample:\n  POST /v1/schedules/daily-sales-report:pause\n\nReturns: Updated schedule\nErrors:\n  - NotFound: Schedule doesn't exist",
+        "description": "Use when:\n- Temporarily disabling a feature\n- During maintenance windows\n- Debugging issues\n\nEffects:\n- Schedule state → PAUSED\n- No new messages created\n- Can be resumed later with ResumeSchedule\n\nExample:\n  POST /v1/schedules/daily-sales-report:pause\n\nReturns: success status\nErrors:\n  - NotFound: Schedule doesn't exist\n  - FailedPrecondition: Schedule not in SCHEDULED state",
         "operationId": "QueueService_PauseSchedule",
         "responses": {
           "200": {
@@ -991,7 +991,7 @@
     "/v1/schedules/{scheduleId}:resume": {
       "post": {
         "summary": "ResumeSchedule reactivates a paused schedule.",
-        "description": "Effects:\n- Schedule state → SCHEDULED\n- Resumes creating messages on next scheduled time\n- Does NOT backfill missed executions during pause\n\nExample:\n  POST /v1/schedules/daily-sales-report:resume\n\nReturns: Updated schedule with next_run\nErrors:\n  - NotFound: Schedule doesn't exist\n  - FailedPrecondition: Schedule not in PAUSED state",
+        "description": "Effects:\n- Schedule state → SCHEDULED\n- Resets the max_messages execution counter\n- Retains next_run; an overdue run is eligible immediately after resume\n- Does NOT backfill missed executions during pause\n\nExample:\n  POST /v1/schedules/daily-sales-report:resume\n\nReturns: success status\nErrors:\n  - NotFound: Schedule doesn't exist\n  - FailedPrecondition: Schedule not in PAUSED state",
         "operationId": "QueueService_ResumeSchedule",
         "responses": {
           "200": {
@@ -1496,10 +1496,14 @@
       "type": "object",
       "properties": {
         "targetQueue": {
-          "type": "string"
+          "type": "string",
+          "description": "Existing queue that will receive the requeued message."
         }
       },
-      "title": "Requeue message from DLQ back to original queue"
+      "description": "Requeue message from a DLQ to a required target queue.",
+      "required": [
+        "targetQueue"
+      ]
     },
     "QueueServiceResumeScheduleBody": {
       "type": "object",
@@ -2113,7 +2117,10 @@
           "description": "metadata: All message execution and lifecycle information."
         }
       },
-      "description": "Message represents a unit of work in ChronoQueue.\n\nA message encapsulates:\n- Your business data (payload)\n- Execution metadata (state, priority, retries)\n- Scheduling information (when to execute)\n- Processing guarantees (leases, acknowledgments)\n\nLifecycle:\n  1. INVISIBLE: Message is scheduled for future execution or waiting to become visible\n  2. PENDING: Message is ready to be consumed by a worker\n  3. RUNNING: Message is actively being processed (worker has acquired a lease)\n  4. COMPLETED: Message was successfully processed and acknowledged\n  5. ERRORED: Message failed all retry attempts and moved to DLQ\n  6. CANCELED: Message was manually canceled before processing\n\nExample usage:\n  // Post a message\n  msg := \u0026message.Message{\n      MessageId: \"task-123\",\n      Metadata: \u0026message.Message_Metadata{\n          Payload: yourPayload,\n          Priority: 4,                          // Higher = processed first (0-4 range)\n          MaxAttempts: 3,                       // Retry up to 3 times\n          LeaseDuration: durationpb.New(30*time.Second), // 30s to process\n          ScheduledTime: timestamppb.New(executeAt),     // When to execute\n      },\n  }\n\n  // Process a message\n  msg, err := client.GetNextMessage(ctx, queueName)\n  // ... do work ...\n  client.AcknowledgeMessage(ctx, queueName, msg.MessageId, streamEntryID)"
+      "description": "Message represents a unit of work in ChronoQueue.\n\nA message encapsulates:\n- Your business data (payload)\n- Execution metadata (state, priority, retries)\n- Scheduling information (when to execute)\n- Processing guarantees (leases, acknowledgments)\n\nLifecycle:\n  1. INVISIBLE: Message is scheduled for future execution or waiting to become visible\n  2. PENDING: Message is ready to be consumed by a worker\n  3. RUNNING: Message is actively being processed (worker has acquired a lease)\n  4. COMPLETED: Message was successfully processed and acknowledged\n  5. ERRORED: Message failed all retry attempts and moved to DLQ\n  6. CANCELED: Message was manually canceled before processing\n\nExample usage:\n  // Post a message\n  msg := \u0026message.Message{\n      MessageId: \"task-123\",\n      Metadata: \u0026message.Message_Metadata{\n          Payload: yourPayload,\n          Priority: 4,                          // Higher = processed first (0-4 range)\n          MaxAttempts: 3,                       // Retry up to 3 times\n          LeaseDuration: durationpb.New(30*time.Second), // 30s to process\n          ScheduledTime: timestamppb.New(executeAt),     // When to execute\n      },\n  }\n\n  // Process a message\n  msg, err := client.GetNextMessage(ctx, queueName)\n  // ... do work ...\n  client.AcknowledgeMessage(ctx, queueName, msg.MessageId, streamEntryID)",
+      "required": [
+        "messageId"
+      ]
     },
     "v1MessageMetadata": {
       "type": "object",
@@ -2652,7 +2659,7 @@
         },
         "queueName": {
           "type": "string",
-          "description": "queue_name: Target queue where scheduled messages are posted.\nMust be an existing queue or auto-created if allowed.\nMessages inherit queue's retry, lease, and DLQ settings."
+          "description": "queue_name: Target queue where scheduled messages are posted.\nMust be an existing queue.\nMessages inherit queue's retry, lease, and DLQ settings."
         },
         "messageIds": {
           "type": "array",
@@ -2759,11 +2766,11 @@
         },
         "content": {
           "type": "string",
-          "title": "content: The actual validation schema.\nFormat depends on content_type.\nFor \"json-schema\": JSON Schema Draft 7 (https://json-schema.org/)\nFor \"protobuf\": Base64-encoded FileDescriptorSet\nSize limit: 1MB"
+          "title": "content: The actual validation schema.\nJSON Schema Draft 7 document (https://json-schema.org/).\nSize limit: 1MB"
         },
         "contentType": {
           "type": "string",
-          "description": "content_type: Schema format identifier.\nSupported values:\n  \"json-schema\" (default): JSON Schema Draft 7\n  \"protobuf\": Protocol Buffers schema\n  \"avro\": Apache Avro schema\nChronoQueue validates content syntax when registering schema."
+          "description": "content_type: Schema format identifier.\nSupported value: \"json-schema\" (default), using JSON Schema Draft 7.\nChronoQueue validates content syntax when registering schema."
         },
         "createdAt": {
           "type": "string",

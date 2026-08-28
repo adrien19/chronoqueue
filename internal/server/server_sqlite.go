@@ -17,29 +17,20 @@ import (
 
 // initializeSQLiteStorage initializes SQLite storage and schema registry
 func (s *Server) initializeSQLiteStorage(ctx context.Context) error {
-	// Create repository using SQLite backend
-	storage, err := repository.NewSQLiteStorage(ctx, &sqliterepository.Config{
-		Path:              s.config.SQLiteDBPath,
-		Logger:            s.logger,
-		KeyManager:        s.encryptionKeyManager,
-		SchedulerInterval: time.Duration(s.config.SchedulerIntervalMs) * time.Millisecond,
-		ReclaimInterval:   time.Duration(s.config.ReclaimIntervalMs) * time.Millisecond,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create SQLite repository: %w", err)
-	}
-
-	s.logger.InfoWithFields(
-		"SQLite repository initialized",
-		"path", s.config.SQLiteDBPath,
-	)
-
 	// Initialize SQLite schema registry
 	connConfig := sqliterepository.DefaultConnectionConfig(s.config.SQLiteDBPath)
 	db, err := sqliterepository.OpenConnection(ctx, connConfig)
 	if err != nil {
 		return fmt.Errorf("failed to open connection for schema registry: %w", err)
 	}
+	closeRegistryDB := true
+	defer func() {
+		if closeRegistryDB {
+			if closeErr := db.Close(); closeErr != nil {
+				s.logger.DPanic("failed to close SQLite schema registry database: ", closeErr)
+			}
+		}
+	}()
 
 	sqliteRegistry, err := schema.NewSQLiteRegistry(db, s.logger)
 	if err != nil {
@@ -50,8 +41,28 @@ func (s *Server) initializeSQLiteStorage(ctx context.Context) error {
 	s.schemaRegistry = sqliteRegistry
 	s.logger.Info("SQLite schema registry initialized")
 
+	// Create repository only after schema validation is available to background producers.
+	storage, err := repository.NewSQLiteStorage(ctx, &sqliterepository.Config{
+		Path:              s.config.SQLiteDBPath,
+		Logger:            s.logger,
+		KeyManager:        s.encryptionKeyManager,
+		SchedulerInterval: time.Duration(s.config.SchedulerIntervalMs) * time.Millisecond,
+		ReclaimInterval:   time.Duration(s.config.ReclaimIntervalMs) * time.Millisecond,
+		SchemaRegistry:    s.schemaRegistry,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create SQLite repository: %w", err)
+	}
+
+	s.logger.InfoWithFields(
+		"SQLite repository initialized",
+		"path", s.config.SQLiteDBPath,
+	)
+
 	// Set the repository as the database
 	s.database = storage
+	s.schemaRegistryDB = db
+	closeRegistryDB = false
 	s.logger.Info("SQLite storage backend ready")
 
 	return nil

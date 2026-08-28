@@ -1958,7 +1958,7 @@ type Schedule_Metadata struct {
 	//	*Schedule_Metadata_CalendarSchedule
 	ScheduleConfig isSchedule_Metadata_ScheduleConfig `protobuf_oneof:"schedule_config"`
 	// queue_name: Target queue where scheduled messages are posted.
-	// Must be an existing queue or auto-created if allowed.
+	// Must be an existing queue.
 	// Messages inherit queue's retry, lease, and DLQ settings.
 	QueueName string `protobuf:"bytes,4,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
 	// message_ids: IDs of messages created by this schedule (for tracking/debugging).

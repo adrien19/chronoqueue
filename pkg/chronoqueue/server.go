@@ -2,6 +2,9 @@ package chronoqueue
 
 import (
 	"context"
+	"regexp"
+	"strconv"
+	"strings"
 
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schema_pb "github.com/adrien19/chronoqueue/api/schema/v1"
@@ -11,6 +14,8 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/schema"
 	"github.com/adrien19/chronoqueue/pkg/validator"
 )
+
+var calendarRuleErrorPattern = regexp.MustCompile(`\brule (\d+)\b`)
 
 // ChronoQueueServer implements the gRPC QueueService interface directly
 // using the storage layer without intermediate service abstractions
@@ -230,15 +235,15 @@ func (s *ChronoQueueServer) SendMessageHeartBeat(ctx context.Context, req *queue
 // Schedule Management Methods
 
 func (s *ChronoQueueServer) CreateSchedule(ctx context.Context, req *queueservice_pb.CreateScheduleRequest) (*queueservice_pb.CreateScheduleResponse, error) {
-	s.logger.InfoWithFields("CreateSchedule called", "schedule_name", req.Schedule.GetScheduleId())
+	s.logger.InfoWithFields("CreateSchedule called", "schedule_name", req.GetSchedule().GetScheduleId())
 
 	resp, err := s.storage.CreateSchedule(ctx, req)
 	if err != nil {
-		s.logger.ErrorWithFields("Failed to create schedule", "schedule_name", req.GetSchedule().ScheduleId, "error", err)
+		s.logger.ErrorWithFields("Failed to create schedule", "schedule_name", req.GetSchedule().GetScheduleId(), "error", err)
 		return nil, domainerror.PrefixMessage(err, "failed to create schedule")
 	}
 
-	s.logger.InfoWithFields("Schedule created successfully", "schedule_name", req.GetSchedule().ScheduleId)
+	s.logger.InfoWithFields("Schedule created successfully", "schedule_name", req.GetSchedule().GetScheduleId())
 	return resp, nil
 }
 
@@ -327,8 +332,9 @@ func (s *ChronoQueueServer) ValidateCalendarSchedule(ctx context.Context, req *q
 		s.logger.ErrorWithFields("Calendar schedule validation failed", "error", err)
 		// Return validation error details
 		return &queueservice_pb.ValidateCalendarScheduleResponse{
-			Valid:        false,
-			ErrorMessage: err.Error(),
+			Valid:            false,
+			ErrorMessage:     err.Error(),
+			ValidationIssues: []*queueservice_pb.ValidationIssue{calendarValidationIssue(err)},
 		}, nil
 	}
 
@@ -338,11 +344,40 @@ func (s *ChronoQueueServer) ValidateCalendarSchedule(ctx context.Context, req *q
 	}, nil
 }
 
+func calendarValidationIssue(err error) *queueservice_pb.ValidationIssue {
+	message := err.Error()
+	issue := &queueservice_pb.ValidationIssue{
+		Severity: "error", RuleIndex: -1, Field: "calendar_schedule", Message: message,
+		Suggestion: "correct the reported calendar schedule constraint",
+	}
+	lower := strings.ToLower(message)
+	switch {
+	case strings.Contains(lower, "timezone"):
+		issue.Field = "timezone"
+		issue.Suggestion = "provide a valid IANA timezone"
+	case strings.Contains(lower, "business calendar"):
+		issue.Field = "business_calendar"
+	case strings.Contains(lower, "exception"):
+		issue.Field = "exceptions"
+	}
+	if match := calendarRuleErrorPattern.FindStringSubmatch(lower); len(match) == 2 {
+		if index, parseErr := strconv.Atoi(match[1]); parseErr == nil {
+			issue.RuleIndex = int32(index)
+			issue.Field = "rules"
+			issue.Suggestion = "correct the referenced calendar rule"
+		}
+	}
+	return issue
+}
+
 func (s *ChronoQueueServer) PreviewCalendarSchedule(ctx context.Context, req *queueservice_pb.PreviewCalendarScheduleRequest) (*queueservice_pb.PreviewCalendarScheduleResponse, error) {
 	s.logger.InfoWithFields("PreviewCalendarSchedule called", "schedule", req.GetCalendarSchedule(), "count", req.GetCount())
 
 	// Default to 10 if not specified
 	count := req.GetCount()
+	if count < 0 {
+		return nil, domainerror.New(domainerror.InvalidArgument, "preview count must not be negative", nil)
+	}
 	if count == 0 {
 		count = 10
 	}
@@ -462,6 +497,11 @@ func (s *ChronoQueueServer) GetDLQStats(ctx context.Context, req *queueservice_p
 func (s *ChronoQueueServer) RegisterSchema(ctx context.Context, req *queueservice_pb.RegisterSchemaRequest) (*queueservice_pb.RegisterSchemaResponse, error) {
 	if req == nil || req.GetSchemaId() == "" || req.GetName() == "" || req.GetContent() == "" {
 		return nil, domainerror.New(domainerror.InvalidArgument, "schema id, name, and content are required", nil)
+	}
+	if req.GetContentType() != "" && req.GetContentType() != "json-schema" {
+		return nil, domainerror.InvalidWithFields("unsupported schema content type", []domainerror.FieldViolation{{
+			Field: "content_type", Description: "must be json-schema",
+		}}, nil)
 	}
 	s.logger.InfoWithFields("RegisterSchema called", "schema_id", req.GetSchemaId())
 

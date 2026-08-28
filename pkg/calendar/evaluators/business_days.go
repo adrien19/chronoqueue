@@ -9,6 +9,16 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/calendar/types"
 )
 
+type businessCalendarContextKey struct{}
+
+// WithBusinessCalendar makes an inline calendar available while evaluating its schedule.
+func WithBusinessCalendar(ctx context.Context, calendar *schedule.BusinessCalendar) context.Context {
+	if calendar == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, businessCalendarContextKey{}, calendar)
+}
+
 // BusinessDaysEvaluator handles business days calendar rules
 type BusinessDaysEvaluator struct {
 	businessCalendarProvider types.BusinessCalendarProvider
@@ -49,7 +59,9 @@ func (e *BusinessDaysEvaluator) Evaluate(ctx context.Context, rule *schedule.Cal
 	// Get business calendar
 	var businessCalendar *schedule.BusinessCalendar
 	if businessRule.BusinessCalendarId != "" {
-		if e.businessCalendarProvider != nil {
+		if inlineCalendar, ok := ctx.Value(businessCalendarContextKey{}).(*schedule.BusinessCalendar); ok && inlineCalendar.GetCalendarId() == businessRule.BusinessCalendarId {
+			businessCalendar = inlineCalendar
+		} else if e.businessCalendarProvider != nil {
 			var err error
 			businessCalendar, err = e.businessCalendarProvider.GetBusinessCalendar(ctx, businessRule.BusinessCalendarId)
 			if err != nil {
@@ -104,7 +116,11 @@ func (e *BusinessDaysEvaluator) Validate(ctx context.Context, rule *schedule.Cal
 
 	// Validate business calendar if specified
 	if businessRule.BusinessCalendarId != "" {
-		if e.businessCalendarProvider != nil {
+		inlineCalendar, hasInlineCalendar := ctx.Value(businessCalendarContextKey{}).(*schedule.BusinessCalendar)
+		if !hasInlineCalendar || inlineCalendar.GetCalendarId() != businessRule.BusinessCalendarId {
+			if e.businessCalendarProvider == nil {
+				return types.ErrBusinessCalendarNotFound.WithDetails(fmt.Sprintf("business calendar not found: %s", businessRule.BusinessCalendarId))
+			}
 			_, err := e.businessCalendarProvider.GetBusinessCalendar(ctx, businessRule.BusinessCalendarId)
 			if err != nil {
 				return types.ErrBusinessCalendarNotFound.WithDetails(fmt.Sprintf("business calendar not found: %s", businessRule.BusinessCalendarId))

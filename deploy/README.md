@@ -36,7 +36,6 @@ This starts:
 
 - **ChronoQueue Server** on ports:
   - `9000` - gRPC API
-  - `8080` - HTTP/REST API
   - `8080` - HTTP/REST API and metrics endpoint
 - **PostgreSQL** on port:
   - `5432` - PostgreSQL server

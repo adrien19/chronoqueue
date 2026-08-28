@@ -30,6 +30,16 @@ func NewDefaultEngine(options ...CalendarEngineOption) *DefaultEngine {
 		option(config)
 	}
 
+	if config.BusinessCalendarProvider == nil {
+		config.BusinessCalendarProvider = NewMemoryBusinessCalendarProvider()
+	}
+	if config.TimezoneProvider == nil {
+		config.TimezoneProvider = NewDefaultTimezoneProvider()
+	}
+	if config.ExceptionHandler == nil {
+		config.ExceptionHandler = NewDefaultExceptionHandler()
+	}
+
 	engine := &DefaultEngine{
 		config:                   config,
 		evaluatorRegistry:        evaluators.NewRegistryWithBusinessCalendar(config.BusinessCalendarProvider),
@@ -43,17 +53,6 @@ func NewDefaultEngine(options ...CalendarEngineOption) *DefaultEngine {
 		engine.cache = newExecutionCache(config.CacheTTL)
 	}
 
-	// Set up default providers if not provided
-	if engine.businessCalendarProvider == nil {
-		engine.businessCalendarProvider = NewMemoryBusinessCalendarProvider()
-	}
-	if engine.timezoneProvider == nil {
-		engine.timezoneProvider = NewDefaultTimezoneProvider()
-	}
-	if engine.exceptionHandler == nil {
-		engine.exceptionHandler = NewDefaultExceptionHandler()
-	}
-
 	return engine
 }
 
@@ -63,6 +62,7 @@ func (e *DefaultEngine) CalculateNextRun(ctx context.Context, calendarSchedule *
 	if err := e.ValidateSchedule(ctx, calendarSchedule); err != nil {
 		return nil, fmt.Errorf("invalid calendar schedule: %w", err)
 	}
+	ctx = evaluators.WithBusinessCalendar(ctx, calendarSchedule.GetBusinessCalendar())
 
 	// Check cache first if enabled
 	if e.cache != nil {
@@ -137,6 +137,7 @@ func (e *DefaultEngine) CalculateNextRuns(ctx context.Context, calendarSchedule 
 	if err := e.ValidateSchedule(ctx, calendarSchedule); err != nil {
 		return nil, fmt.Errorf("invalid calendar schedule: %w", err)
 	}
+	ctx = evaluators.WithBusinessCalendar(ctx, calendarSchedule.GetBusinessCalendar())
 
 	// Check cache first if enabled
 	if e.cache != nil {
@@ -225,6 +226,7 @@ func (e *DefaultEngine) ValidateSchedule(ctx context.Context, calendarSchedule *
 	if calendarSchedule.Type == schedule.CalendarSchedule_CUSTOM {
 		return ErrInvalidSchedule.WithDetails("custom calendar schedules are not supported")
 	}
+	ctx = evaluators.WithBusinessCalendar(ctx, calendarSchedule.GetBusinessCalendar())
 
 	// Validate rules
 	if len(calendarSchedule.Rules) == 0 {
@@ -292,20 +294,14 @@ func ruleMatchesScheduleType(scheduleType schedule.CalendarSchedule_ScheduleType
 
 // PreviewSchedule generates a preview of execution times for testing/debugging
 func (e *DefaultEngine) PreviewSchedule(ctx context.Context, calendarSchedule *schedule.CalendarSchedule, from time.Time, count int) (*SchedulePreview, error) {
-	fmt.Printf("DEBUG PreviewSchedule: received count=%d\n", count)
-
 	// Default to 10 if count not specified
 	if count <= 0 {
 		count = 10
-		fmt.Printf("DEBUG PreviewSchedule: defaulted count to 10\n")
 	}
 
 	if count > e.config.MaxPreviewCount {
 		count = e.config.MaxPreviewCount
-		fmt.Printf("DEBUG PreviewSchedule: capped count to MaxPreviewCount=%d\n", e.config.MaxPreviewCount)
 	}
-
-	fmt.Printf("DEBUG PreviewSchedule: calling CalculateNextRuns with count=%d\n", count)
 	// Calculate execution times
 	executionTimes, err := e.CalculateNextRuns(ctx, calendarSchedule, from, count)
 	if err != nil {

@@ -42,6 +42,7 @@ func (r *PostgresRegistry) initSchema(ctx context.Context) error {
         description  TEXT,
         content      TEXT NOT NULL,
         content_type TEXT NOT NULL DEFAULT 'json-schema',
+        metadata_json TEXT NOT NULL DEFAULT '{}',
         is_active    BOOLEAN NOT NULL DEFAULT TRUE,
         created_at   BIGINT NOT NULL,
         updated_at   BIGINT NOT NULL,
@@ -58,6 +59,9 @@ func (r *PostgresRegistry) initSchema(ctx context.Context) error {
 	if _, err := r.db.ExecContext(ctx, schema); err != nil {
 		return fmt.Errorf("failed to create schema tables: %w", err)
 	}
+	if _, err := r.db.ExecContext(ctx, `ALTER TABLE cq_schemas ADD COLUMN IF NOT EXISTS metadata_json TEXT NOT NULL DEFAULT '{}'`); err != nil {
+		return fmt.Errorf("add schema metadata column: %w", err)
+	}
 
 	r.logger.Info("Schema registry tables initialized")
 	return nil
@@ -65,7 +69,10 @@ func (r *PostgresRegistry) initSchema(ctx context.Context) error {
 
 // Register registers a new schema or creates a new version.
 func (r *PostgresRegistry) Register(ctx context.Context, schema *schema_pb.Schema) (SchemaMetadata, error) {
-	if err := validateSchemaContent(schema.Content); err != nil {
+	if schema.ContentType != "" && schema.ContentType != "json-schema" {
+		return SchemaMetadata{}, domainerror.InvalidWithFields("unsupported schema content type", []domainerror.FieldViolation{{Field: "content_type", Description: "must be json-schema"}}, nil)
+	}
+	if err := validateSchemaContent(schema.ContentType, schema.Content); err != nil {
 		return SchemaMetadata{}, domainerror.New(domainerror.InvalidArgument, "invalid schema content", err)
 	}
 
@@ -97,13 +104,17 @@ func (r *PostgresRegistry) Register(ctx context.Context, schema *schema_pb.Schem
 	if schema.ContentType == "" {
 		schema.ContentType = "json-schema"
 	}
+	metadataJSON, err := encodeMetadata(schema.Metadata)
+	if err != nil {
+		return SchemaMetadata{}, err
+	}
 
 	result, err := tx.ExecContext(
 		ctx, `
         INSERT INTO cq_schemas (
             schema_id, version, name, description, content,
-            content_type, is_active, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            content_type, metadata_json, is_active, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT(schema_id, version) DO NOTHING
     `,
 		schema.SchemaId,
@@ -112,6 +123,7 @@ func (r *PostgresRegistry) Register(ctx context.Context, schema *schema_pb.Schem
 		schema.Description,
 		schema.Content,
 		schema.ContentType,
+		metadataJSON,
 		true,
 		schema.CreatedAt,
 		schema.UpdatedAt,
@@ -152,10 +164,11 @@ func (r *PostgresRegistry) Get(ctx context.Context, schemaID string, version int
 
 	var schema schema_pb.Schema
 	var isActive bool
+	var metadataJSON string
 
 	err := r.db.QueryRowContext(ctx, `
         SELECT schema_id, version, name, description, content,
-               content_type, is_active, created_at, updated_at
+               content_type, metadata_json, is_active, created_at, updated_at
         FROM cq_schemas
         WHERE schema_id = $1 AND version = $2
     `, schemaID, version).Scan(
@@ -165,6 +178,7 @@ func (r *PostgresRegistry) Get(ctx context.Context, schemaID string, version int
 		&schema.Description,
 		&schema.Content,
 		&schema.ContentType,
+		&metadataJSON,
 		&isActive,
 		&schema.CreatedAt,
 		&schema.UpdatedAt,
@@ -178,6 +192,10 @@ func (r *PostgresRegistry) Get(ctx context.Context, schemaID string, version int
 	}
 
 	schema.IsActive = isActive
+	schema.Metadata, err = decodeMetadata(metadataJSON)
+	if err != nil {
+		return nil, err
+	}
 
 	return &schema, nil
 }
@@ -186,10 +204,11 @@ func (r *PostgresRegistry) Get(ctx context.Context, schemaID string, version int
 func (r *PostgresRegistry) GetLatest(ctx context.Context, schemaID string) (*schema_pb.Schema, error) {
 	var schema schema_pb.Schema
 	var isActive bool
+	var metadataJSON string
 
 	err := r.db.QueryRowContext(ctx, `
         SELECT schema_id, version, name, description, content,
-               content_type, is_active, created_at, updated_at
+               content_type, metadata_json, is_active, created_at, updated_at
         FROM cq_schemas
         WHERE schema_id = $1
         ORDER BY version DESC
@@ -201,6 +220,7 @@ func (r *PostgresRegistry) GetLatest(ctx context.Context, schemaID string) (*sch
 		&schema.Description,
 		&schema.Content,
 		&schema.ContentType,
+		&metadataJSON,
 		&isActive,
 		&schema.CreatedAt,
 		&schema.UpdatedAt,
@@ -214,6 +234,10 @@ func (r *PostgresRegistry) GetLatest(ctx context.Context, schemaID string) (*sch
 	}
 
 	schema.IsActive = isActive
+	schema.Metadata, err = decodeMetadata(metadataJSON)
+	if err != nil {
+		return nil, err
+	}
 
 	return &schema, nil
 }
@@ -241,7 +265,7 @@ func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOpti
 		), latest AS (
 			SELECT * FROM ranked WHERE row_number = 1
 		)
-		SELECT schema_id, version, name, description, content, content_type,
+		SELECT schema_id, version, name, description, content, content_type, metadata_json,
 		       is_active, created_at, updated_at, version_count, first_created_at,
 		       last_updated_at, COUNT(*) OVER ()
 		FROM latest
@@ -267,6 +291,7 @@ func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOpti
 		var versionCount int32
 		var firstCreatedAt int64
 		var lastUpdatedAt int64
+		var metadataJSON string
 
 		if err := rows.Scan(
 			&schema.SchemaId,
@@ -275,6 +300,7 @@ func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOpti
 			&schema.Description,
 			&schema.Content,
 			&schema.ContentType,
+			&metadataJSON,
 			&isActive,
 			&schema.CreatedAt,
 			&schema.UpdatedAt,
@@ -288,6 +314,10 @@ func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOpti
 		}
 
 		schema.IsActive = isActive
+		schema.Metadata, err = decodeMetadata(metadataJSON)
+		if err != nil {
+			return ListResult{}, err
+		}
 		schemas = append(schemas, &schema)
 		metadata[schema.SchemaId] = SchemaMetadata{SchemaID: schema.SchemaId, LatestVersion: schema.Version, TotalVersions: versionCount, CreatedAt: time.UnixMilli(firstCreatedAt), UpdatedAt: time.UnixMilli(lastUpdatedAt)}
 	}

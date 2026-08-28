@@ -18,7 +18,6 @@ var (
 	)
 
 	// leaseExpirationsTotal tracks messages reclaimed due to expired leases
-	// Expiry type indicates what expired: "lease" (lease_expiry) or "heartbeat" (heartbeat_expiry)
 	// High lease expiration rate may indicate workers are crashing or overloaded
 	leaseExpirationsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -29,7 +28,6 @@ var (
 	)
 
 	// heartbeatTimeoutsTotal specifically tracks heartbeat timeouts
-	// This is a subset of leaseExpirationsTotal but important for monitoring worker health
 	// Workers are expected to send heartbeats regularly - timeouts indicate worker issues
 	heartbeatTimeoutsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -46,8 +44,7 @@ func IncrementLeaseRenewals(queueName, status string) {
 	leaseRenewalsTotal.WithLabelValues(queueName, status).Inc()
 }
 
-// IncrementLeaseExpirations records a message being reclaimed due to lease/heartbeat expiry
-// Expiry type should be: "lease" or "heartbeat"
+// IncrementLeaseExpirations records a message being reclaimed due to lease expiry.
 func IncrementLeaseExpirations(queueName, expiryType string) {
 	leaseExpirationsTotal.WithLabelValues(queueName, expiryType).Inc()
 }

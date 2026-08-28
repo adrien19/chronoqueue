@@ -98,7 +98,7 @@ message Schedule {
     }
 
         // queue_name: Target queue where scheduled messages are posted.
-        // Must be an existing queue or auto-created if allowed.
+        // Must be an existing queue.
         // Messages inherit queue's retry, lease, and DLQ settings.
     string queue_name = 4;
 

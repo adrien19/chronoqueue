@@ -460,10 +460,14 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 		return fmt.Errorf("get queue metadata: %w", err)
 	}
 	retentionPolicy := queueMeta.GetMessageRetentionPolicy()
+	var leaseStartedAt sql.NullInt64
 
 	err = s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		shouldDelete, deletedAt := s.calculateDeletion(retentionPolicy)
 		nowMs := s.nowMs()
+		if err := tx.QueryRowContext(ctx, s.ph(`SELECT lease_started_at FROM cq_messages WHERE queue_name = ? AND message_id = ?`), queueName, messageId).Scan(&leaseStartedAt); err != nil && err != sql.ErrNoRows {
+			return fmt.Errorf("query lease start: %w", err)
+		}
 
 		if shouldDelete {
 			result, err := tx.ExecContext(ctx, s.ph(`
@@ -526,6 +530,9 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 	if err == nil {
 		// Record successful acknowledgment
 		metrics.RecordStateTransition(queueName, "RUNNING", "COMPLETED")
+		if leaseStartedAt.Valid {
+			metrics.ObserveMessageProcessingDuration(queueName, time.Duration(s.nowMs()-leaseStartedAt.Int64)*time.Millisecond)
+		}
 	}
 
 	return err

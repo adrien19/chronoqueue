@@ -1215,7 +1215,7 @@ func (client *ChronoQueueClient) GetDLQMessages(ctx context.Context, dlqName str
 	return res, nil
 }
 
-// RequeueFromDLQ moves a message from DLQ back to its original queue or specified target queue
+// RequeueFromDLQ moves a message from DLQ to the required target queue.
 func (client *ChronoQueueClient) RequeueFromDLQ(ctx context.Context, dlqName string, messageId string, targetQueue string) (*queueservice_pb.RequeueFromDLQResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	if cancel != nil {

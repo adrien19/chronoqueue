@@ -6,7 +6,10 @@ import (
 )
 
 // validateSchemaContent validates that content is valid JSON Schema
-func validateSchemaContent(content string) error {
+func validateSchemaContent(contentType, content string) error {
+	if contentType != "" && contentType != "json-schema" {
+		return fmt.Errorf("unsupported content type %q: only json-schema is supported", contentType)
+	}
 	// Validate that content is valid JSON
 	var schema map[string]interface{}
 	if err := json.Unmarshal([]byte(content), &schema); err != nil {
@@ -34,4 +37,26 @@ func getRequiredFields(schema map[string]interface{}) map[string]bool {
 	}
 
 	return required
+}
+
+func encodeMetadata(metadata map[string]string) (string, error) {
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+	encoded, err := json.Marshal(metadata)
+	if err != nil {
+		return "", fmt.Errorf("encode schema metadata: %w", err)
+	}
+	return string(encoded), nil
+}
+
+func decodeMetadata(encoded string) (map[string]string, error) {
+	metadata := make(map[string]string)
+	if encoded == "" {
+		return metadata, nil
+	}
+	if err := json.Unmarshal([]byte(encoded), &metadata); err != nil {
+		return nil, fmt.Errorf("decode schema metadata: %w", err)
+	}
+	return metadata, nil
 }
