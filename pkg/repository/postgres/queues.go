@@ -12,24 +12,42 @@ import (
 	"github.com/adrien19/chronoqueue/internal/domainerror"
 )
 
+const lockQueuesForRelationshipMutation = `LOCK TABLE cq_queues IN SHARE ROW EXCLUSIVE MODE`
+
 func (s *Storage) CreateQueue(ctx context.Context, queue *queuepb.Queue) error {
 	queueBytes, err := s.Serializer.MarshalQueue(queue)
 	if err != nil {
 		return fmt.Errorf("marshal queue: %w", err)
 	}
 
-	query := s.ph(`INSERT INTO cq_queues (name, metadata_pb, state_counts, created_at, updated_at) VALUES (?, ?, '{}', ?, ?)`)
-	now := s.nowMs()
-	_, err = s.DB.ExecContext(ctx, query, queue.Name, queueBytes, now, now)
-	if err != nil {
-		var pqErr *pq.Error
-		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
-			return domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("queue %q already exists", queue.Name), err)
+	return s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, lockQueuesForRelationshipMutation); err != nil {
+			return fmt.Errorf("lock queues for creation: %w", err)
 		}
-		return fmt.Errorf("insert queue: %w", err)
-	}
 
-	return nil
+		metadata := queue.GetMetadata()
+		if dlqName := metadata.GetDeadLetterQueueName(); dlqName != "" && !metadata.GetAutoCreateDlq() {
+			var exists int
+			if err := tx.QueryRowContext(ctx, `SELECT 1 FROM cq_queues WHERE name = $1`, dlqName).Scan(&exists); err != nil {
+				if err == sql.ErrNoRows {
+					return domainerror.New(domainerror.NotFound, fmt.Sprintf("dead letter queue %q not found", dlqName), err)
+				}
+				return fmt.Errorf("query dead letter queue: %w", err)
+			}
+		}
+
+		query := s.ph(`INSERT INTO cq_queues (name, metadata_pb, state_counts, created_at, updated_at) VALUES (?, ?, '{}', ?, ?)`)
+		now := s.nowMs()
+		if _, err := tx.ExecContext(ctx, query, queue.Name, queueBytes, now, now); err != nil {
+			var pqErr *pq.Error
+			if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+				return domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("queue %q already exists", queue.Name), err)
+			}
+			return fmt.Errorf("insert queue: %w", err)
+		}
+
+		return nil
+	})
 }
 
 // GetQueue retrieves a queue by name.
@@ -106,21 +124,48 @@ func (s *Storage) ListQueuesWithPrefix(ctx context.Context, prefix string) ([]*q
 
 // DeleteQueue deletes a queue.
 func (s *Storage) DeleteQueue(ctx context.Context, name string) error {
-	query := s.ph(`DELETE FROM cq_queues WHERE name = ?`)
-	result, err := s.DB.ExecContext(ctx, query, name)
-	if err != nil {
-		return fmt.Errorf("delete queue: %w", err)
-	}
+	return s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, lockQueuesForRelationshipMutation); err != nil {
+			return fmt.Errorf("lock queues for deletion: %w", err)
+		}
+		var exists int
+		if err := tx.QueryRowContext(ctx, `SELECT 1 FROM cq_queues WHERE name = $1`, name).Scan(&exists); err != nil {
+			if err == sql.ErrNoRows {
+				return domainerror.New(domainerror.NotFound, fmt.Sprintf("queue %q not found", name), err)
+			}
+			return fmt.Errorf("query queue for deletion: %w", err)
+		}
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
-	}
-	if rows == 0 {
-		return domainerror.New(domainerror.NotFound, fmt.Sprintf("queue %q not found", name), nil)
-	}
+		rows, err := tx.QueryContext(ctx, `SELECT metadata_pb FROM cq_queues WHERE name <> $1`, name)
+		if err != nil {
+			return fmt.Errorf("query queue references: %w", err)
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var queueBytes []byte
+			if err := rows.Scan(&queueBytes); err != nil {
+				return fmt.Errorf("scan queue reference: %w", err)
+			}
+			queue, err := s.Serializer.UnmarshalQueue(queueBytes)
+			if err != nil {
+				return fmt.Errorf("unmarshal queue reference: %w", err)
+			}
+			if queue.GetMetadata().GetDeadLetterQueueName() == name {
+				return domainerror.New(domainerror.FailedPrecondition, fmt.Sprintf("queue %q is referenced as a dead letter queue by %q", name, queue.GetName()), nil)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("iterate queue references: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return fmt.Errorf("close queue references: %w", err)
+		}
 
-	return nil
+		if _, err := tx.ExecContext(ctx, `DELETE FROM cq_queues WHERE name = $1`, name); err != nil {
+			return fmt.Errorf("delete queue: %w", err)
+		}
+		return nil
+	})
 }
 
 // EnqueueMessage adds a message to a queue.

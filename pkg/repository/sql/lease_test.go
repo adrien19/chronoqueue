@@ -96,3 +96,18 @@ func TestLeaseRuntimeCalculator_RequestedDurationOverridesPolicy(t *testing.T) {
 	assert.EqualValues(t, 45*time.Second/time.Millisecond, runtime.LeaseExpiry-runtime.LeaseStartedAt)
 	assert.EqualValues(t, 10*time.Second/time.Millisecond, runtime.HeartbeatExpiry-runtime.LastHeartbeatAt)
 }
+
+func TestLeaseRuntimeCalculator_ExtendLeaseAddsToCurrentExpiryAndCapsExtension(t *testing.T) {
+	calculator := NewLeaseRuntimeCalculator(NewClock())
+	policy := &commonpb.LeasePolicy{
+		MaxExtension: durationpb.New(5 * time.Second),
+		ExtendStep:   durationpb.New(time.Second),
+	}
+	currentExpiry := time.Now().Add(time.Minute).UnixMilli()
+
+	runtime, err := calculator.ExtendLease(policy, currentExpiry, 2_000, 10_000)
+
+	assert.NoError(t, err)
+	assert.Equal(t, currentExpiry+3_000, runtime.LeaseExpiry)
+	assert.EqualValues(t, 5_000, runtime.LeaseExtensionUsed)
+}

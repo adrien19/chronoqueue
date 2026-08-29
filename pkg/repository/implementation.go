@@ -270,6 +270,11 @@ func (impl *implementation) CreateQueue(ctx context.Context, request *queueservi
 		}
 		return nil, domainerror.New(domainerror.InvalidArgument, err.Error(), err)
 	}
+	if metadata.GetDeadLetterQueueName() != "" && !metadata.GetAutoCreateDlq() {
+		if _, err := impl.backend.GetQueue(ctx, metadata.GetDeadLetterQueueName()); err != nil {
+			return nil, domainerror.PrefixMessage(err, "get configured dead letter queue")
+		}
+	}
 	queue := &queuepb.Queue{
 		Name:     request.Name,
 		Metadata: metadata,
@@ -963,18 +968,13 @@ func (impl *implementation) RenewMessageLease(ctx context.Context, request *queu
 		}
 	}
 
-	if err := impl.backend.ExtendMessageLease(ctx, request.QueueName, request.MessageId, request.GetAttemptId(), request.GetWorkerId(), extensionMs); err != nil {
+	remainingTimeMs, err := impl.backend.ExtendMessageLease(ctx, request.QueueName, request.MessageId, request.GetAttemptId(), request.GetWorkerId(), extensionMs)
+	if err != nil {
 		return nil, err
 	}
 
-	// Return remaining time if lease duration was provided
-	var remainingTime *durationpb.Duration
-	if request.LeaseDuration != nil {
-		remainingTime = request.LeaseDuration
-	}
-
 	return &queueservicepb.RenewMessageLeaseResponse{
-		RemainingTime: remainingTime,
+		RemainingTime: durationpb.New(time.Duration(remainingTimeMs) * time.Millisecond),
 		State:         messagepb.Message_Metadata_RUNNING,
 	}, nil
 }

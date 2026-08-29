@@ -191,10 +191,10 @@ func TestSQLiteSchemaIntegration(t *testing.T) {
 		assert.Equal(t, int32(2), resp.GetVersion())
 	})
 
-	t.Run("DeleteSchemaVersion", func(t *testing.T) {
+	t.Run("DeactivateLatestFallsBackToActiveVersion", func(t *testing.T) {
 		resp, err := client.DeleteSchema(ctx, &queueservicepb.DeleteSchemaRequest{
 			SchemaId: "user.profile.v1",
-			Version:  1,
+			Version:  2,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.GetSuccess())
@@ -202,7 +202,7 @@ func TestSQLiteSchemaIntegration(t *testing.T) {
 
 		schemaResp, err := client.GetSchema(ctx, &queueservicepb.GetSchemaRequest{
 			SchemaId: "user.profile.v1",
-			Version:  1,
+			Version:  2,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, schemaResp.GetSchema())
@@ -212,13 +212,17 @@ func TestSQLiteSchemaIntegration(t *testing.T) {
 			ActiveOnly: true,
 		})
 		require.NoError(t, err)
-		foundActiveV2 := false
+		foundActiveV1 := false
 		for _, s := range activeOnlyResp.GetSchemas() {
-			if s.GetSchemaId() == "user.profile.v1" && s.GetLatestVersion() == 2 {
-				foundActiveV2 = true
+			if s.GetSchemaId() == "user.profile.v1" && s.GetLatestVersion() == 1 {
+				foundActiveV1 = true
 			}
 		}
-		assert.True(t, foundActiveV2, "schema user.profile.v1 should remain active via version 2")
+		assert.True(t, foundActiveV1, "schema user.profile.v1 should fall back to active version 1")
+
+		latest, err := client.GetSchema(ctx, &queueservicepb.GetSchemaRequest{SchemaId: "user.profile.v1"})
+		require.NoError(t, err)
+		assert.Equal(t, int32(1), latest.GetSchema().GetVersion())
 	})
 }
 

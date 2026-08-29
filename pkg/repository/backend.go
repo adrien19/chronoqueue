@@ -35,7 +35,7 @@ type BackendStorage interface {
 	CancelMessage(ctx context.Context, queueName string, messageId string, reason string) error
 	NackMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error
 	HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) (messagepb.Message_Metadata_State, int64, error)
-	ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, workerId string, extensionMs int64) error
+	ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, workerId string, extensionMs int64) (int64, error)
 	PeekMessagesWithPriorityRange(ctx context.Context, queueName string, limit int32, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error)
 
 	// Schedule Operations

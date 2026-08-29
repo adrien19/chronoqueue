@@ -315,7 +315,7 @@ func TestSQLiteRegistry_List(t *testing.T) {
 	})
 }
 
-func TestSQLiteRegistry_ListWithOptions_ActiveOnlyExcludesInactiveLatestVersion(t *testing.T) {
+func TestSQLiteRegistry_ActiveSelectionFallsBackFromInactiveLatestVersion(t *testing.T) {
 	registry, cleanup := setupTestSQLiteRegistry(t)
 	defer cleanup()
 
@@ -334,8 +334,19 @@ func TestSQLiteRegistry_ListWithOptions_ActiveOnlyExcludesInactiveLatestVersion(
 
 	activeOnly, err := registry.ListWithOptions(ctx, ListOptions{Prefix: schemaID, Limit: 100, ActiveOnly: true})
 	require.NoError(t, err)
-	assert.Empty(t, activeOnly.Schemas)
-	assert.Zero(t, activeOnly.TotalCount)
+	require.Len(t, activeOnly.Schemas, 1)
+	assert.Equal(t, int32(1), activeOnly.Schemas[0].GetVersion())
+	assert.True(t, activeOnly.Schemas[0].GetIsActive())
+	assert.Equal(t, int32(1), activeOnly.TotalCount)
+
+	latest, err := registry.GetLatest(ctx, schemaID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), latest.GetVersion())
+
+	validation, err := registry.Validate(ctx, schemaID, 0, []byte(`{"field":"value"}`))
+	require.NoError(t, err)
+	require.True(t, validation.GetValid())
+	assert.Equal(t, int32(1), validation.GetSchemaVersion())
 
 	all, err := registry.ListWithOptions(ctx, ListOptions{Prefix: schemaID, Limit: 100})
 	require.NoError(t, err)
@@ -405,6 +416,15 @@ func TestSQLiteRegistry_DeactivateAllVersions(t *testing.T) {
 	result, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "deactivate-all.test", Limit: 10, ActiveOnly: true})
 	require.NoError(t, err)
 	assert.Empty(t, result.Schemas)
+
+	_, err = registry.GetLatest(ctx, "deactivate-all.test")
+	require.ErrorContains(t, err, "schema")
+
+	validation, err := registry.Validate(ctx, "deactivate-all.test", 0, []byte(`{}`))
+	require.NoError(t, err)
+	require.False(t, validation.GetValid())
+	require.NotEmpty(t, validation.GetErrors())
+	assert.Equal(t, schema_pb.ErrorCode_SCHEMA_NOT_FOUND.String(), validation.GetErrors()[0].GetErrorCode())
 }
 
 func TestSQLiteRegistry_RegisterRejectsExistingVersion(t *testing.T) {

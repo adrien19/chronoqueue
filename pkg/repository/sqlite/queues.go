@@ -16,17 +16,29 @@ func (s *Storage) CreateQueue(ctx context.Context, queue *queuepb.Queue) error {
 		return fmt.Errorf("marshal queue: %w", err)
 	}
 
-	query := `INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES (?, ?, ?, ?)`
-	nowMs := s.nowMs()
-	_, err = s.DB.ExecContext(ctx, query, queue.Name, queueBytes, nowMs, nowMs)
-	if err != nil {
-		if isUniqueConstraintError(err) {
-			return domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("queue %q already exists", queue.Name), err)
+	return s.WithSerializableTransaction(ctx, func(tx *sql.Tx) error {
+		metadata := queue.GetMetadata()
+		if dlqName := metadata.GetDeadLetterQueueName(); dlqName != "" && !metadata.GetAutoCreateDlq() {
+			var exists int
+			if err := tx.QueryRowContext(ctx, `SELECT 1 FROM cq_queues WHERE name = ?`, dlqName).Scan(&exists); err != nil {
+				if err == sql.ErrNoRows {
+					return domainerror.New(domainerror.NotFound, fmt.Sprintf("dead letter queue %q not found", dlqName), err)
+				}
+				return fmt.Errorf("query dead letter queue: %w", err)
+			}
 		}
-		return fmt.Errorf("insert queue: %w", err)
-	}
 
-	return nil
+		query := `INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES (?, ?, ?, ?)`
+		nowMs := s.nowMs()
+		if _, err := tx.ExecContext(ctx, query, queue.Name, queueBytes, nowMs, nowMs); err != nil {
+			if isUniqueConstraintError(err) {
+				return domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("queue %q already exists", queue.Name), err)
+			}
+			return fmt.Errorf("insert queue: %w", err)
+		}
+
+		return nil
+	})
 }
 
 // GetQueue retrieves a queue by name
@@ -103,19 +115,43 @@ func (s *Storage) ListQueuesWithPrefix(ctx context.Context, prefix string) ([]*q
 
 // DeleteQueue deletes a queue
 func (s *Storage) DeleteQueue(ctx context.Context, name string) error {
-	query := `DELETE FROM cq_queues WHERE name = ?`
-	result, err := s.DB.ExecContext(ctx, query, name)
-	if err != nil {
-		return fmt.Errorf("delete queue: %w", err)
-	}
+	return s.WithSerializableTransaction(ctx, func(tx *sql.Tx) error {
+		var exists int
+		if err := tx.QueryRowContext(ctx, `SELECT 1 FROM cq_queues WHERE name = ?`, name).Scan(&exists); err != nil {
+			if err == sql.ErrNoRows {
+				return domainerror.New(domainerror.NotFound, fmt.Sprintf("queue %q not found", name), err)
+			}
+			return fmt.Errorf("query queue for deletion: %w", err)
+		}
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
-	}
-	if rows == 0 {
-		return domainerror.New(domainerror.NotFound, fmt.Sprintf("queue %q not found", name), nil)
-	}
+		rows, err := tx.QueryContext(ctx, `SELECT metadata_pb FROM cq_queues WHERE name <> ?`, name)
+		if err != nil {
+			return fmt.Errorf("query queue references: %w", err)
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var queueBytes []byte
+			if err := rows.Scan(&queueBytes); err != nil {
+				return fmt.Errorf("scan queue reference: %w", err)
+			}
+			queue, err := s.Serializer.UnmarshalQueue(queueBytes)
+			if err != nil {
+				return fmt.Errorf("unmarshal queue reference: %w", err)
+			}
+			if queue.GetMetadata().GetDeadLetterQueueName() == name {
+				return domainerror.New(domainerror.FailedPrecondition, fmt.Sprintf("queue %q is referenced as a dead letter queue by %q", name, queue.GetName()), nil)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("iterate queue references: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return fmt.Errorf("close queue references: %w", err)
+		}
 
-	return nil
+		if _, err := tx.ExecContext(ctx, `DELETE FROM cq_queues WHERE name = ?`, name); err != nil {
+			return fmt.Errorf("delete queue: %w", err)
+		}
+		return nil
+	})
 }

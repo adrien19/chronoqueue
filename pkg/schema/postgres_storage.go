@@ -210,7 +210,7 @@ func (r *PostgresRegistry) GetLatest(ctx context.Context, schemaID string) (*sch
         SELECT schema_id, version, name, description, content,
                content_type, metadata_json, is_active, created_at, updated_at
         FROM cq_schemas
-        WHERE schema_id = $1
+		WHERE schema_id = $1 AND is_active = TRUE
         ORDER BY version DESC
         LIMIT 1
     `, schemaID).Scan(
@@ -255,21 +255,23 @@ func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOpti
 	}
 
 	rows, err := r.db.QueryContext(ctx, `
-		WITH ranked AS (
-			SELECT s.*, ROW_NUMBER() OVER (PARTITION BY schema_id ORDER BY version DESC) AS row_number,
-			       COUNT(*) OVER (PARTITION BY schema_id) AS version_count,
-			       MIN(created_at) OVER (PARTITION BY schema_id) AS first_created_at,
-			       MAX(updated_at) OVER (PARTITION BY schema_id) AS last_updated_at
-			FROM cq_schemas s
+		WITH family_stats AS (
+			SELECT schema_id, COUNT(*) AS version_count, MIN(created_at) AS first_created_at,
+			       MAX(updated_at) AS last_updated_at
+			FROM cq_schemas
 			WHERE STRPOS(schema_id, $2) = 1
+			GROUP BY schema_id
+		), ranked AS (
+			SELECT s.*, ROW_NUMBER() OVER (PARTITION BY s.schema_id ORDER BY s.version DESC) AS row_number
+			FROM cq_schemas s
+			WHERE STRPOS(s.schema_id, $2) = 1 AND ($1 = FALSE OR s.is_active = TRUE)
 		), latest AS (
 			SELECT * FROM ranked WHERE row_number = 1
 		)
 		SELECT schema_id, version, name, description, content, content_type, metadata_json,
-		       is_active, created_at, updated_at, version_count, first_created_at,
-		       last_updated_at, COUNT(*) OVER ()
-		FROM latest
-		WHERE ($1 = FALSE OR is_active = TRUE)
+		       is_active, created_at, updated_at, family_stats.version_count,
+		       family_stats.first_created_at, family_stats.last_updated_at, COUNT(*) OVER ()
+		FROM latest JOIN family_stats USING (schema_id)
 		ORDER BY schema_id
 		LIMIT $3
 	`, options.ActiveOnly, options.Prefix, options.Limit)
