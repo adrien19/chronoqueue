@@ -318,7 +318,12 @@ func TestCalendarServiceDoesNotRecordConflictingMessage(t *testing.T) {
 	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_messages WHERE queue_name = ?`, queue.Name).Scan(&messageCount))
 	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_schedule_history WHERE schedule_id = ?`, schedule.ScheduleId).Scan(&historyCount))
 	require.Equal(t, 1, messageCount)
-	require.Zero(t, historyCount)
+	require.Equal(t, 1, historyCount)
+	var success int
+	var errorMessage string
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT success, error_message FROM cq_schedule_history WHERE schedule_id = ?`, schedule.ScheduleId).Scan(&success, &errorMessage))
+	require.Zero(t, success)
+	require.Contains(t, errorMessage, "insert message")
 
 	counts, err := storage.StateManager.GetStateCounts(ctx, storage.DB, queue.Name)
 	require.NoError(t, err)

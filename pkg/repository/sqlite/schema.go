@@ -8,7 +8,7 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/schema"
 )
 
-const latestVersion = uint(7)
+const latestVersion = uint(8)
 
 type SchemaManager struct {
 	baseManager *schema.BaseManager
@@ -66,6 +66,9 @@ func (m *SchemaManager) Initialize(ctx context.Context, db *sql.DB) error {
 	if err := m.createScheduleHistoryTable(ctx, tx); err != nil {
 		return fmt.Errorf("create schedule history table: %w", err)
 	}
+	if err := m.createScheduleArchiveTable(ctx, tx); err != nil {
+		return fmt.Errorf("create schedule archive table: %w", err)
+	}
 
 	_, err = tx.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES (?, ?)`, latestVersion, "Initial schema")
 	if err != nil {
@@ -120,6 +123,10 @@ func (m *SchemaManager) Migrate(ctx context.Context, db *sql.DB, targetVersion u
 		case 7:
 			if err := m.migrateToV7_FixSchedulerIndex(ctx, db); err != nil {
 				return fmt.Errorf("migrate to version 7: %w", err)
+			}
+		case 8:
+			if err := m.migrateToV8_DurableScheduleHistory(ctx, db); err != nil {
+				return fmt.Errorf("migrate to version 8: %w", err)
 			}
 		default:
 			return fmt.Errorf("unsupported target version %d", v)
@@ -302,6 +309,79 @@ func (m *SchemaManager) migrateToV7_FixSchedulerIndex(ctx context.Context, db *s
 	return tx.Commit()
 }
 
+func (m *SchemaManager) migrateToV8_DurableScheduleHistory(ctx context.Context, db *sql.DB) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin migration tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := m.createScheduleHistoryTable(ctx, tx); err != nil {
+		return fmt.Errorf("create schedule history table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE cq_schedule_history RENAME TO cq_schedule_history_v7`); err != nil {
+		return fmt.Errorf("rename schedule history table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DROP INDEX IF EXISTS idx_schedule_history_schedule`); err != nil {
+		return fmt.Errorf("drop old schedule history index: %w", err)
+	}
+	if err := m.createScheduleHistoryTable(ctx, tx); err != nil {
+		return fmt.Errorf("create durable schedule history table: %w", err)
+	}
+	copyStatement := `
+		INSERT INTO cq_schedule_history (id, schedule_id, message_id, executed_at, success, error_message, message_pb)
+		SELECT h.id, h.schedule_id, h.message_id, h.executed_at, h.success, h.error_message, m.metadata_pb
+		FROM cq_schedule_history_v7 h
+		LEFT JOIN cq_messages m ON m.id = (SELECT candidate.id FROM cq_messages candidate WHERE candidate.message_id = h.message_id ORDER BY candidate.id LIMIT 1)
+	`
+	hasQueueName, err := sqliteTableHasColumn(ctx, tx, "cq_schedules", "queue_name")
+	if err != nil {
+		return fmt.Errorf("inspect schedules table: %w", err)
+	}
+	if hasQueueName {
+		copyStatement = `
+			INSERT INTO cq_schedule_history (id, schedule_id, message_id, executed_at, success, error_message, message_pb)
+			SELECT h.id, h.schedule_id, h.message_id, h.executed_at, h.success, h.error_message, m.metadata_pb
+			FROM cq_schedule_history_v7 h
+			JOIN cq_schedules s ON s.id = h.schedule_id
+			LEFT JOIN cq_messages m ON m.message_id = h.message_id AND m.queue_name = s.queue_name
+		`
+	}
+	if _, err := tx.ExecContext(ctx, copyStatement); err != nil {
+		return fmt.Errorf("copy schedule history: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DROP TABLE cq_schedule_history_v7`); err != nil {
+		return fmt.Errorf("drop old schedule history table: %w", err)
+	}
+	if err := m.createScheduleArchiveTable(ctx, tx); err != nil {
+		return fmt.Errorf("create schedule archive table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES (?, ?)`, 8, "Preserve schedule history and message snapshots"); err != nil {
+		return fmt.Errorf("record schema version: %w", err)
+	}
+	return tx.Commit()
+}
+
+func sqliteTableHasColumn(ctx context.Context, tx *sql.Tx, tableName, columnName string) (bool, error) {
+	rows, err := tx.QueryContext(ctx, `PRAGMA table_info(`+tableName+`)`)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return false, err
+		}
+		if name == columnName {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
 func (m *SchemaManager) Version(ctx context.Context, db *sql.DB) (uint, bool, error) {
 	return m.GetVersion(ctx, db)
 }
@@ -384,10 +464,15 @@ func (m *SchemaManager) createSchedulesTable(ctx context.Context, tx *sql.Tx) er
 }
 
 func (m *SchemaManager) createScheduleHistoryTable(ctx context.Context, tx *sql.Tx) error {
-	_, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS cq_schedule_history (id INTEGER PRIMARY KEY AUTOINCREMENT, schedule_id TEXT NOT NULL, message_id TEXT NOT NULL, executed_at INTEGER NOT NULL, success INTEGER NOT NULL, error_message TEXT, FOREIGN KEY (schedule_id) REFERENCES cq_schedules(id) ON DELETE CASCADE)`)
+	_, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS cq_schedule_history (id INTEGER PRIMARY KEY AUTOINCREMENT, schedule_id TEXT NOT NULL, message_id TEXT NOT NULL, executed_at INTEGER NOT NULL, success INTEGER NOT NULL, error_message TEXT, message_pb BLOB)`)
 	if err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_schedule_history_schedule ON cq_schedule_history(schedule_id, executed_at DESC)`)
+	return err
+}
+
+func (m *SchemaManager) createScheduleArchiveTable(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS cq_schedule_archive (schedule_id TEXT PRIMARY KEY, metadata_pb BLOB NOT NULL, deleted_at INTEGER NOT NULL)`)
 	return err
 }

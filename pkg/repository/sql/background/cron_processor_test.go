@@ -258,6 +258,11 @@ func TestCronProcessorMarksInvalidExpression(t *testing.T) {
 	require.Equal(t, schedulepb.Schedule_Metadata_ERRORED, updated.Metadata.State)
 	require.Contains(t, updated.Metadata.StateMessage, "invalid cron")
 	require.Nil(t, updated.Metadata.NextRun)
+	var success int
+	var errorMessage string
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT success, error_message FROM cq_schedule_history WHERE schedule_id = ?`, schedule.ScheduleId).Scan(&success, &errorMessage))
+	require.Zero(t, success)
+	require.Contains(t, errorMessage, "invalid cron")
 }
 
 func TestCronProcessorCoalescesMissedRunAndRecoversAfterRestart(t *testing.T) {

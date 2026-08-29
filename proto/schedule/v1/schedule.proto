@@ -189,6 +189,28 @@ message ScheduleHistory {
 
     // updated_at: When this schedule was last modified.
   google.protobuf.Timestamp updated_at = 6;
+
+    // executions: Durable schedule execution records. Unlike messages, these
+    // records remain available after message retention or schedule deletion.
+  repeated Execution executions = 7;
+
+  message Execution {
+        // message_id: Identifier assigned to the generated message.
+    string message_id = 1;
+
+        // executed_at: Scheduled execution time recorded by the processor.
+    google.protobuf.Timestamp executed_at = 2;
+
+        // success: Whether the schedule execution created its message.
+    bool success = 3;
+
+        // error_message: Execution failure detail when success is false.
+    string error_message = 4;
+
+        // message: Immutable snapshot of the generated message. This remains
+        // available after the live message is removed by its retention policy.
+    chronoqueue.api.message.v1.Message message = 5;
+  }
 }
 
 // CalendarSchedule defines rich business calendar-based scheduling.

@@ -356,7 +356,10 @@ type ScheduleHistory struct {
 	// created_at: When this schedule was created.
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// updated_at: When this schedule was last modified.
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// executions: Durable schedule execution records. Unlike messages, these
+	// records remain available after message retention or schedule deletion.
+	Executions    []*ScheduleHistory_Execution `protobuf:"bytes,7,rep,name=executions,proto3" json:"executions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -429,6 +432,13 @@ func (x *ScheduleHistory) GetCreatedAt() *timestamppb.Timestamp {
 func (x *ScheduleHistory) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *ScheduleHistory) GetExecutions() []*ScheduleHistory_Execution {
+	if x != nil {
+		return x.Executions
 	}
 	return nil
 }
@@ -2213,6 +2223,88 @@ func (*Schedule_Metadata_CronSchedule) isSchedule_Metadata_ScheduleConfig() {}
 
 func (*Schedule_Metadata_CalendarSchedule) isSchedule_Metadata_ScheduleConfig() {}
 
+type ScheduleHistory_Execution struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// message_id: Identifier assigned to the generated message.
+	MessageId string `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	// executed_at: Scheduled execution time recorded by the processor.
+	ExecutedAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
+	// success: Whether the schedule execution created its message.
+	Success bool `protobuf:"varint,3,opt,name=success,proto3" json:"success,omitempty"`
+	// error_message: Execution failure detail when success is false.
+	ErrorMessage string `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	// message: Immutable snapshot of the generated message. This remains
+	// available after the live message is removed by its retention policy.
+	Message       *v1.Message `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScheduleHistory_Execution) Reset() {
+	*x = ScheduleHistory_Execution{}
+	mi := &file_proto_schedule_v1_schedule_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScheduleHistory_Execution) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScheduleHistory_Execution) ProtoMessage() {}
+
+func (x *ScheduleHistory_Execution) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_schedule_v1_schedule_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScheduleHistory_Execution.ProtoReflect.Descriptor instead.
+func (*ScheduleHistory_Execution) Descriptor() ([]byte, []int) {
+	return file_proto_schedule_v1_schedule_proto_rawDescGZIP(), []int{1, 0}
+}
+
+func (x *ScheduleHistory_Execution) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+func (x *ScheduleHistory_Execution) GetExecutedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExecutedAt
+	}
+	return nil
+}
+
+func (x *ScheduleHistory_Execution) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ScheduleHistory_Execution) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *ScheduleHistory_Execution) GetMessage() *v1.Message {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
 var File_proto_schedule_v1_schedule_proto protoreflect.FileDescriptor
 
 const file_proto_schedule_v1_schedule_proto_rawDesc = "" +
@@ -2252,7 +2344,7 @@ const file_proto_schedule_v1_schedule_proto_rawDesc = "" +
 	"\n" +
 	"\x06PAUSED\x10\x03B\x11\n" +
 	"\x0fschedule_configJ\x04\b\n" +
-	"\x10\vR\x0fexclusivity_key\"\xd7\x02\n" +
+	"\x10\vR\x0fexclusivity_key\"\x97\x05\n" +
 	"\x0fScheduleHistory\x12?\n" +
 	"\bmessages\x18\x01 \x03(\v2#.chronoqueue.api.message.v1.MessageR\bmessages\x12\x1f\n" +
 	"\vschedule_id\x18\x02 \x01(\tR\n" +
@@ -2262,7 +2354,18 @@ const file_proto_schedule_v1_schedule_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xca\x03\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12V\n" +
+	"\n" +
+	"executions\x18\a \x03(\v26.chronoqueue.api.schedule.v1.ScheduleHistory.ExecutionR\n" +
+	"executions\x1a\xe5\x01\n" +
+	"\tExecution\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x01 \x01(\tR\tmessageId\x12;\n" +
+	"\vexecuted_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"executedAt\x12\x18\n" +
+	"\asuccess\x18\x03 \x01(\bR\asuccess\x12#\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\x12=\n" +
+	"\amessage\x18\x05 \x01(\v2#.chronoqueue.api.message.v1.MessageR\amessage\"\xca\x03\n" +
 	"\x10CalendarSchedule\x12N\n" +
 	"\x04type\x18\x01 \x01(\x0e2:.chronoqueue.api.schedule.v1.CalendarSchedule.ScheduleTypeR\x04type\x12?\n" +
 	"\x05rules\x18\x02 \x03(\v2).chronoqueue.api.schedule.v1.CalendarRuleR\x05rules\x12\x1a\n" +
@@ -2399,7 +2502,7 @@ func file_proto_schedule_v1_schedule_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_schedule_v1_schedule_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_proto_schedule_v1_schedule_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_proto_schedule_v1_schedule_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_proto_schedule_v1_schedule_proto_goTypes = []any{
 	(Schedule_Metadata_State)(0),         // 0: chronoqueue.api.schedule.v1.Schedule.Metadata.State
 	(CalendarSchedule_ScheduleType)(0),   // 1: chronoqueue.api.schedule.v1.CalendarSchedule.ScheduleType
@@ -2424,62 +2527,66 @@ var file_proto_schedule_v1_schedule_proto_goTypes = []any{
 	(*EasterOffset)(nil),                 // 20: chronoqueue.api.schedule.v1.EasterOffset
 	(*CalendarException)(nil),            // 21: chronoqueue.api.schedule.v1.CalendarException
 	(*Schedule_Metadata)(nil),            // 22: chronoqueue.api.schedule.v1.Schedule.Metadata
-	nil,                                  // 23: chronoqueue.api.schedule.v1.CustomRule.ParametersEntry
-	(*v1.Message)(nil),                   // 24: chronoqueue.api.message.v1.Message
-	(*timestamppb.Timestamp)(nil),        // 25: google.protobuf.Timestamp
-	(*v11.Payload)(nil),                  // 26: chronoqueue.api.common.v1.Payload
-	(*durationpb.Duration)(nil),          // 27: google.protobuf.Duration
-	(*v1.Message_Metadata_Header)(nil),   // 28: chronoqueue.api.message.v1.Message.Metadata.Header
+	(*ScheduleHistory_Execution)(nil),    // 23: chronoqueue.api.schedule.v1.ScheduleHistory.Execution
+	nil,                                  // 24: chronoqueue.api.schedule.v1.CustomRule.ParametersEntry
+	(*v1.Message)(nil),                   // 25: chronoqueue.api.message.v1.Message
+	(*timestamppb.Timestamp)(nil),        // 26: google.protobuf.Timestamp
+	(*v11.Payload)(nil),                  // 27: chronoqueue.api.common.v1.Payload
+	(*durationpb.Duration)(nil),          // 28: google.protobuf.Duration
+	(*v1.Message_Metadata_Header)(nil),   // 29: chronoqueue.api.message.v1.Message.Metadata.Header
 }
 var file_proto_schedule_v1_schedule_proto_depIdxs = []int32{
 	22, // 0: chronoqueue.api.schedule.v1.Schedule.metadata:type_name -> chronoqueue.api.schedule.v1.Schedule.Metadata
-	24, // 1: chronoqueue.api.schedule.v1.ScheduleHistory.messages:type_name -> chronoqueue.api.message.v1.Message
-	25, // 2: chronoqueue.api.schedule.v1.ScheduleHistory.next_run:type_name -> google.protobuf.Timestamp
-	25, // 3: chronoqueue.api.schedule.v1.ScheduleHistory.last_run:type_name -> google.protobuf.Timestamp
-	25, // 4: chronoqueue.api.schedule.v1.ScheduleHistory.created_at:type_name -> google.protobuf.Timestamp
-	25, // 5: chronoqueue.api.schedule.v1.ScheduleHistory.updated_at:type_name -> google.protobuf.Timestamp
-	1,  // 6: chronoqueue.api.schedule.v1.CalendarSchedule.type:type_name -> chronoqueue.api.schedule.v1.CalendarSchedule.ScheduleType
-	7,  // 7: chronoqueue.api.schedule.v1.CalendarSchedule.rules:type_name -> chronoqueue.api.schedule.v1.CalendarRule
-	15, // 8: chronoqueue.api.schedule.v1.CalendarSchedule.business_calendar:type_name -> chronoqueue.api.schedule.v1.BusinessCalendar
-	21, // 9: chronoqueue.api.schedule.v1.CalendarSchedule.exceptions:type_name -> chronoqueue.api.schedule.v1.CalendarException
-	8,  // 10: chronoqueue.api.schedule.v1.CalendarRule.monthly:type_name -> chronoqueue.api.schedule.v1.MonthlyRule
-	9,  // 11: chronoqueue.api.schedule.v1.CalendarRule.weekly:type_name -> chronoqueue.api.schedule.v1.WeeklyRule
-	10, // 12: chronoqueue.api.schedule.v1.CalendarRule.daily:type_name -> chronoqueue.api.schedule.v1.DailyRule
-	11, // 13: chronoqueue.api.schedule.v1.CalendarRule.yearly:type_name -> chronoqueue.api.schedule.v1.YearlyRule
-	12, // 14: chronoqueue.api.schedule.v1.CalendarRule.business_days:type_name -> chronoqueue.api.schedule.v1.BusinessDaysRule
-	13, // 15: chronoqueue.api.schedule.v1.CalendarRule.custom:type_name -> chronoqueue.api.schedule.v1.CustomRule
-	14, // 16: chronoqueue.api.schedule.v1.CalendarRule.execution_times:type_name -> chronoqueue.api.schedule.v1.TimeOfDay
-	25, // 17: chronoqueue.api.schedule.v1.CalendarRule.valid_from:type_name -> google.protobuf.Timestamp
-	25, // 18: chronoqueue.api.schedule.v1.CalendarRule.valid_until:type_name -> google.protobuf.Timestamp
-	2,  // 19: chronoqueue.api.schedule.v1.MonthlyRule.day_type:type_name -> chronoqueue.api.schedule.v1.MonthlyRule.DayType
-	25, // 20: chronoqueue.api.schedule.v1.WeeklyRule.start_week:type_name -> google.protobuf.Timestamp
-	25, // 21: chronoqueue.api.schedule.v1.DailyRule.start_date:type_name -> google.protobuf.Timestamp
-	23, // 22: chronoqueue.api.schedule.v1.CustomRule.parameters:type_name -> chronoqueue.api.schedule.v1.CustomRule.ParametersEntry
-	16, // 23: chronoqueue.api.schedule.v1.BusinessCalendar.holidays:type_name -> chronoqueue.api.schedule.v1.Holiday
-	25, // 24: chronoqueue.api.schedule.v1.Holiday.date:type_name -> google.protobuf.Timestamp
-	17, // 25: chronoqueue.api.schedule.v1.Holiday.rule:type_name -> chronoqueue.api.schedule.v1.HolidayRule
-	18, // 26: chronoqueue.api.schedule.v1.HolidayRule.fixed:type_name -> chronoqueue.api.schedule.v1.FixedDate
-	19, // 27: chronoqueue.api.schedule.v1.HolidayRule.relative:type_name -> chronoqueue.api.schedule.v1.RelativeDate
-	20, // 28: chronoqueue.api.schedule.v1.HolidayRule.easter_offset:type_name -> chronoqueue.api.schedule.v1.EasterOffset
-	25, // 29: chronoqueue.api.schedule.v1.CalendarException.date:type_name -> google.protobuf.Timestamp
-	3,  // 30: chronoqueue.api.schedule.v1.CalendarException.type:type_name -> chronoqueue.api.schedule.v1.CalendarException.ExceptionType
-	25, // 31: chronoqueue.api.schedule.v1.CalendarException.reschedule_to:type_name -> google.protobuf.Timestamp
-	14, // 32: chronoqueue.api.schedule.v1.CalendarException.extra_times:type_name -> chronoqueue.api.schedule.v1.TimeOfDay
-	26, // 33: chronoqueue.api.schedule.v1.Schedule.Metadata.payload:type_name -> chronoqueue.api.common.v1.Payload
-	0,  // 34: chronoqueue.api.schedule.v1.Schedule.Metadata.state:type_name -> chronoqueue.api.schedule.v1.Schedule.Metadata.State
-	6,  // 35: chronoqueue.api.schedule.v1.Schedule.Metadata.calendar_schedule:type_name -> chronoqueue.api.schedule.v1.CalendarSchedule
-	25, // 36: chronoqueue.api.schedule.v1.Schedule.Metadata.next_run:type_name -> google.protobuf.Timestamp
-	25, // 37: chronoqueue.api.schedule.v1.Schedule.Metadata.last_run:type_name -> google.protobuf.Timestamp
-	25, // 38: chronoqueue.api.schedule.v1.Schedule.Metadata.created_at:type_name -> google.protobuf.Timestamp
-	25, // 39: chronoqueue.api.schedule.v1.Schedule.Metadata.updated_at:type_name -> google.protobuf.Timestamp
-	27, // 40: chronoqueue.api.schedule.v1.Schedule.Metadata.lease_duration:type_name -> google.protobuf.Duration
-	25, // 41: chronoqueue.api.schedule.v1.Schedule.Metadata.next_runs:type_name -> google.protobuf.Timestamp
-	28, // 42: chronoqueue.api.schedule.v1.Schedule.Metadata.headers:type_name -> chronoqueue.api.message.v1.Message.Metadata.Header
-	43, // [43:43] is the sub-list for method output_type
-	43, // [43:43] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	25, // 1: chronoqueue.api.schedule.v1.ScheduleHistory.messages:type_name -> chronoqueue.api.message.v1.Message
+	26, // 2: chronoqueue.api.schedule.v1.ScheduleHistory.next_run:type_name -> google.protobuf.Timestamp
+	26, // 3: chronoqueue.api.schedule.v1.ScheduleHistory.last_run:type_name -> google.protobuf.Timestamp
+	26, // 4: chronoqueue.api.schedule.v1.ScheduleHistory.created_at:type_name -> google.protobuf.Timestamp
+	26, // 5: chronoqueue.api.schedule.v1.ScheduleHistory.updated_at:type_name -> google.protobuf.Timestamp
+	23, // 6: chronoqueue.api.schedule.v1.ScheduleHistory.executions:type_name -> chronoqueue.api.schedule.v1.ScheduleHistory.Execution
+	1,  // 7: chronoqueue.api.schedule.v1.CalendarSchedule.type:type_name -> chronoqueue.api.schedule.v1.CalendarSchedule.ScheduleType
+	7,  // 8: chronoqueue.api.schedule.v1.CalendarSchedule.rules:type_name -> chronoqueue.api.schedule.v1.CalendarRule
+	15, // 9: chronoqueue.api.schedule.v1.CalendarSchedule.business_calendar:type_name -> chronoqueue.api.schedule.v1.BusinessCalendar
+	21, // 10: chronoqueue.api.schedule.v1.CalendarSchedule.exceptions:type_name -> chronoqueue.api.schedule.v1.CalendarException
+	8,  // 11: chronoqueue.api.schedule.v1.CalendarRule.monthly:type_name -> chronoqueue.api.schedule.v1.MonthlyRule
+	9,  // 12: chronoqueue.api.schedule.v1.CalendarRule.weekly:type_name -> chronoqueue.api.schedule.v1.WeeklyRule
+	10, // 13: chronoqueue.api.schedule.v1.CalendarRule.daily:type_name -> chronoqueue.api.schedule.v1.DailyRule
+	11, // 14: chronoqueue.api.schedule.v1.CalendarRule.yearly:type_name -> chronoqueue.api.schedule.v1.YearlyRule
+	12, // 15: chronoqueue.api.schedule.v1.CalendarRule.business_days:type_name -> chronoqueue.api.schedule.v1.BusinessDaysRule
+	13, // 16: chronoqueue.api.schedule.v1.CalendarRule.custom:type_name -> chronoqueue.api.schedule.v1.CustomRule
+	14, // 17: chronoqueue.api.schedule.v1.CalendarRule.execution_times:type_name -> chronoqueue.api.schedule.v1.TimeOfDay
+	26, // 18: chronoqueue.api.schedule.v1.CalendarRule.valid_from:type_name -> google.protobuf.Timestamp
+	26, // 19: chronoqueue.api.schedule.v1.CalendarRule.valid_until:type_name -> google.protobuf.Timestamp
+	2,  // 20: chronoqueue.api.schedule.v1.MonthlyRule.day_type:type_name -> chronoqueue.api.schedule.v1.MonthlyRule.DayType
+	26, // 21: chronoqueue.api.schedule.v1.WeeklyRule.start_week:type_name -> google.protobuf.Timestamp
+	26, // 22: chronoqueue.api.schedule.v1.DailyRule.start_date:type_name -> google.protobuf.Timestamp
+	24, // 23: chronoqueue.api.schedule.v1.CustomRule.parameters:type_name -> chronoqueue.api.schedule.v1.CustomRule.ParametersEntry
+	16, // 24: chronoqueue.api.schedule.v1.BusinessCalendar.holidays:type_name -> chronoqueue.api.schedule.v1.Holiday
+	26, // 25: chronoqueue.api.schedule.v1.Holiday.date:type_name -> google.protobuf.Timestamp
+	17, // 26: chronoqueue.api.schedule.v1.Holiday.rule:type_name -> chronoqueue.api.schedule.v1.HolidayRule
+	18, // 27: chronoqueue.api.schedule.v1.HolidayRule.fixed:type_name -> chronoqueue.api.schedule.v1.FixedDate
+	19, // 28: chronoqueue.api.schedule.v1.HolidayRule.relative:type_name -> chronoqueue.api.schedule.v1.RelativeDate
+	20, // 29: chronoqueue.api.schedule.v1.HolidayRule.easter_offset:type_name -> chronoqueue.api.schedule.v1.EasterOffset
+	26, // 30: chronoqueue.api.schedule.v1.CalendarException.date:type_name -> google.protobuf.Timestamp
+	3,  // 31: chronoqueue.api.schedule.v1.CalendarException.type:type_name -> chronoqueue.api.schedule.v1.CalendarException.ExceptionType
+	26, // 32: chronoqueue.api.schedule.v1.CalendarException.reschedule_to:type_name -> google.protobuf.Timestamp
+	14, // 33: chronoqueue.api.schedule.v1.CalendarException.extra_times:type_name -> chronoqueue.api.schedule.v1.TimeOfDay
+	27, // 34: chronoqueue.api.schedule.v1.Schedule.Metadata.payload:type_name -> chronoqueue.api.common.v1.Payload
+	0,  // 35: chronoqueue.api.schedule.v1.Schedule.Metadata.state:type_name -> chronoqueue.api.schedule.v1.Schedule.Metadata.State
+	6,  // 36: chronoqueue.api.schedule.v1.Schedule.Metadata.calendar_schedule:type_name -> chronoqueue.api.schedule.v1.CalendarSchedule
+	26, // 37: chronoqueue.api.schedule.v1.Schedule.Metadata.next_run:type_name -> google.protobuf.Timestamp
+	26, // 38: chronoqueue.api.schedule.v1.Schedule.Metadata.last_run:type_name -> google.protobuf.Timestamp
+	26, // 39: chronoqueue.api.schedule.v1.Schedule.Metadata.created_at:type_name -> google.protobuf.Timestamp
+	26, // 40: chronoqueue.api.schedule.v1.Schedule.Metadata.updated_at:type_name -> google.protobuf.Timestamp
+	28, // 41: chronoqueue.api.schedule.v1.Schedule.Metadata.lease_duration:type_name -> google.protobuf.Duration
+	26, // 42: chronoqueue.api.schedule.v1.Schedule.Metadata.next_runs:type_name -> google.protobuf.Timestamp
+	29, // 43: chronoqueue.api.schedule.v1.Schedule.Metadata.headers:type_name -> chronoqueue.api.message.v1.Message.Metadata.Header
+	26, // 44: chronoqueue.api.schedule.v1.ScheduleHistory.Execution.executed_at:type_name -> google.protobuf.Timestamp
+	25, // 45: chronoqueue.api.schedule.v1.ScheduleHistory.Execution.message:type_name -> chronoqueue.api.message.v1.Message
+	46, // [46:46] is the sub-list for method output_type
+	46, // [46:46] is the sub-list for method input_type
+	46, // [46:46] is the sub-list for extension type_name
+	46, // [46:46] is the sub-list for extension extendee
+	0,  // [0:46] is the sub-list for field type_name
 }
 
 func init() { file_proto_schedule_v1_schedule_proto_init() }
@@ -2510,7 +2617,7 @@ func file_proto_schedule_v1_schedule_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_schedule_v1_schedule_proto_rawDesc), len(file_proto_schedule_v1_schedule_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   20,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

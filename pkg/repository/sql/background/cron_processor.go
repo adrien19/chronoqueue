@@ -372,6 +372,11 @@ func (c *CronProcessorService) markScheduleError(ctx context.Context, tx *sql.Tx
 	if _, err := tx.ExecContext(ctx, updateQuery, updatedBytes, schedule.Metadata.GetState(), now.UnixMilli(), scheduleID); err != nil {
 		return fmt.Errorf("update schedule state: %w", err)
 	}
+	historyQuery := fmt.Sprintf(`INSERT INTO cq_schedule_history (schedule_id, message_id, executed_at, success, error_message) VALUES (%s, %s, %s, %s, %s)`,
+		c.base.Dialect.Placeholder(1), c.base.Dialect.Placeholder(2), c.base.Dialect.Placeholder(3), c.base.Dialect.Placeholder(4), c.base.Dialect.Placeholder(5))
+	if _, err := tx.ExecContext(ctx, historyQuery, scheduleID, "", now.UnixMilli(), 0, msg); err != nil {
+		return fmt.Errorf("record failed schedule execution: %w", err)
+	}
 
 	metrics.IncrementCronScheduleFailures(scheduleID, schedule.Metadata.GetQueueName())
 
@@ -483,11 +488,11 @@ func (c *CronProcessorService) createCronMessage(ctx context.Context, tx *sql.Tx
 	}
 
 	historyQuery := fmt.Sprintf(`
-        INSERT INTO cq_schedule_history (schedule_id, message_id, executed_at, success)
-        VALUES (%s, %s, %s, %s)
-    `, c.base.Dialect.Placeholder(1), c.base.Dialect.Placeholder(2), c.base.Dialect.Placeholder(3), c.base.Dialect.Placeholder(4))
+		INSERT INTO cq_schedule_history (schedule_id, message_id, executed_at, success, message_pb)
+		VALUES (%s, %s, %s, %s, %s)
+	`, c.base.Dialect.Placeholder(1), c.base.Dialect.Placeholder(2), c.base.Dialect.Placeholder(3), c.base.Dialect.Placeholder(4), c.base.Dialect.Placeholder(5))
 
-	if _, err := tx.ExecContext(ctx, historyQuery, schedule.GetScheduleId(), messageID, runTime.UnixMilli(), 1); err != nil {
+	if _, err := tx.ExecContext(ctx, historyQuery, schedule.GetScheduleId(), messageID, runTime.UnixMilli(), 1, messageBytes); err != nil {
 		return "", fmt.Errorf("insert schedule history: %w", err)
 	}
 
