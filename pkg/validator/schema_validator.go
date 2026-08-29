@@ -48,6 +48,7 @@ func (v *SchemaValidator) Validate(ctx context.Context, msg *message_pb.Message)
 
 	// If queue requires schema but none specified, error
 	if v.queueMeta != nil && v.queueMeta.SchemaRequired && schemaID == "" {
+		result.SchemaMismatch = true
 		result.AddError(
 			NewValidationError(
 				"payload.schema_id",
@@ -66,6 +67,7 @@ func (v *SchemaValidator) Validate(ctx context.Context, msg *message_pb.Message)
 	// Convert payload data to JSON bytes
 	payloadBytes, err := v.payloadToJSON(payload.Data)
 	if err != nil {
+		result.SchemaMismatch = true
 		result.AddError(
 			NewValidationError(
 				"payload.data",
@@ -79,6 +81,7 @@ func (v *SchemaValidator) Validate(ctx context.Context, msg *message_pb.Message)
 	// Validate against schema
 	schemaResult, err := v.registry.Validate(ctx, schemaID, schemaVersion, payloadBytes)
 	if err != nil {
+		result.SchemaMismatch = true
 		result.AddError(
 			NewValidationError(
 				"payload",
@@ -92,6 +95,7 @@ func (v *SchemaValidator) Validate(ctx context.Context, msg *message_pb.Message)
 	// Convert schema validation errors to validator errors
 	if !schemaResult.Valid {
 		result.Valid = false
+		result.SchemaMismatch = true
 		result.SchemaID = schemaResult.SchemaId
 		result.SchemaVersion = schemaResult.SchemaVersion
 

@@ -141,7 +141,8 @@ message PostMessagesBulkResponse {
       DUPLICATE_MESSAGE_ID = 2;
       SCHEMA_MISMATCH      = 3;
       INTERNAL_ERROR       = 4;
-      QUEUE_NOT_FOUND      = 5;
+      // Queue lookup failures are RPC-level errors because all items target queue_name.
+      QUEUE_NOT_FOUND      = 5 [deprecated = true];
     }
     ErrorCode error_code = 4;
   }
@@ -328,7 +329,7 @@ message GetScheduleHistoryResponse {
 // Get messages from DLQ
 message GetDLQMessagesRequest {
   string dlq_name = 1;
-  int32  limit    = 2;
+  int32  limit    = 2; // Maximum results. 0 uses the default of 100; maximum is 1000.
 }
 
 message GetDLQMessagesResponse {

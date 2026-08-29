@@ -135,7 +135,10 @@ const (
 	PostMessagesBulkResponse_MessagePostResult_DUPLICATE_MESSAGE_ID PostMessagesBulkResponse_MessagePostResult_ErrorCode = 2
 	PostMessagesBulkResponse_MessagePostResult_SCHEMA_MISMATCH      PostMessagesBulkResponse_MessagePostResult_ErrorCode = 3
 	PostMessagesBulkResponse_MessagePostResult_INTERNAL_ERROR       PostMessagesBulkResponse_MessagePostResult_ErrorCode = 4
-	PostMessagesBulkResponse_MessagePostResult_QUEUE_NOT_FOUND      PostMessagesBulkResponse_MessagePostResult_ErrorCode = 5
+	// Queue lookup failures are RPC-level errors because all items target queue_name.
+	//
+	// Deprecated: Marked as deprecated in proto/queueservice/v1/request_response.proto.
+	PostMessagesBulkResponse_MessagePostResult_QUEUE_NOT_FOUND PostMessagesBulkResponse_MessagePostResult_ErrorCode = 5
 )
 
 // Enum value maps for PostMessagesBulkResponse_MessagePostResult_ErrorCode.
@@ -2155,7 +2158,7 @@ func (x *GetScheduleHistoryResponse) GetScheduleHistory() *v12.ScheduleHistory {
 type GetDLQMessagesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DlqName       string                 `protobuf:"bytes,1,opt,name=dlq_name,json=dlqName,proto3" json:"dlq_name,omitempty"`
-	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"` // Maximum results. 0 uses the default of 100; maximum is 1000.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3798,26 +3801,26 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\x10transaction_mode\x18\x03 \x01(\x0e2H.chronoqueue.api.queueservice.v1.PostMessagesBulkRequest.TransactionModeR\x0ftransactionMode\"6\n" +
 	"\x0fTransactionMode\x12\x12\n" +
 	"\x0eALL_OR_NOTHING\x10\x00\x12\x0f\n" +
-	"\vBEST_EFFORT\x10\x01\"\xce\x04\n" +
+	"\vBEST_EFFORT\x10\x01\"\xd2\x04\n" +
 	"\x18PostMessagesBulkResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12)\n" +
 	"\x10successful_count\x18\x02 \x01(\x05R\x0fsuccessfulCount\x12!\n" +
 	"\ffailed_count\x18\x03 \x01(\x05R\vfailedCount\x12e\n" +
-	"\aresults\x18\x04 \x03(\v2K.chronoqueue.api.queueservice.v1.PostMessagesBulkResponse.MessagePostResultR\aresults\x1a\xe2\x02\n" +
+	"\aresults\x18\x04 \x03(\v2K.chronoqueue.api.queueservice.v1.PostMessagesBulkResponse.MessagePostResultR\aresults\x1a\xe6\x02\n" +
 	"\x11MessagePostResult\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\x12t\n" +
 	"\n" +
-	"error_code\x18\x04 \x01(\x0e2U.chronoqueue.api.queueservice.v1.PostMessagesBulkResponse.MessagePostResult.ErrorCodeR\terrorCode\"\x87\x01\n" +
+	"error_code\x18\x04 \x01(\x0e2U.chronoqueue.api.queueservice.v1.PostMessagesBulkResponse.MessagePostResult.ErrorCodeR\terrorCode\"\x8b\x01\n" +
 	"\tErrorCode\x12\v\n" +
 	"\aSUCCESS\x10\x00\x12\x15\n" +
 	"\x11VALIDATION_FAILED\x10\x01\x12\x18\n" +
 	"\x14DUPLICATE_MESSAGE_ID\x10\x02\x12\x13\n" +
 	"\x0fSCHEMA_MISMATCH\x10\x03\x12\x12\n" +
-	"\x0eINTERNAL_ERROR\x10\x04\x12\x13\n" +
-	"\x0fQUEUE_NOT_FOUND\x10\x05\"\x84\x02\n" +
+	"\x0eINTERNAL_ERROR\x10\x04\x12\x17\n" +
+	"\x0fQUEUE_NOT_FOUND\x10\x05\x1a\x02\b\x01\"\x84\x02\n" +
 	"\x15GetNextMessageRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12@\n" +

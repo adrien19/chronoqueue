@@ -114,6 +114,7 @@
           },
           {
             "name": "limit",
+            "description": "Maximum results. 0 uses the default of 100; maximum is 1000.",
             "in": "query",
             "required": false,
             "type": "integer",
@@ -1280,7 +1281,8 @@
         "QUEUE_NOT_FOUND"
       ],
       "default": "SUCCESS",
-      "description": "Error code for programmatic handling"
+      "description": "- QUEUE_NOT_FOUND: Queue lookup failures are RPC-level errors because all items target queue_name.",
+      "title": "Error code for programmatic handling"
     },
     "MessageRetentionPolicyMode": {
       "type": "string",
@@ -1756,7 +1758,7 @@
         },
         "timezone": {
           "type": "string",
-          "description": "timezone: IANA timezone for all time calculations.\nExamples: \"America/New_York\", \"Europe/London\", \"Asia/Tokyo\"\nAffects DST transitions, date boundaries, execution times.\nRequired for calendar schedules."
+          "description": "timezone: Canonical IANA timezone for all calendar schedule calculations.\nExamples: \"America/New_York\", \"Europe/London\", \"Asia/Tokyo\"\nAffects DST transitions, date boundaries, execution times.\nRequired for calendar schedules."
         },
         "businessCalendar": {
           "$ref": "#/definitions/v1BusinessCalendar",
@@ -2746,7 +2748,7 @@
         },
         "timezone": {
           "type": "string",
-          "description": "timezone: Timezone for calendar_schedule calculations.\nIANA timezone format: \"America/New_York\", \"Europe/London\", \"Asia/Tokyo\"\nAffects when \"9 AM\" means and handles DST transitions correctly.\nMust be set when using calendar_schedule."
+          "description": "Deprecated: calendar_schedule.timezone is the canonical timezone.\nIf supplied for compatibility, it must match calendar_schedule.timezone."
         },
         "nextRuns": {
           "type": "array",

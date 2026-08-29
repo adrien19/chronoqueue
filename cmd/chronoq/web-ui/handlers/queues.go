@@ -843,8 +843,6 @@ func buildBulkMessageResults(response *queueservice_pb.PostMessagesBulkResponse)
 				message = "Message ID already exists"
 			case queueservice_pb.PostMessagesBulkResponse_MessagePostResult_SCHEMA_MISMATCH:
 				message = "Payload does not match the schema"
-			case queueservice_pb.PostMessagesBulkResponse_MessagePostResult_QUEUE_NOT_FOUND:
-				message = "Queue was not found"
 			default:
 				message = "Message could not be posted"
 			}
