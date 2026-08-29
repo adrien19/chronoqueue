@@ -86,6 +86,7 @@ type stubBackend struct {
 	enqueueTxErr    error   // transaction-level error for bulk operations
 	cancelled       []cancelledCall
 	cancelErr       error
+	extendRemaining int64
 	pingErr         error
 }
 
@@ -240,8 +241,11 @@ func (b *stubBackend) HeartbeatMessage(ctx context.Context, queueName string, me
 	return messagepb.Message_Metadata_RUNNING, 30000, nil
 }
 
-func (b *stubBackend) ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, workerId string, extensionMs int64) error {
-	return nil
+func (b *stubBackend) ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, workerId string, extensionMs int64) (int64, error) {
+	if b.extendRemaining != 0 {
+		return b.extendRemaining, nil
+	}
+	return extensionMs, nil
 }
 
 func (b *stubBackend) PeekMessagesWithPriorityRange(ctx context.Context, queueName string, limit int32, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error) {
@@ -567,6 +571,36 @@ func TestCreateQueue_PreservesOptionalUserDLQName(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, backend.createdQueues, 1)
 	require.Equal(t, "failed-orders", backend.createdQueues[0].GetMetadata().GetDeadLetterQueueName())
+}
+
+func TestCreateQueue_RequiresConfiguredDLQToExist(t *testing.T) {
+	backend := &stubBackend{getQueueErr: domainerror.New(domainerror.NotFound, "queue not found", nil)}
+	impl := &implementation{backend: backend}
+
+	_, err := impl.CreateQueue(context.Background(), &queueservicepb.CreateQueueRequest{
+		Name:     "orders",
+		Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "missing-dlq"},
+	})
+	require.ErrorContains(t, err, "get configured dead letter queue")
+	require.Empty(t, backend.createdQueues)
+}
+
+func TestRenewMessageLease_ReturnsBackendRemainingTime(t *testing.T) {
+	backend := &stubBackend{extendRemaining: 1_250}
+	impl := &implementation{backend: backend}
+	attemptID := "attempt"
+	workerID := "worker"
+
+	response, err := impl.RenewMessageLease(context.Background(), &queueservicepb.RenewMessageLeaseRequest{
+		QueueName:     "orders",
+		MessageId:     "message",
+		LeaseDuration: durationpb.New(45 * time.Second),
+		AttemptId:     &attemptID,
+		WorkerId:      &workerID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1250*time.Millisecond, response.GetRemainingTime().AsDuration())
+	require.Equal(t, messagepb.Message_Metadata_RUNNING, response.GetState())
 }
 
 func TestGetQueueMessage_ForwardsExclusivityKey(t *testing.T) {

@@ -72,6 +72,11 @@ func (s *SchedulerService) Stop() {
 	close(s.stopChan)
 }
 
+// RunOnce processes due messages once.
+func (s *SchedulerService) RunOnce(ctx context.Context) error {
+	return s.processScheduledMessages(ctx)
+}
+
 // scheduledMessage holds data for a message that needs activation
 type scheduledMessage struct {
 	id        int64
@@ -116,12 +121,16 @@ func (s *SchedulerService) processScheduledMessages(ctx context.Context) error {
 		msg.message.Metadata.State = messagepb.Message_Metadata_PENDING
 
 		// Update state in transaction
-		if err := s.activateMessage(ctx, msg.id, msg.queueName, msg.messageID, msg.message, oldState); err != nil {
+		activatedMessage, err := s.activateMessage(ctx, msg.id, msg.queueName, msg.messageID, msg.message, oldState, nowMs)
+		if err != nil {
 			s.base.Logger.ErrorWithFields(
 				"Failed to activate scheduled message",
 				"message_id", msg.messageID,
 				"error", err,
 			)
+			continue
+		}
+		if !activatedMessage {
 			continue
 		}
 
@@ -213,8 +222,10 @@ func (s *SchedulerService) activateMessage(
 	messageID string,
 	message *messagepb.Message,
 	oldState messagepb.Message_Metadata_State,
-) error {
-	return s.base.WithTransaction(ctx, &sqlbase.TxOptions{Timeout: 5 * time.Second}, func(tx *sql.Tx) error {
+	nowMs int64,
+) (bool, error) {
+	activated := false
+	err := s.base.WithTransaction(ctx, &sqlbase.TxOptions{Timeout: 5 * time.Second}, func(tx *sql.Tx) error {
 		// Marshal updated message
 		metadataBytes, err := s.base.Serializer.MarshalMessage(message)
 		if err != nil {
@@ -227,28 +238,44 @@ func (s *SchedulerService) activateMessage(
 			SET state = %s,
 			    metadata_pb = %s,
 			    updated_at = %s
-			WHERE id = %s
+			WHERE id = %s AND state = %s AND scheduled_at <= %s
 		`, s.base.Dialect.Placeholder(1),
 			s.base.Dialect.Placeholder(2),
 			s.base.Dialect.Placeholder(3),
-			s.base.Dialect.Placeholder(4))
+			s.base.Dialect.Placeholder(4),
+			s.base.Dialect.Placeholder(5),
+			s.base.Dialect.Placeholder(6))
 
-		_, err = tx.ExecContext(
+		result, err := tx.ExecContext(
 			ctx, updateQuery,
 			int(message.GetMetadata().GetState()),
 			metadataBytes,
 			s.base.Clock.NowMs(),
 			id,
+			int(messagepb.Message_Metadata_INVISIBLE),
+			nowMs,
 		)
 		if err != nil {
 			return fmt.Errorf("update message: %w", err)
+		}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("get activated message rows: %w", err)
+		}
+		if rows == 0 {
+			return nil
+		}
+		if rows != 1 {
+			return fmt.Errorf("activate message: expected one row, updated %d", rows)
 		}
 
 		// Update state counters
 		if err := s.base.StateManager.UpdateCounters(ctx, tx, queueName, oldState, message.GetMetadata().GetState()); err != nil {
 			return fmt.Errorf("update counters: %w", err)
 		}
+		activated = true
 
 		return nil
 	})
+	return activated, err
 }

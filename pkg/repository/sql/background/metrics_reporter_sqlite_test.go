@@ -21,8 +21,8 @@ func TestMetricsReporterEmitsDatabaseAndDLQGauges(t *testing.T) {
 	ctx := context.Background()
 	storage := newTestStorage(t)
 	t.Cleanup(func() { require.NoError(t, storage.Close()) })
-	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "source", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "source-dlq"}}))
 	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "source-dlq", Metadata: &queuepb.QueueMetadata{}}))
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "source", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "source-dlq"}}))
 
 	registry := metrics.NewMetricsRegistry()
 	reporter := NewMetricsReporterService(storage.BaseSQL, time.Second)
@@ -57,6 +57,7 @@ func TestMetricsReporterRecordsMetadataFailureWithoutAdvancingLastReportedAt(t *
 	ctx := context.Background()
 	storage := newTestStorage(t)
 	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "source-dlq", Metadata: &queuepb.QueueMetadata{}}))
 	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "source", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "source-dlq"}}))
 	_, err := storage.DB.ExecContext(ctx, `UPDATE cq_queues SET metadata_pb = ? WHERE name = ?`, []byte("invalid"), "source")
 	require.NoError(t, err)
@@ -76,10 +77,10 @@ func TestMetricsReporterReportsSharedDLQOnce(t *testing.T) {
 	ctx := context.Background()
 	storage := newTestStorage(t)
 	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "shared-dlq", Metadata: &queuepb.QueueMetadata{}}))
 	for _, source := range []string{"source-a", "source-b"} {
 		require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: source, Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "shared-dlq"}}))
 	}
-	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "shared-dlq", Metadata: &queuepb.QueueMetadata{}}))
 
 	registry := metrics.NewMetricsRegistry()
 	NewMetricsReporterService(storage.BaseSQL, time.Second).reportMetrics(ctx)
@@ -99,8 +100,8 @@ func TestMetricsReporterDLQCountFailureDoesNotRecordSuccess(t *testing.T) {
 	ctx := context.Background()
 	storage := newTestStorage(t)
 	t.Cleanup(func() { require.NoError(t, storage.Close()) })
-	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "source", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "source-dlq"}}))
 	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "source-dlq", Metadata: &queuepb.QueueMetadata{}}))
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "source", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "source-dlq"}}))
 	_, err := storage.DB.ExecContext(ctx, "DROP TABLE cq_messages")
 	require.NoError(t, err)
 	registry := metrics.NewMetricsRegistry()

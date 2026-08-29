@@ -815,8 +815,9 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 }
 
 // ExtendMessageLease extends the lease on a message.
-func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, workerId string, extensionMs int64) error {
-	return s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, workerId string, extensionMs int64) (int64, error) {
+	var remainingTimeMs int64
+	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		var messageBytes []byte
 		var leaseExtensionUsed int64
 		var currentRenewalCount int32
@@ -887,8 +888,10 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
 			return err
 		}
 		metrics.IncrementLeaseRenewals(queueName, "success")
+		remainingTimeMs = max(newLeaseRuntime.LeaseExpiry-s.nowMs(), 0)
 		return nil
 	})
+	return remainingTimeMs, err
 }
 
 // HeartbeatMessage updates the heartbeat for a message.

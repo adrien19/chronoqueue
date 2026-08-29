@@ -7,15 +7,40 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 
+	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	"github.com/adrien19/chronoqueue/internal/domainerror"
 )
+
+func TestExtendMessageLease_ReturnsPolicyCappedRemainingTime(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "renew-remaining.db"))
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "owned", Metadata: &queuepb.QueueMetadata{}}))
+	message := reclaimTestMessage("renew-capped", 1, 1)
+	message.Metadata.LeasePolicy = &commonpb.LeasePolicy{
+		BaseLease:    durationpb.New(time.Minute),
+		MaxExtension: durationpb.New(5 * time.Second),
+		ExtendStep:   durationpb.New(time.Second),
+	}
+	require.NoError(t, storage.EnqueueMessage(ctx, "owned", message))
+	claimed, err := storage.ClaimMessage(ctx, "owned", "worker", "attempt", "")
+	require.NoError(t, err)
+	require.NotNil(t, claimed)
+
+	remainingMs, err := storage.ExtendMessageLease(ctx, "owned", message.GetMessageId(), "attempt", "worker", int64((10 * time.Second).Milliseconds()))
+	require.NoError(t, err)
+	require.Positive(t, remainingMs)
+	require.LessOrEqual(t, remainingMs, int64((5 * time.Second).Milliseconds()))
+	require.Greater(t, remainingMs, int64((4 * time.Second).Milliseconds()))
+}
 
 func TestWorkerMutations_RequireActiveOwnership(t *testing.T) {
 	ctx := context.Background()
@@ -35,7 +60,8 @@ func TestWorkerMutations_RequireActiveOwnership(t *testing.T) {
 			return err
 		},
 		"renew": func(ctx context.Context, storage *Storage, queue, attempt, worker string) error {
-			return storage.ExtendMessageLease(ctx, queue, "renew", attempt, worker, 1_000)
+			_, err := storage.ExtendMessageLease(ctx, queue, "renew", attempt, worker, 1_000)
+			return err
 		},
 	}
 

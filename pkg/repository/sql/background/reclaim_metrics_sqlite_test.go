@@ -41,10 +41,10 @@ func TestReclaimMetricsReflectPersistedExpiryCause(t *testing.T) {
 			storage := newTestStorage(t)
 			t.Cleanup(func() { require.NoError(t, storage.Close()) })
 			queueName := "reclaim-" + strings.ReplaceAll(tt.name, " ", "-")
-			require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: tt.dlqTarget}}))
 			if tt.dlqTarget != "" {
 				require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: tt.dlqTarget, Metadata: &queuepb.QueueMetadata{}}))
 			}
+			require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: tt.dlqTarget}}))
 			attemptsLeft := int32(2)
 			if tt.transitionsToErrored {
 				attemptsLeft = 1

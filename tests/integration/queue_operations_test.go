@@ -126,6 +126,15 @@ func TestQueueOperations_CreateQueueWithDLQ_Success(t *testing.T) {
 	})
 	require.NoError(t, err, "DLQ should exist")
 	assert.NotNil(t, dlqState, "DLQ state should be returned")
+
+	_, err = client.DeleteQueue(ctx, &queueservice_pb.DeleteQueueRequest{Name: dlqName})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.ErrorContains(t, err, "referenced as a dead letter queue")
+
+	_, err = client.DeleteQueue(ctx, &queueservice_pb.DeleteQueueRequest{Name: queueName})
+	require.NoError(t, err)
+	_, err = client.DeleteQueue(ctx, &queueservice_pb.DeleteQueueRequest{Name: dlqName})
+	require.NoError(t, err)
 }
 
 // TestQueueOperations_DeleteEmptyQueue_Success validates deleting an empty queue.
