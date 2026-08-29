@@ -492,7 +492,7 @@ type CalendarSchedule struct {
 	// Multiple rules = union of all matching times.
 	// Example: Two rules for "weekdays at 9 AM" and "weekdays at 5 PM"
 	Rules []*CalendarRule `protobuf:"bytes,2,rep,name=rules,proto3" json:"rules,omitempty"`
-	// timezone: IANA timezone for all time calculations.
+	// timezone: Canonical IANA timezone for all calendar schedule calculations.
 	// Examples: "America/New_York", "Europe/London", "Asia/Tokyo"
 	// Affects DST transitions, date boundaries, execution times.
 	// Required for calendar schedules.
@@ -2007,10 +2007,10 @@ type Schedule_Metadata struct {
 	// If not set, uses queue's default lease_duration.
 	// Useful when scheduled tasks need different processing time than queue default.
 	LeaseDuration *durationpb.Duration `protobuf:"bytes,15,opt,name=lease_duration,json=leaseDuration,proto3" json:"lease_duration,omitempty"`
-	// timezone: Timezone for calendar_schedule calculations.
-	// IANA timezone format: "America/New_York", "Europe/London", "Asia/Tokyo"
-	// Affects when "9 AM" means and handles DST transitions correctly.
-	// Must be set when using calendar_schedule.
+	// Deprecated: calendar_schedule.timezone is the canonical timezone.
+	// If supplied for compatibility, it must match calendar_schedule.timezone.
+	//
+	// Deprecated: Marked as deprecated in proto/schedule/v1/schedule.proto.
 	Timezone string `protobuf:"bytes,17,opt,name=timezone,proto3" json:"timezone,omitempty"`
 	// next_runs: Precomputed upcoming execution times (for preview/validation).
 	// Populated by PreviewSchedule API or ValidateSchedule API.
@@ -2169,6 +2169,7 @@ func (x *Schedule_Metadata) GetLeaseDuration() *durationpb.Duration {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in proto/schedule/v1/schedule.proto.
 func (x *Schedule_Metadata) GetTimezone() string {
 	if x != nil {
 		return x.Timezone
@@ -2309,11 +2310,11 @@ var File_proto_schedule_v1_schedule_proto protoreflect.FileDescriptor
 
 const file_proto_schedule_v1_schedule_proto_rawDesc = "" +
 	"\n" +
-	" proto/schedule/v1/schedule.proto\x12\x1bchronoqueue.api.schedule.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cproto/common/v1/common.proto\x1a\x1eproto/message/v1/message.proto\"\x94\t\n" +
+	" proto/schedule/v1/schedule.proto\x12\x1bchronoqueue.api.schedule.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cproto/common/v1/common.proto\x1a\x1eproto/message/v1/message.proto\"\x98\t\n" +
 	"\bSchedule\x12\x1f\n" +
 	"\vschedule_id\x18\x01 \x01(\tR\n" +
 	"scheduleId\x12J\n" +
-	"\bmetadata\x18\x02 \x01(\v2..chronoqueue.api.schedule.v1.Schedule.MetadataR\bmetadata\x1a\x9a\b\n" +
+	"\bmetadata\x18\x02 \x01(\v2..chronoqueue.api.schedule.v1.Schedule.MetadataR\bmetadata\x1a\x9e\b\n" +
 	"\bMetadata\x12<\n" +
 	"\apayload\x18\x01 \x01(\v2\".chronoqueue.api.common.v1.PayloadR\apayload\x12J\n" +
 	"\x05state\x18\x02 \x01(\x0e24.chronoqueue.api.schedule.v1.Schedule.Metadata.StateR\x05state\x12%\n" +
@@ -2333,8 +2334,8 @@ const file_proto_schedule_v1_schedule_proto_rawDesc = "" +
 	"\bpriority\x18\f \x01(\x03R\bpriority\x12(\n" +
 	"\x10has_max_messages\x18\r \x01(\bR\x0ehasMaxMessages\x12!\n" +
 	"\fmax_messages\x18\x0e \x01(\x03R\vmaxMessages\x12@\n" +
-	"\x0elease_duration\x18\x0f \x01(\v2\x19.google.protobuf.DurationR\rleaseDuration\x12\x1a\n" +
-	"\btimezone\x18\x11 \x01(\tR\btimezone\x127\n" +
+	"\x0elease_duration\x18\x0f \x01(\v2\x19.google.protobuf.DurationR\rleaseDuration\x12\x1e\n" +
+	"\btimezone\x18\x11 \x01(\tB\x02\x18\x01R\btimezone\x127\n" +
 	"\tnext_runs\x18\x12 \x03(\v2\x1a.google.protobuf.TimestampR\bnextRuns\x12M\n" +
 	"\aheaders\x18\x13 \x03(\v23.chronoqueue.api.message.v1.Message.Metadata.HeaderR\aheaders\"=\n" +
 	"\x05State\x12\r\n" +

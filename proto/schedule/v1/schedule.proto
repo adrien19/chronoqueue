@@ -148,11 +148,9 @@ message Schedule {
         // Useful when scheduled tasks need different processing time than queue default.
     google.protobuf.Duration lease_duration = 15;
 
-        // timezone: Timezone for calendar_schedule calculations.
-        // IANA timezone format: "America/New_York", "Europe/London", "Asia/Tokyo"
-        // Affects when "9 AM" means and handles DST transitions correctly.
-        // Must be set when using calendar_schedule.
-    string timezone = 17;
+        // Deprecated: calendar_schedule.timezone is the canonical timezone.
+        // If supplied for compatibility, it must match calendar_schedule.timezone.
+    string timezone = 17 [deprecated = true];
 
         // next_runs: Precomputed upcoming execution times (for preview/validation).
         // Populated by PreviewSchedule API or ValidateSchedule API.
@@ -272,7 +270,7 @@ message CalendarSchedule {
     // Example: Two rules for "weekdays at 9 AM" and "weekdays at 5 PM"
   repeated CalendarRule rules = 2;
 
-    // timezone: IANA timezone for all time calculations.
+    // timezone: Canonical IANA timezone for all calendar schedule calculations.
     // Examples: "America/New_York", "Europe/London", "Asia/Tokyo"
     // Affects DST transitions, date boundaries, execution times.
     // Required for calendar schedules.

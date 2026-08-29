@@ -37,7 +37,17 @@ Internal errors use the public message `internal server error`. Database and enc
 - `scheduled_time` must be a valid protobuf timestamp.
 - Runtime fields (`state`, `lease_expiry`, `lease_renewal_count`, `current_attempt`, and `priority_level`) are server-managed and cannot be supplied when posting.
 - Payload size, metadata size, content type, and configured schema are validated before persistence.
-- Bulk posting accepts 1–1000 messages and at most 1 MiB of serialized message data. Validation failure rejects `ALL_OR_NOTHING` batches with `FailedPrecondition`; `BEST_EFFORT` reports individual failures in its response.
+- Bulk posting accepts 1–1000 messages and at most 1 MiB of serialized message data. Validation failure rejects `ALL_OR_NOTHING` batches with `FailedPrecondition`; `BEST_EFFORT` reports individual failures in its response. Schema-originated failures use `SCHEMA_MISMATCH`; queue lookup failure is an RPC-level `NotFound` because every item targets the request's single `queue_name`.
+
+## Scheduling
+
+- `calendar_schedule.timezone` is the canonical timezone for calendar validation, preview, and execution.
+- The deprecated `schedule.metadata.timezone` may be omitted. If supplied for compatibility, it must equal `calendar_schedule.timezone`.
+
+## Dead-letter queue listing
+
+- `dlq_name` is required.
+- `limit` must be between 0 and 1000. A value of 0 uses the server default of 100.
 
 ## Claim and lifecycle requests
 

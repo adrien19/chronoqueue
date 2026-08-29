@@ -561,6 +561,7 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 
 	// Pre-process and validate all messages
 	validationErrors := make([]error, len(messages))
+	validationErrorCodes := make([]queueservicepb.PostMessagesBulkResponse_MessagePostResult_ErrorCode, len(messages))
 	for i, message := range messages {
 		if message == nil {
 			err := fmt.Errorf("message[%d] is required", i)
@@ -603,6 +604,9 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 					errorDetails += fmt.Sprintf(" %s: %s;", valErr.Field, valErr.Message)
 				}
 				validationErrors[i] = fmt.Errorf("%s", errorDetails)
+				if validationResult.SchemaMismatch {
+					validationErrorCodes[i] = queueservicepb.PostMessagesBulkResponse_MessagePostResult_SCHEMA_MISMATCH
+				}
 			} else {
 				metrics.IncrementMessagesValidated(queueName)
 			}
@@ -689,8 +693,11 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 			results[i] = &queueservicepb.PostMessagesBulkResponse_MessagePostResult{
 				MessageId: messageId,
 				Success:   false,
-				ErrorCode: queueservicepb.PostMessagesBulkResponse_MessagePostResult_VALIDATION_FAILED,
+				ErrorCode: validationErrorCodes[i],
 				Error:     validationErrors[i].Error(),
+			}
+			if results[i].ErrorCode == queueservicepb.PostMessagesBulkResponse_MessagePostResult_SUCCESS {
+				results[i].ErrorCode = queueservicepb.PostMessagesBulkResponse_MessagePostResult_VALIDATION_FAILED
 			}
 		}
 	}
@@ -1077,6 +1084,12 @@ func (impl *implementation) CreateSchedule(ctx context.Context, request *queuese
 		if config.CalendarSchedule == nil {
 			return nil, domainerror.New(domainerror.InvalidArgument, "calendar schedule is required", nil)
 		}
+		if meta.GetTimezone() != "" && meta.GetTimezone() != config.CalendarSchedule.GetTimezone() { //nolint:staticcheck // Validate the deprecated field for old clients.
+			return nil, domainerror.InvalidWithFields("schedule timezone must match calendar schedule timezone", []domainerror.FieldViolation{{
+				Field:       "schedule.metadata.timezone",
+				Description: "must match schedule.metadata.calendar_schedule.timezone",
+			}}, nil)
+		}
 	default:
 		return nil, domainerror.New(domainerror.InvalidArgument, "schedule configuration is invalid", nil)
 	}
@@ -1235,6 +1248,19 @@ func (impl *implementation) GetCalendarSchedulePreview(ctx context.Context, cale
 
 // GetDLQMessages retrieves messages from the dead letter queue
 func (impl *implementation) GetDLQMessages(ctx context.Context, dlqName string, limit int32) ([]*messagepb.Message, error) {
+	const (
+		defaultLimit int32 = 100
+		maximumLimit int32 = 1000
+	)
+	if dlqName == "" {
+		return nil, domainerror.New(domainerror.InvalidArgument, "DLQ name is required", nil)
+	}
+	if limit < 0 || limit > maximumLimit {
+		return nil, domainerror.New(domainerror.InvalidArgument, "limit must be between 0 and 1000", nil)
+	}
+	if limit == 0 {
+		limit = defaultLimit
+	}
 	if _, err := impl.backend.GetQueue(ctx, dlqName); err != nil {
 		return nil, err
 	}

@@ -15,10 +15,11 @@ type Validator interface {
 
 // ValidationResult contains the outcome of validation
 type ValidationResult struct {
-	Valid         bool
-	Errors        []*ValidationError
-	SchemaID      string
-	SchemaVersion int32
+	Valid          bool
+	Errors         []*ValidationError
+	SchemaID       string
+	SchemaVersion  int32
+	SchemaMismatch bool
 }
 
 // ValidationError provides detailed error information
@@ -110,6 +111,7 @@ func (c *ValidatorChain) Validate(ctx context.Context, msg *message_pb.Message) 
 		if !vResult.Valid {
 			result.Valid = false
 			result.Errors = append(result.Errors, vResult.Errors...)
+			result.SchemaMismatch = result.SchemaMismatch || vResult.SchemaMismatch
 		}
 	}
 

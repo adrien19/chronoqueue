@@ -75,6 +75,7 @@ type stubBackend struct {
 	deletedQueues   []string
 	claims          []claimCall
 	peekCalls       []peekCall
+	dlqLimits       []int32
 	queues          []*queuepb.Queue
 	schedules       []*schedulepb.Schedule
 	queuePrefix     string
@@ -277,6 +278,7 @@ func (b *stubBackend) GetScheduleHistory(ctx context.Context, scheduleId string,
 }
 
 func (b *stubBackend) GetDLQMessages(ctx context.Context, dlqName string, limit int32) ([]*messagepb.Message, error) {
+	b.dlqLimits = append(b.dlqLimits, limit)
 	return nil, nil
 }
 
@@ -405,6 +407,41 @@ func TestCreateScheduleReturnsUnexpectedNextRunError(t *testing.T) {
 	}})
 	require.ErrorContains(t, err, "calculate next run")
 	require.Empty(t, backend.schedules)
+}
+
+func TestCreateScheduleRejectsConflictingTimezoneFields(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend, calendarEngine: &stubEngine{}}
+
+	_, err := impl.CreateSchedule(context.Background(), &queueservicepb.CreateScheduleRequest{Schedule: &schedulepb.Schedule{
+		ScheduleId: "conflicting-timezones",
+		Metadata: &schedulepb.Schedule_Metadata{
+			QueueName: "jobs",
+			Timezone:  "Europe/London",
+			ScheduleConfig: &schedulepb.Schedule_Metadata_CalendarSchedule{CalendarSchedule: &schedulepb.CalendarSchedule{
+				Timezone: "America/New_York",
+			}},
+		},
+	}})
+	require.Equal(t, codes.InvalidArgument, status.Code(domainerror.ToGRPC(err)))
+	require.Empty(t, backend.schedules)
+}
+
+func TestCreateScheduleAllowsOmittedDeprecatedTimezone(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend, calendarEngine: &stubEngine{}}
+
+	_, err := impl.CreateSchedule(context.Background(), &queueservicepb.CreateScheduleRequest{Schedule: &schedulepb.Schedule{
+		ScheduleId: "canonical-timezone",
+		Metadata: &schedulepb.Schedule_Metadata{
+			QueueName: "jobs",
+			ScheduleConfig: &schedulepb.Schedule_Metadata_CalendarSchedule{CalendarSchedule: &schedulepb.CalendarSchedule{
+				Timezone: "America/New_York",
+			}},
+		},
+	}})
+	require.NoError(t, err)
+	require.Len(t, backend.schedules, 1)
 }
 
 func TestMissingQueueStateAndDLQStatsReturnNotFound(t *testing.T) {
@@ -1397,6 +1434,45 @@ func TestCreateQueueMessagesBulk_BackendInternalError(t *testing.T) {
 
 	require.Equal(t, "internal server error", resp.Results[1].Error)
 	require.NotContains(t, resp.Results[1].Error, "database connection lost")
+}
+
+func TestCreateQueueMessagesBulk_ReportsSchemaMismatch(t *testing.T) {
+	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{}}
+	impl := &implementation{backend: backend}
+	validation := &stubValidator{result: &validator.ValidationResult{
+		Valid:          false,
+		SchemaMismatch: true,
+		Errors: []*validator.ValidationError{{
+			Field: "payload.name", Message: "required field missing",
+		}},
+	}}
+
+	response, err := impl.CreateQueueMessagesBulk(context.Background(), &queueservicepb.PostMessagesBulkRequest{
+		QueueName:       "test-queue",
+		Messages:        []*messagepb.Message{{MessageId: "schema-invalid", Metadata: &messagepb.Message_Metadata{}}},
+		TransactionMode: queueservicepb.PostMessagesBulkRequest_BEST_EFFORT,
+	}, validation)
+	require.NoError(t, err)
+	require.Equal(t, queueservicepb.PostMessagesBulkResponse_MessagePostResult_SCHEMA_MISMATCH, response.GetResults()[0].GetErrorCode())
+}
+
+func TestGetDLQMessagesNormalizesAndValidatesLimit(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend}
+
+	_, err := impl.GetDLQMessages(context.Background(), "jobs-dlq", 0)
+	require.NoError(t, err)
+	require.Equal(t, []int32{100}, backend.dlqLimits)
+
+	_, err = impl.GetDLQMessages(context.Background(), "jobs-dlq", 1000)
+	require.NoError(t, err)
+	require.Equal(t, []int32{100, 1000}, backend.dlqLimits)
+
+	for _, limit := range []int32{-1, 1001} {
+		_, err = impl.GetDLQMessages(context.Background(), "jobs-dlq", limit)
+		require.Equal(t, codes.InvalidArgument, status.Code(domainerror.ToGRPC(err)))
+	}
+	require.Equal(t, []int32{100, 1000}, backend.dlqLimits)
 }
 
 func TestCreateQueueMessagesBulk_DuplicateMessageID(t *testing.T) {
