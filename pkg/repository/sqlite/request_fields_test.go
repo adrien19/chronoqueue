@@ -93,6 +93,29 @@ func TestPeekMessages_FiltersPriorityRange(t *testing.T) {
 	}
 }
 
+func TestPeekMessages_ReturnsPendingStateOnly(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "peek-state.db"))
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "peek-state", Metadata: &queuepb.QueueMetadata{}}))
+	for _, state := range []messagepb.Message_Metadata_State{
+		messagepb.Message_Metadata_PENDING,
+		messagepb.Message_Metadata_INVISIBLE,
+		messagepb.Message_Metadata_RUNNING,
+		messagepb.Message_Metadata_COMPLETED,
+		messagepb.Message_Metadata_CANCELED,
+		messagepb.Message_Metadata_ERRORED,
+	} {
+		message := reclaimTestMessage(state.String(), 1, 1)
+		message.Metadata.State = state
+		require.NoError(t, storage.EnqueueMessage(ctx, "peek-state", message))
+	}
+
+	messages, err := storage.PeekMessages(ctx, "peek-state", 10)
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.Equal(t, messagepb.Message_Metadata_PENDING.String(), messages[0].GetMessageId())
+}
+
 func TestListResources_FiltersLiteralPrefixes(t *testing.T) {
 	ctx := context.Background()
 	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "list-prefix.db"))

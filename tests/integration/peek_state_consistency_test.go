@@ -20,14 +20,14 @@ import (
 	"github.com/adrien19/chronoqueue/tests/helpers"
 )
 
-// TestPeekStateConsistency_LeasedMessageReportedAsRunning verifies end-to-end
+// TestPeekStateConsistency_LeasedMessageExcluded verifies end-to-end
 // consistency between GetNextMessage, GetQueueState, and PeekQueueMessages.
 //
 // Regression coverage:
-//   - Peek must reflect runtime state (RUNNING) for leased messages.
+//   - Peek returns PENDING messages only and excludes leased RUNNING messages.
 //   - Reclaim service must not immediately requeue RUNNING messages when
 //     heartbeat_expiry is unset/zero.
-func TestPeekStateConsistency_LeasedMessageReportedAsRunning(t *testing.T) {
+func TestPeekStateConsistency_LeasedMessageExcluded(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -90,12 +90,7 @@ func TestPeekStateConsistency_LeasedMessageReportedAsRunning(t *testing.T) {
 		Limit:     10,
 	})
 	require.NoError(t, err)
-	require.Len(t, peekResp.GetMessages(), 1)
-
-	peekMsg := peekResp.GetMessages()[0]
-	assert.Equal(t, messageID, peekMsg.GetMessageId())
-	assert.Equal(t, message_pb.Message_Metadata_RUNNING, peekMsg.GetMetadata().GetState())
-	assert.Equal(t, getResp.GetAttemptId(), peekMsg.GetMetadata().GetCurrentAttempt().GetAttemptId())
+	require.Empty(t, peekResp.GetMessages())
 
 	// Wait longer than reclaim interval (2s in shared env) to ensure reclaim does
 	// not incorrectly move RUNNING -> PENDING when heartbeat_expiry is unset.
@@ -111,8 +106,7 @@ func TestPeekStateConsistency_LeasedMessageReportedAsRunning(t *testing.T) {
 		Limit:     10,
 	})
 	require.NoError(t, err)
-	require.Len(t, peekAfterWait.GetMessages(), 1)
-	assert.Equal(t, message_pb.Message_Metadata_RUNNING, peekAfterWait.GetMessages()[0].GetMetadata().GetState())
+	require.Empty(t, peekAfterWait.GetMessages())
 
 	attemptID := getResp.GetAttemptId()
 	workerID := getResp.GetWorkerId()

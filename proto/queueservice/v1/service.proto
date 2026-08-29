@@ -61,14 +61,11 @@ service QueueService {
     // Example:
     //   POST /v1/queues
     //   {
-    //     "queue": {
-    //       "name": "order-processing",
-    //       "metadata": {
-    //         "default_max_attempts": 3,
-    //         "lease_duration": "5m",
-    //         "dead_letter_queue_name": "order-processing_dlq",
-    //         "auto_create_dlq": true
-    //       }
+    //     "name": "order-processing",
+    //     "metadata": {
+    //       "default_max_attempts": 3,
+    //       "lease_duration": "300s",
+    //       "auto_create_dlq": true
     //     }
     //   }
     //
@@ -389,7 +386,7 @@ service QueueService {
     // - Affect message ordering
     //
     // Example:
-    //   GET /v1/queues/order-processing/messages:peek?count=10
+    //   GET /v1/queues/order-processing/messages:peek?limit=10
     //
     // Returns: List of messages (up to requested count)
   rpc PeekQueueMessages(PeekQueueMessagesRequest) returns (PeekQueueMessagesResponse) {
@@ -710,7 +707,6 @@ service QueueService {
     // ValidateCalendarSchedule checks if a calendar schedule is valid.
     //
     // Validates:
-    // - Cron expression syntax
     // - Calendar rule correctness
     // - Timezone validity
     // - Holiday rule logic

@@ -111,7 +111,7 @@ func TestRetentionPolicy_DeleteImmediately(t *testing.T) {
 }
 
 // TestRetentionPolicy_RetainDuration validates that messages with RETAIN_DURATION policy
-// are hidden from consumers but remain visible to peek for audit/UI purposes.
+// remain in terminal state while being hidden from consumer and peek operations.
 func TestRetentionPolicy_RetainDuration(t *testing.T) {
 	t.Parallel()
 
@@ -195,19 +195,21 @@ func TestRetentionPolicy_RetainDuration(t *testing.T) {
 		t.Error("Soft-deleted message should not be visible after acknowledgment with RETAIN_DURATION policy")
 	}
 
-	// Verify message remains visible via Peek for audit/UI purposes until retention expires.
+	stateResp, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{QueueName: queueName})
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), stateResp.GetStateCounts()[message_pb.Message_Metadata_COMPLETED.String()])
+
+	// Peek exposes PENDING messages only.
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
 		Limit:     10,
 	})
 	require.NoError(t, err)
-	require.Len(t, peekResp.Messages, 1)
-	assert.Equal(t, msgID, peekResp.Messages[0].GetMessageId())
-	assert.Equal(t, message_pb.Message_Metadata_COMPLETED, peekResp.Messages[0].GetMetadata().GetState())
+	require.Empty(t, peekResp.Messages)
 }
 
 // TestRetentionPolicy_RetainForever validates that messages with RETAIN_FOREVER policy
-// are hidden from consumers but remain visible to peek indefinitely.
+// remain in terminal state while being hidden from consumer and peek operations.
 func TestRetentionPolicy_RetainForever(t *testing.T) {
 	t.Parallel()
 
@@ -289,14 +291,16 @@ func TestRetentionPolicy_RetainForever(t *testing.T) {
 		t.Error("Soft-deleted message should not be visible after acknowledgment with RETAIN_FOREVER policy")
 	}
 
+	stateResp, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{QueueName: queueName})
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), stateResp.GetStateCounts()[message_pb.Message_Metadata_COMPLETED.String()])
+
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
 		Limit:     10,
 	})
 	require.NoError(t, err)
-	require.Len(t, peekResp.Messages, 1)
-	assert.Equal(t, msgID, peekResp.Messages[0].GetMessageId())
-	assert.Equal(t, message_pb.Message_Metadata_COMPLETED, peekResp.Messages[0].GetMetadata().GetState())
+	require.Empty(t, peekResp.Messages)
 }
 
 // TestRetentionPolicy_NackWithRetention validates that NACK with max retries exhausted
@@ -387,14 +391,16 @@ func TestRetentionPolicy_NackWithRetention(t *testing.T) {
 		t.Error("Message should be soft-deleted after NACK exhausts retries with retention policy")
 	}
 
+	stateResp, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{QueueName: queueName})
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), stateResp.GetStateCounts()[message_pb.Message_Metadata_ERRORED.String()])
+
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
 		Limit:     10,
 	})
 	require.NoError(t, err)
-	require.Len(t, peekResp.Messages, 1)
-	assert.Equal(t, msgID, peekResp.Messages[0].GetMessageId())
-	assert.Equal(t, message_pb.Message_Metadata_ERRORED, peekResp.Messages[0].GetMetadata().GetState())
+	require.Empty(t, peekResp.Messages)
 }
 
 // TestRetentionPolicy_MultipleMessages validates retention policy works correctly
@@ -487,16 +493,17 @@ func TestRetentionPolicy_MultipleMessages(t *testing.T) {
 		t.Error("All messages should be soft-deleted")
 	}
 
-	// Verify peek still exposes the retained completed messages for audit/UI purposes.
+	stateResp, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{QueueName: queueName})
+	require.NoError(t, err)
+	assert.Equal(t, int32(messageCount), stateResp.GetStateCounts()[message_pb.Message_Metadata_COMPLETED.String()])
+
+	// Peek exposes PENDING messages only.
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
 		Limit:     10,
 	})
 	require.NoError(t, err)
-	require.Len(t, peekResp.Messages, messageCount)
-	for _, msg := range peekResp.Messages {
-		assert.Equal(t, message_pb.Message_Metadata_COMPLETED, msg.GetMetadata().GetState())
-	}
+	require.Empty(t, peekResp.Messages)
 }
 
 // TestRetentionPolicy_ExplicitDeleteImmediately validates that explicitly setting

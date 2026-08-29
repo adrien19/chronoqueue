@@ -26,7 +26,7 @@ import (
 	"github.com/adrien19/chronoqueue/internal/server"
 )
 
-func TestSQLitePeekStateConsistency_LeasedMessageReportedAsRunning(t *testing.T) {
+func TestSQLitePeekStateConsistency_LeasedMessageExcluded(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -117,9 +117,7 @@ func TestSQLitePeekStateConsistency_LeasedMessageReportedAsRunning(t *testing.T)
 		Limit:     10,
 	})
 	require.NoError(t, err)
-	require.Len(t, peekResp.GetMessages(), 1)
-	assert.Equal(t, messagepb.Message_Metadata_RUNNING, peekResp.GetMessages()[0].GetMetadata().GetState())
-	assert.Equal(t, getResp.GetAttemptId(), peekResp.GetMessages()[0].GetMetadata().GetCurrentAttempt().GetAttemptId())
+	require.Empty(t, peekResp.GetMessages())
 
 	// Ensure reclaim loop does not incorrectly move RUNNING to PENDING when heartbeat_expiry is unset.
 	time.Sleep(3 * time.Second)
@@ -134,8 +132,7 @@ func TestSQLitePeekStateConsistency_LeasedMessageReportedAsRunning(t *testing.T)
 		Limit:     10,
 	})
 	require.NoError(t, err)
-	require.Len(t, peekAfterWait.GetMessages(), 1)
-	assert.Equal(t, messagepb.Message_Metadata_RUNNING, peekAfterWait.GetMessages()[0].GetMetadata().GetState())
+	require.Empty(t, peekAfterWait.GetMessages())
 
 	attemptID := getResp.GetAttemptId()
 	workerID := getResp.GetWorkerId()

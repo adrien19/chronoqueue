@@ -22,8 +22,10 @@ type BackendStorage interface {
 
 	// Queue Operations
 	CreateQueue(ctx context.Context, queue *queuepb.Queue) error
+	CreateQueueWithDLQ(ctx context.Context, queue *queuepb.Queue, dlq *queuepb.Queue) error
 	GetQueue(ctx context.Context, name string) (*queuepb.Queue, error)
 	GetQueueMetadata(ctx context.Context, name string) (*queuepb.QueueMetadata, error)
+	IsDLQ(ctx context.Context, name string) (bool, error)
 	ListQueuesWithPrefix(ctx context.Context, prefix string) ([]*queuepb.Queue, error)
 	DeleteQueue(ctx context.Context, name string) error
 

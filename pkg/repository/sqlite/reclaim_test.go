@@ -82,7 +82,7 @@ func TestReclaimExpiredMessage_UsesAuthoritativeAttemptsAndFencesAttempt(t *test
 	_, err = first.ReclaimExpiredMessage(ctx, queueName, expired[0])
 	require.NoError(t, err)
 
-	peeked, err := first.PeekMessages(ctx, queueName, 10)
+	peeked, err := first.GetDLQMessages(ctx, queueName, 10)
 	require.NoError(t, err)
 	require.Len(t, peeked, 1)
 	assert.Equal(t, messagepb.Message_Metadata_ERRORED, peeked[0].GetMetadata().GetState())

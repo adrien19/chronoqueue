@@ -99,6 +99,9 @@ func (s *Storage) RetryDLQMessage(ctx context.Context, dlqName string, messageId
 		`
 		_, err = tx.ExecContext(ctx, updateQuery, targetQueueName, messagepb.Message_Metadata_PENDING, attemptsLeft, messageId, dlqName)
 		if err != nil {
+			if isUniqueConstraintError(err) {
+				return domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("message %q already exists in queue %q", messageId, targetQueueName), err)
+			}
 			return fmt.Errorf("update message: %w", err)
 		}
 

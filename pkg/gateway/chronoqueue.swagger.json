@@ -54,7 +54,7 @@
     "/v1/calendar-schedules:validate": {
       "post": {
         "summary": "ValidateCalendarSchedule checks if a calendar schedule is valid.",
-        "description": "Validates:\n- Cron expression syntax\n- Calendar rule correctness\n- Timezone validity\n- Holiday rule logic\n\nUse before CreateSchedule to catch configuration errors.\n\nExample:\n  POST /v1/calendar-schedules:validate\n  {\n    \"calendar_schedule\": {...}\n  }\n\nReturns: Validation result with errors if invalid",
+        "description": "Validates:\n- Calendar rule correctness\n- Timezone validity\n- Holiday rule logic\n\nUse before CreateSchedule to catch configuration errors.\n\nExample:\n  POST /v1/calendar-schedules:validate\n  {\n    \"calendar_schedule\": {...}\n  }\n\nReturns: Validation result with errors if invalid",
         "operationId": "QueueService_ValidateCalendarSchedule",
         "responses": {
           "200": {
@@ -321,7 +321,7 @@
       },
       "post": {
         "summary": "CreateQueue creates a new queue with specified configuration.",
-        "description": "Use to:\n- Define retry behavior (max_attempts, lease_duration)\n- Set up dead letter queue for failed messages\n- Configure priority handling\n- Enforce message schemas\n\nExample:\n  POST /v1/queues\n  {\n    \"queue\": {\n      \"name\": \"order-processing\",\n      \"metadata\": {\n        \"default_max_attempts\": 3,\n        \"lease_duration\": \"5m\",\n        \"dead_letter_queue_name\": \"order-processing_dlq\",\n        \"auto_create_dlq\": true\n      }\n    }\n  }\n\nReturns: success status\nErrors:\n  - AlreadyExists: Queue with this name exists\n  - InvalidArgument: Invalid configuration (negative lease_duration, etc.)",
+        "description": "Use to:\n- Define retry behavior (max_attempts, lease_duration)\n- Set up dead letter queue for failed messages\n- Configure priority handling\n- Enforce message schemas\n\nExample:\n  POST /v1/queues\n  {\n    \"name\": \"order-processing\",\n    \"metadata\": {\n      \"default_max_attempts\": 3,\n      \"lease_duration\": \"300s\",\n      \"auto_create_dlq\": true\n    }\n  }\n\nReturns: success status\nErrors:\n  - AlreadyExists: Queue with this name exists\n  - InvalidArgument: Invalid configuration (negative lease_duration, etc.)",
         "operationId": "QueueService_CreateQueue",
         "responses": {
           "200": {
@@ -696,7 +696,7 @@
     "/v1/queues/{queueName}/messages:peek": {
       "get": {
         "summary": "PeekQueueMessages views messages without leasing them.",
-        "description": "Use for:\n- Debugging (inspect message payloads)\n- Monitoring (see what's pending)\n- Admin dashboards\n\nDoes NOT:\n- Change message state\n- Create leases\n- Affect message ordering\n\nExample:\n  GET /v1/queues/order-processing/messages:peek?count=10\n\nReturns: List of messages (up to requested count)",
+        "description": "Use for:\n- Debugging (inspect message payloads)\n- Monitoring (see what's pending)\n- Admin dashboards\n\nDoes NOT:\n- Change message state\n- Create leases\n- Affect message ordering\n\nExample:\n  GET /v1/queues/order-processing/messages:peek?limit=10\n\nReturns: List of messages (up to requested count)",
         "operationId": "QueueService_PeekQueueMessages",
         "responses": {
           "200": {

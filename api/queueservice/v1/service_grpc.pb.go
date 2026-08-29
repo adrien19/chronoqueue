@@ -109,14 +109,11 @@ type QueueServiceClient interface {
 	//
 	//	POST /v1/queues
 	//	{
-	//	  "queue": {
-	//	    "name": "order-processing",
-	//	    "metadata": {
-	//	      "default_max_attempts": 3,
-	//	      "lease_duration": "5m",
-	//	      "dead_letter_queue_name": "order-processing_dlq",
-	//	      "auto_create_dlq": true
-	//	    }
+	//	  "name": "order-processing",
+	//	  "metadata": {
+	//	    "default_max_attempts": 3,
+	//	    "lease_duration": "300s",
+	//	    "auto_create_dlq": true
 	//	  }
 	//	}
 	//
@@ -389,7 +386,7 @@ type QueueServiceClient interface {
 	//
 	// Example:
 	//
-	//	GET /v1/queues/order-processing/messages:peek?count=10
+	//	GET /v1/queues/order-processing/messages:peek?limit=10
 	//
 	// Returns: List of messages (up to requested count)
 	PeekQueueMessages(ctx context.Context, in *PeekQueueMessagesRequest, opts ...grpc.CallOption) (*PeekQueueMessagesResponse, error)
@@ -641,7 +638,6 @@ type QueueServiceClient interface {
 	// ValidateCalendarSchedule checks if a calendar schedule is valid.
 	//
 	// Validates:
-	// - Cron expression syntax
 	// - Calendar rule correctness
 	// - Timezone validity
 	// - Holiday rule logic
@@ -1129,14 +1125,11 @@ type QueueServiceServer interface {
 	//
 	//	POST /v1/queues
 	//	{
-	//	  "queue": {
-	//	    "name": "order-processing",
-	//	    "metadata": {
-	//	      "default_max_attempts": 3,
-	//	      "lease_duration": "5m",
-	//	      "dead_letter_queue_name": "order-processing_dlq",
-	//	      "auto_create_dlq": true
-	//	    }
+	//	  "name": "order-processing",
+	//	  "metadata": {
+	//	    "default_max_attempts": 3,
+	//	    "lease_duration": "300s",
+	//	    "auto_create_dlq": true
 	//	  }
 	//	}
 	//
@@ -1409,7 +1402,7 @@ type QueueServiceServer interface {
 	//
 	// Example:
 	//
-	//	GET /v1/queues/order-processing/messages:peek?count=10
+	//	GET /v1/queues/order-processing/messages:peek?limit=10
 	//
 	// Returns: List of messages (up to requested count)
 	PeekQueueMessages(context.Context, *PeekQueueMessagesRequest) (*PeekQueueMessagesResponse, error)
@@ -1661,7 +1654,6 @@ type QueueServiceServer interface {
 	// ValidateCalendarSchedule checks if a calendar schedule is valid.
 	//
 	// Validates:
-	// - Cron expression syntax
 	// - Calendar rule correctness
 	// - Timezone validity
 	// - Holiday rule logic
