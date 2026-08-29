@@ -60,8 +60,9 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 	assert.Equal(t, latestVersion, version)
 
 	for table, expected := range map[string][]string{
-		"cq_schedules": {"next_run", "last_run", "cron_schedule", "execution_count"},
-		"cq_messages":  {"completed_at", "deleted_at", "cancellation_reason"},
+		"cq_schedules":        {"next_run", "last_run", "cron_schedule", "execution_count"},
+		"cq_messages":         {"completed_at", "deleted_at", "cancellation_reason"},
+		"cq_schedule_history": {"message_pb"},
 	} {
 		for _, column := range expected {
 			var exists bool
@@ -72,6 +73,9 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 			assert.True(t, exists, "column %s.%s is missing", table, column)
 		}
 	}
+	var archiveTableExists bool
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'cq_schedule_archive')`).Scan(&archiveTableExists))
+	assert.True(t, archiveTableExists)
 	var schedulerIndexDefinition string
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT indexdef FROM pg_indexes WHERE tablename = 'cq_messages' AND indexname = 'idx_messages_scheduler'`).Scan(&schedulerIndexDefinition))
 	assert.Contains(t, schedulerIndexDefinition, "WHERE (state = 0)")

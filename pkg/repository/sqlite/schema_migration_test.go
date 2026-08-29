@@ -48,6 +48,10 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 
 	assertSQLiteColumns(t, ctx, db, "cq_schedules", "next_run", "last_run", "cron_schedule", "execution_count")
 	assertSQLiteColumns(t, ctx, db, "cq_messages", "completed_at", "deleted_at", "cancellation_reason")
+	assertSQLiteColumns(t, ctx, db, "cq_schedule_history", "message_pb")
+	var archiveTableCount int
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'cq_schedule_archive'`).Scan(&archiveTableCount))
+	assert.Equal(t, 1, archiveTableCount)
 	var schedulerIndexSQL string
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_messages_scheduler'`).Scan(&schedulerIndexSQL))
 	assert.Contains(t, schedulerIndexSQL, "WHERE state = 0")
@@ -77,6 +81,40 @@ func TestSchemaMigration_V7RollsBackWithoutMessagesTable(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, exists)
 	assert.Equal(t, uint(6), version)
+}
+
+func TestSchemaMigration_V8PreservesExistingScheduleHistory(t *testing.T) {
+	ctx := context.Background()
+	db, err := OpenConnection(ctx, DefaultConnectionConfig(filepath.Join(t.TempDir(), "migration.db")))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+	statements := []string{
+		`CREATE TABLE cq_schema_version (version INTEGER PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, description TEXT)`,
+		`INSERT INTO cq_schema_version (version, description) VALUES (7, 'v7 fixture')`,
+		`CREATE TABLE cq_schedules (id TEXT PRIMARY KEY, queue_name TEXT NOT NULL)`,
+		`CREATE TABLE cq_messages (id INTEGER PRIMARY KEY, queue_name TEXT NOT NULL, message_id TEXT NOT NULL, metadata_pb BLOB NOT NULL)`,
+		`CREATE TABLE cq_schedule_history (id INTEGER PRIMARY KEY AUTOINCREMENT, schedule_id TEXT NOT NULL, message_id TEXT NOT NULL, executed_at INTEGER NOT NULL, success INTEGER NOT NULL, error_message TEXT, FOREIGN KEY (schedule_id) REFERENCES cq_schedules(id) ON DELETE CASCADE)`,
+		`CREATE INDEX idx_schedule_history_schedule ON cq_schedule_history(schedule_id, executed_at DESC)`,
+		`INSERT INTO cq_schedules (id, queue_name) VALUES ('schedule-a', 'queue-a')`,
+		`INSERT INTO cq_messages (id, queue_name, message_id, metadata_pb) VALUES (1, 'queue-a', 'message-a', X'0102')`,
+		`INSERT INTO cq_schedule_history (schedule_id, message_id, executed_at, success) VALUES ('schedule-a', 'message-a', 1234, 1)`,
+	}
+	for _, statement := range statements {
+		_, err := db.ExecContext(ctx, statement)
+		require.NoError(t, err)
+	}
+
+	manager := NewSchemaManager()
+	require.NoError(t, manager.Migrate(ctx, db, 8))
+	var snapshot []byte
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT message_pb FROM cq_schedule_history WHERE schedule_id = 'schedule-a'`).Scan(&snapshot))
+	assert.Equal(t, []byte{1, 2}, snapshot)
+	_, err = db.ExecContext(ctx, `DELETE FROM cq_schedules WHERE id = 'schedule-a'`)
+	require.NoError(t, err)
+	var historyCount int
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_schedule_history WHERE schedule_id = 'schedule-a'`).Scan(&historyCount))
+	assert.Equal(t, 1, historyCount)
 }
 
 func TestSchemaMigration_RollsBackFailedVersion(t *testing.T) {

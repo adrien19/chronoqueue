@@ -8,7 +8,7 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/schema"
 )
 
-const latestVersion = uint(7)
+const latestVersion = uint(8)
 
 // SchemaManager handles PostgreSQL schema initialization and versioning.
 type SchemaManager struct {
@@ -67,6 +67,9 @@ func (m *SchemaManager) Initialize(ctx context.Context, db *sql.DB) error {
 	if err := m.createScheduleHistoryTable(ctx, tx); err != nil {
 		return fmt.Errorf("create schedule history table: %w", err)
 	}
+	if err := m.createScheduleArchiveTable(ctx, tx); err != nil {
+		return fmt.Errorf("create schedule archive table: %w", err)
+	}
 
 	if _, err := tx.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES ($1, $2)`, latestVersion, "Initial schema"); err != nil {
 		return fmt.Errorf("set schema version: %w", err)
@@ -120,6 +123,10 @@ func (m *SchemaManager) Migrate(ctx context.Context, db *sql.DB, targetVersion u
 		case 7:
 			if err := m.migrateToV7_FixSchedulerIndex(ctx, db); err != nil {
 				return fmt.Errorf("migrate to version 7: %w", err)
+			}
+		case 8:
+			if err := m.migrateToV8_DurableScheduleHistory(ctx, db); err != nil {
+				return fmt.Errorf("migrate to version 8: %w", err)
 			}
 		default:
 			return fmt.Errorf("unsupported target version %d", v)
@@ -273,6 +280,47 @@ func (m *SchemaManager) migrateToV7_FixSchedulerIndex(ctx context.Context, db *s
 	return tx.Commit()
 }
 
+func (m *SchemaManager) migrateToV8_DurableScheduleHistory(ctx context.Context, db *sql.DB) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin migration tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := m.createScheduleHistoryTable(ctx, tx); err != nil {
+		return fmt.Errorf("create schedule history table: %w", err)
+	}
+	statements := []string{
+		`ALTER TABLE cq_schedule_history ADD COLUMN IF NOT EXISTS message_pb BYTEA`,
+		`DO $$
+		BEGIN
+			IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'cq_schedules' AND column_name = 'queue_name') THEN
+				UPDATE cq_schedule_history h
+				SET message_pb = m.metadata_pb
+				FROM cq_messages m, cq_schedules s
+				WHERE h.schedule_id = s.id AND m.queue_name = s.queue_name AND h.message_id = m.message_id AND h.message_pb IS NULL;
+			ELSE
+				UPDATE cq_schedule_history h
+				SET message_pb = (SELECT m.metadata_pb FROM cq_messages m WHERE m.message_id = h.message_id ORDER BY m.id LIMIT 1)
+				WHERE h.message_pb IS NULL;
+			END IF;
+		END $$`,
+		`ALTER TABLE cq_schedule_history DROP CONSTRAINT IF EXISTS cq_schedule_history_schedule_id_fkey`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
+			return fmt.Errorf("execute migration statement: %w", err)
+		}
+	}
+	if err := m.createScheduleArchiveTable(ctx, tx); err != nil {
+		return fmt.Errorf("create schedule archive table: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES ($1, $2)`, 8, "Preserve schedule history and message snapshots"); err != nil {
+		return fmt.Errorf("record schema version: %w", err)
+	}
+	return tx.Commit()
+}
+
 func (m *SchemaManager) Version(ctx context.Context, db *sql.DB) (uint, bool, error) {
 	return m.GetVersion(ctx, db)
 }
@@ -400,12 +448,22 @@ func (m *SchemaManager) createScheduleHistoryTable(ctx context.Context, tx *sql.
 			executed_at BIGINT NOT NULL,
 			success INTEGER NOT NULL,
 			error_message TEXT,
-			FOREIGN KEY (schedule_id) REFERENCES cq_schedules(id) ON DELETE CASCADE
+			message_pb BYTEA
 		)`)
 	if err != nil {
 		return err
 	}
 
 	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_schedule_history_schedule ON cq_schedule_history(schedule_id, executed_at DESC)`)
+	return err
+}
+
+func (m *SchemaManager) createScheduleArchiveTable(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS cq_schedule_archive (
+			schedule_id TEXT PRIMARY KEY,
+			metadata_pb BYTEA NOT NULL,
+			deleted_at BIGINT NOT NULL
+		)`)
 	return err
 }

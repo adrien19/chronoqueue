@@ -155,21 +155,22 @@ func (s *Storage) ListSchedulesWithPrefix(ctx context.Context, prefix string) ([
 
 // DeleteSchedule deletes a schedule
 func (s *Storage) DeleteSchedule(ctx context.Context, scheduleId string) error {
-	query := `DELETE FROM cq_schedules WHERE id = ?`
-	result, err := s.DB.ExecContext(ctx, query, scheduleId)
-	if err != nil {
-		return fmt.Errorf("delete schedule: %w", err)
-	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
-	}
-	if rows == 0 {
-		return domainerror.New(domainerror.NotFound, fmt.Sprintf("schedule %q not found", scheduleId), nil)
-	}
-
-	return nil
+	return s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+		var scheduleBytes []byte
+		if err := tx.QueryRowContext(ctx, `SELECT metadata_pb FROM cq_schedules WHERE id = ?`, scheduleId).Scan(&scheduleBytes); err != nil {
+			if err == sql.ErrNoRows {
+				return domainerror.New(domainerror.NotFound, fmt.Sprintf("schedule %q not found", scheduleId), err)
+			}
+			return fmt.Errorf("query schedule for deletion: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO cq_schedule_archive (schedule_id, metadata_pb, deleted_at) VALUES (?, ?, ?) ON CONFLICT(schedule_id) DO UPDATE SET metadata_pb = excluded.metadata_pb, deleted_at = excluded.deleted_at`, scheduleId, scheduleBytes, s.Clock.NowMs()); err != nil {
+			return fmt.Errorf("archive schedule: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM cq_schedules WHERE id = ?`, scheduleId); err != nil {
+			return fmt.Errorf("delete schedule: %w", err)
+		}
+		return nil
+	})
 }
 
 // PauseSchedule pauses a schedule
@@ -289,10 +290,17 @@ func (s *Storage) ResumeSchedule(ctx context.Context, scheduleId string) error {
 
 // RecordScheduleExecution records a schedule execution
 func (s *Storage) RecordScheduleExecution(ctx context.Context, scheduleId string, messageId string, executionTime int64) error {
-	query := `INSERT INTO cq_schedule_history (schedule_id, message_id, executed_at, success) VALUES (?, ?, ?, ?)`
-	_, err := s.DB.ExecContext(ctx, query, scheduleId, messageId, executionTime, 1)
+	query := `INSERT INTO cq_schedule_history (schedule_id, message_id, executed_at, success, message_pb) SELECT ?, ?, ?, ?, m.metadata_pb FROM cq_messages m JOIN cq_schedules sc ON sc.queue_name = m.queue_name WHERE sc.id = ? AND m.message_id = ?`
+	result, err := s.DB.ExecContext(ctx, query, scheduleId, messageId, executionTime, 1, scheduleId, messageId)
 	if err != nil {
 		return fmt.Errorf("insert schedule history: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get inserted history rows: %w", err)
+	}
+	if rows == 0 {
+		return domainerror.New(domainerror.NotFound, fmt.Sprintf("scheduled message %q not found", messageId), nil)
 	}
 
 	return nil
@@ -300,19 +308,16 @@ func (s *Storage) RecordScheduleExecution(ctx context.Context, scheduleId string
 
 // GetScheduleHistory returns the execution history for a schedule
 func (s *Storage) GetScheduleHistory(ctx context.Context, scheduleId string, limit int64) (*schedulepb.ScheduleHistory, error) {
-	// Get schedule metadata
-	schedule, err := s.GetSchedule(ctx, scheduleId)
+	schedule, err := s.getScheduleForHistory(ctx, scheduleId)
 	if err != nil {
-		return nil, fmt.Errorf("get schedule: %w", err)
+		return nil, err
 	}
 
-	// Query messages from history
 	query := `
-		SELECT m.metadata_pb
-		FROM cq_schedule_history h
-		JOIN cq_messages m ON h.message_id = m.id
-		WHERE h.schedule_id = ?
-		ORDER BY h.executed_at DESC
+		SELECT message_id, executed_at, success, error_message, message_pb
+		FROM cq_schedule_history
+		WHERE schedule_id = ?
+		ORDER BY executed_at DESC
 		LIMIT ?
 	`
 
@@ -323,18 +328,37 @@ func (s *Storage) GetScheduleHistory(ctx context.Context, scheduleId string, lim
 	defer func() { _ = rows.Close() }()
 
 	var messages []*messagepb.Message
+	var executions []*schedulepb.ScheduleHistory_Execution
 	for rows.Next() {
-		var messageBytes []byte
-		if err := rows.Scan(&messageBytes); err != nil {
-			return nil, fmt.Errorf("scan message: %w", err)
+		var (
+			messageID    string
+			executedAt   int64
+			success      int32
+			errorMessage sql.NullString
+			messageBytes []byte
+		)
+		if err := rows.Scan(&messageID, &executedAt, &success, &errorMessage, &messageBytes); err != nil {
+			return nil, fmt.Errorf("scan schedule execution: %w", err)
 		}
 
-		msg, err := s.Serializer.UnmarshalMessage(messageBytes)
-		if err != nil {
-			return nil, fmt.Errorf("unmarshal message: %w", err)
+		execution := &schedulepb.ScheduleHistory_Execution{
+			MessageId:    messageID,
+			ExecutedAt:   timestamppb.New(time.UnixMilli(executedAt)),
+			Success:      success != 0,
+			ErrorMessage: errorMessage.String,
 		}
-
-		messages = append(messages, msg)
+		if len(messageBytes) > 0 {
+			msg, err := s.Serializer.UnmarshalMessage(messageBytes)
+			if err != nil {
+				return nil, fmt.Errorf("unmarshal history message: %w", err)
+			}
+			if err := repositorycommon.DecryptMessagePayload(msg, s.KeyManager); err != nil {
+				return nil, fmt.Errorf("decrypt history message: %w", err)
+			}
+			execution.Message = msg
+			messages = append(messages, msg)
+		}
+		executions = append(executions, execution)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -344,6 +368,7 @@ func (s *Storage) GetScheduleHistory(ctx context.Context, scheduleId string, lim
 	history := &schedulepb.ScheduleHistory{
 		Messages:   messages,
 		ScheduleId: scheduleId,
+		Executions: executions,
 	}
 
 	// Populate schedule metadata if available
@@ -355,6 +380,25 @@ func (s *Storage) GetScheduleHistory(ctx context.Context, scheduleId string, lim
 	}
 
 	return history, nil
+}
+
+func (s *Storage) getScheduleForHistory(ctx context.Context, scheduleId string) (*schedulepb.Schedule, error) {
+	query := `SELECT metadata_pb FROM cq_schedules WHERE id = ? UNION ALL SELECT metadata_pb FROM cq_schedule_archive WHERE schedule_id = ? LIMIT 1`
+	var scheduleBytes []byte
+	if err := s.DB.QueryRowContext(ctx, query, scheduleId, scheduleId).Scan(&scheduleBytes); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, domainerror.New(domainerror.NotFound, fmt.Sprintf("schedule %q not found", scheduleId), err)
+		}
+		return nil, fmt.Errorf("query schedule history metadata: %w", err)
+	}
+	schedule, err := s.Serializer.UnmarshalSchedule(scheduleBytes)
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal schedule history metadata: %w", err)
+	}
+	if err := repositorycommon.DecryptSchedulePayload(schedule, s.KeyManager); err != nil {
+		return nil, fmt.Errorf("decrypt schedule history metadata: %w", err)
+	}
+	return schedule, nil
 }
 
 // GetDLQMessages returns messages in the dead letter queue
