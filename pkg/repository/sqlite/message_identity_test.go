@@ -8,9 +8,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 )
 
 func TestMessageID_IsUniqueWithinQueue(t *testing.T) {
@@ -23,6 +26,24 @@ func TestMessageID_IsUniqueWithinQueue(t *testing.T) {
 	require.NoError(t, storage.EnqueueMessage(ctx, "queue-a", reclaimTestMessage("shared-id", 1, 1)))
 	require.NoError(t, storage.EnqueueMessage(ctx, "queue-b", reclaimTestMessage("shared-id", 1, 1)))
 	require.ErrorContains(t, storage.EnqueueMessage(ctx, "queue-a", reclaimTestMessage("shared-id", 1, 1)), "duplicate message_id")
+}
+
+func TestRetryDLQMessage_MapsTargetDuplicateToAlreadyExists(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "dlq-target-duplicate.db"))
+	for _, queueName := range []string{"queue-dlq", "queue-target"} {
+		require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
+		require.NoError(t, storage.EnqueueMessage(ctx, queueName, reclaimTestMessage("duplicate", 1, 1)))
+	}
+	_, err := storage.DB.ExecContext(ctx, `UPDATE cq_messages SET state = ? WHERE queue_name = ? AND message_id = ?`, messagepb.Message_Metadata_ERRORED, "queue-dlq", "duplicate")
+	require.NoError(t, err)
+
+	err = storage.RetryDLQMessage(ctx, "queue-dlq", "duplicate", "queue-target", true)
+	require.Equal(t, codes.AlreadyExists, status.Code(domainerror.ToGRPC(err)))
+
+	var state messagepb.Message_Metadata_State
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT state FROM cq_messages WHERE queue_name = ? AND message_id = ?`, "queue-dlq", "duplicate").Scan(&state))
+	require.Equal(t, messagepb.Message_Metadata_ERRORED, state)
 }
 
 func TestRetryDLQMessage_IsScopedToQueue(t *testing.T) {

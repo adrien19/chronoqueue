@@ -68,6 +68,29 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 		require.ErrorContains(t, err, `queue "concurrent-source" not found`)
 	})
 
+	t.Run("creates source and automatic DLQ atomically", func(t *testing.T) {
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "atomic-collision_dlq", Metadata: &queuepb.QueueMetadata{}}))
+		err := first.CreateQueueWithDLQ(ctx,
+			&queuepb.Queue{Name: "atomic-collision", Metadata: &queuepb.QueueMetadata{AutoCreateDlq: true, DeadLetterQueueName: "atomic-collision_dlq"}},
+			&queuepb.Queue{Name: "atomic-collision_dlq", Metadata: &queuepb.QueueMetadata{}},
+		)
+		require.Error(t, err)
+		_, err = first.GetQueue(ctx, "atomic-collision")
+		require.ErrorContains(t, err, `queue "atomic-collision" not found`)
+	})
+
+	t.Run("rejects mismatched automatic DLQ without inserting", func(t *testing.T) {
+		err := first.CreateQueueWithDLQ(ctx,
+			&queuepb.Queue{Name: "mismatched-source", Metadata: &queuepb.QueueMetadata{AutoCreateDlq: true, DeadLetterQueueName: "missing-dlq"}},
+			&queuepb.Queue{Name: "created-dlq", Metadata: &queuepb.QueueMetadata{}},
+		)
+		require.ErrorContains(t, err, `dead letter target "missing-dlq" does not match queue "created-dlq"`)
+		_, err = first.GetQueue(ctx, "mismatched-source")
+		require.ErrorContains(t, err, `queue "mismatched-source" not found`)
+		_, err = first.GetQueue(ctx, "created-dlq")
+		require.ErrorContains(t, err, `queue "created-dlq" not found`)
+	})
+
 	t.Run("promotes a scheduled message once across schedulers", func(t *testing.T) {
 		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "scheduled-cas", Metadata: &queuepb.QueueMetadata{}}))
 		dueMessage := postgresReclaimTestMessage("scheduled-once", 1, 1)
@@ -154,7 +177,7 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 	_, err = first.ReclaimExpiredMessage(ctx, queueName, expired[0])
 	require.NoError(t, err)
 
-	peeked, err := first.PeekMessages(ctx, queueName, 10)
+	peeked, err := first.GetDLQMessages(ctx, queueName, 10)
 	require.NoError(t, err)
 	require.Len(t, peeked, 1)
 	assert.Equal(t, messagepb.Message_Metadata_ERRORED, peeked[0].GetMetadata().GetState())

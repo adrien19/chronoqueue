@@ -68,26 +68,27 @@ type peekCall struct {
 }
 
 type stubBackend struct {
-	queueMetadata   *queuepb.QueueMetadata
-	getQueueErr     error
-	createdQueues   []*queuepb.Queue
-	createQueueErrs []error
-	deletedQueues   []string
-	claims          []claimCall
-	peekCalls       []peekCall
-	dlqLimits       []int32
-	queues          []*queuepb.Queue
-	schedules       []*schedulepb.Schedule
-	queuePrefix     string
-	schedulePrefix  string
-	enqueued        []enqueuedCall
-	enqueueErr      error
-	enqueueErrs     []error // per-message errors for bulk operations
-	enqueueTxErr    error   // transaction-level error for bulk operations
-	cancelled       []cancelledCall
-	cancelErr       error
-	extendRemaining int64
-	pingErr         error
+	queueMetadata    *queuepb.QueueMetadata
+	getQueueErr      error
+	createdQueues    []*queuepb.Queue
+	createQueueErrs  []error
+	deletedQueues    []string
+	claims           []claimCall
+	peekCalls        []peekCall
+	dlqLimits        []int32
+	queues           []*queuepb.Queue
+	schedules        []*schedulepb.Schedule
+	queuePrefix      string
+	schedulePrefix   string
+	enqueued         []enqueuedCall
+	enqueueErr       error
+	enqueueErrs      []error // per-message errors for bulk operations
+	enqueueTxErr     error   // transaction-level error for bulk operations
+	enqueueErrorsNil bool
+	cancelled        []cancelledCall
+	cancelErr        error
+	extendRemaining  int64
+	pingErr          error
 }
 
 type stubEngine struct {
@@ -164,6 +165,16 @@ func (b *stubBackend) CreateQueue(ctx context.Context, queue *queuepb.Queue) err
 	return nil
 }
 
+func (b *stubBackend) CreateQueueWithDLQ(ctx context.Context, queue *queuepb.Queue, dlq *queuepb.Queue) error {
+	b.createdQueues = append(b.createdQueues, queue, dlq)
+	for _, err := range b.createQueueErrs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (b *stubBackend) GetQueue(ctx context.Context, name string) (*queuepb.Queue, error) {
 	if b.getQueueErr != nil {
 		return nil, b.getQueueErr
@@ -176,6 +187,15 @@ func (b *stubBackend) GetQueueMetadata(ctx context.Context, name string) (*queue
 		return b.queueMetadata, nil
 	}
 	return &queuepb.QueueMetadata{}, nil
+}
+
+func (b *stubBackend) IsDLQ(ctx context.Context, name string) (bool, error) {
+	for _, queue := range b.queues {
+		if queue.GetMetadata().GetDeadLetterQueueName() == name {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (b *stubBackend) ListQueuesWithPrefix(ctx context.Context, prefix string) ([]*queuepb.Queue, error) {
@@ -194,6 +214,9 @@ func (b *stubBackend) EnqueueMessage(ctx context.Context, queueName string, mess
 }
 
 func (b *stubBackend) EnqueueMessagesBulk(ctx context.Context, queueName string, messages []*messagepb.Message, transactionMode queueservicepb.PostMessagesBulkRequest_TransactionMode) ([]error, error) {
+	if b.enqueueErrorsNil {
+		return nil, b.enqueueTxErr
+	}
 	errors := make([]error, len(messages))
 	for i, message := range messages {
 		b.enqueued = append(b.enqueued, enqueuedCall{queue: queueName, message: message})
@@ -546,7 +569,7 @@ func TestCreateQueue_AutoCreatesComputedDLQName(t *testing.T) {
 		require.Empty(t, backend.deletedQueues)
 	})
 
-	t.Run("DLQ creation failure rolls back source queue", func(t *testing.T) {
+	t.Run("atomic pair creation failure needs no compensation", func(t *testing.T) {
 		createDLQErr := errors.New("create DLQ")
 		backend := &stubBackend{createQueueErrs: []error{nil, createDLQErr}}
 		impl := &implementation{backend: backend}
@@ -556,12 +579,12 @@ func TestCreateQueue_AutoCreatesComputedDLQName(t *testing.T) {
 		require.Len(t, backend.createdQueues, 2)
 		require.Equal(t, "orders_dlq", backend.createdQueues[0].GetMetadata().GetDeadLetterQueueName())
 		require.Equal(t, "orders_dlq", backend.createdQueues[1].GetName())
-		require.Equal(t, []string{"orders"}, backend.deletedQueues)
+		require.Empty(t, backend.deletedQueues)
 	})
 }
 
 func TestCreateQueue_PreservesOptionalUserDLQName(t *testing.T) {
-	backend := &stubBackend{}
+	backend := &stubBackend{queues: []*queuepb.Queue{{Name: "jobs", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "jobs-dlq"}}}}
 	impl := &implementation{backend: backend}
 
 	_, err := impl.CreateQueue(context.Background(), &queueservicepb.CreateQueueRequest{
@@ -752,6 +775,36 @@ func TestCreateQueueMessage_ValidatorNil(t *testing.T) {
 	}
 	if backend.enqueued[0].message.GetMetadata().GetState() != messagepb.Message_Metadata_PENDING {
 		t.Fatalf("expected message state to be PENDING")
+	}
+}
+
+func TestMessageSchedulingUsesRepositoryClock(t *testing.T) {
+	fixedNow := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	for _, tt := range []struct {
+		name  string
+		at    time.Time
+		state messagepb.Message_Metadata_State
+	}{
+		{name: "past", at: fixedNow.Add(-time.Nanosecond), state: messagepb.Message_Metadata_PENDING},
+		{name: "exact", at: fixedNow, state: messagepb.Message_Metadata_PENDING},
+		{name: "future", at: fixedNow.Add(time.Nanosecond), state: messagepb.Message_Metadata_INVISIBLE},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{}}
+			impl := &implementation{backend: backend, clock: repositorysql.NewClockWithNow(func() time.Time { return fixedNow })}
+			message := &messagepb.Message{MessageId: tt.name, Metadata: &messagepb.Message_Metadata{ScheduledTime: timestamppb.New(tt.at)}}
+
+			_, err := impl.CreateQueueMessage(context.Background(), &queueservicepb.PostMessageRequest{QueueName: "queue", Message: message}, nil)
+			require.NoError(t, err)
+			require.Equal(t, tt.state, backend.enqueued[0].message.GetMetadata().GetState())
+
+			bulkMessage := &messagepb.Message{MessageId: tt.name + "-bulk", Metadata: &messagepb.Message_Metadata{ScheduledTime: timestamppb.New(tt.at)}}
+			_, err = impl.CreateQueueMessagesBulk(context.Background(), &queueservicepb.PostMessagesBulkRequest{
+				QueueName: "queue", Messages: []*messagepb.Message{bulkMessage}, TransactionMode: queueservicepb.PostMessagesBulkRequest_BEST_EFFORT,
+			}, nil)
+			require.NoError(t, err)
+			require.Equal(t, tt.state, bulkMessage.GetMetadata().GetState())
+		})
 	}
 }
 
@@ -1491,7 +1544,7 @@ func TestCreateQueueMessagesBulk_ReportsSchemaMismatch(t *testing.T) {
 }
 
 func TestGetDLQMessagesNormalizesAndValidatesLimit(t *testing.T) {
-	backend := &stubBackend{}
+	backend := &stubBackend{queues: []*queuepb.Queue{{Name: "jobs", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "jobs-dlq"}}}}
 	impl := &implementation{backend: backend}
 
 	_, err := impl.GetDLQMessages(context.Background(), "jobs-dlq", 0)
@@ -1507,6 +1560,44 @@ func TestGetDLQMessagesNormalizesAndValidatesLimit(t *testing.T) {
 		require.Equal(t, codes.InvalidArgument, status.Code(domainerror.ToGRPC(err)))
 	}
 	require.Equal(t, []int32{100, 1000}, backend.dlqLimits)
+}
+
+func TestDLQOperationsRejectOrdinaryQueue(t *testing.T) {
+	impl := &implementation{backend: &stubBackend{queues: []*queuepb.Queue{{Name: "ordinary", Metadata: &queuepb.QueueMetadata{}}}}}
+	operations := map[string]func() error{
+		"get": func() error { _, err := impl.GetDLQMessages(context.Background(), "ordinary", 10); return err },
+		"requeue": func() error {
+			return impl.RequeueFromDLQ(context.Background(), "ordinary", "message", "target", true)
+		},
+		"delete": func() error { return impl.DeleteFromDLQ(context.Background(), "ordinary", "message") },
+		"purge":  func() error { return impl.PurgeDLQ(context.Background(), "ordinary") },
+		"stats":  func() error { _, err := impl.GetDLQStats(context.Background(), "ordinary"); return err },
+	}
+	for name, operation := range operations {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, codes.FailedPrecondition, status.Code(domainerror.ToGRPC(operation())))
+		})
+	}
+}
+
+func TestDLQRejectsProducerAndConsumerOperations(t *testing.T) {
+	backend := &stubBackend{
+		queueMetadata: &queuepb.QueueMetadata{},
+		queues:        []*queuepb.Queue{{Name: "source", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "source-dlq"}}},
+	}
+	impl := &implementation{backend: backend}
+	_, postErr := impl.CreateQueueMessage(context.Background(), &queueservicepb.PostMessageRequest{
+		QueueName: "source-dlq", Message: &messagepb.Message{MessageId: "message", Metadata: &messagepb.Message_Metadata{}},
+	}, nil)
+	_, bulkErr := impl.CreateQueueMessagesBulk(context.Background(), &queueservicepb.PostMessagesBulkRequest{
+		QueueName: "source-dlq", Messages: []*messagepb.Message{{MessageId: "message", Metadata: &messagepb.Message_Metadata{}}},
+	}, nil)
+	_, claimErr := impl.GetQueueMessage(context.Background(), &queueservicepb.GetNextMessageRequest{QueueName: "source-dlq"})
+	for _, err := range []error{postErr, bulkErr, claimErr} {
+		require.Equal(t, codes.FailedPrecondition, status.Code(domainerror.ToGRPC(err)))
+	}
+	require.Empty(t, backend.enqueued)
+	require.Empty(t, backend.claims)
 }
 
 func TestCreateQueueMessagesBulk_DuplicateMessageID(t *testing.T) {
@@ -1610,13 +1701,7 @@ func TestCreateQueueMessagesBulk_BestEffort_PartialTransactionFailure(t *testing
 	}
 
 	resp, err := impl.CreateQueueMessagesBulk(context.Background(), req, nil)
-	if err == nil {
-		t.Fatalf("expected error for transaction failure in BEST_EFFORT mode")
-	}
-
-	if !strings.Contains(err.Error(), "partial bulk enqueue failure") {
-		t.Fatalf("expected 'partial bulk enqueue failure' in error, got: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Response should contain partial success details
 	if resp == nil {
@@ -1634,6 +1719,34 @@ func TestCreateQueueMessagesBulk_BestEffort_PartialTransactionFailure(t *testing
 	// Both messages were "enqueued" (added to stub's list)
 	if len(backend.enqueued) != 2 {
 		t.Fatalf("expected 2 entries in backend.enqueued, got %d", len(backend.enqueued))
+	}
+}
+
+func TestCreateQueueMessagesBulk_BestEffort_UnknownOutcomesAreInternalErrors(t *testing.T) {
+	backend := &stubBackend{
+		queueMetadata:    &queuepb.QueueMetadata{DefaultMaxAttempts: 3},
+		enqueueErrorsNil: true,
+		enqueueTxErr:     errors.New("backend outcome unavailable"),
+	}
+	impl := &implementation{backend: backend}
+	response, err := impl.CreateQueueMessagesBulk(context.Background(), &queueservicepb.PostMessagesBulkRequest{
+		QueueName: "test-queue",
+		Messages: []*messagepb.Message{
+			{MessageId: "msg-1", Metadata: &messagepb.Message_Metadata{}},
+			{MessageId: "msg-2", Metadata: &messagepb.Message_Metadata{}},
+		},
+		TransactionMode: queueservicepb.PostMessagesBulkRequest_BEST_EFFORT,
+	}, nil)
+
+	require.NoError(t, err)
+	require.False(t, response.GetSuccess())
+	require.Zero(t, response.GetSuccessfulCount())
+	require.EqualValues(t, 2, response.GetFailedCount())
+	require.Len(t, response.GetResults(), 2)
+	for _, result := range response.GetResults() {
+		require.False(t, result.GetSuccess())
+		require.Equal(t, queueservicepb.PostMessagesBulkResponse_MessagePostResult_INTERNAL_ERROR, result.GetErrorCode())
+		require.Equal(t, "internal server error", result.GetError())
 	}
 }
 

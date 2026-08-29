@@ -131,8 +131,14 @@ func TestReclaimMetricsReflectPersistedExpiryCause(t *testing.T) {
 				}
 			}
 			require.Equal(t, dlqBefore+wantDLQDelta, metricValue(t, registry, dlqMetric))
-			messages, err := storage.PeekMessages(ctx, stateQueue, 1)
+			var messages []*messagepb.Message
+			if wantState == messagepb.Message_Metadata_ERRORED {
+				messages, err = storage.GetDLQMessages(ctx, stateQueue, 1)
+			} else {
+				messages, err = storage.PeekMessages(ctx, stateQueue, 1)
+			}
 			require.NoError(t, err)
+			require.Len(t, messages, 1)
 			require.Equal(t, wantState, messages[0].GetMetadata().GetState())
 		})
 	}

@@ -43,11 +43,14 @@ Internal errors use the public message `internal server error`. Database and enc
 
 - `calendar_schedule.timezone` is the canonical timezone for calendar validation, preview, and execution.
 - The deprecated `schedule.metadata.timezone` may be omitted. If supplied for compatibility, it must equal `calendar_schedule.timezone`.
+- `ValidateCalendarSchedule` is a validation-result endpoint: invalid calendar content returns an OK transport status with `valid: false` and structured `validation_issues`. Transport or server failures still use non-OK status codes.
 
 ## Dead-letter queue listing
 
 - `dlq_name` is required.
 - `limit` must be between 0 and 1000. A value of 0 uses the server default of 100.
+- DLQ administration requires the named queue to be referenced by at least one source queue's `dead_letter_queue_name`; ordinary queues return `FailedPrecondition`.
+- Posting and worker claims against a referenced DLQ return `FailedPrecondition`; DLQ messages are managed through the DLQ operations.
 
 ## Claim and lifecycle requests
 

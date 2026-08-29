@@ -3,12 +3,16 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
+	"google.golang.org/protobuf/proto"
+
+	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/schema"
 )
 
-const latestVersion = uint(8)
+const latestVersion = uint(9)
 
 // SchemaManager handles PostgreSQL schema initialization and versioning.
 type SchemaManager struct {
@@ -128,12 +132,78 @@ func (m *SchemaManager) Migrate(ctx context.Context, db *sql.DB, targetVersion u
 			if err := m.migrateToV8_DurableScheduleHistory(ctx, db); err != nil {
 				return fmt.Errorf("migrate to version 8: %w", err)
 			}
+		case 9:
+			if err := m.migrateToV9_AddDLQRelationshipIndex(ctx, db); err != nil {
+				return fmt.Errorf("migrate to version 9: %w", err)
+			}
 		default:
 			return fmt.Errorf("unsupported target version %d", v)
 		}
 	}
 
 	return nil
+}
+
+func (m *SchemaManager) migrateToV9_AddDLQRelationshipIndex(ctx context.Context, db *sql.DB) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin migration tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE cq_queues ADD COLUMN IF NOT EXISTS dead_letter_queue_name TEXT`); err != nil {
+		return fmt.Errorf("add dead letter queue column: %w", err)
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT name, metadata_pb FROM cq_queues`)
+	if err != nil {
+		return fmt.Errorf("query queues for DLQ backfill: %w", err)
+	}
+	closeRowsWith := func(baseErr error) error {
+		if closeErr := rows.Close(); closeErr != nil {
+			return errors.Join(baseErr, fmt.Errorf("close queues for DLQ backfill: %w", closeErr))
+		}
+		return baseErr
+	}
+	type relationship struct{ source, target string }
+	var relationships []relationship
+	for rows.Next() {
+		var name string
+		var data []byte
+		if err := rows.Scan(&name, &data); err != nil {
+			return closeRowsWith(fmt.Errorf("scan queue for DLQ backfill: %w", err))
+		}
+		queue := &queuepb.Queue{}
+		if err := proto.Unmarshal(data, queue); err != nil {
+			return closeRowsWith(fmt.Errorf("unmarshal queue %q for DLQ backfill: %w", name, err))
+		}
+		if target := queue.GetMetadata().GetDeadLetterQueueName(); target != "" {
+			relationships = append(relationships, relationship{source: name, target: target})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return closeRowsWith(fmt.Errorf("iterate queues for DLQ backfill: %w", err))
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close queues for DLQ backfill: %w", err)
+	}
+	for _, relationship := range relationships {
+		if _, err := tx.ExecContext(ctx, `UPDATE cq_queues SET dead_letter_queue_name = $1 WHERE name = $2`, relationship.target, relationship.source); err != nil {
+			return fmt.Errorf("backfill dead letter queue name: %w", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_queues_dead_letter_queue_name ON cq_queues(dead_letter_queue_name) WHERE dead_letter_queue_name IS NOT NULL`); err != nil {
+		return fmt.Errorf("create dead letter queue index: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES ($1, $2)`, 9, "Index queue dead letter relationships"); err != nil {
+		return fmt.Errorf("record schema version: %w", err)
+	}
+	return tx.Commit()
+}
+
+func nullableDLQName(name string) any {
+	if name == "" {
+		return nil
+	}
+	return name
 }
 
 func (m *SchemaManager) migrateToV2(ctx context.Context, db *sql.DB) error {
@@ -329,11 +399,16 @@ func (m *SchemaManager) createQueuesTable(ctx context.Context, tx *sql.Tx) error
 	_, err := tx.ExecContext(ctx, `
         CREATE TABLE IF NOT EXISTS cq_queues (
             name TEXT PRIMARY KEY,
-            metadata_pb BYTEA NOT NULL,
+	            metadata_pb BYTEA NOT NULL,
+	            dead_letter_queue_name TEXT,
             state_counts JSONB DEFAULT '{}'::jsonb,
             created_at BIGINT NOT NULL,
             updated_at BIGINT NOT NULL
-        )`)
+	        )`)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_queues_dead_letter_queue_name ON cq_queues(dead_letter_queue_name) WHERE dead_letter_queue_name IS NOT NULL`)
 	return err
 }
 

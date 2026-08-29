@@ -997,9 +997,10 @@ func (s *Storage) PeekMessagesWithPriorityRange(ctx context.Context, queueName s
 		       heartbeat_expiry
 		FROM cq_messages
 		WHERE queue_name = ?
+		  AND state = ?
 		  AND (deleted_at IS NULL OR deleted_at > ?)
 	`
-	args := []any{queueName, nowMs}
+	args := []any{queueName, messagepb.Message_Metadata_PENDING, nowMs}
 	if priorityRange != nil {
 		query += ` AND priority BETWEEN ? AND ?`
 		args = append(args, priorityRange.Min, priorityRange.Max)

@@ -47,6 +47,7 @@ type implementation struct {
 	cronService      *background.CronProcessorService
 	cleanupService   *background.CleanupService
 	calendarEngine   calendar.Engine
+	clock            *repositorysql.Clock
 	cancelFunc       context.CancelFunc
 }
 
@@ -107,6 +108,7 @@ func NewSQLiteStorage(ctx context.Context, config *sqlite.Config) (Storage, erro
 		cronService:      cronService,
 		cleanupService:   cleanupService,
 		calendarEngine:   calendarEngine,
+		clock:            storage.Clock,
 		cancelFunc:       cancel,
 	}, nil
 }
@@ -166,6 +168,7 @@ func NewPostgresStorage(ctx context.Context, config *postgres.Config) (Storage, 
 		cronService:      cronService,
 		cleanupService:   cleanupService,
 		calendarEngine:   calendarEngine,
+		clock:            storage.Clock,
 		cancelFunc:       cancel,
 	}, nil
 }
@@ -280,15 +283,13 @@ func (impl *implementation) CreateQueue(ctx context.Context, request *queueservi
 		Metadata: metadata,
 	}
 
-	if err := impl.backend.CreateQueue(ctx, queue); err != nil {
-		return nil, err
-	}
 	if metadata.GetAutoCreateDlq() {
 		dlq := &queuepb.Queue{Name: metadata.GetDeadLetterQueueName(), Metadata: &queuepb.QueueMetadata{}}
-		if err := impl.backend.CreateQueue(ctx, dlq); err != nil {
-			rollbackErr := impl.backend.DeleteQueue(ctx, queue.GetName())
-			return nil, errors.Join(fmt.Errorf("create automatic DLQ %q: %w", dlq.GetName(), err), wrapShutdownError("rollback source queue", rollbackErr))
+		if err := impl.backend.CreateQueueWithDLQ(ctx, queue, dlq); err != nil {
+			return nil, err
 		}
+	} else if err := impl.backend.CreateQueue(ctx, queue); err != nil {
+		return nil, err
 	}
 
 	// Update metrics
@@ -464,6 +465,9 @@ func (impl *implementation) CreateQueueMessage(ctx context.Context, request *que
 	if queueName == "" {
 		return nil, domainerror.New(domainerror.InvalidArgument, "queue name is required", nil)
 	}
+	if err := impl.rejectDLQOperation(ctx, queueName); err != nil {
+		return nil, err
+	}
 	message := request.GetMessage()
 	if message.Metadata == nil {
 		return nil, domainerror.InvalidWithFields("message metadata is required", []domainerror.FieldViolation{{
@@ -495,7 +499,7 @@ func (impl *implementation) CreateQueueMessage(ctx context.Context, request *que
 
 	// Messages with a future scheduled_time enter INVISIBLE and are promoted to PENDING
 	// by the background SchedulerService when their delivery time arrives.
-	if st := message.Metadata.GetScheduledTime(); st != nil && st.AsTime().After(time.Now()) {
+	if st := message.Metadata.GetScheduledTime(); st != nil && st.AsTime().After(impl.now()) {
 		message.Metadata.State = messagepb.Message_Metadata_INVISIBLE
 	} else {
 		message.Metadata.State = messagepb.Message_Metadata_PENDING
@@ -543,6 +547,9 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 	queueName := request.GetQueueName()
 	if queueName == "" {
 		return nil, domainerror.New(domainerror.InvalidArgument, "queue name is required", nil)
+	}
+	if err := impl.rejectDLQOperation(ctx, queueName); err != nil {
+		return nil, err
 	}
 	messages := request.GetMessages()
 	transactionMode := request.GetTransactionMode()
@@ -619,7 +626,7 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 
 		// Messages with a future scheduled_time enter INVISIBLE; the background
 		// SchedulerService promotes them to PENDING when their delivery time arrives.
-		if st := message.Metadata.GetScheduledTime(); st != nil && st.AsTime().After(time.Now()) {
+		if st := message.Metadata.GetScheduledTime(); st != nil && st.AsTime().After(impl.now()) {
 			message.Metadata.State = messagepb.Message_Metadata_INVISIBLE
 		} else {
 			message.Metadata.State = messagepb.Message_Metadata_PENDING
@@ -677,6 +684,12 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 		messageErrors, txErr = impl.backend.EnqueueMessagesBulk(ctx, queueName, validMessages, transactionMode)
 	}
 
+	if txErr != nil && transactionMode == queueservicepb.PostMessagesBulkRequest_BEST_EFFORT && messageErrors == nil {
+		messageErrors = make([]error, len(validMessages))
+		for i := range messageErrors {
+			messageErrors[i] = fmt.Errorf("bulk message outcome unknown: %w", txErr)
+		}
+	}
 	if messageErrors == nil {
 		messageErrors = make([]error, len(validMessages))
 	}
@@ -756,7 +769,7 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 			baseSQL.Logger.WarnWithFields("bulk enqueue partial failure in BEST_EFFORT mode",
 				"error", txErr.Error(), "queue", queueName)
 		}
-		return response, fmt.Errorf("partial bulk enqueue failure: %w", txErr)
+		return response, nil
 	}
 
 	return response, nil
@@ -766,6 +779,9 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 func (impl *implementation) GetQueueMessage(ctx context.Context, request *queueservicepb.GetNextMessageRequest) (*queueservicepb.GetNextMessageResponse, error) {
 	if request == nil || request.GetQueueName() == "" {
 		return nil, domainerror.New(domainerror.InvalidArgument, "queue name is required", nil)
+	}
+	if err := impl.rejectDLQOperation(ctx, request.GetQueueName()); err != nil {
+		return nil, err
 	}
 
 	leaseDuration := time.Duration(0)
@@ -1261,7 +1277,7 @@ func (impl *implementation) GetDLQMessages(ctx context.Context, dlqName string, 
 	if limit == 0 {
 		limit = defaultLimit
 	}
-	if _, err := impl.backend.GetQueue(ctx, dlqName); err != nil {
+	if err := impl.requireDLQ(ctx, dlqName); err != nil {
 		return nil, err
 	}
 	return impl.backend.GetDLQMessages(ctx, dlqName, limit)
@@ -1272,7 +1288,7 @@ func (impl *implementation) RequeueFromDLQ(ctx context.Context, dlqName string, 
 	if targetQueueName == "" {
 		return domainerror.New(domainerror.InvalidArgument, "target queue name is required", nil)
 	}
-	if _, err := impl.backend.GetQueue(ctx, dlqName); err != nil {
+	if err := impl.requireDLQ(ctx, dlqName); err != nil {
 		return err
 	}
 	if _, err := impl.backend.GetQueue(ctx, targetQueueName); err != nil {
@@ -1283,7 +1299,7 @@ func (impl *implementation) RequeueFromDLQ(ctx context.Context, dlqName string, 
 
 // DeleteFromDLQ permanently deletes a message from DLQ
 func (impl *implementation) DeleteFromDLQ(ctx context.Context, dlqName string, messageID string) error {
-	if _, err := impl.backend.GetQueue(ctx, dlqName); err != nil {
+	if err := impl.requireDLQ(ctx, dlqName); err != nil {
 		return err
 	}
 	return impl.backend.DeleteDLQMessage(ctx, dlqName, messageID)
@@ -1291,7 +1307,7 @@ func (impl *implementation) DeleteFromDLQ(ctx context.Context, dlqName string, m
 
 // PurgeDLQ removes all messages from a DLQ
 func (impl *implementation) PurgeDLQ(ctx context.Context, dlqName string) error {
-	if _, err := impl.backend.GetQueue(ctx, dlqName); err != nil {
+	if err := impl.requireDLQ(ctx, dlqName); err != nil {
 		return err
 	}
 	_, err := impl.backend.PurgeDLQ(ctx, dlqName)
@@ -1300,7 +1316,7 @@ func (impl *implementation) PurgeDLQ(ctx context.Context, dlqName string) error 
 
 // GetDLQStats returns statistics about a DLQ
 func (impl *implementation) GetDLQStats(ctx context.Context, dlqName string) (*DLQStats, error) {
-	if _, err := impl.backend.GetQueue(ctx, dlqName); err != nil {
+	if err := impl.requireDLQ(ctx, dlqName); err != nil {
 		return nil, err
 	}
 	baseSQL := impl.getSQLBackend()
@@ -1332,4 +1348,40 @@ func (impl *implementation) GetDLQStats(ctx context.Context, dlqName string) (*D
 		CreatedAt:    createdAt,
 		UpdatedAt:    updatedAt,
 	}, nil
+}
+
+func (impl *implementation) requireDLQ(ctx context.Context, name string) error {
+	if _, err := impl.backend.GetQueue(ctx, name); err != nil {
+		return err
+	}
+	isDLQ, err := impl.isDLQ(ctx, name)
+	if err != nil {
+		return err
+	}
+	if isDLQ {
+		return nil
+	}
+	return domainerror.New(domainerror.FailedPrecondition, fmt.Sprintf("queue %q is not configured as a dead letter queue", name), nil)
+}
+
+func (impl *implementation) rejectDLQOperation(ctx context.Context, name string) error {
+	isDLQ, err := impl.isDLQ(ctx, name)
+	if err != nil {
+		return err
+	}
+	if isDLQ {
+		return domainerror.New(domainerror.FailedPrecondition, fmt.Sprintf("queue %q is a dead letter queue", name), nil)
+	}
+	return nil
+}
+
+func (impl *implementation) isDLQ(ctx context.Context, name string) (bool, error) {
+	return impl.backend.IsDLQ(ctx, name)
+}
+
+func (impl *implementation) now() time.Time {
+	if impl.clock != nil {
+		return impl.clock.Now()
+	}
+	return time.Now()
 }

@@ -10,6 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	postgrescontainer "github.com/testcontainers/testcontainers-go/modules/postgres"
+	"google.golang.org/protobuf/proto"
+
+	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 )
 
 func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
@@ -36,7 +39,7 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 		`INSERT INTO cq_schema_version (version, description) VALUES (1, 'release fixture')`,
 		`CREATE TABLE cq_schedules (id TEXT PRIMARY KEY, state INTEGER NOT NULL)`,
 		`CREATE TABLE cq_queues (name TEXT PRIMARY KEY, metadata_pb BYTEA NOT NULL, created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL)`,
-		`INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES ('queue-a', '\x00', 1, 1), ('queue-b', '\x00', 1, 1)`,
+		`INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES ('queue-a', '\x', 1, 1), ('queue-b', '\x', 1, 1)`,
 		`CREATE TABLE cq_messages (
 			id BIGSERIAL PRIMARY KEY, queue_name TEXT NOT NULL, message_id TEXT NOT NULL UNIQUE,
 			metadata_pb BYTEA NOT NULL, state INTEGER NOT NULL, priority INTEGER NOT NULL DEFAULT 5,
@@ -51,6 +54,10 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 		_, err := db.ExecContext(ctx, statement)
 		require.NoError(t, err)
 	}
+	queueBytes, err := proto.Marshal(&queuepb.Queue{Name: "queue-a", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "queue-b"}})
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `UPDATE cq_queues SET metadata_pb = $1 WHERE name = $2`, queueBytes, "queue-a")
+	require.NoError(t, err)
 
 	manager := NewSchemaManager()
 	require.NoError(t, manager.Migrate(ctx, db, latestVersion))
@@ -63,6 +70,7 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 		"cq_schedules":        {"next_run", "last_run", "cron_schedule", "execution_count"},
 		"cq_messages":         {"completed_at", "deleted_at", "cancellation_reason"},
 		"cq_schedule_history": {"message_pb"},
+		"cq_queues":           {"dead_letter_queue_name"},
 	} {
 		for _, column := range expected {
 			var exists bool
@@ -80,6 +88,9 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT indexdef FROM pg_indexes WHERE tablename = 'cq_messages' AND indexname = 'idx_messages_scheduler'`).Scan(&schedulerIndexDefinition))
 	assert.Contains(t, schedulerIndexDefinition, "WHERE (state = 0)")
 	assert.NotContains(t, schedulerIndexDefinition, "WHERE (state = 1)")
+	var dlqName string
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT dead_letter_queue_name FROM cq_queues WHERE name = $1`, "queue-a").Scan(&dlqName))
+	assert.Equal(t, "queue-b", dlqName)
 
 	_, err = db.ExecContext(ctx, `INSERT INTO cq_messages (queue_name, message_id, metadata_pb, state, priority, created_at, updated_at) VALUES ('queue-b', 'shared-id', '\x00', 1, 1, 1, 1)`)
 	require.NoError(t, err)
@@ -92,4 +103,48 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 	require.NoError(t, err)
 	require.ErrorContains(t, manager.Migrate(ctx, db, latestVersion), "newer than supported")
 	require.ErrorContains(t, manager.Initialize(ctx, db), "newer than supported")
+}
+
+func TestSchemaMigration_V9RejectsInvalidQueueMetadataAndRollsBack(t *testing.T) {
+	ctx := context.Background()
+	container, err := postgrescontainer.Run(
+		ctx,
+		"postgres:17-alpine",
+		postgrescontainer.WithDatabase("chronoqueue"),
+		postgrescontainer.WithUsername("chronoqueue"),
+		postgrescontainer.WithPassword("chronoqueue"),
+		postgrescontainer.BasicWaitStrategies(),
+		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, container.Terminate(ctx)) })
+	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+	db, err := OpenConnection(ctx, &ConnectionConfig{DSN: dsn})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+	statements := []string{
+		`CREATE TABLE cq_schema_version (version INTEGER PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, description TEXT)`,
+		`INSERT INTO cq_schema_version (version, description) VALUES (8, 'pre-DLQ-index fixture')`,
+		`CREATE TABLE cq_queues (name TEXT PRIMARY KEY, metadata_pb BYTEA NOT NULL, created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL)`,
+		`INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES ('broken', '\x00', 1, 1)`,
+	}
+	for _, statement := range statements {
+		_, err := db.ExecContext(ctx, statement)
+		require.NoError(t, err)
+	}
+
+	err = NewSchemaManager().Migrate(ctx, db, latestVersion)
+	require.ErrorContains(t, err, `unmarshal queue "broken"`)
+	version, exists, err := NewSchemaManager().Version(ctx, db)
+	require.NoError(t, err)
+	require.True(t, exists)
+	require.Equal(t, uint(8), version)
+
+	var columnExists bool
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT EXISTS (
+		SELECT 1 FROM information_schema.columns WHERE table_name = 'cq_queues' AND column_name = 'dead_letter_queue_name'
+	)`).Scan(&columnExists))
+	require.False(t, columnExists)
 }

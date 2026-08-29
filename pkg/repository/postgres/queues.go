@@ -15,11 +15,6 @@ import (
 const lockQueuesForRelationshipMutation = `LOCK TABLE cq_queues IN SHARE ROW EXCLUSIVE MODE`
 
 func (s *Storage) CreateQueue(ctx context.Context, queue *queuepb.Queue) error {
-	queueBytes, err := s.Serializer.MarshalQueue(queue)
-	if err != nil {
-		return fmt.Errorf("marshal queue: %w", err)
-	}
-
 	return s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, lockQueuesForRelationshipMutation); err != nil {
 			return fmt.Errorf("lock queues for creation: %w", err)
@@ -36,18 +31,62 @@ func (s *Storage) CreateQueue(ctx context.Context, queue *queuepb.Queue) error {
 			}
 		}
 
-		query := s.ph(`INSERT INTO cq_queues (name, metadata_pb, state_counts, created_at, updated_at) VALUES (?, ?, '{}', ?, ?)`)
-		now := s.nowMs()
-		if _, err := tx.ExecContext(ctx, query, queue.Name, queueBytes, now, now); err != nil {
-			var pqErr *pq.Error
-			if errors.As(err, &pqErr) && pqErr.Code == "23505" {
-				return domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("queue %q already exists", queue.Name), err)
-			}
-			return fmt.Errorf("insert queue: %w", err)
-		}
-
-		return nil
+		return s.insertQueue(ctx, tx, queue)
 	})
+}
+
+func (s *Storage) CreateQueueWithDLQ(ctx context.Context, queue *queuepb.Queue, dlq *queuepb.Queue) error {
+	if err := validateQueueDLQPair(queue, dlq); err != nil {
+		return err
+	}
+	return s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, lockQueuesForRelationshipMutation); err != nil {
+			return fmt.Errorf("lock queues for creation: %w", err)
+		}
+		if err := s.insertQueue(ctx, tx, dlq); err != nil {
+			return fmt.Errorf("create automatic DLQ %q: %w", dlq.GetName(), err)
+		}
+		return s.insertQueue(ctx, tx, queue)
+	})
+}
+
+func validateQueueDLQPair(queue *queuepb.Queue, dlq *queuepb.Queue) error {
+	if queue == nil || dlq == nil {
+		return domainerror.New(domainerror.InvalidArgument, "source queue and dead letter queue are required", nil)
+	}
+	target := queue.GetMetadata().GetDeadLetterQueueName()
+	if target == "" || dlq.GetName() == "" {
+		return domainerror.New(domainerror.InvalidArgument, "dead letter queue target is required", nil)
+	}
+	if target != dlq.GetName() {
+		return domainerror.New(domainerror.InvalidArgument, fmt.Sprintf("source queue dead letter target %q does not match queue %q", target, dlq.GetName()), nil)
+	}
+	return nil
+}
+
+func (s *Storage) insertQueue(ctx context.Context, tx *sql.Tx, queue *queuepb.Queue) error {
+	queueBytes, err := s.Serializer.MarshalQueue(queue)
+	if err != nil {
+		return fmt.Errorf("marshal queue: %w", err)
+	}
+	query := s.ph(`INSERT INTO cq_queues (name, metadata_pb, dead_letter_queue_name, state_counts, created_at, updated_at) VALUES (?, ?, ?, '{}', ?, ?)`)
+	now := s.nowMs()
+	if _, err := tx.ExecContext(ctx, query, queue.Name, queueBytes, nullableDLQName(queue.GetMetadata().GetDeadLetterQueueName()), now, now); err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("queue %q already exists", queue.Name), err)
+		}
+		return fmt.Errorf("insert queue: %w", err)
+	}
+	return nil
+}
+
+func (s *Storage) IsDLQ(ctx context.Context, name string) (bool, error) {
+	var exists bool
+	if err := s.DB.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM cq_queues WHERE dead_letter_queue_name = $1)`, name).Scan(&exists); err != nil {
+		return false, fmt.Errorf("query DLQ relationship: %w", err)
+	}
+	return exists, nil
 }
 
 // GetQueue retrieves a queue by name.
@@ -136,29 +175,11 @@ func (s *Storage) DeleteQueue(ctx context.Context, name string) error {
 			return fmt.Errorf("query queue for deletion: %w", err)
 		}
 
-		rows, err := tx.QueryContext(ctx, `SELECT metadata_pb FROM cq_queues WHERE name <> $1`, name)
-		if err != nil {
-			return fmt.Errorf("query queue references: %w", err)
-		}
-		defer func() { _ = rows.Close() }()
-		for rows.Next() {
-			var queueBytes []byte
-			if err := rows.Scan(&queueBytes); err != nil {
-				return fmt.Errorf("scan queue reference: %w", err)
-			}
-			queue, err := s.Serializer.UnmarshalQueue(queueBytes)
-			if err != nil {
-				return fmt.Errorf("unmarshal queue reference: %w", err)
-			}
-			if queue.GetMetadata().GetDeadLetterQueueName() == name {
-				return domainerror.New(domainerror.FailedPrecondition, fmt.Sprintf("queue %q is referenced as a dead letter queue by %q", name, queue.GetName()), nil)
-			}
-		}
-		if err := rows.Err(); err != nil {
-			return fmt.Errorf("iterate queue references: %w", err)
-		}
-		if err := rows.Close(); err != nil {
-			return fmt.Errorf("close queue references: %w", err)
+		var referringQueue string
+		if err := tx.QueryRowContext(ctx, `SELECT name FROM cq_queues WHERE dead_letter_queue_name = $1 LIMIT 1`, name).Scan(&referringQueue); err != nil && err != sql.ErrNoRows {
+			return fmt.Errorf("query queue reference: %w", err)
+		} else if err == nil {
+			return domainerror.New(domainerror.FailedPrecondition, fmt.Sprintf("queue %q is referenced as a dead letter queue by %q", name, referringQueue), nil)
 		}
 
 		if _, err := tx.ExecContext(ctx, `DELETE FROM cq_queues WHERE name = $1`, name); err != nil {

@@ -5,20 +5,29 @@ import (
 )
 
 // Clock provides timestamp operations for consistency across storage layer
-type Clock struct{}
+type Clock struct {
+	now func() time.Time
+}
 
 // NewClock creates a new Clock instance
 func NewClock() *Clock {
-	return &Clock{}
+	return &Clock{now: time.Now}
+}
+
+func NewClockWithNow(now func() time.Time) *Clock {
+	return &Clock{now: now}
 }
 
 // NowMs returns the current Unix timestamp in milliseconds
 func (c *Clock) NowMs() int64 {
-	return time.Now().UnixMilli()
+	return c.Now().UnixMilli()
 }
 
 // Now returns the current time
 func (c *Clock) Now() time.Time {
+	if c != nil && c.now != nil {
+		return c.now()
+	}
 	return time.Now()
 }
 

@@ -10,6 +10,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+
+	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 )
 
 func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
@@ -23,7 +26,7 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 		`INSERT INTO cq_schema_version (version, description) VALUES (1, 'release fixture')`,
 		`CREATE TABLE cq_schedules (id TEXT PRIMARY KEY, state INTEGER NOT NULL)`,
 		`CREATE TABLE cq_queues (name TEXT PRIMARY KEY, metadata_pb BLOB NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
-		`INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES ('queue-a', X'00', 1, 1), ('queue-b', X'00', 1, 1)`,
+		`INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES ('queue-a', X'', 1, 1), ('queue-b', X'', 1, 1)`,
 		`CREATE TABLE cq_messages (
 			id INTEGER PRIMARY KEY AUTOINCREMENT, queue_name TEXT NOT NULL, message_id TEXT NOT NULL UNIQUE,
 			metadata_pb BLOB NOT NULL, state INTEGER NOT NULL, priority INTEGER NOT NULL DEFAULT 5,
@@ -49,6 +52,7 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 	assertSQLiteColumns(t, ctx, db, "cq_schedules", "next_run", "last_run", "cron_schedule", "execution_count")
 	assertSQLiteColumns(t, ctx, db, "cq_messages", "completed_at", "deleted_at", "cancellation_reason")
 	assertSQLiteColumns(t, ctx, db, "cq_schedule_history", "message_pb")
+	assertSQLiteColumns(t, ctx, db, "cq_queues", "dead_letter_queue_name")
 	var archiveTableCount int
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'cq_schedule_archive'`).Scan(&archiveTableCount))
 	assert.Equal(t, 1, archiveTableCount)
@@ -60,6 +64,53 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, `INSERT INTO cq_messages (queue_name, message_id, metadata_pb, state, priority, created_at, updated_at) VALUES ('queue-a', 'shared-id', X'00', 1, 1, 1, 1)`)
 	require.Error(t, err)
+}
+
+func TestSchemaMigration_V9BackfillsDLQRelationship(t *testing.T) {
+	ctx := context.Background()
+	db, err := OpenConnection(ctx, DefaultConnectionConfig(filepath.Join(t.TempDir(), "dlq-migration.db")))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	_, err = db.ExecContext(ctx, `CREATE TABLE cq_schema_version (version INTEGER PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, description TEXT)`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES (8, 'pre-DLQ-index fixture')`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `CREATE TABLE cq_queues (name TEXT PRIMARY KEY, metadata_pb BLOB NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`)
+	require.NoError(t, err)
+	queueBytes, err := proto.Marshal(&queuepb.Queue{Name: "source", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "source-dlq"}})
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES (?, ?, 1, 1)`, "source", queueBytes)
+	require.NoError(t, err)
+
+	require.NoError(t, NewSchemaManager().Migrate(ctx, db, latestVersion))
+	var dlqName string
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT dead_letter_queue_name FROM cq_queues WHERE name = ?`, "source").Scan(&dlqName))
+	require.Equal(t, "source-dlq", dlqName)
+	var indexCount int
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_queues_dead_letter_queue_name'`).Scan(&indexCount))
+	require.Equal(t, 1, indexCount)
+}
+
+func TestSchemaMigration_V9RejectsInvalidQueueMetadataAndRollsBack(t *testing.T) {
+	ctx := context.Background()
+	db, err := OpenConnection(ctx, DefaultConnectionConfig(filepath.Join(t.TempDir(), "invalid-dlq-migration.db")))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	_, err = db.ExecContext(ctx, `CREATE TABLE cq_schema_version (version INTEGER PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, description TEXT)`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES (8, 'pre-DLQ-index fixture')`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `CREATE TABLE cq_queues (name TEXT PRIMARY KEY, metadata_pb BLOB NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES ('broken', X'00', 1, 1)`)
+	require.NoError(t, err)
+
+	err = NewSchemaManager().Migrate(ctx, db, latestVersion)
+	require.ErrorContains(t, err, `unmarshal queue "broken"`)
+	version, exists, err := NewSchemaManager().Version(ctx, db)
+	require.NoError(t, err)
+	require.True(t, exists)
+	require.Equal(t, uint(8), version)
 }
 
 func TestSchemaMigration_V7RollsBackWithoutMessagesTable(t *testing.T) {
