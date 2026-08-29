@@ -38,8 +38,8 @@ func TestExtendMessageLease_ReturnsPolicyCappedRemainingTime(t *testing.T) {
 	remainingMs, err := storage.ExtendMessageLease(ctx, "owned", message.GetMessageId(), "attempt", "worker", int64((10 * time.Second).Milliseconds()))
 	require.NoError(t, err)
 	require.Positive(t, remainingMs)
-	require.LessOrEqual(t, remainingMs, int64((5 * time.Second).Milliseconds()))
-	require.Greater(t, remainingMs, int64((4 * time.Second).Milliseconds()))
+	require.LessOrEqual(t, remainingMs, int64((65 * time.Second).Milliseconds()))
+	require.Greater(t, remainingMs, int64((64 * time.Second).Milliseconds()))
 }
 
 func TestWorkerMutations_RequireActiveOwnership(t *testing.T) {

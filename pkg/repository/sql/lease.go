@@ -65,6 +65,7 @@ func (lrc *LeaseRuntimeCalculator) CalculateLeaseRuntimeWithDuration(policy *com
 // Returns updated lease runtime or error if max extension reached.
 func (lrc *LeaseRuntimeCalculator) ExtendLease(
 	policy *commonpb.LeasePolicy,
+	currentLeaseExpiry int64,
 	currentExtensionUsed int64,
 	requestedExtensionMs int64,
 ) (*LeaseRuntime, error) {
@@ -87,11 +88,10 @@ func (lrc *LeaseRuntimeCalculator) ExtendLease(
 		actualExtensionMs = remainingExtensionMs
 	}
 
-	nowMs := lrc.clock.NowMs()
 	newExtensionUsed := currentExtensionUsed + actualExtensionMs
 
 	return &LeaseRuntime{
-		LeaseExpiry:        nowMs + actualExtensionMs,
+		LeaseExpiry:        currentLeaseExpiry + actualExtensionMs,
 		LeaseExtensionUsed: newExtensionUsed,
 	}, nil
 }

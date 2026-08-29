@@ -42,66 +42,64 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 
 	first := newPostgresReclaimTestStorage(t, ctx, dsn)
 	second := newPostgresReclaimTestStorage(t, ctx, dsn)
-	require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "protected-dlq", Metadata: &queuepb.QueueMetadata{}}))
-	require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "protected-source", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "protected-dlq"}}))
-	require.ErrorContains(t, first.DeleteQueue(ctx, "protected-dlq"), "referenced as a dead letter queue")
-	require.NoError(t, first.DeleteQueue(ctx, "protected-source"))
-	require.NoError(t, first.DeleteQueue(ctx, "protected-dlq"))
+	t.Run("rejects deletion of referenced DLQ", func(t *testing.T) {
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "protected-dlq", Metadata: &queuepb.QueueMetadata{}}))
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "protected-source", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "protected-dlq"}}))
+		require.ErrorContains(t, first.DeleteQueue(ctx, "protected-dlq"), "referenced as a dead letter queue")
+		require.NoError(t, first.DeleteQueue(ctx, "protected-source"))
+		require.NoError(t, first.DeleteQueue(ctx, "protected-dlq"))
+	})
 
-	require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "concurrent-dlq", Metadata: &queuepb.QueueMetadata{}}))
-	deleteTx, err := first.DB.BeginTx(ctx, nil)
-	require.NoError(t, err)
-	_, err = deleteTx.ExecContext(ctx, lockQueuesForRelationshipMutation)
-	require.NoError(t, err)
-	_, err = deleteTx.ExecContext(ctx, `DELETE FROM cq_queues WHERE name = $1`, "concurrent-dlq")
-	require.NoError(t, err)
-	createErr := make(chan error, 1)
-	go func() {
-		createErr <- second.CreateQueue(ctx, &queuepb.Queue{
-			Name: "concurrent-source",
-			Metadata: &queuepb.QueueMetadata{
-				DeadLetterQueueName: "concurrent-dlq",
-			},
-		})
-	}()
-	require.NoError(t, deleteTx.Commit())
-	require.ErrorContains(t, <-createErr, `dead letter queue "concurrent-dlq" not found`)
-	_, err = first.GetQueue(ctx, "concurrent-source")
-	require.ErrorContains(t, err, `queue "concurrent-source" not found`)
+	t.Run("serializes dependent creation with DLQ deletion", func(t *testing.T) {
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "concurrent-dlq", Metadata: &queuepb.QueueMetadata{}}))
+		deleteTx, err := first.DB.BeginTx(ctx, nil)
+		require.NoError(t, err)
+		_, err = deleteTx.ExecContext(ctx, lockQueuesForRelationshipMutation)
+		require.NoError(t, err)
+		_, err = deleteTx.ExecContext(ctx, `DELETE FROM cq_queues WHERE name = $1`, "concurrent-dlq")
+		require.NoError(t, err)
+		createErr := make(chan error, 1)
+		go func() {
+			createErr <- second.CreateQueue(ctx, &queuepb.Queue{Name: "concurrent-source", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "concurrent-dlq"}})
+		}()
+		require.NoError(t, deleteTx.Commit())
+		require.ErrorContains(t, <-createErr, `dead letter queue "concurrent-dlq" not found`)
+		_, err = first.GetQueue(ctx, "concurrent-source")
+		require.ErrorContains(t, err, `queue "concurrent-source" not found`)
+	})
 
-	require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "scheduled-cas", Metadata: &queuepb.QueueMetadata{}}))
-	dueMessage := postgresReclaimTestMessage("scheduled-once", 1, 1)
-	dueMessage.Metadata.State = messagepb.Message_Metadata_INVISIBLE
-	dueMessage.Metadata.ScheduledTime = timestamppb.New(time.Now().Add(-time.Minute))
-	require.NoError(t, first.EnqueueMessage(ctx, "scheduled-cas", dueMessage))
-	_, err = first.DB.ExecContext(ctx, `UPDATE cq_queues SET state_counts = '{"invisible":1}' WHERE name = $1`, "scheduled-cas")
-	require.NoError(t, err)
-	schedulers := []*background.SchedulerService{
-		background.NewSchedulerService(first.BaseSQL, time.Second),
-		background.NewSchedulerService(second.BaseSQL, time.Second),
-	}
-	startSchedulers := make(chan struct{})
-	schedulerErrs := make(chan error, len(schedulers))
-	var schedulerWG sync.WaitGroup
-	for _, scheduler := range schedulers {
-		schedulerWG.Add(1)
-		go func(scheduler *background.SchedulerService) {
-			defer schedulerWG.Done()
-			<-startSchedulers
-			schedulerErrs <- scheduler.RunOnce(ctx)
-		}(scheduler)
-	}
-	close(startSchedulers)
-	schedulerWG.Wait()
-	close(schedulerErrs)
-	for schedulerErr := range schedulerErrs {
-		require.NoError(t, schedulerErr)
-	}
-	var invisibleCount, pendingCount int64
-	err = first.DB.QueryRowContext(ctx, `SELECT COALESCE((state_counts->>'invisible')::BIGINT, 0), COALESCE((state_counts->>'pending')::BIGINT, 0) FROM cq_queues WHERE name = $1`, "scheduled-cas").Scan(&invisibleCount, &pendingCount)
-	require.NoError(t, err)
-	require.Zero(t, invisibleCount)
-	require.EqualValues(t, 1, pendingCount)
+	t.Run("promotes a scheduled message once across schedulers", func(t *testing.T) {
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "scheduled-cas", Metadata: &queuepb.QueueMetadata{}}))
+		dueMessage := postgresReclaimTestMessage("scheduled-once", 1, 1)
+		dueMessage.Metadata.State = messagepb.Message_Metadata_INVISIBLE
+		dueMessage.Metadata.ScheduledTime = timestamppb.New(time.Now().Add(-time.Minute))
+		require.NoError(t, first.EnqueueMessage(ctx, "scheduled-cas", dueMessage))
+		_, err := first.DB.ExecContext(ctx, `UPDATE cq_queues SET state_counts = '{"invisible":1}' WHERE name = $1`, "scheduled-cas")
+		require.NoError(t, err)
+		schedulers := []*background.SchedulerService{background.NewSchedulerService(first.BaseSQL, time.Second), background.NewSchedulerService(second.BaseSQL, time.Second)}
+		startSchedulers := make(chan struct{})
+		schedulerErrs := make(chan error, len(schedulers))
+		var schedulerWG sync.WaitGroup
+		for _, scheduler := range schedulers {
+			schedulerWG.Add(1)
+			go func(scheduler *background.SchedulerService) {
+				defer schedulerWG.Done()
+				<-startSchedulers
+				schedulerErrs <- scheduler.RunOnce(ctx)
+			}(scheduler)
+		}
+		close(startSchedulers)
+		schedulerWG.Wait()
+		close(schedulerErrs)
+		for schedulerErr := range schedulerErrs {
+			require.NoError(t, schedulerErr)
+		}
+		var invisibleCount, pendingCount int64
+		err = first.DB.QueryRowContext(ctx, `SELECT COALESCE((state_counts->>'invisible')::BIGINT, 0), COALESCE((state_counts->>'pending')::BIGINT, 0) FROM cq_queues WHERE name = $1`, "scheduled-cas").Scan(&invisibleCount, &pendingCount)
+		require.NoError(t, err)
+		require.Zero(t, invisibleCount)
+		require.EqualValues(t, 1, pendingCount)
+	})
 
 	queueName := "reclaim-fencing"
 	require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))

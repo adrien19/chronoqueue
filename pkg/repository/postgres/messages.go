@@ -819,11 +819,12 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
 	var remainingTimeMs int64
 	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		var messageBytes []byte
+		var currentLeaseExpiry int64
 		var leaseExtensionUsed int64
 		var currentRenewalCount int32
 		nowMs := s.nowMs()
 		query := s.ph(`
-			SELECT metadata_pb, lease_extension_used, lease_renewal_count
+			SELECT metadata_pb, lease_expiry, lease_extension_used, lease_renewal_count
 			FROM cq_messages
 			WHERE queue_name = ? AND message_id = ? AND state = ?
 			  AND current_attempt_id = ? AND current_worker_id = ?
@@ -831,7 +832,7 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
 			  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
 			  AND deleted_at IS NULL
 			FOR UPDATE`)
-		err := tx.QueryRowContext(ctx, query, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs).Scan(&messageBytes, &leaseExtensionUsed, &currentRenewalCount)
+		err := tx.QueryRowContext(ctx, query, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs).Scan(&messageBytes, &currentLeaseExpiry, &leaseExtensionUsed, &currentRenewalCount)
 		if err == sql.ErrNoRows {
 			return s.classifyOwnedMessageFailure(ctx, tx, queueName, messageId, attemptId, workerId, nowMs)
 		}
@@ -854,7 +855,7 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
 			}
 		}
 
-		newLeaseRuntime, err := s.LeaseRuntime.ExtendLease(leasePolicy, leaseExtensionUsed, extensionMs)
+		newLeaseRuntime, err := s.LeaseRuntime.ExtendLease(leasePolicy, currentLeaseExpiry, leaseExtensionUsed, extensionMs)
 		if err != nil {
 			return domainerror.New(domainerror.FailedPrecondition, "maximum lease extension reached", err)
 		}

@@ -481,8 +481,8 @@ func TestMessageLifecycle_RenewMessageLease(t *testing.T) {
 	// Assert
 	require.NoError(t, err, "Lease renewal should succeed")
 	assert.NotNil(t, renewResp.RemainingTime, "Should return remaining time")
-	assert.Greater(t, renewResp.GetRemainingTime().AsDuration(), 44*time.Second)
-	assert.LessOrEqual(t, renewResp.GetRemainingTime().AsDuration(), 45*time.Second)
+	assert.Greater(t, renewResp.GetRemainingTime().AsDuration(), 73*time.Second)
+	assert.LessOrEqual(t, renewResp.GetRemainingTime().AsDuration(), 75*time.Second)
 	assert.Equal(t, message_pb.Message_Metadata_RUNNING, renewResp.GetState())
 	t.Logf("Lease renewed successfully, remaining time: %v", renewResp.RemainingTime)
 }
