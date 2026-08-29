@@ -45,7 +45,11 @@ func New(kind Kind, message string, cause error) error {
 }
 
 func InvalidWithFields(message string, fields []FieldViolation, cause error) error {
-	return &Error{kind: InvalidArgument, message: message, cause: cause, fields: fields}
+	return WithFields(InvalidArgument, message, fields, cause)
+}
+
+func WithFields(kind Kind, message string, fields []FieldViolation, cause error) error {
+	return &Error{kind: kind, message: message, cause: cause, fields: fields}
 }
 
 func PrefixMessage(err error, prefix string) error {
@@ -85,7 +89,7 @@ func ToGRPC(err error) error {
 	}
 
 	grpcStatus := status.New(codeForKind(domainErr.kind), domainErr.message)
-	if domainErr.kind == InvalidArgument && len(domainErr.fields) > 0 {
+	if len(domainErr.fields) > 0 {
 		violations := make([]*errdetails.BadRequest_FieldViolation, 0, len(domainErr.fields))
 		for _, field := range domainErr.fields {
 			violations = append(violations, &errdetails.BadRequest_FieldViolation{Field: field.Field, Description: field.Description})

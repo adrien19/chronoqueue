@@ -114,13 +114,19 @@ func TestParseMessageHeaders(t *testing.T) {
 }
 
 func TestParseBulkMessages(t *testing.T) {
-	raw := `[{"message_id":"one","payload":{"value":1},"headers":[{"key":"trace-id","value_base64":"AP8="}],"scheduled_time":"2030-01-01T00:00:00Z","lease_policy":{"base_lease":"30s","max_extension":"5m"}},{"message_id":"two","payload":{"value":2}}]`
+	raw := `[{"message_id":"one","payload":{"value":1},"headers":[{"key":"trace-id","value_base64":"AP8="}],"scheduled_time":"2030-01-01T00:00:00Z","lease_policy":{"base_lease":"30s","max_extension":"5m","max_renewals":0}},{"message_id":"two","payload":{"value":2}}]`
 	messages, err := parseBulkMessages(raw)
 	if err != nil || len(messages) != 2 || messages[0].MessageID != "one" || len(messages[0].Options.Headers) != 1 {
 		t.Fatalf("bulk messages = (%v, %v)", messages, err)
 	}
 	if messages[0].Options.ScheduledTime == nil || messages[0].Options.LeasePolicy.BaseLease != "30s" {
 		t.Fatalf("bulk producer options = %+v", messages[0].Options)
+	}
+	if !messages[0].Options.LeasePolicy.HasMaxRenewals || messages[0].Options.LeasePolicy.MaxRenewals != 0 {
+		t.Fatalf("explicit max_renewals presence was lost: %+v", messages[0].Options.LeasePolicy)
+	}
+	if messages[1].Options.LeasePolicy.HasMaxRenewals {
+		t.Fatalf("omitted max_renewals became explicit: %+v", messages[1].Options.LeasePolicy)
 	}
 	for _, raw := range []string{"[]", `[{}]`, `[{"message_id":"one","payload":[]}]`, `[{"message_id":"one","payload":{},"priority":5}]`} {
 		if _, err := parseBulkMessages(raw); err == nil {

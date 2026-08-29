@@ -49,8 +49,8 @@ func (v *LeasePolicyValidator) Validate(_ context.Context, msg *messagepb.Messag
 		if requestedPolicy.GetExtendStep() != nil {
 			effective.ExtendStep = requestedPolicy.GetExtendStep()
 		}
-		if requestedPolicy.GetMaxRenewals() != 0 {
-			effective.MaxRenewals = requestedPolicy.GetMaxRenewals()
+		if requestedPolicy.MaxRenewals != nil {
+			effective.MaxRenewals = proto.Int32(requestedPolicy.GetMaxRenewals())
 		}
 	}
 

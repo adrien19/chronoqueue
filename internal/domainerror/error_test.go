@@ -49,6 +49,13 @@ func TestToGRPCIncludesValidationDetails(t *testing.T) {
 	assert.Equal(t, "metadata.priority", detail.GetFieldViolations()[0].GetField())
 }
 
+func TestToGRPCIncludesFieldDetailsForFailedPrecondition(t *testing.T) {
+	err := WithFields(FailedPrecondition, "invalid atomic batch", []FieldViolation{{Field: "messages[1].metadata", Description: "required field missing"}}, nil)
+	grpcStatus := status.Convert(ToGRPC(err))
+	require.Equal(t, codes.FailedPrecondition, grpcStatus.Code())
+	require.Len(t, grpcStatus.Details(), 1)
+}
+
 func TestPrefixMessagePreservesDomainContract(t *testing.T) {
 	cause := errors.New("private detail")
 	err := PrefixMessage(New(NotFound, "queue not found", cause), "get queue metadata")

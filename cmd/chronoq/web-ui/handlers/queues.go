@@ -166,6 +166,7 @@ func parseLeasePolicy(formValue func(string) string) (client.LeasePolicyOptions,
 			return client.LeasePolicyOptions{}, fmt.Errorf("maximum renewals must be a non-negative integer")
 		}
 		policy.MaxRenewals = int32(value)
+		policy.HasMaxRenewals = true
 	}
 	for name, raw := range map[string]string{"Base lease": policy.BaseLease, "Maximum extension": policy.MaxExtension, "Heartbeat timeout": policy.HeartbeatTimeout, "Extension step": policy.ExtendStep} {
 		if raw == "" {
@@ -288,7 +289,7 @@ func parseBulkMessages(raw string) ([]client.MessageWithID, error) {
 			MaxExtension     string `json:"max_extension"`
 			HeartbeatTimeout string `json:"heartbeat_timeout"`
 			ExtendStep       string `json:"extend_step"`
-			MaxRenewals      int32  `json:"max_renewals"`
+			MaxRenewals      *int32 `json:"max_renewals"`
 		} `json:"lease_policy"`
 	}
 	if err := json.Unmarshal([]byte(raw), &inputs); err != nil {
@@ -340,7 +341,10 @@ func parseBulkMessages(raw string) ([]client.MessageWithID, error) {
 			case "extend_step":
 				return input.LeasePolicy.ExtendStep
 			case "max_renewals":
-				return strconv.FormatInt(int64(input.LeasePolicy.MaxRenewals), 10)
+				if input.LeasePolicy.MaxRenewals != nil {
+					return strconv.FormatInt(int64(*input.LeasePolicy.MaxRenewals), 10)
+				}
+				return ""
 			default:
 				return ""
 			}

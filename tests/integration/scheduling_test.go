@@ -77,9 +77,8 @@ func TestScheduling_CreateCronSchedule(t *testing.T) {
 	schedule := &schedule_pb.Schedule{
 		ScheduleId: scheduleID,
 		Metadata: &schedule_pb.Schedule_Metadata{
-			Payload:    payload,
-			QueueName:  queueName,
-			MessageIds: []string{helpers.GenerateUniqueMessageID(t)},
+			Payload:   payload,
+			QueueName: queueName,
 			ScheduleConfig: &schedule_pb.Schedule_Metadata_CronSchedule{
 				CronSchedule: scheduleFixture.CronExpression,
 			},

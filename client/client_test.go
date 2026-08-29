@@ -932,6 +932,20 @@ func TestBuildLeasePolicyRejectsNegativeMaxRenewals(t *testing.T) {
 	}
 }
 
+func TestBuildLeasePolicyPreservesExplicitUnlimitedRenewals(t *testing.T) {
+	policy, err := buildLeasePolicy(LeasePolicyOptions{HasMaxRenewals: true})
+	require.NoError(t, err)
+	require.NotNil(t, policy)
+	require.NotNil(t, policy.MaxRenewals)
+	require.Zero(t, policy.GetMaxRenewals())
+}
+
+func TestBuildLeasePolicyPreservesOmittedRenewalsWithAnotherPolicyField(t *testing.T) {
+	policy, err := buildLeasePolicy(LeasePolicyOptions{BaseLease: "30s"})
+	require.NoError(t, err)
+	require.Nil(t, policy.MaxRenewals)
+}
+
 func mustStruct(t *testing.T, value map[string]any) *structpb.Struct {
 	t.Helper()
 	result, err := structpb.NewStruct(value)

@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
@@ -91,10 +92,11 @@ type stubEngine struct {
 	preview     *calendar.SchedulePreview
 	previewErr  error
 	validateErr error
+	nextRunErr  error
 }
 
 func (e *stubEngine) CalculateNextRun(ctx context.Context, calendarSchedule *schedulepb.CalendarSchedule, from time.Time) (*time.Time, error) {
-	return nil, nil
+	return nil, e.nextRunErr
 }
 
 func (e *stubEngine) CalculateNextRuns(ctx context.Context, calendarSchedule *schedulepb.CalendarSchedule, from time.Time, count int) ([]time.Time, error) {
@@ -330,6 +332,78 @@ func TestCreateScheduleRequiresExistingTargetQueue(t *testing.T) {
 		},
 	}})
 	require.Equal(t, codes.NotFound, status.Code(domainerror.ToGRPC(err)))
+	require.Empty(t, backend.schedules)
+}
+
+func TestCreateScheduleRejectsServerManagedFields(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend}
+	now := timestamppb.Now()
+
+	_, err := impl.CreateSchedule(context.Background(), &queueservicepb.CreateScheduleRequest{Schedule: &schedulepb.Schedule{
+		ScheduleId: "runtime-fields",
+		Metadata: &schedulepb.Schedule_Metadata{
+			QueueName:      "jobs",
+			ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "*/5 * * * *"},
+			State:          schedulepb.Schedule_Metadata_PAUSED,
+			MessageIds:     []string{"fabricated"},
+			NextRun:        now,
+			LastRun:        now,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+			StateMessage:   "fabricated",
+			NextRuns:       []*timestamppb.Timestamp{now},
+		},
+	}})
+	require.Error(t, err)
+	grpcStatus := status.Convert(domainerror.ToGRPC(err))
+	require.Equal(t, codes.InvalidArgument, grpcStatus.Code())
+	require.Empty(t, backend.schedules)
+	require.Len(t, grpcStatus.Details(), 1)
+	details, ok := grpcStatus.Details()[0].(*errdetails.BadRequest)
+	require.True(t, ok)
+	require.Len(t, details.GetFieldViolations(), 8)
+	require.Equal(t, "schedule.metadata.state", details.GetFieldViolations()[0].GetField())
+}
+
+func TestCreateSchedulePersistsNoFutureCalendarScheduleAsPaused(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{
+		backend:        backend,
+		calendarEngine: &stubEngine{nextRunErr: calendar.ErrNoExecutionTime.WithDetails("all execution times expired")},
+	}
+
+	_, err := impl.CreateSchedule(context.Background(), &queueservicepb.CreateScheduleRequest{Schedule: &schedulepb.Schedule{
+		ScheduleId: "no-future-runs",
+		Metadata: &schedulepb.Schedule_Metadata{
+			QueueName: "jobs",
+			ScheduleConfig: &schedulepb.Schedule_Metadata_CalendarSchedule{
+				CalendarSchedule: &schedulepb.CalendarSchedule{},
+			},
+		},
+	}})
+	require.NoError(t, err)
+	require.Len(t, backend.schedules, 1)
+	metadata := backend.schedules[0].GetMetadata()
+	require.Equal(t, schedulepb.Schedule_Metadata_PAUSED, metadata.GetState())
+	require.Equal(t, "no future runs", metadata.GetStateMessage())
+	require.Nil(t, metadata.GetNextRun())
+}
+
+func TestCreateScheduleReturnsUnexpectedNextRunError(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend, calendarEngine: &stubEngine{nextRunErr: errors.New("calculation failed")}}
+
+	_, err := impl.CreateSchedule(context.Background(), &queueservicepb.CreateScheduleRequest{Schedule: &schedulepb.Schedule{
+		ScheduleId: "calculation-error",
+		Metadata: &schedulepb.Schedule_Metadata{
+			QueueName: "jobs",
+			ScheduleConfig: &schedulepb.Schedule_Metadata_CalendarSchedule{
+				CalendarSchedule: &schedulepb.CalendarSchedule{},
+			},
+		},
+	}})
+	require.ErrorContains(t, err, "calculate next run")
 	require.Empty(t, backend.schedules)
 }
 
@@ -1001,12 +1075,25 @@ func TestCreateQueueMessagesBulk_AllOrNothingReportsIndexedMetadata(t *testing.T
 	}, nil)
 	require.Error(t, err)
 	grpcStatus := status.Convert(domainerror.ToGRPC(err))
-	require.Equal(t, codes.InvalidArgument, grpcStatus.Code())
+	require.Equal(t, codes.FailedPrecondition, grpcStatus.Code())
 	require.Empty(t, backend.enqueued)
 	require.Len(t, grpcStatus.Details(), 1)
 	details, ok := grpcStatus.Details()[0].(*errdetails.BadRequest)
 	require.True(t, ok)
 	require.Equal(t, "messages[1].metadata", details.GetFieldViolations()[0].GetField())
+}
+
+func TestCreateQueueMessagesBulk_AllOrNothingRejectsNilMessageAsFailedPrecondition(t *testing.T) {
+	backend := &stubBackend{queueMetadata: &queuepb.QueueMetadata{}}
+	impl := &implementation{backend: backend}
+
+	_, err := impl.CreateQueueMessagesBulk(context.Background(), &queueservicepb.PostMessagesBulkRequest{
+		QueueName:       "test-queue",
+		Messages:        []*messagepb.Message{nil},
+		TransactionMode: queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING,
+	}, nil)
+	require.Equal(t, codes.FailedPrecondition, status.Code(domainerror.ToGRPC(err)))
+	require.Empty(t, backend.enqueued)
 }
 
 func TestCreateQueueMessagesBulk_EmptyMessages(t *testing.T) {
@@ -1127,6 +1214,7 @@ func TestCreateQueueMessagesBulk_ValidationFails_AllOrNothing(t *testing.T) {
 	if !strings.Contains(err.Error(), "validation failed") {
 		t.Fatalf("expected validation error message, got: %v", err)
 	}
+	require.Equal(t, codes.FailedPrecondition, status.Code(domainerror.ToGRPC(err)))
 
 	// No messages should be enqueued in ALL_OR_NOTHING mode on validation failure
 	if len(backend.enqueued) != 0 {
