@@ -107,6 +107,7 @@ type (
 		HeartbeatTimeout string `json:"heartbeatTimeout,omitempty"`
 		ExtendStep       string `json:"extendStep,omitempty"`
 		MaxRenewals      int32  `json:"maxRenewals,omitempty"`
+		HasMaxRenewals   bool   `json:"hasMaxRenewals,omitempty"`
 	}
 
 	// RetentionPolicyOption configures message retention after acknowledgment
@@ -366,7 +367,7 @@ func parseDurationToProto(durationStr string) (*durationpb.Duration, error) {
 }
 
 func buildLeasePolicy(opts LeasePolicyOptions) (*common_pb.LeasePolicy, error) {
-	if opts.BaseLease == "" && opts.MaxExtension == "" && opts.HeartbeatTimeout == "" && opts.ExtendStep == "" && opts.MaxRenewals == 0 {
+	if opts.BaseLease == "" && opts.MaxExtension == "" && opts.HeartbeatTimeout == "" && opts.ExtendStep == "" && opts.MaxRenewals == 0 && !opts.HasMaxRenewals {
 		return nil, nil
 	}
 
@@ -406,7 +407,9 @@ func buildLeasePolicy(opts LeasePolicyOptions) (*common_pb.LeasePolicy, error) {
 	if opts.MaxRenewals < 0 {
 		return nil, fmt.Errorf("max renewals must not be negative")
 	}
-	lp.MaxRenewals = opts.MaxRenewals
+	if opts.MaxRenewals != 0 || opts.HasMaxRenewals {
+		lp.MaxRenewals = &opts.MaxRenewals
+	}
 
 	return lp, nil
 }

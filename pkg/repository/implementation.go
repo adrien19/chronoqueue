@@ -573,7 +573,7 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 		if message.Metadata == nil {
 			err := fmt.Errorf("message metadata is required")
 			if transactionMode == queueservicepb.PostMessagesBulkRequest_ALL_OR_NOTHING {
-				return nil, domainerror.InvalidWithFields(err.Error(), []domainerror.FieldViolation{{
+				return nil, domainerror.WithFields(domainerror.FailedPrecondition, err.Error(), []domainerror.FieldViolation{{
 					Field:       fmt.Sprintf("messages[%d].metadata", i),
 					Description: "required field missing",
 				}}, nil)
@@ -596,7 +596,7 @@ func (impl *implementation) CreateQueueMessagesBulk(ctx context.Context, request
 							Description: valErr.Message,
 						})
 					}
-					return nil, domainerror.InvalidWithFields(errorDetails, fieldViolations, nil)
+					return nil, domainerror.WithFields(domainerror.FailedPrecondition, errorDetails, fieldViolations, nil)
 				}
 				errorDetails := "validation failed:"
 				for _, valErr := range validationResult.Errors {
@@ -1014,6 +1014,34 @@ func (impl *implementation) CreateSchedule(ctx context.Context, request *queuese
 	if meta == nil {
 		return nil, domainerror.New(domainerror.InvalidArgument, "schedule metadata is required", nil)
 	}
+	runtimeFields := make([]domainerror.FieldViolation, 0, 8)
+	if meta.GetState() != schedulepb.Schedule_Metadata_SCHEDULED {
+		runtimeFields = append(runtimeFields, domainerror.FieldViolation{Field: "schedule.metadata.state", Description: "must be SCHEDULED when creating a schedule"})
+	}
+	if len(meta.GetMessageIds()) > 0 {
+		runtimeFields = append(runtimeFields, domainerror.FieldViolation{Field: "schedule.metadata.message_ids", Description: "is managed by the server"})
+	}
+	if meta.GetNextRun() != nil {
+		runtimeFields = append(runtimeFields, domainerror.FieldViolation{Field: "schedule.metadata.next_run", Description: "is managed by the server"})
+	}
+	if meta.GetLastRun() != nil {
+		runtimeFields = append(runtimeFields, domainerror.FieldViolation{Field: "schedule.metadata.last_run", Description: "is managed by the server"})
+	}
+	if meta.GetCreatedAt() != nil {
+		runtimeFields = append(runtimeFields, domainerror.FieldViolation{Field: "schedule.metadata.created_at", Description: "is managed by the server"})
+	}
+	if meta.GetUpdatedAt() != nil {
+		runtimeFields = append(runtimeFields, domainerror.FieldViolation{Field: "schedule.metadata.updated_at", Description: "is managed by the server"})
+	}
+	if meta.GetStateMessage() != "" {
+		runtimeFields = append(runtimeFields, domainerror.FieldViolation{Field: "schedule.metadata.state_message", Description: "is managed by the server"})
+	}
+	if len(meta.GetNextRuns()) > 0 {
+		runtimeFields = append(runtimeFields, domainerror.FieldViolation{Field: "schedule.metadata.next_runs", Description: "is managed by the server"})
+	}
+	if len(runtimeFields) > 0 {
+		return nil, domainerror.InvalidWithFields("schedule contains server-managed fields", runtimeFields, nil)
+	}
 	if meta.GetQueueName() == "" {
 		return nil, domainerror.New(domainerror.InvalidArgument, "schedule queue name is required", nil)
 	}
@@ -1053,29 +1081,21 @@ func (impl *implementation) CreateSchedule(ctx context.Context, request *queuese
 		return nil, domainerror.New(domainerror.InvalidArgument, "schedule configuration is invalid", nil)
 	}
 
-	if nextRun := meta.GetNextRun(); nextRun != nil {
-		if err := nextRun.CheckValid(); err != nil {
-			return nil, domainerror.New(domainerror.InvalidArgument, "schedule next run is invalid", err)
-		}
-	}
-
 	// Pre-compute next_run for calendar schedules so the background processor can pick them up.
 	if meta.GetCalendarSchedule() != nil {
 		if err := impl.calendarEngine.ValidateSchedule(ctx, meta.GetCalendarSchedule()); err != nil {
 			return nil, domainerror.New(domainerror.InvalidArgument, "calendar schedule is invalid", err)
 		}
-		if meta.GetNextRun() == nil {
-			nextRun, err := impl.calendarEngine.CalculateNextRun(ctx, meta.GetCalendarSchedule(), time.Now())
-			if err != nil {
-				return nil, fmt.Errorf("calculate next run: %w", err)
-			}
+		nextRun, err := impl.calendarEngine.CalculateNextRun(ctx, meta.GetCalendarSchedule(), time.Now())
+		if err != nil {
+			return nil, fmt.Errorf("calculate next run: %w", err)
+		}
 
-			if nextRun == nil {
-				meta.State = schedulepb.Schedule_Metadata_PAUSED
-				meta.StateMessage = "no future runs"
-			} else {
-				meta.NextRun = timestamppb.New(*nextRun)
-			}
+		if nextRun == nil {
+			meta.State = schedulepb.Schedule_Metadata_PAUSED
+			meta.StateMessage = "no future runs"
+		} else {
+			meta.NextRun = timestamppb.New(*nextRun)
 		}
 	}
 

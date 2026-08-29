@@ -104,5 +104,5 @@ option go_package = "github.com/adrien19/chronoqueue/api/common/v1;common";
   // Example:
   //   max_renewals = 5
   //   A worker can renew the lease up to 5 times, after which ExtendMessageLease fails.
-    int32 max_renewals = 5;
+    optional int32 max_renewals = 5;
   }

@@ -166,6 +166,7 @@ func parseLeasePolicy(formValue func(string) string) (client.LeasePolicyOptions,
 			return client.LeasePolicyOptions{}, fmt.Errorf("maximum renewals must be a non-negative integer")
 		}
 		policy.MaxRenewals = int32(value)
+		policy.HasMaxRenewals = true
 	}
 	for name, raw := range map[string]string{"Base lease": policy.BaseLease, "Maximum extension": policy.MaxExtension, "Heartbeat timeout": policy.HeartbeatTimeout, "Extension step": policy.ExtendStep} {
 		if raw == "" {

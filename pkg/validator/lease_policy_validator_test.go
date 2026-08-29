@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
@@ -18,16 +19,19 @@ func TestLeasePolicyValidator(t *testing.T) {
 	queuePolicy := &commonpb.LeasePolicy{
 		BaseLease:    durationpb.New(30 * time.Second),
 		MaxExtension: durationpb.New(5 * time.Minute),
+		MaxRenewals:  proto.Int32(5),
 	}
 	tests := []struct {
 		name          string
 		metadata      *messagepb.Message_Metadata
 		wantValid     bool
 		wantBaseLease time.Duration
+		wantRenewals  int32
 	}{
-		{name: "inherits queue policy", metadata: &messagepb.Message_Metadata{}, wantValid: true, wantBaseLease: 30 * time.Second},
-		{name: "lease policy override", metadata: &messagepb.Message_Metadata{LeasePolicy: &commonpb.LeasePolicy{BaseLease: durationpb.New(time.Minute)}}, wantValid: true, wantBaseLease: time.Minute},
-		{name: "legacy override", metadata: &messagepb.Message_Metadata{LeaseDuration: durationpb.New(45 * time.Second)}, wantValid: true, wantBaseLease: 45 * time.Second},
+		{name: "inherits queue policy", metadata: &messagepb.Message_Metadata{}, wantValid: true, wantBaseLease: 30 * time.Second, wantRenewals: 5},
+		{name: "lease policy override", metadata: &messagepb.Message_Metadata{LeasePolicy: &commonpb.LeasePolicy{BaseLease: durationpb.New(time.Minute)}}, wantValid: true, wantBaseLease: time.Minute, wantRenewals: 5},
+		{name: "explicit unlimited renewals override", metadata: &messagepb.Message_Metadata{LeasePolicy: &commonpb.LeasePolicy{MaxRenewals: proto.Int32(0)}}, wantValid: true, wantBaseLease: 30 * time.Second, wantRenewals: 0},
+		{name: "legacy override", metadata: &messagepb.Message_Metadata{LeaseDuration: durationpb.New(45 * time.Second)}, wantValid: true, wantBaseLease: 45 * time.Second, wantRenewals: 5},
 		{name: "conflicting fields", metadata: &messagepb.Message_Metadata{LeaseDuration: durationpb.New(45 * time.Second), LeasePolicy: &commonpb.LeasePolicy{BaseLease: durationpb.New(time.Minute)}}, wantValid: false},
 		{name: "invalid duration", metadata: &messagepb.Message_Metadata{LeasePolicy: &commonpb.LeasePolicy{BaseLease: &durationpb.Duration{Seconds: 315576000001}}}, wantValid: false},
 	}
@@ -40,6 +44,7 @@ func TestLeasePolicyValidator(t *testing.T) {
 			if tt.wantValid {
 				require.NotNil(t, msg.GetMetadata().GetLeasePolicy())
 				assert.Equal(t, tt.wantBaseLease, msg.GetMetadata().GetLeasePolicy().GetBaseLease().AsDuration())
+				assert.Equal(t, tt.wantRenewals, msg.GetMetadata().GetLeasePolicy().GetMaxRenewals())
 			}
 		})
 	}

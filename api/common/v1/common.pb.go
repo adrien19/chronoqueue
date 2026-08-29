@@ -186,7 +186,7 @@ type LeasePolicy struct {
 	//
 	//	max_renewals = 5
 	//	A worker can renew the lease up to 5 times, after which ExtendMessageLease fails.
-	MaxRenewals   int32 `protobuf:"varint,5,opt,name=max_renewals,json=maxRenewals,proto3" json:"max_renewals,omitempty"`
+	MaxRenewals   *int32 `protobuf:"varint,5,opt,name=max_renewals,json=maxRenewals,proto3,oneof" json:"max_renewals,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -250,8 +250,8 @@ func (x *LeasePolicy) GetExtendStep() *durationpb.Duration {
 }
 
 func (x *LeasePolicy) GetMaxRenewals() int32 {
-	if x != nil {
-		return x.MaxRenewals
+	if x != nil && x.MaxRenewals != nil {
+		return *x.MaxRenewals
 	}
 	return 0
 }
@@ -269,15 +269,16 @@ const file_proto_common_v1_common_proto_rawDesc = "" +
 	"\x0eschema_version\x18\x05 \x01(\x05R\rschemaVersion\x1aS\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
-	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\"\xae\x02\n" +
+	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\"\xc4\x02\n" +
 	"\vLeasePolicy\x128\n" +
 	"\n" +
 	"base_lease\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\tbaseLease\x12>\n" +
 	"\rmax_extension\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\fmaxExtension\x12F\n" +
 	"\x11heartbeat_timeout\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\x10heartbeatTimeout\x12:\n" +
 	"\vextend_step\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\n" +
-	"extendStep\x12!\n" +
-	"\fmax_renewals\x18\x05 \x01(\x05R\vmaxRenewalsB6Z4github.com/adrien19/chronoqueue/api/common/v1;commonb\x06proto3"
+	"extendStep\x12&\n" +
+	"\fmax_renewals\x18\x05 \x01(\x05H\x00R\vmaxRenewals\x88\x01\x01B\x0f\n" +
+	"\r_max_renewalsB6Z4github.com/adrien19/chronoqueue/api/common/v1;commonb\x06proto3"
 
 var (
 	file_proto_common_v1_common_proto_rawDescOnce sync.Once
@@ -320,6 +321,7 @@ func file_proto_common_v1_common_proto_init() {
 	if File_proto_common_v1_common_proto != nil {
 		return
 	}
+	file_proto_common_v1_common_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

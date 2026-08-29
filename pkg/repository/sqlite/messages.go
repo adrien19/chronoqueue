@@ -850,10 +850,10 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
 
 		// Check max_renewals limit
 		leasePolicy := msg.GetMetadata().GetLeasePolicy()
-		if leasePolicy != nil && leasePolicy.MaxRenewals > 0 {
-			if currentRenewalCount >= leasePolicy.MaxRenewals {
+		if leasePolicy != nil && leasePolicy.GetMaxRenewals() > 0 {
+			if currentRenewalCount >= leasePolicy.GetMaxRenewals() {
 				metrics.IncrementLeaseRenewals(queueName, "denied_max_renewals")
-				message := fmt.Sprintf("lease renewal limit reached: %d/%d renewals used", currentRenewalCount, leasePolicy.MaxRenewals)
+				message := fmt.Sprintf("lease renewal limit reached: %d/%d renewals used", currentRenewalCount, leasePolicy.GetMaxRenewals())
 				return domainerror.New(domainerror.FailedPrecondition, message, nil)
 			}
 		}
