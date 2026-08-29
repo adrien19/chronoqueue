@@ -1088,7 +1088,11 @@ func (impl *implementation) CreateSchedule(ctx context.Context, request *queuese
 		}
 		nextRun, err := impl.calendarEngine.CalculateNextRun(ctx, meta.GetCalendarSchedule(), time.Now())
 		if err != nil {
-			return nil, fmt.Errorf("calculate next run: %w", err)
+			var calendarErr *calendar.CalendarError
+			if !errors.As(err, &calendarErr) || calendarErr.Code != calendar.ErrNoExecutionTime.Code {
+				return nil, fmt.Errorf("calculate next run: %w", err)
+			}
+			nextRun = nil
 		}
 
 		if nextRun == nil {

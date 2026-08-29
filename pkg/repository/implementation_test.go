@@ -92,10 +92,11 @@ type stubEngine struct {
 	preview     *calendar.SchedulePreview
 	previewErr  error
 	validateErr error
+	nextRunErr  error
 }
 
 func (e *stubEngine) CalculateNextRun(ctx context.Context, calendarSchedule *schedulepb.CalendarSchedule, from time.Time) (*time.Time, error) {
-	return nil, nil
+	return nil, e.nextRunErr
 }
 
 func (e *stubEngine) CalculateNextRuns(ctx context.Context, calendarSchedule *schedulepb.CalendarSchedule, from time.Time, count int) ([]time.Time, error) {
@@ -363,6 +364,47 @@ func TestCreateScheduleRejectsServerManagedFields(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, details.GetFieldViolations(), 8)
 	require.Equal(t, "schedule.metadata.state", details.GetFieldViolations()[0].GetField())
+}
+
+func TestCreateSchedulePersistsNoFutureCalendarScheduleAsPaused(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{
+		backend:        backend,
+		calendarEngine: &stubEngine{nextRunErr: calendar.ErrNoExecutionTime.WithDetails("all execution times expired")},
+	}
+
+	_, err := impl.CreateSchedule(context.Background(), &queueservicepb.CreateScheduleRequest{Schedule: &schedulepb.Schedule{
+		ScheduleId: "no-future-runs",
+		Metadata: &schedulepb.Schedule_Metadata{
+			QueueName: "jobs",
+			ScheduleConfig: &schedulepb.Schedule_Metadata_CalendarSchedule{
+				CalendarSchedule: &schedulepb.CalendarSchedule{},
+			},
+		},
+	}})
+	require.NoError(t, err)
+	require.Len(t, backend.schedules, 1)
+	metadata := backend.schedules[0].GetMetadata()
+	require.Equal(t, schedulepb.Schedule_Metadata_PAUSED, metadata.GetState())
+	require.Equal(t, "no future runs", metadata.GetStateMessage())
+	require.Nil(t, metadata.GetNextRun())
+}
+
+func TestCreateScheduleReturnsUnexpectedNextRunError(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend, calendarEngine: &stubEngine{nextRunErr: errors.New("calculation failed")}}
+
+	_, err := impl.CreateSchedule(context.Background(), &queueservicepb.CreateScheduleRequest{Schedule: &schedulepb.Schedule{
+		ScheduleId: "calculation-error",
+		Metadata: &schedulepb.Schedule_Metadata{
+			QueueName: "jobs",
+			ScheduleConfig: &schedulepb.Schedule_Metadata_CalendarSchedule{
+				CalendarSchedule: &schedulepb.CalendarSchedule{},
+			},
+		},
+	}})
+	require.ErrorContains(t, err, "calculate next run")
+	require.Empty(t, backend.schedules)
 }
 
 func TestMissingQueueStateAndDLQStatsReturnNotFound(t *testing.T) {

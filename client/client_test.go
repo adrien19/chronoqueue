@@ -940,6 +940,12 @@ func TestBuildLeasePolicyPreservesExplicitUnlimitedRenewals(t *testing.T) {
 	require.Zero(t, policy.GetMaxRenewals())
 }
 
+func TestBuildLeasePolicyPreservesOmittedRenewalsWithAnotherPolicyField(t *testing.T) {
+	policy, err := buildLeasePolicy(LeasePolicyOptions{BaseLease: "30s"})
+	require.NoError(t, err)
+	require.Nil(t, policy.MaxRenewals)
+}
+
 func mustStruct(t *testing.T, value map[string]any) *structpb.Struct {
 	t.Helper()
 	result, err := structpb.NewStruct(value)
