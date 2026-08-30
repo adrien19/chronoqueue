@@ -62,6 +62,61 @@ func TestScheduleHistorySurvivesMessageAndScheduleDeletion(t *testing.T) {
 	require.Len(t, history.GetMessages(), 1)
 }
 
+func TestScheduleHistoryRemainsAddressableAfterQueueDeletion(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "queue-schedule-history.db"))
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "jobs", Metadata: &queuepb.QueueMetadata{}}))
+	schedule := &schedulepb.Schedule{ScheduleId: "queue-history", Metadata: &schedulepb.Schedule_Metadata{
+		State: schedulepb.Schedule_Metadata_SCHEDULED, QueueName: "jobs",
+		ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "*/5 * * * *"},
+	}}
+	require.NoError(t, storage.CreateSchedule(ctx, schedule))
+	payload, err := structpb.NewStruct(map[string]any{"job": "queue-snapshot"})
+	require.NoError(t, err)
+	message := &messagepb.Message{MessageId: "queue-scheduled-message", Metadata: &messagepb.Message_Metadata{
+		State: messagepb.Message_Metadata_PENDING, AttemptsLeft: 1, MaxAttempts: 1,
+		Payload: &commonpb.Payload{Data: payload, ContentType: "application/json"},
+	}}
+	require.NoError(t, storage.EnqueueMessage(ctx, "jobs", message))
+	executedAt := time.Now().UTC().Truncate(time.Millisecond)
+	require.NoError(t, storage.RecordScheduleExecution(ctx, schedule.ScheduleId, message.MessageId, executedAt.UnixMilli()))
+	require.NoError(t, storage.DeleteQueue(ctx, "jobs"))
+
+	history, err := storage.GetScheduleHistory(ctx, schedule.ScheduleId, 10)
+	require.NoError(t, err)
+	require.Equal(t, schedule.ScheduleId, history.GetScheduleId())
+	require.Len(t, history.GetExecutions(), 1)
+	require.Equal(t, message.MessageId, history.GetExecutions()[0].GetMessageId())
+	require.Equal(t, executedAt, history.GetExecutions()[0].GetExecutedAt().AsTime())
+	require.Len(t, history.GetMessages(), 1)
+	require.Equal(t, "queue-snapshot", history.GetMessages()[0].GetMetadata().GetPayload().GetData().GetFields()["job"].GetStringValue())
+}
+
+func TestDeleteQueue_RollsBackWhenScheduleArchivalFails(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "queue-archive-failure.db"))
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "jobs", Metadata: &queuepb.QueueMetadata{}}))
+	schedule := &schedulepb.Schedule{ScheduleId: "archive-failure", Metadata: &schedulepb.Schedule_Metadata{
+		State: schedulepb.Schedule_Metadata_SCHEDULED, QueueName: "jobs",
+		ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "*/5 * * * *"},
+	}}
+	require.NoError(t, storage.CreateSchedule(ctx, schedule))
+	_, err := storage.DB.ExecContext(ctx, `
+		CREATE TRIGGER fail_schedule_archive
+		BEFORE INSERT ON cq_schedule_archive
+		BEGIN
+			SELECT RAISE(ABORT, 'forced archive failure');
+		END`)
+	require.NoError(t, err)
+
+	err = storage.DeleteQueue(ctx, "jobs")
+	require.ErrorContains(t, err, "archive queue schedules")
+	_, err = storage.GetQueue(ctx, "jobs")
+	require.NoError(t, err)
+	_, err = storage.GetSchedule(ctx, schedule.ScheduleId)
+	require.NoError(t, err)
+}
+
 func TestPauseScheduleContract(t *testing.T) {
 	ctx := context.Background()
 	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "schedule-contract.db"))

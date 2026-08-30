@@ -195,6 +195,14 @@ func (s *Storage) DeleteQueue(ctx context.Context, name string) error {
 			return domainerror.New(domainerror.FailedPrecondition, fmt.Sprintf("queue %q is referenced as a dead letter queue by %q", name, referringQueue), nil)
 		}
 
+		nowMs := s.Clock.NowMs()
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO cq_schedule_archive (schedule_id, metadata_pb, deleted_at)
+			SELECT id, metadata_pb, $1 FROM cq_schedules WHERE queue_name = $2
+			ON CONFLICT(schedule_id) DO UPDATE SET metadata_pb = EXCLUDED.metadata_pb, deleted_at = EXCLUDED.deleted_at`, nowMs, name); err != nil {
+			return fmt.Errorf("archive queue schedules: %w", err)
+		}
+
 		if _, err := tx.ExecContext(ctx, `DELETE FROM cq_queues WHERE name = $1`, name); err != nil {
 			return fmt.Errorf("delete queue: %w", err)
 		}

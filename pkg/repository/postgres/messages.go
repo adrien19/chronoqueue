@@ -579,8 +579,11 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 		}
 
 		newState := messagepb.Message_Metadata_PENDING
-		newAttemptsLeft := attemptsLeft - 1
-		if newAttemptsLeft <= 0 {
+		newAttemptsLeft := attemptsLeft
+		if attemptsLeft != -1 {
+			newAttemptsLeft--
+		}
+		if newAttemptsLeft != -1 && newAttemptsLeft <= 0 {
 			exhausted = true
 			newState = messagepb.Message_Metadata_ERRORED
 			movedToDLQ = dlqName != ""
@@ -904,9 +907,11 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		var messageBytes []byte
 		var state messagepb.Message_Metadata_State
+		var leaseExpiry, leaseExtensionUsed int64
+		var leaseRenewalCount int32
 		nowMs := s.Clock.NowMs()
 		query := s.ph(`
-			SELECT metadata_pb, state
+			SELECT metadata_pb, state, lease_expiry, lease_extension_used, lease_renewal_count
 			FROM cq_messages
 			WHERE queue_name = ? AND message_id = ? AND state = ?
 			  AND current_attempt_id = ? AND current_worker_id = ?
@@ -914,7 +919,7 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 			  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
 			  AND deleted_at IS NULL
 			FOR UPDATE`)
-		err := tx.QueryRowContext(ctx, query, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs).Scan(&messageBytes, &state)
+		err := tx.QueryRowContext(ctx, query, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs).Scan(&messageBytes, &state, &leaseExpiry, &leaseExtensionUsed, &leaseRenewalCount)
 		if err == sql.ErrNoRows {
 			return s.classifyOwnedMessageFailure(ctx, tx, queueName, messageId, attemptId, workerId, nowMs)
 		}
@@ -927,23 +932,33 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 			return fmt.Errorf("unmarshal message: %w", err)
 		}
 
-		heartbeatTimeoutMs := int64(30000)
-		if lp := msg.GetMetadata().GetLeasePolicy(); lp != nil && lp.GetHeartbeatTimeout() != nil {
-			heartbeatTimeoutMs = lp.GetHeartbeatTimeout().AsDuration().Milliseconds()
-			if heartbeatTimeoutMs <= 0 {
-				heartbeatTimeoutMs = 30000
-			}
+		leasePolicy := msg.GetMetadata().GetLeasePolicy()
+		var heartbeatExpiry any
+		if timeout := leasePolicy.GetHeartbeatTimeout(); timeout != nil && timeout.AsDuration() > 0 {
+			heartbeatExpiry = nowMs + timeout.AsDuration().Milliseconds()
 		}
 
-		heartbeatExpiry := nowMs + heartbeatTimeoutMs
-		// Extend the lease when heartbeat is received to prevent message re-claiming
-		newLeaseExpiry := nowMs + heartbeatTimeoutMs
+		newLeaseExpiry := leaseExpiry
+		newExtensionUsed := leaseExtensionUsed
+		newRenewalCount := leaseRenewalCount
+		canRenew := leasePolicy.GetMaxRenewals() == 0 || leaseRenewalCount < leasePolicy.GetMaxRenewals()
+		if step := leasePolicy.GetExtendStep(); canRenew && step != nil && step.AsDuration() > 0 && leasePolicy.GetMaxExtension() != nil && leaseExtensionUsed < leasePolicy.GetMaxExtension().AsDuration().Milliseconds() {
+			runtime, extendErr := s.LeaseRuntime.ExtendLease(leasePolicy, leaseExpiry, leaseExtensionUsed, step.AsDuration().Milliseconds())
+			if extendErr != nil {
+				return fmt.Errorf("extend lease for heartbeat: %w", extendErr)
+			}
+			newLeaseExpiry = runtime.LeaseExpiry
+			newExtensionUsed = runtime.LeaseExtensionUsed
+			newRenewalCount++
+		}
 
 		update := s.ph(`
             UPDATE cq_messages
             SET last_heartbeat_at = ?,
                 heartbeat_expiry = ?,
                 lease_expiry = ?,
+				lease_extension_used = ?,
+				lease_renewal_count = ?,
                 updated_at = ?
 			WHERE queue_name = ? AND message_id = ? AND state = ?
 			  AND current_attempt_id = ? AND current_worker_id = ?
@@ -951,7 +966,7 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 			  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
 			  AND deleted_at IS NULL
         `)
-		result, err := tx.ExecContext(ctx, update, nowMs, heartbeatExpiry, newLeaseExpiry, nowMs, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs)
+		result, err := tx.ExecContext(ctx, update, nowMs, heartbeatExpiry, newLeaseExpiry, newExtensionUsed, newRenewalCount, nowMs, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs)
 		if err != nil {
 			return fmt.Errorf("update heartbeat: %w", err)
 		}

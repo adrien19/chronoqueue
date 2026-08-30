@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"sync"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ import (
 	commonpb "github.com/adrien19/chronoqueue/api/common/v1"
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
+	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/internal/encryption/keymanager"
 	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/background"
@@ -42,6 +44,75 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 
 	first := newPostgresReclaimTestStorage(t, ctx, dsn)
 	second := newPostgresReclaimTestStorage(t, ctx, dsn)
+	t.Run("preserves infinite retries after nack", func(t *testing.T) {
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "nack-infinite", Metadata: &queuepb.QueueMetadata{}}))
+		require.NoError(t, first.EnqueueMessage(ctx, "nack-infinite", postgresReclaimTestMessage("infinite", -1, -1)))
+		for _, attempt := range []string{"attempt-1", "attempt-2"} {
+			claimed, claimErr := first.ClaimMessage(ctx, "nack-infinite", "worker", attempt, "")
+			require.NoError(t, claimErr)
+			require.NotNil(t, claimed)
+			require.NoError(t, first.NackMessage(ctx, "nack-infinite", "infinite", attempt, "worker"))
+		}
+		messages, listErr := first.PeekMessages(ctx, "nack-infinite", 1)
+		require.NoError(t, listErr)
+		require.Len(t, messages, 1)
+		require.EqualValues(t, -1, messages[0].GetMetadata().GetAttemptsLeft())
+	})
+
+	t.Run("exhausts last finite attempt after nack", func(t *testing.T) {
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "nack-finite", Metadata: &queuepb.QueueMetadata{
+			MessageRetentionPolicy: &queuepb.MessageRetentionPolicy{Mode: queuepb.MessageRetentionPolicy_RETAIN_FOREVER},
+		}}))
+		const messageID = "nack-finite-message"
+		require.NoError(t, first.EnqueueMessage(ctx, "nack-finite", postgresReclaimTestMessage(messageID, 1, 1)))
+		claimed, claimErr := first.ClaimMessage(ctx, "nack-finite", "worker", "attempt", "")
+		require.NoError(t, claimErr)
+		require.NotNil(t, claimed)
+		require.NoError(t, first.NackMessage(ctx, "nack-finite", messageID, "attempt", "worker"))
+
+		var state messagepb.Message_Metadata_State
+		var attemptsLeft int32
+		require.NoError(t, first.DB.QueryRowContext(ctx, `SELECT state, attempts_left FROM cq_messages WHERE queue_name = $1 AND message_id = $2`, "nack-finite", messageID).Scan(&state, &attemptsLeft))
+		require.Equal(t, messagepb.Message_Metadata_ERRORED, state)
+		require.Zero(t, attemptsLeft)
+	})
+
+	t.Run("bounds heartbeat extensions", func(t *testing.T) {
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "heartbeat-policy", Metadata: &queuepb.QueueMetadata{}}))
+		maxRenewals := int32(1)
+		message := postgresReclaimTestMessage("heartbeat", 1, 1)
+		message.Metadata.LeasePolicy = &commonpb.LeasePolicy{
+			BaseLease: durationpb.New(time.Minute), MaxExtension: durationpb.New(2 * time.Second),
+			ExtendStep: durationpb.New(time.Second), MaxRenewals: &maxRenewals,
+		}
+		require.NoError(t, first.EnqueueMessage(ctx, "heartbeat-policy", message))
+		_, err = first.ClaimMessage(ctx, "heartbeat-policy", "worker", "attempt", "")
+		require.NoError(t, err)
+		_, _, err = first.HeartbeatMessage(ctx, "heartbeat-policy", "heartbeat", "attempt", "worker")
+		require.NoError(t, err)
+		_, _, err = first.HeartbeatMessage(ctx, "heartbeat-policy", "heartbeat", "attempt", "worker")
+		require.NoError(t, err)
+		var heartbeatExpiry sql.NullInt64
+		var extensionUsed int64
+		var renewalCount int32
+		require.NoError(t, first.DB.QueryRowContext(ctx, `SELECT heartbeat_expiry, lease_extension_used, lease_renewal_count FROM cq_messages WHERE message_id = $1`, "heartbeat").Scan(&heartbeatExpiry, &extensionUsed, &renewalCount))
+		require.False(t, heartbeatExpiry.Valid)
+		require.EqualValues(t, time.Second.Milliseconds(), extensionUsed)
+		require.EqualValues(t, 1, renewalCount)
+	})
+
+	t.Run("archives schedules when deleting queue", func(t *testing.T) {
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "queue-history", Metadata: &queuepb.QueueMetadata{}}))
+		schedule := &schedulepb.Schedule{ScheduleId: "queue-history-schedule", Metadata: &schedulepb.Schedule_Metadata{
+			State: schedulepb.Schedule_Metadata_SCHEDULED, QueueName: "queue-history",
+			ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "*/5 * * * *"},
+		}}
+		require.NoError(t, first.CreateSchedule(ctx, schedule))
+		require.NoError(t, first.DeleteQueue(ctx, "queue-history"))
+		history, historyErr := first.GetScheduleHistory(ctx, schedule.ScheduleId, 10)
+		require.NoError(t, historyErr)
+		require.Equal(t, schedule.ScheduleId, history.GetScheduleId())
+	})
 	t.Run("rejects deletion of referenced DLQ", func(t *testing.T) {
 		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "protected-dlq", Metadata: &queuepb.QueueMetadata{}}))
 		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "protected-source", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "protected-dlq"}}))

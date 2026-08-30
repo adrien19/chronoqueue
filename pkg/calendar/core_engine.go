@@ -58,69 +58,14 @@ func NewDefaultEngine(options ...CalendarEngineOption) *DefaultEngine {
 
 // CalculateNextRun calculates the next execution time for a calendar schedule
 func (e *DefaultEngine) CalculateNextRun(ctx context.Context, calendarSchedule *schedule.CalendarSchedule, from time.Time) (*time.Time, error) {
-	// Validate the schedule first
-	if err := e.ValidateSchedule(ctx, calendarSchedule); err != nil {
-		return nil, fmt.Errorf("invalid calendar schedule: %w", err)
-	}
-	ctx = evaluators.WithBusinessCalendar(ctx, calendarSchedule.GetBusinessCalendar())
-
-	// Check cache first if enabled
-	if e.cache != nil {
-		cacheKey := e.generateCacheKey(calendarSchedule, from, 1)
-		if cachedTimes := e.cache.get(cacheKey); len(cachedTimes) > 0 {
-			return &cachedTimes[0], nil
-		}
-	}
-
-	// Get timezone
-	timezone, err := e.getTimezone(ctx, calendarSchedule.Timezone)
+	times, err := e.CalculateNextRuns(ctx, calendarSchedule, from, 1)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get timezone: %w", err)
+		return nil, err
 	}
-
-	// Convert from time to the specified timezone
-	fromLocal := from.In(timezone)
-
-	// Collect next execution times from all rules
-	var candidateTimes []time.Time
-	for _, rule := range calendarSchedule.Rules {
-		nextTime, err := e.evaluatorRegistry.EvaluateRule(ctx, rule, fromLocal, timezone)
-		if err != nil {
-			continue // Skip rules that error out
-		}
-		if nextTime != nil {
-			candidateTimes = append(candidateTimes, *nextTime)
-		}
-	}
-
-	if len(candidateTimes) == 0 {
-		return nil, ErrNoExecutionTime.WithDetails("no rules produced valid execution times")
-	}
-
-	// Sort times and get the earliest
-	sort.Slice(candidateTimes, func(i, j int) bool {
-		return candidateTimes[i].Before(candidateTimes[j])
-	})
-
-	// Apply calendar exceptions
-	finalTimes, err := e.applyExceptions(ctx, candidateTimes[:1], calendarSchedule.Exceptions, timezone)
-	if err != nil {
-		return nil, fmt.Errorf("failed to apply exceptions: %w", err)
-	}
-
-	if len(finalTimes) == 0 {
+	if len(times) == 0 {
 		return nil, ErrNoExecutionTime.WithDetails("all execution times were filtered out by exceptions")
 	}
-
-	result := finalTimes[0]
-
-	// Cache the result if caching is enabled
-	if e.cache != nil {
-		cacheKey := e.generateCacheKey(calendarSchedule, from, 1)
-		e.cache.set(cacheKey, finalTimes)
-	}
-
-	return &result, nil
+	return &times[0], nil
 }
 
 // CalculateNextRuns calculates the next N execution times for a calendar schedule
@@ -162,7 +107,7 @@ func (e *DefaultEngine) CalculateNextRuns(ctx context.Context, calendarSchedule 
 	searchEnd := fromLocal.Add(searchWindow)
 
 	for _, rule := range calendarSchedule.Rules {
-		ruleTimes, err := e.evaluatorRegistry.EvaluateRuleMultiple(ctx, rule, fromLocal, timezone, count*5) // Get extra to account for exceptions
+		ruleTimes, err := e.evaluatorRegistry.EvaluateRuleMultiple(ctx, rule, fromLocal, timezone, e.config.MaxFutureCalculations)
 		if err != nil {
 			continue // Skip rules that error out
 		}
@@ -171,6 +116,18 @@ func (e *DefaultEngine) CalculateNextRuns(ctx context.Context, calendarSchedule 
 		for _, t := range ruleTimes {
 			if t.Before(searchEnd) {
 				allCandidates = append(allCandidates, t)
+			}
+		}
+	}
+	for _, exception := range calendarSchedule.Exceptions {
+		if exception.GetType() != schedule.CalendarException_EXTRA || exception.GetDate() == nil {
+			continue
+		}
+		exceptionDate := exception.GetDate().AsTime().In(timezone)
+		for _, extra := range exception.GetExtraTimes() {
+			candidate := time.Date(exceptionDate.Year(), exceptionDate.Month(), exceptionDate.Day(), int(extra.GetHour()), int(extra.GetMinute()), int(extra.GetSecond()), 0, timezone)
+			if candidate.After(fromLocal) && candidate.Before(searchEnd) {
+				allCandidates = append(allCandidates, candidate)
 			}
 		}
 	}
@@ -184,17 +141,15 @@ func (e *DefaultEngine) CalculateNextRuns(ctx context.Context, calendarSchedule 
 		return allCandidates[i].Before(allCandidates[j])
 	})
 
-	// Remove duplicates and take more than needed to account for exceptions
+	// Remove duplicates before applying exceptions.
 	candidateTimes := e.removeDuplicateTimes(allCandidates)
-	if len(candidateTimes) > count*2 {
-		candidateTimes = candidateTimes[:count*2]
-	}
 
 	// Apply calendar exceptions
 	finalTimes, err := e.applyExceptions(ctx, candidateTimes, calendarSchedule.Exceptions, timezone)
 	if err != nil {
 		return nil, fmt.Errorf("failed to apply exceptions: %w", err)
 	}
+	finalTimes = e.removeDuplicateTimes(finalTimes)
 
 	// Return requested count
 	if len(finalTimes) > count {
