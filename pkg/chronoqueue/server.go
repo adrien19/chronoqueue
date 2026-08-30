@@ -556,15 +556,15 @@ func (s *ChronoQueueServer) ListSchemas(ctx context.Context, req *queueservice_p
 		return nil, domainerror.New(domainerror.InvalidArgument, err.Error(), err)
 	}
 	filter := fmt.Sprintf("%s:%t", req.GetPrefix(), req.GetActiveOnly())
-	offset, err := pagination.Decode(req.GetPageToken(), "schemas", filter)
+	cursor, err := pagination.DecodePosition(req.GetPageToken(), "schemas", filter)
 	if err != nil {
 		return nil, domainerror.New(domainerror.InvalidArgument, err.Error(), err)
 	}
 
 	result, err := s.schemaRegistry.ListWithOptions(ctx, schema.ListOptions{
 		Prefix:     req.GetPrefix(),
-		Limit:      pageSize + 1,
-		Offset:     offset,
+		Limit:      pageSize,
+		Cursor:     cursor,
 		ActiveOnly: req.GetActiveOnly(),
 	})
 	if err != nil {
@@ -572,10 +572,6 @@ func (s *ChronoQueueServer) ListSchemas(ctx context.Context, req *queueservice_p
 		return nil, domainerror.PrefixMessage(err, "failed to list schemas")
 	}
 
-	hasMore := len(result.Schemas) > int(pageSize)
-	if hasMore {
-		result.Schemas = result.Schemas[:pageSize]
-	}
 	schemasInfo := make([]*queueservice_pb.SchemaInfo, 0, len(result.Schemas))
 	for _, schema := range result.Schemas {
 		metadata := result.Metadata[schema.SchemaId]
@@ -592,8 +588,8 @@ func (s *ChronoQueueServer) ListSchemas(ctx context.Context, req *queueservice_p
 	}
 
 	var nextPageToken string
-	if hasMore {
-		nextPageToken, err = pagination.Encode("schemas", filter, offset+int64(pageSize))
+	if result.NextCursor != "" {
+		nextPageToken, err = pagination.EncodePosition("schemas", filter, result.NextCursor)
 		if err != nil {
 			return nil, err
 		}

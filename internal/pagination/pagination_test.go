@@ -56,3 +56,18 @@ func TestCursorRoundTripAndValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestPositionRoundTripAndRejectsOffsetTokens(t *testing.T) {
+	token, err := EncodePosition("queues", "orders-", "orders-us")
+	require.NoError(t, err)
+	position, err := DecodePosition(token, "queues", "orders-")
+	require.NoError(t, err)
+	require.Equal(t, "orders-us", position)
+
+	offsetToken, err := Encode("queues", "orders-", 2)
+	require.NoError(t, err)
+	_, err = DecodePosition(offsetToken, "queues", "orders-")
+	require.Error(t, err)
+	_, err = Decode(token, "queues", "orders-")
+	require.Error(t, err)
+}

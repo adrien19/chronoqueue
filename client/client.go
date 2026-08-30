@@ -989,7 +989,18 @@ func (client *ChronoQueueClient) StopHeartbeat(messageID string) {
 
 // ListQueues returns list of available queues.
 func (client *ChronoQueueClient) ListQueues(ctx context.Context, prefix string) (*queueservice_pb.ListQueuesResponse, error) {
-	return client.ListQueuesPage(ctx, prefix, 0, "")
+	response := &queueservice_pb.ListQueuesResponse{}
+	for {
+		page, err := client.ListQueuesPage(ctx, prefix, 0, response.GetNextPageToken())
+		if err != nil {
+			return nil, err
+		}
+		response.Queues = append(response.Queues, page.GetQueues()...)
+		response.NextPageToken = page.GetNextPageToken()
+		if response.GetNextPageToken() == "" {
+			return response, nil
+		}
+	}
 }
 
 func (client *ChronoQueueClient) ListQueuesPage(ctx context.Context, prefix string, pageSize int32, pageToken string) (*queueservice_pb.ListQueuesResponse, error) {
@@ -1098,7 +1109,18 @@ func (client *ChronoQueueClient) GetSchedule(ctx context.Context, scheduleId str
 
 // ListSchedules returns list of schedules
 func (client *ChronoQueueClient) ListSchedules(ctx context.Context, prefix string) (*queueservice_pb.ListSchedulesResponse, error) {
-	return client.ListSchedulesPage(ctx, prefix, 0, "")
+	response := &queueservice_pb.ListSchedulesResponse{}
+	for {
+		page, err := client.ListSchedulesPage(ctx, prefix, 0, response.GetNextPageToken())
+		if err != nil {
+			return nil, err
+		}
+		response.Schedules = append(response.Schedules, page.GetSchedules()...)
+		response.NextPageToken = page.GetNextPageToken()
+		if response.GetNextPageToken() == "" {
+			return response, nil
+		}
+	}
 }
 
 func (client *ChronoQueueClient) ListSchedulesPage(ctx context.Context, prefix string, pageSize int32, pageToken string) (*queueservice_pb.ListSchedulesResponse, error) {

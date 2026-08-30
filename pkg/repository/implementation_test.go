@@ -205,9 +205,10 @@ func (b *stubBackend) ListQueuesWithPrefix(ctx context.Context, prefix string) (
 	return b.queues, nil
 }
 
-func (b *stubBackend) ListQueuesPage(ctx context.Context, prefix string, limit int32, offset int64) ([]*queuepb.Queue, error) {
+func (b *stubBackend) ListQueuesPage(ctx context.Context, prefix string, limit int32, cursor string) ([]*queuepb.Queue, string, error) {
 	b.queuePrefix = prefix
-	return pageSlice(b.queues, limit, offset), nil
+	items, next := keysetPage(b.queues, limit, cursor, func(queue *queuepb.Queue) string { return queue.GetName() })
+	return items, next, nil
 }
 
 func (b *stubBackend) DeleteQueue(ctx context.Context, name string) error {
@@ -306,9 +307,10 @@ func (b *stubBackend) ListSchedulesWithPrefix(ctx context.Context, prefix string
 	return b.schedules, nil
 }
 
-func (b *stubBackend) ListSchedulesPage(ctx context.Context, prefix string, limit int32, offset int64) ([]*schedulepb.Schedule, error) {
+func (b *stubBackend) ListSchedulesPage(ctx context.Context, prefix string, limit int32, cursor string) ([]*schedulepb.Schedule, string, error) {
 	b.schedulePrefix = prefix
-	return pageSlice(b.schedules, limit, offset), nil
+	items, next := keysetPage(b.schedules, limit, cursor, func(schedule *schedulepb.Schedule) string { return schedule.GetScheduleId() })
+	return items, next, nil
 }
 func (b *stubBackend) DeleteSchedule(ctx context.Context, scheduleId string) error { return nil }
 func (b *stubBackend) PauseSchedule(ctx context.Context, scheduleId string) error  { return nil }
@@ -321,11 +323,12 @@ func (b *stubBackend) GetScheduleHistory(ctx context.Context, scheduleId string,
 	return nil, nil
 }
 
-func (b *stubBackend) GetScheduleHistoryPage(ctx context.Context, scheduleId string, limit int32, offset int64) (*schedulepb.ScheduleHistory, error) {
+func (b *stubBackend) GetScheduleHistoryPage(ctx context.Context, scheduleId string, limit int32, cursor string) (*schedulepb.ScheduleHistory, string, error) {
 	if b.history == nil {
-		return &schedulepb.ScheduleHistory{}, nil
+		return &schedulepb.ScheduleHistory{}, "", nil
 	}
-	return &schedulepb.ScheduleHistory{ScheduleId: b.history.GetScheduleId(), Executions: pageSlice(b.history.GetExecutions(), limit, offset)}, nil
+	items, next := keysetPage(b.history.GetExecutions(), limit, cursor, func(execution *schedulepb.ScheduleHistory_Execution) string { return execution.GetMessageId() })
+	return &schedulepb.ScheduleHistory{ScheduleId: b.history.GetScheduleId(), Executions: items}, next, nil
 }
 
 func (b *stubBackend) GetDLQMessages(ctx context.Context, dlqName string, limit int32) ([]*messagepb.Message, error) {
@@ -333,9 +336,29 @@ func (b *stubBackend) GetDLQMessages(ctx context.Context, dlqName string, limit 
 	return nil, nil
 }
 
-func (b *stubBackend) GetDLQMessagesPage(ctx context.Context, dlqName string, limit int32, offset int64) ([]*messagepb.Message, error) {
+func (b *stubBackend) GetDLQMessagesPage(ctx context.Context, dlqName string, limit int32, cursor string) ([]*messagepb.Message, string, error) {
 	b.dlqLimits = append(b.dlqLimits, limit)
-	return pageSlice(b.messages, limit, offset), nil
+	items, next := keysetPage(b.messages, limit, cursor, func(message *messagepb.Message) string { return message.GetMessageId() })
+	return items, next, nil
+}
+
+func keysetPage[T any](values []T, limit int32, cursor string, key func(T) string) ([]T, string) {
+	start := 0
+	if cursor != "" {
+		start = len(values)
+		for index, value := range values {
+			if key(value) > cursor {
+				start = index
+				break
+			}
+		}
+	}
+	end := min(start+int(limit), len(values))
+	items := values[start:end]
+	if end == len(values) || len(items) == 0 {
+		return items, ""
+	}
+	return items, key(items[len(items)-1])
 }
 
 func pageSlice[T any](values []T, limit int32, offset int64) []T {
@@ -806,6 +829,25 @@ func TestPeekScheduleHistoryAndDLQPagination(t *testing.T) {
 	}
 	impl := &implementation{backend: backend}
 	ctx := context.Background()
+	backend.schedules = []*schedulepb.Schedule{{ScheduleId: "schedule-a"}, {ScheduleId: "schedule-b"}, {ScheduleId: "schedule-c"}}
+	schedulesFirst, err := impl.ListSchedules(ctx, &queueservicepb.ListSchedulesRequest{Prefix: "schedule-", PageSize: 2})
+	require.NoError(t, err)
+	require.Len(t, schedulesFirst.GetSchedules(), 2)
+	require.NotEmpty(t, schedulesFirst.GetNextPageToken())
+	schedulesLast, err := impl.ListSchedules(ctx, &queueservicepb.ListSchedulesRequest{Prefix: "schedule-", PageSize: 2, PageToken: schedulesFirst.GetNextPageToken()})
+	require.NoError(t, err)
+	require.Len(t, schedulesLast.GetSchedules(), 1)
+	require.Equal(t, "schedule-c", schedulesLast.GetSchedules()[0].GetScheduleId())
+	require.Empty(t, schedulesLast.GetNextPageToken())
+	for name, request := range map[string]*queueservicepb.ListSchedulesRequest{
+		"malformed token":  {Prefix: "schedule-", PageSize: 2, PageToken: "%%%"},
+		"mismatched token": {Prefix: "other-", PageSize: 2, PageToken: schedulesFirst.GetNextPageToken()},
+	} {
+		t.Run("schedules "+name, func(t *testing.T) {
+			_, err := impl.ListSchedules(ctx, request)
+			require.Equal(t, codes.InvalidArgument, status.Code(domainerror.ToGRPC(err)))
+		})
+	}
 
 	peekFirst, err := impl.PeekQueueMessages(ctx, &queueservicepb.PeekQueueMessagesRequest{QueueName: "queue", PageSize: 2})
 	require.NoError(t, err)

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
 
 	"github.com/lib/pq"
 
@@ -14,29 +16,44 @@ import (
 )
 
 func (s *Storage) GetDLQMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error) {
-	return s.GetDLQMessagesPage(ctx, queueName, limit, 0)
+	messages, _, err := s.GetDLQMessagesPage(ctx, queueName, limit, "")
+	return messages, err
 }
 
-func (s *Storage) GetDLQMessagesPage(ctx context.Context, queueName string, limit int32, offset int64) ([]*messagepb.Message, error) {
+// GetDLQMessagesPage uses immutable insertion IDs so updates cannot reorder an in-progress traversal.
+func (s *Storage) GetDLQMessagesPage(ctx context.Context, queueName string, limit int32, cursor string) ([]*messagepb.Message, string, error) {
+	if limit <= 0 {
+		return nil, "", nil
+	}
+	cursorID := int64(math.MaxInt64)
+	if cursor != "" {
+		var err error
+		cursorID, err = strconv.ParseInt(cursor, 10, 64)
+		if err != nil || cursorID < 1 {
+			return nil, "", domainerror.New(domainerror.InvalidArgument, "invalid DLQ cursor", err)
+		}
+	}
 	query := s.ph(`
-        SELECT metadata_pb, state, attempts_left
+		SELECT id, metadata_pb, state, attempts_left
         FROM cq_messages
-        WHERE queue_name = ? AND state = ?
-        ORDER BY updated_at DESC, id DESC
-        LIMIT ? OFFSET ?
+		WHERE queue_name = ? AND state = ? AND id < ?
+		ORDER BY id DESC
+		LIMIT ?
     `)
 
-	rows, err := s.DB.QueryContext(ctx, query, queueName, messagepb.Message_Metadata_ERRORED, limit, offset)
+	rows, err := s.DB.QueryContext(ctx, query, queueName, messagepb.Message_Metadata_ERRORED, cursorID, int64(limit)+1)
 	if err != nil {
-		return nil, fmt.Errorf("query DLQ messages: %w", err)
+		return nil, "", fmt.Errorf("query DLQ messages: %w", err)
 	}
 	var messages []*messagepb.Message
+	var rowIDs []int64
 	var scanErr error
 	for rows.Next() {
+		var rowID int64
 		var messageBytes []byte
 		var state messagepb.Message_Metadata_State
 		var attemptsLeft int32
-		if err := rows.Scan(&messageBytes, &state, &attemptsLeft); err != nil {
+		if err := rows.Scan(&rowID, &messageBytes, &state, &attemptsLeft); err != nil {
 			scanErr = fmt.Errorf("scan message: %w", err)
 			break
 		}
@@ -53,6 +70,7 @@ func (s *Storage) GetDLQMessagesPage(ctx context.Context, queueName string, limi
 		msg.Metadata.AttemptsLeft = attemptsLeft
 
 		messages = append(messages, msg)
+		rowIDs = append(rowIDs, rowID)
 	}
 
 	if scanErr == nil {
@@ -60,12 +78,16 @@ func (s *Storage) GetDLQMessagesPage(ctx context.Context, queueName string, limi
 	}
 	closeErr := rows.Close()
 	if scanErr != nil {
-		return nil, scanErr
+		return nil, "", scanErr
 	}
 	if closeErr != nil {
-		return nil, fmt.Errorf("close DLQ message rows: %w", closeErr)
+		return nil, "", fmt.Errorf("close DLQ message rows: %w", closeErr)
 	}
-	return messages, nil
+	if len(messages) <= int(limit) {
+		return messages, "", nil
+	}
+	messages = messages[:limit]
+	return messages, strconv.FormatInt(rowIDs[limit-1], 10), nil
 }
 
 // RetryDLQMessage moves a message from DLQ back to pending.

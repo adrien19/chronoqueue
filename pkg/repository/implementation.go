@@ -49,6 +49,25 @@ func pageRequest(requested int32, token, scope, filter string) (int32, int64, er
 	return pageSize, offset, nil
 }
 
+func positionPageRequest(requested int32, token, scope, filter string) (int32, string, error) {
+	pageSize, err := pagination.PageSize(requested)
+	if err != nil {
+		return 0, "", domainerror.New(domainerror.InvalidArgument, err.Error(), err)
+	}
+	cursor, err := pagination.DecodePosition(token, scope, filter)
+	if err != nil {
+		return 0, "", domainerror.New(domainerror.InvalidArgument, err.Error(), err)
+	}
+	return pageSize, cursor, nil
+}
+
+func positionPageToken(scope, filter, cursor string) (string, error) {
+	if cursor == "" {
+		return "", nil
+	}
+	return pagination.EncodePosition(scope, filter, cursor)
+}
+
 func finishPage[T any](items []T, pageSize int32, offset int64, scope, filter string) ([]T, string, error) {
 	if len(items) <= int(pageSize) {
 		return items, "", nil
@@ -356,15 +375,15 @@ func (impl *implementation) ListQueues(ctx context.Context, request *queueservic
 	if request == nil {
 		request = &queueservicepb.ListQueuesRequest{}
 	}
-	pageSize, offset, err := pageRequest(request.GetPageSize(), request.GetPageToken(), "queues", request.GetPrefix())
+	pageSize, cursor, err := positionPageRequest(request.GetPageSize(), request.GetPageToken(), "queues", request.GetPrefix())
 	if err != nil {
 		return nil, err
 	}
-	queues, err := impl.backend.ListQueuesPage(ctx, request.GetPrefix(), pageSize+1, offset)
+	queues, nextCursor, err := impl.backend.ListQueuesPage(ctx, request.GetPrefix(), pageSize, cursor)
 	if err != nil {
 		return nil, err
 	}
-	queues, nextToken, err := finishPage(queues, pageSize, offset, "queues", request.GetPrefix())
+	nextToken, err := positionPageToken("queues", request.GetPrefix(), nextCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1217,15 +1236,15 @@ func (impl *implementation) ListSchedules(ctx context.Context, request *queueser
 	if request == nil {
 		request = &queueservicepb.ListSchedulesRequest{}
 	}
-	pageSize, offset, err := pageRequest(request.GetPageSize(), request.GetPageToken(), "schedules", request.GetPrefix())
+	pageSize, cursor, err := positionPageRequest(request.GetPageSize(), request.GetPageToken(), "schedules", request.GetPrefix())
 	if err != nil {
 		return nil, err
 	}
-	schedules, err := impl.backend.ListSchedulesPage(ctx, request.GetPrefix(), pageSize+1, offset)
+	schedules, nextCursor, err := impl.backend.ListSchedulesPage(ctx, request.GetPrefix(), pageSize, cursor)
 	if err != nil {
 		return nil, err
 	}
-	schedules, nextToken, err := finishPage(schedules, pageSize, offset, "schedules", request.GetPrefix())
+	nextToken, err := positionPageToken("schedules", request.GetPrefix(), nextCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1237,26 +1256,18 @@ func (impl *implementation) GetScheduleHistory(ctx context.Context, request *que
 	if request == nil || request.GetScheduleId() == "" {
 		return nil, domainerror.New(domainerror.InvalidArgument, "schedule id is required", nil)
 	}
-	pageSize, offset, err := pageRequest(request.GetPageSize(), request.GetPageToken(), "schedule-history", request.GetScheduleId())
+	pageSize, cursor, err := positionPageRequest(request.GetPageSize(), request.GetPageToken(), "schedule-history", request.GetScheduleId())
 	if err != nil {
 		return nil, err
 	}
-	history, err := impl.backend.GetScheduleHistoryPage(ctx, request.ScheduleId, pageSize+1, offset)
+	history, nextCursor, err := impl.backend.GetScheduleHistoryPage(ctx, request.ScheduleId, pageSize, cursor)
 	if err != nil {
 		return nil, err
 	}
-	executions, nextToken, err := finishPage(history.GetExecutions(), pageSize, offset, "schedule-history", request.GetScheduleId())
+	nextToken, err := positionPageToken("schedule-history", request.GetScheduleId(), nextCursor)
 	if err != nil {
 		return nil, err
 	}
-	history.Executions = executions
-	history.Messages = history.Messages[:0]
-	for _, execution := range executions {
-		if execution.Message != nil {
-			history.Messages = append(history.Messages, execution.Message)
-		}
-	}
-
 	return &queueservicepb.GetScheduleHistoryResponse{
 		ScheduleHistory: history,
 		NextPageToken:   nextToken,
@@ -1347,25 +1358,26 @@ func (impl *implementation) GetDLQMessages(ctx context.Context, dlqName string, 
 	if err := impl.requireDLQ(ctx, dlqName); err != nil {
 		return nil, err
 	}
-	return impl.backend.GetDLQMessagesPage(ctx, dlqName, limit, 0)
+	messages, _, err := impl.backend.GetDLQMessagesPage(ctx, dlqName, limit, "")
+	return messages, err
 }
 
 func (impl *implementation) GetDLQMessagesPage(ctx context.Context, request *queueservicepb.GetDLQMessagesRequest) (*queueservicepb.GetDLQMessagesResponse, error) {
 	if request == nil || request.GetDlqName() == "" {
 		return nil, domainerror.New(domainerror.InvalidArgument, "DLQ name is required", nil)
 	}
-	pageSize, offset, err := pageRequest(request.GetPageSize(), request.GetPageToken(), "dlq", request.GetDlqName())
+	pageSize, cursor, err := positionPageRequest(request.GetPageSize(), request.GetPageToken(), "dlq", request.GetDlqName())
 	if err != nil {
 		return nil, err
 	}
 	if err := impl.requireDLQ(ctx, request.GetDlqName()); err != nil {
 		return nil, err
 	}
-	messages, err := impl.backend.GetDLQMessagesPage(ctx, request.GetDlqName(), pageSize+1, offset)
+	messages, nextCursor, err := impl.backend.GetDLQMessagesPage(ctx, request.GetDlqName(), pageSize, cursor)
 	if err != nil {
 		return nil, err
 	}
-	messages, nextToken, err := finishPage(messages, pageSize, offset, "dlq", request.GetDlqName())
+	nextToken, err := positionPageToken("dlq", request.GetDlqName(), nextCursor)
 	if err != nil {
 		return nil, err
 	}

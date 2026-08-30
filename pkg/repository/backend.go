@@ -26,7 +26,7 @@ type BackendStorage interface {
 	GetQueue(ctx context.Context, name string) (*queuepb.Queue, error)
 	GetQueueMetadata(ctx context.Context, name string) (*queuepb.QueueMetadata, error)
 	IsDLQ(ctx context.Context, name string) (bool, error)
-	ListQueuesPage(ctx context.Context, prefix string, limit int32, offset int64) ([]*queuepb.Queue, error)
+	ListQueuesPage(ctx context.Context, prefix string, limit int32, cursor string) ([]*queuepb.Queue, string, error)
 	DeleteQueue(ctx context.Context, name string) error
 
 	// Message Operations
@@ -44,15 +44,15 @@ type BackendStorage interface {
 	CreateSchedule(ctx context.Context, schedule *schedulepb.Schedule) error
 	GetSchedule(ctx context.Context, scheduleId string) (*schedulepb.Schedule, error)
 	ListSchedules(ctx context.Context, queueName string) ([]*schedulepb.Schedule, error)
-	ListSchedulesPage(ctx context.Context, prefix string, limit int32, offset int64) ([]*schedulepb.Schedule, error)
+	ListSchedulesPage(ctx context.Context, prefix string, limit int32, cursor string) ([]*schedulepb.Schedule, string, error)
 	DeleteSchedule(ctx context.Context, scheduleId string) error
 	PauseSchedule(ctx context.Context, scheduleId string) error
 	ResumeSchedule(ctx context.Context, scheduleId string) error
 	RecordScheduleExecution(ctx context.Context, scheduleId string, messageId string, executionTime int64) error
-	GetScheduleHistoryPage(ctx context.Context, scheduleId string, limit int32, offset int64) (*schedulepb.ScheduleHistory, error)
+	GetScheduleHistoryPage(ctx context.Context, scheduleId string, limit int32, cursor string) (*schedulepb.ScheduleHistory, string, error)
 
 	// DLQ Operations
-	GetDLQMessagesPage(ctx context.Context, queueName string, limit int32, offset int64) ([]*messagepb.Message, error)
+	GetDLQMessagesPage(ctx context.Context, queueName string, limit int32, cursor string) ([]*messagepb.Message, string, error)
 	RetryDLQMessage(ctx context.Context, dlqName string, messageId string, targetQueueName string, resetRetries bool) error
 	DeleteDLQMessage(ctx context.Context, queueName string, messageId string) error
 	PurgeDLQ(ctx context.Context, queueName string) (int64, error)

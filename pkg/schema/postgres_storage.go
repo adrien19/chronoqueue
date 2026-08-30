@@ -272,7 +272,7 @@ func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOpti
 		), ranked AS (
 			SELECT s.*, ROW_NUMBER() OVER (PARTITION BY s.schema_id ORDER BY s.version DESC) AS row_number
 			FROM cq_schemas s
-			WHERE STRPOS(s.schema_id, $2) = 1 AND ($1 = FALSE OR s.is_active = TRUE)
+			WHERE STRPOS(s.schema_id, $2) = 1 AND s.schema_id > $4 AND ($1 = FALSE OR s.is_active = TRUE)
 		), latest AS (
 			SELECT * FROM ranked WHERE row_number = 1
 		)
@@ -281,8 +281,8 @@ func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOpti
 		       family_stats.first_created_at, family_stats.last_updated_at
 		FROM latest JOIN family_stats USING (schema_id)
 		ORDER BY schema_id
-		LIMIT $3 OFFSET $4
-	`, options.ActiveOnly, options.Prefix, options.Limit, options.Offset)
+		LIMIT $3
+	`, options.ActiveOnly, options.Prefix, int64(options.Limit)+1, options.Cursor)
 	if err != nil {
 		return ListResult{}, fmt.Errorf("failed to list schemas: %w", err)
 	}
@@ -334,7 +334,12 @@ func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOpti
 		return ListResult{}, fmt.Errorf("error iterating schemas: %w", err)
 	}
 
-	return ListResult{Schemas: schemas, TotalCount: totalCount, Metadata: metadata}, nil
+	var nextCursor string
+	if len(schemas) > int(options.Limit) {
+		schemas = schemas[:options.Limit]
+		nextCursor = schemas[len(schemas)-1].GetSchemaId()
+	}
+	return ListResult{Schemas: schemas, TotalCount: totalCount, Metadata: metadata, NextCursor: nextCursor}, nil
 }
 
 // Deactivate marks a schema version as inactive.

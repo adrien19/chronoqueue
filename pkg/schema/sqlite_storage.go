@@ -318,7 +318,7 @@ func (s *SQLiteRegistry) ListWithOptions(ctx context.Context, options ListOption
 		), ranked AS (
 			SELECT s.*, ROW_NUMBER() OVER (PARTITION BY s.schema_id ORDER BY s.version DESC) AS row_number
 			FROM cq_schemas s
-			WHERE instr(s.schema_id, ?) = 1 AND (? = 0 OR s.is_active = 1)
+			WHERE instr(s.schema_id, ?) = 1 AND s.schema_id > ? AND (? = 0 OR s.is_active = 1)
 		), latest AS (
 			SELECT * FROM ranked WHERE row_number = 1
 		)
@@ -327,8 +327,8 @@ func (s *SQLiteRegistry) ListWithOptions(ctx context.Context, options ListOption
 		       family_stats.first_created_at, family_stats.last_updated_at
 		FROM latest JOIN family_stats USING (schema_id)
 		ORDER BY schema_id
-		LIMIT ? OFFSET ?
-	`, options.Prefix, options.Prefix, options.ActiveOnly, options.Limit, options.Offset)
+		LIMIT ?
+	`, options.Prefix, options.Prefix, options.Cursor, options.ActiveOnly, int64(options.Limit)+1)
 	if err != nil {
 		return ListResult{}, fmt.Errorf("failed to list schemas: %w", err)
 	}
@@ -381,7 +381,12 @@ func (s *SQLiteRegistry) ListWithOptions(ctx context.Context, options ListOption
 		return ListResult{}, fmt.Errorf("error iterating schemas: %w", err)
 	}
 
-	return ListResult{Schemas: schemas, TotalCount: totalCount, Metadata: metadata}, nil
+	var nextCursor string
+	if len(schemas) > int(options.Limit) {
+		schemas = schemas[:options.Limit]
+		nextCursor = schemas[len(schemas)-1].GetSchemaId()
+	}
+	return ListResult{Schemas: schemas, TotalCount: totalCount, Metadata: metadata, NextCursor: nextCursor}, nil
 }
 
 // Deactivate marks a schema version as inactive

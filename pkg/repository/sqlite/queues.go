@@ -113,20 +113,25 @@ func (s *Storage) ListQueues(ctx context.Context) ([]*queuepb.Queue, error) {
 
 // ListQueuesWithPrefix returns queues whose names start with prefix.
 func (s *Storage) ListQueuesWithPrefix(ctx context.Context, prefix string) ([]*queuepb.Queue, error) {
-	return s.ListQueuesPage(ctx, prefix, int32(^uint32(0)>>1), 0)
+	queues, _, err := s.ListQueuesPage(ctx, prefix, int32(^uint32(0)>>1), "")
+	return queues, err
 }
 
-func (s *Storage) ListQueuesPage(ctx context.Context, prefix string, limit int32, offset int64) ([]*queuepb.Queue, error) {
-	query := `SELECT metadata_pb FROM cq_queues WHERE instr(name, ?) = 1 ORDER BY name LIMIT ? OFFSET ?`
-	rows, err := s.DB.QueryContext(ctx, query, prefix, limit, offset)
+func (s *Storage) ListQueuesPage(ctx context.Context, prefix string, limit int32, cursor string) ([]*queuepb.Queue, string, error) {
+	if limit <= 0 {
+		return nil, "", nil
+	}
+	query := `SELECT name, metadata_pb FROM cq_queues WHERE instr(name, ?) = 1 AND name > ? ORDER BY name LIMIT ?`
+	rows, err := s.DB.QueryContext(ctx, query, prefix, cursor, int64(limit)+1)
 	if err != nil {
-		return nil, fmt.Errorf("query queues: %w", err)
+		return nil, "", fmt.Errorf("query queues: %w", err)
 	}
 	var queues []*queuepb.Queue
 	var scanErr error
 	for rows.Next() {
+		var name string
 		var queueBytes []byte
-		if err := rows.Scan(&queueBytes); err != nil {
+		if err := rows.Scan(&name, &queueBytes); err != nil {
 			scanErr = fmt.Errorf("scan queue: %w", err)
 			break
 		}
@@ -145,12 +150,16 @@ func (s *Storage) ListQueuesPage(ctx context.Context, prefix string, limit int32
 	}
 	closeErr := rows.Close()
 	if scanErr != nil {
-		return nil, scanErr
+		return nil, "", scanErr
 	}
 	if closeErr != nil {
-		return nil, fmt.Errorf("close queue rows: %w", closeErr)
+		return nil, "", fmt.Errorf("close queue rows: %w", closeErr)
 	}
-	return queues, nil
+	if len(queues) <= int(limit) {
+		return queues, "", nil
+	}
+	queues = queues[:limit]
+	return queues, queues[len(queues)-1].GetName(), nil
 }
 
 // DeleteQueue deletes a queue

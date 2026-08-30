@@ -10,10 +10,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
+	"github.com/adrien19/chronoqueue/internal/domainerror"
 	repositorysql "github.com/adrien19/chronoqueue/pkg/repository/sql"
 )
 
@@ -138,13 +141,15 @@ func TestListResources_FiltersLiteralPrefixes(t *testing.T) {
 	literalQueues, err := storage.ListQueuesWithPrefix(ctx, "%")
 	require.NoError(t, err)
 	require.Empty(t, literalQueues)
-	firstQueuePage, err := storage.ListQueuesPage(ctx, "", 2, 0)
+	firstQueuePage, queueCursor, err := storage.ListQueuesPage(ctx, "", 2, "")
 	require.NoError(t, err)
 	require.Equal(t, []string{"orders-eu", "orders-us"}, []string{firstQueuePage[0].GetName(), firstQueuePage[1].GetName()})
-	secondQueuePage, err := storage.ListQueuesPage(ctx, "", 2, 2)
+	require.Equal(t, "orders-us", queueCursor)
+	secondQueuePage, queueCursor, err := storage.ListQueuesPage(ctx, "", 2, queueCursor)
 	require.NoError(t, err)
 	require.Len(t, secondQueuePage, 1)
 	require.Equal(t, "payments", secondQueuePage[0].GetName())
+	require.Empty(t, queueCursor)
 
 	schedules, err := storage.ListSchedulesWithPrefix(ctx, "billing-")
 	require.NoError(t, err)
@@ -155,13 +160,36 @@ func TestListResources_FiltersLiteralPrefixes(t *testing.T) {
 	literalSchedules, err := storage.ListSchedulesWithPrefix(ctx, "%")
 	require.NoError(t, err)
 	require.Empty(t, literalSchedules)
-	firstSchedulePage, err := storage.ListSchedulesPage(ctx, "", 2, 0)
+	firstSchedulePage, scheduleCursor, err := storage.ListSchedulesPage(ctx, "", 2, "")
 	require.NoError(t, err)
 	require.Equal(t, []string{"billing-daily", "billing-monthly"}, []string{firstSchedulePage[0].GetScheduleId(), firstSchedulePage[1].GetScheduleId()})
-	secondSchedulePage, err := storage.ListSchedulesPage(ctx, "", 2, 2)
+	require.Equal(t, "billing-monthly", scheduleCursor)
+	secondSchedulePage, scheduleCursor, err := storage.ListSchedulesPage(ctx, "", 2, scheduleCursor)
 	require.NoError(t, err)
 	require.Len(t, secondSchedulePage, 1)
 	require.Equal(t, "cleanup", secondSchedulePage[0].GetScheduleId())
+	require.Empty(t, scheduleCursor)
+}
+
+func TestQueueKeysetPaginationDoesNotShiftWhenEarlierRowsChange(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "queue-keyset.db"))
+	for _, name := range []string{"queue-a", "queue-b", "queue-c"} {
+		require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: name, Metadata: &queuepb.QueueMetadata{}}))
+	}
+
+	first, cursor, err := storage.ListQueuesPage(ctx, "queue-", 2, "")
+	require.NoError(t, err)
+	require.Equal(t, []string{"queue-a", "queue-b"}, []string{first[0].GetName(), first[1].GetName()})
+	require.Equal(t, "queue-b", cursor)
+	require.NoError(t, storage.DeleteQueue(ctx, "queue-a"))
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "queue-aa", Metadata: &queuepb.QueueMetadata{}}))
+
+	second, cursor, err := storage.ListQueuesPage(ctx, "queue-", 2, cursor)
+	require.NoError(t, err)
+	require.Len(t, second, 1)
+	require.Equal(t, "queue-c", second[0].GetName())
+	require.Empty(t, cursor)
 }
 
 func TestRequestFieldQueries_PropagateClosedDatabaseErrors(t *testing.T) {
@@ -171,6 +199,10 @@ func TestRequestFieldQueries_PropagateClosedDatabaseErrors(t *testing.T) {
 
 	_, err := storage.ClaimMessageWithLeaseDuration(ctx, "queue", "worker", "attempt", "", time.Second)
 	require.Error(t, err)
+	for _, limit := range []int64{-1, int64(^uint32(0))} {
+		_, err = storage.GetScheduleHistory(ctx, "schedule", limit)
+		require.Equal(t, codes.InvalidArgument, status.Code(domainerror.ToGRPC(err)))
+	}
 	_, err = storage.PeekMessagesWithPriorityRange(ctx, "queue", 1, &repositorysql.PriorityRange{Min: 1, Max: 2})
 	require.Error(t, err)
 	_, err = storage.ListQueuesWithPrefix(ctx, "queue")

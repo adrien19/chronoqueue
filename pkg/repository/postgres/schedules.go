@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/lib/pq"
@@ -14,6 +15,7 @@ import (
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/internal/domainerror"
 	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
+	repositorysql "github.com/adrien19/chronoqueue/pkg/repository/sql"
 )
 
 func (s *Storage) CreateSchedule(ctx context.Context, schedule *schedulepb.Schedule) error {
@@ -147,24 +149,32 @@ func (s *Storage) scanSchedules(rows *sql.Rows) ([]*schedulepb.Schedule, error) 
 
 // ListSchedulesWithPrefix returns schedules whose IDs start with prefix.
 func (s *Storage) ListSchedulesWithPrefix(ctx context.Context, prefix string) ([]*schedulepb.Schedule, error) {
-	return s.ListSchedulesPage(ctx, prefix, int32(^uint32(0)>>1), 0)
+	schedules, _, err := s.ListSchedulesPage(ctx, prefix, int32(^uint32(0)>>1), "")
+	return schedules, err
 }
 
-func (s *Storage) ListSchedulesPage(ctx context.Context, prefix string, limit int32, offset int64) ([]*schedulepb.Schedule, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT metadata_pb FROM cq_schedules WHERE STRPOS(id, $1) = 1 ORDER BY id LIMIT $2 OFFSET $3`, prefix, limit, offset)
+func (s *Storage) ListSchedulesPage(ctx context.Context, prefix string, limit int32, cursor string) ([]*schedulepb.Schedule, string, error) {
+	if limit <= 0 {
+		return nil, "", nil
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT metadata_pb FROM cq_schedules WHERE STRPOS(id, $1) = 1 AND id > $2 ORDER BY id LIMIT $3`, prefix, cursor, int64(limit)+1)
 	if err != nil {
-		return nil, fmt.Errorf("query schedules: %w", err)
+		return nil, "", fmt.Errorf("query schedules: %w", err)
 	}
 
 	schedules, scanErr := s.scanSchedules(rows)
 	closeErr := rows.Close()
 	if scanErr != nil {
-		return nil, scanErr
+		return nil, "", scanErr
 	}
 	if closeErr != nil {
-		return nil, fmt.Errorf("close schedule rows: %w", closeErr)
+		return nil, "", fmt.Errorf("close schedule rows: %w", closeErr)
 	}
-	return schedules, nil
+	if len(schedules) <= int(limit) {
+		return schedules, "", nil
+	}
+	schedules = schedules[:limit]
+	return schedules, schedules[len(schedules)-1].GetScheduleId(), nil
 }
 
 // DeleteSchedule deletes a schedule.
@@ -322,41 +332,51 @@ func (s *Storage) RecordScheduleExecution(ctx context.Context, scheduleId string
 
 // GetScheduleHistory returns the execution history for a schedule
 func (s *Storage) GetScheduleHistory(ctx context.Context, scheduleId string, limit int64) (*schedulepb.ScheduleHistory, error) {
-	return s.GetScheduleHistoryPage(ctx, scheduleId, int32(limit), 0)
+	if limit < 0 || limit > math.MaxInt32 {
+		return nil, domainerror.New(domainerror.InvalidArgument, "schedule history limit must fit within int32", nil)
+	}
+	history, _, err := s.GetScheduleHistoryPage(ctx, scheduleId, int32(limit), "")
+	return history, err
 }
 
-func (s *Storage) GetScheduleHistoryPage(ctx context.Context, scheduleId string, limit int32, offset int64) (*schedulepb.ScheduleHistory, error) {
+func (s *Storage) GetScheduleHistoryPage(ctx context.Context, scheduleId string, limit int32, cursor string) (*schedulepb.ScheduleHistory, string, error) {
 	schedule, err := s.getScheduleForHistory(ctx, scheduleId)
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+	cursorTime, cursorID, err := repositorysql.DecodeHistoryCursor(cursor)
+	if err != nil {
+		return nil, "", domainerror.New(domainerror.InvalidArgument, "invalid schedule history cursor", err)
 	}
 
 	query := s.ph(`
-		SELECT message_id, executed_at, success, error_message, message_pb
+		SELECT id, message_id, executed_at, success, error_message, message_pb
 		FROM cq_schedule_history
-		WHERE schedule_id = ?
+		WHERE schedule_id = ? AND (? = '' OR executed_at < ? OR (executed_at = ? AND id < ?))
 		ORDER BY executed_at DESC, id DESC
-		LIMIT ? OFFSET ?
+		LIMIT ?
 	`)
 
-	rows, err := s.DB.QueryContext(ctx, query, scheduleId, limit, offset)
+	rows, err := s.DB.QueryContext(ctx, query, scheduleId, cursor, cursorTime, cursorTime, cursorID, int64(limit)+1)
 	if err != nil {
-		return nil, fmt.Errorf("query schedule history: %w", err)
+		return nil, "", fmt.Errorf("query schedule history: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
 	var messages []*messagepb.Message
 	var executions []*schedulepb.ScheduleHistory_Execution
+	var rowIDs []int64
 	for rows.Next() {
 		var (
+			rowID        int64
 			messageID    string
 			executedAt   int64
 			success      int32
 			errorMessage sql.NullString
 			messageBytes []byte
 		)
-		if err := rows.Scan(&messageID, &executedAt, &success, &errorMessage, &messageBytes); err != nil {
-			return nil, fmt.Errorf("scan schedule execution: %w", err)
+		if err := rows.Scan(&rowID, &messageID, &executedAt, &success, &errorMessage, &messageBytes); err != nil {
+			return nil, "", fmt.Errorf("scan schedule execution: %w", err)
 		}
 
 		execution := &schedulepb.ScheduleHistory_Execution{
@@ -368,19 +388,34 @@ func (s *Storage) GetScheduleHistoryPage(ctx context.Context, scheduleId string,
 		if len(messageBytes) > 0 {
 			msg, err := s.Serializer.UnmarshalMessage(messageBytes)
 			if err != nil {
-				return nil, fmt.Errorf("unmarshal history message: %w", err)
+				return nil, "", fmt.Errorf("unmarshal history message: %w", err)
 			}
 			if err := repositorycommon.DecryptMessagePayload(msg, s.KeyManager); err != nil {
-				return nil, fmt.Errorf("decrypt history message: %w", err)
+				return nil, "", fmt.Errorf("decrypt history message: %w", err)
 			}
 			execution.Message = msg
 			messages = append(messages, msg)
 		}
 		executions = append(executions, execution)
+		rowIDs = append(rowIDs, rowID)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate messages: %w", err)
+		return nil, "", fmt.Errorf("iterate messages: %w", err)
+	}
+	var nextCursor string
+	if limit == 0 {
+		executions = nil
+		messages = nil
+	} else if len(executions) > int(limit) {
+		executions = executions[:limit]
+		nextCursor = repositorysql.EncodeHistoryCursor(executions[len(executions)-1].GetExecutedAt().AsTime().UnixMilli(), rowIDs[limit-1])
+		messages = messages[:0]
+		for _, execution := range executions {
+			if execution.GetMessage() != nil {
+				messages = append(messages, execution.GetMessage())
+			}
+		}
 	}
 
 	history := &schedulepb.ScheduleHistory{
@@ -397,7 +432,7 @@ func (s *Storage) GetScheduleHistoryPage(ctx context.Context, scheduleId string,
 		history.UpdatedAt = schedule.Metadata.UpdatedAt
 	}
 
-	return history, nil
+	return history, nextCursor, nil
 }
 
 func (s *Storage) getScheduleForHistory(ctx context.Context, scheduleId string) (*schedulepb.Schedule, error) {
