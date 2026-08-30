@@ -113,8 +113,12 @@ func (s *Storage) ListQueues(ctx context.Context) ([]*queuepb.Queue, error) {
 
 // ListQueuesWithPrefix returns queues whose names start with prefix.
 func (s *Storage) ListQueuesWithPrefix(ctx context.Context, prefix string) ([]*queuepb.Queue, error) {
-	query := `SELECT metadata_pb FROM cq_queues WHERE instr(name, ?) = 1 ORDER BY name`
-	rows, err := s.DB.QueryContext(ctx, query, prefix)
+	return s.ListQueuesPage(ctx, prefix, int32(^uint32(0)>>1), 0)
+}
+
+func (s *Storage) ListQueuesPage(ctx context.Context, prefix string, limit int32, offset int64) ([]*queuepb.Queue, error) {
+	query := `SELECT metadata_pb FROM cq_queues WHERE instr(name, ?) = 1 ORDER BY name LIMIT ? OFFSET ?`
+	rows, err := s.DB.QueryContext(ctx, query, prefix, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("query queues: %w", err)
 	}

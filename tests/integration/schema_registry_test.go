@@ -68,7 +68,7 @@ func TestSchemaRegistry_RegisterSchema(t *testing.T) {
 	assert.Equal(t, int32(2), secondResp.GetVersion())
 	assert.Equal(t, registerResp.GetCreatedAt(), secondResp.GetCreatedAt())
 
-	listResp, err := client.ListSchemas(ctx, &queueservice_pb.ListSchemasRequest{Prefix: schemaID, Limit: 1})
+	listResp, err := client.ListSchemas(ctx, &queueservice_pb.ListSchemasRequest{Prefix: schemaID, PageSize: 1})
 	require.NoError(t, err)
 	require.Len(t, listResp.GetSchemas(), 1)
 	listed := listResp.GetSchemas()[0]
@@ -221,7 +221,7 @@ func TestSchemaRegistry_ListSchemas(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	listResp, err := client.ListSchemas(ctx, &queueservice_pb.ListSchemasRequest{Prefix: prefix, Limit: 2, ActiveOnly: true})
+	listResp, err := client.ListSchemas(ctx, &queueservice_pb.ListSchemasRequest{Prefix: prefix, PageSize: 2, ActiveOnly: true})
 	require.NoError(t, err, "List schemas should succeed")
 	assert.Len(t, listResp.GetSchemas(), 2)
 	assert.Equal(t, int32(3), listResp.GetTotalCount())
@@ -233,8 +233,8 @@ func TestSchemaRegistry_ListSchemas(t *testing.T) {
 		assert.Positive(t, listed.GetUpdatedAt())
 	}
 
-	_, err = client.ListSchemas(ctx, &queueservice_pb.ListSchemasRequest{Limit: -1})
-	require.ErrorContains(t, err, "limit must not be negative")
+	_, err = client.ListSchemas(ctx, &queueservice_pb.ListSchemasRequest{PageSize: -1})
+	require.ErrorContains(t, err, "page size must be between 0 and 1000")
 
 	_, err = client.DeleteSchema(ctx, &queueservice_pb.DeleteSchemaRequest{SchemaId: schemas[0].id, Version: 1})
 	require.NoError(t, err)

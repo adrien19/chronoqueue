@@ -137,7 +137,11 @@ func (s *Storage) scanSchedules(rows *sql.Rows) ([]*schedulepb.Schedule, error) 
 
 // ListSchedulesWithPrefix returns schedules whose IDs start with prefix.
 func (s *Storage) ListSchedulesWithPrefix(ctx context.Context, prefix string) ([]*schedulepb.Schedule, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT metadata_pb FROM cq_schedules WHERE instr(id, ?) = 1 ORDER BY id`, prefix)
+	return s.ListSchedulesPage(ctx, prefix, int32(^uint32(0)>>1), 0)
+}
+
+func (s *Storage) ListSchedulesPage(ctx context.Context, prefix string, limit int32, offset int64) ([]*schedulepb.Schedule, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT metadata_pb FROM cq_schedules WHERE instr(id, ?) = 1 ORDER BY id LIMIT ? OFFSET ?`, prefix, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("query schedules: %w", err)
 	}
@@ -308,6 +312,10 @@ func (s *Storage) RecordScheduleExecution(ctx context.Context, scheduleId string
 
 // GetScheduleHistory returns the execution history for a schedule
 func (s *Storage) GetScheduleHistory(ctx context.Context, scheduleId string, limit int64) (*schedulepb.ScheduleHistory, error) {
+	return s.GetScheduleHistoryPage(ctx, scheduleId, int32(limit), 0)
+}
+
+func (s *Storage) GetScheduleHistoryPage(ctx context.Context, scheduleId string, limit int32, offset int64) (*schedulepb.ScheduleHistory, error) {
 	schedule, err := s.getScheduleForHistory(ctx, scheduleId)
 	if err != nil {
 		return nil, err
@@ -317,11 +325,11 @@ func (s *Storage) GetScheduleHistory(ctx context.Context, scheduleId string, lim
 		SELECT message_id, executed_at, success, error_message, message_pb
 		FROM cq_schedule_history
 		WHERE schedule_id = ?
-		ORDER BY executed_at DESC
-		LIMIT ?
+		ORDER BY executed_at DESC, id DESC
+		LIMIT ? OFFSET ?
 	`
 
-	rows, err := s.DB.QueryContext(ctx, query, scheduleId, limit)
+	rows, err := s.DB.QueryContext(ctx, query, scheduleId, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("query schedule history: %w", err)
 	}

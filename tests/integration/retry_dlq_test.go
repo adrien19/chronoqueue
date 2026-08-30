@@ -225,8 +225,8 @@ func TestRetrySystem_MaxRetriesReached(t *testing.T) {
 
 	// Assert - Check DLQ for the failed message
 	dlqResp, err := client.GetDLQMessages(ctx, &queueservice_pb.GetDLQMessagesRequest{
-		DlqName: dlqName,
-		Limit:   10,
+		DlqName:  dlqName,
+		PageSize: 10,
 	})
 
 	require.NoError(t, err)
@@ -333,8 +333,8 @@ func TestDLQ_RequeueMessage(t *testing.T) {
 
 	// Get message from DLQ
 	dlqResp, err := client.GetDLQMessages(ctx, &queueservice_pb.GetDLQMessagesRequest{
-		DlqName: dlqName,
-		Limit:   10,
+		DlqName:  dlqName,
+		PageSize: 10,
 	})
 
 	require.NoError(t, err)
@@ -396,7 +396,7 @@ func TestDLQ_DeleteMessage(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, deleteResp.GetSuccess())
-	messages, err := client.GetDLQMessages(ctx, &queueservice_pb.GetDLQMessagesRequest{DlqName: dlqName, Limit: 10})
+	messages, err := client.GetDLQMessages(ctx, &queueservice_pb.GetDLQMessagesRequest{DlqName: dlqName, PageSize: 10})
 	require.NoError(t, err)
 	require.Empty(t, messages.GetMessages())
 }
@@ -439,7 +439,7 @@ func TestDLQ_PurgeAll(t *testing.T) {
 	// Assert
 	require.NoError(t, err, "Purge DLQ should succeed")
 	require.True(t, purgeResp.GetSuccess())
-	messages, err := client.GetDLQMessages(ctx, &queueservice_pb.GetDLQMessagesRequest{DlqName: dlqName, Limit: 10})
+	messages, err := client.GetDLQMessages(ctx, &queueservice_pb.GetDLQMessagesRequest{DlqName: dlqName, PageSize: 10})
 	require.NoError(t, err)
 	require.Empty(t, messages.GetMessages())
 }

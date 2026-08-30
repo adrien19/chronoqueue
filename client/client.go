@@ -808,12 +808,16 @@ func (client *ChronoQueueClient) GetNextMessage(ctx context.Context, queue strin
 
 // PeekQueueMessages returns messages on a queue that are in pending state
 func (client *ChronoQueueClient) PeekQueueMessages(ctx context.Context, queue string, limit int32, timeRange TimeRangeOption) (*queueservice_pb.PeekQueueMessagesResponse, error) {
+	return client.PeekQueueMessagesPage(ctx, queue, limit, "", timeRange)
+}
+
+func (client *ChronoQueueClient) PeekQueueMessagesPage(ctx context.Context, queue string, pageSize int32, pageToken string, timeRange TimeRangeOption) (*queueservice_pb.PeekQueueMessagesResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	if cancel != nil {
 		defer cancel()
 	}
 
-	req := &queueservice_pb.PeekQueueMessagesRequest{QueueName: queue, Limit: int64(limit)}
+	req := &queueservice_pb.PeekQueueMessagesRequest{QueueName: queue, PageSize: pageSize, PageToken: pageToken}
 
 	// Only set priority range if it's specified (non-zero values)
 	if timeRange.Min != 0 || timeRange.Max != 0 {
@@ -985,13 +989,19 @@ func (client *ChronoQueueClient) StopHeartbeat(messageID string) {
 
 // ListQueues returns list of available queues.
 func (client *ChronoQueueClient) ListQueues(ctx context.Context, prefix string) (*queueservice_pb.ListQueuesResponse, error) {
+	return client.ListQueuesPage(ctx, prefix, 0, "")
+}
+
+func (client *ChronoQueueClient) ListQueuesPage(ctx context.Context, prefix string, pageSize int32, pageToken string) (*queueservice_pb.ListQueuesResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	if cancel != nil {
 		defer cancel()
 	}
 
 	req := &queueservice_pb.ListQueuesRequest{
-		Prefix: prefix,
+		Prefix:    prefix,
+		PageSize:  pageSize,
+		PageToken: pageToken,
 	}
 	res, err := client.service.ListQueues(ctx, req)
 	if err != nil {
@@ -1088,12 +1098,18 @@ func (client *ChronoQueueClient) GetSchedule(ctx context.Context, scheduleId str
 
 // ListSchedules returns list of schedules
 func (client *ChronoQueueClient) ListSchedules(ctx context.Context, prefix string) (*queueservice_pb.ListSchedulesResponse, error) {
+	return client.ListSchedulesPage(ctx, prefix, 0, "")
+}
+
+func (client *ChronoQueueClient) ListSchedulesPage(ctx context.Context, prefix string, pageSize int32, pageToken string) (*queueservice_pb.ListSchedulesResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	if cancel != nil {
 		defer cancel()
 	}
 	req := &queueservice_pb.ListSchedulesRequest{
-		Prefix: prefix,
+		Prefix:    prefix,
+		PageSize:  pageSize,
+		PageToken: pageToken,
 	}
 	res, err := client.service.ListSchedules(ctx, req)
 	if err != nil {
@@ -1104,13 +1120,18 @@ func (client *ChronoQueueClient) ListSchedules(ctx context.Context, prefix strin
 
 // GetScheduleHistory returns the history of a schedule
 func (client *ChronoQueueClient) GetScheduleHistory(ctx context.Context, scheduleId string, limit int64) (*queueservice_pb.GetScheduleHistoryResponse, error) {
+	return client.GetScheduleHistoryPage(ctx, scheduleId, int32(limit), "")
+}
+
+func (client *ChronoQueueClient) GetScheduleHistoryPage(ctx context.Context, scheduleId string, pageSize int32, pageToken string) (*queueservice_pb.GetScheduleHistoryResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	if cancel != nil {
 		defer cancel()
 	}
 	req := &queueservice_pb.GetScheduleHistoryRequest{
 		ScheduleId: scheduleId,
-		Limit:      limit,
+		PageSize:   pageSize,
+		PageToken:  pageToken,
 	}
 	res, err := client.service.GetScheduleHistory(ctx, req)
 	if err != nil {
@@ -1202,14 +1223,19 @@ func (client *ChronoQueueClient) PreviewCalendarSchedule(ctx context.Context, ca
 
 // GetDLQMessages retrieves messages from a Dead Letter Queue
 func (client *ChronoQueueClient) GetDLQMessages(ctx context.Context, dlqName string, limit int32) (*queueservice_pb.GetDLQMessagesResponse, error) {
+	return client.GetDLQMessagesPage(ctx, dlqName, limit, "")
+}
+
+func (client *ChronoQueueClient) GetDLQMessagesPage(ctx context.Context, dlqName string, pageSize int32, pageToken string) (*queueservice_pb.GetDLQMessagesResponse, error) {
 	ctx, cancel := client.setDefaultContextTimeout(ctx)
 	if cancel != nil {
 		defer cancel()
 	}
 
 	req := &queueservice_pb.GetDLQMessagesRequest{
-		DlqName: dlqName,
-		Limit:   limit,
+		DlqName:   dlqName,
+		PageSize:  pageSize,
+		PageToken: pageToken,
 	}
 	res, err := client.service.GetDLQMessages(ctx, req)
 	if err != nil {
@@ -1366,17 +1392,7 @@ func (client *ChronoQueueClient) GetSchema(ctx context.Context, schemaID string,
 
 // ListSchemas returns all schemas matching the criteria
 func (client *ChronoQueueClient) ListSchemas(ctx context.Context, prefix string, limit int32, activeOnly bool) ([]map[string]interface{}, error) {
-	ctx, cancel := client.setDefaultContextTimeout(ctx)
-	if cancel != nil {
-		defer cancel()
-	}
-
-	req := &queueservice_pb.ListSchemasRequest{
-		Prefix:     prefix,
-		Limit:      limit,
-		ActiveOnly: activeOnly,
-	}
-	res, err := client.service.ListSchemas(ctx, req)
+	res, err := client.ListSchemasPage(ctx, prefix, limit, "", activeOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -1389,12 +1405,31 @@ func (client *ChronoQueueClient) ListSchemas(ctx context.Context, prefix string,
 			"version":     schema.GetLatestVersion(),
 			"versions":    schema.GetVersionCount(),
 			"description": schema.GetDescription(),
-			// "content_type": schema.GetContentType(),
-			"created_at": schema.GetCreatedAt(),
-			"is_active":  schema.GetIsActive(),
+			"created_at":  schema.GetCreatedAt(),
+			"is_active":   schema.GetIsActive(),
 		}
 	}
 	return schemas, nil
+}
+
+func (client *ChronoQueueClient) ListSchemasPage(ctx context.Context, prefix string, pageSize int32, pageToken string, activeOnly bool) (*queueservice_pb.ListSchemasResponse, error) {
+	ctx, cancel := client.setDefaultContextTimeout(ctx)
+	if cancel != nil {
+		defer cancel()
+	}
+
+	req := &queueservice_pb.ListSchemasRequest{
+		Prefix:     prefix,
+		PageSize:   pageSize,
+		ActiveOnly: activeOnly,
+		PageToken:  pageToken,
+	}
+	res, err := client.service.ListSchemas(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }
 
 // DeleteSchema removes a schema version or all versions

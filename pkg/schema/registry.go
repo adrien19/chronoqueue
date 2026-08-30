@@ -36,6 +36,7 @@ type ListOptions struct {
 	Prefix string
 	// Limit is the maximum number of schemas to return. A value of zero or less means no limit.
 	Limit      int32
+	Offset     int64
 	ActiveOnly bool // If true, only return active schemas; if false, return all schemas
 }
 

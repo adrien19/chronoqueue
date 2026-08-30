@@ -386,9 +386,9 @@ service QueueService {
     // - Affect message ordering
     //
     // Example:
-    //   GET /v1/queues/order-processing/messages:peek?limit=10
+    //   GET /v1/queues/order-processing/messages:peek?page_size=10
     //
-    // Returns: List of messages (up to requested count)
+    // Returns: One deterministically ordered page of pending messages.
   rpc PeekQueueMessages(PeekQueueMessagesRequest) returns (PeekQueueMessagesResponse) {
     option (google.api.http) = {
       get: "/v1/queues/{queue_name=*}/messages:peek"
@@ -601,7 +601,7 @@ service QueueService {
     // - Identifying systematic issues
     //
     // Example:
-    //   GET /v1/dlq/order-dlq/messages?limit=50
+    //   GET /v1/dlq/order-dlq/messages?page_size=50
     //
     // Returns: List of failed messages with error details
   rpc GetDLQMessages(GetDLQMessagesRequest) returns (GetDLQMessagesResponse) {

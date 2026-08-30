@@ -14,15 +14,19 @@ import (
 )
 
 func (s *Storage) GetDLQMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error) {
+	return s.GetDLQMessagesPage(ctx, queueName, limit, 0)
+}
+
+func (s *Storage) GetDLQMessagesPage(ctx context.Context, queueName string, limit int32, offset int64) ([]*messagepb.Message, error) {
 	query := s.ph(`
         SELECT metadata_pb, state, attempts_left
         FROM cq_messages
         WHERE queue_name = ? AND state = ?
-        ORDER BY updated_at DESC
-        LIMIT ?
+        ORDER BY updated_at DESC, id DESC
+        LIMIT ? OFFSET ?
     `)
 
-	rows, err := s.DB.QueryContext(ctx, query, queueName, messagepb.Message_Metadata_ERRORED, limit)
+	rows, err := s.DB.QueryContext(ctx, query, queueName, messagepb.Message_Metadata_ERRORED, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("query DLQ messages: %w", err)
 	}

@@ -90,6 +90,10 @@ func TestPostgresRegistryActiveSelectionFallsBackFromInactiveLatestVersion(t *te
 	require.Len(t, listed.Schemas, 1)
 	require.Equal(t, int32(1), listed.Schemas[0].GetVersion())
 	require.Equal(t, int32(2), listed.Metadata["active-fallback"].TotalVersions)
+	emptyPage, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "active-fallback", Limit: 1, Offset: 1, ActiveOnly: true})
+	require.NoError(t, err)
+	require.Empty(t, emptyPage.Schemas)
+	require.Equal(t, int32(1), emptyPage.TotalCount)
 
 	_, err = registry.Deactivate(ctx, "active-fallback", 1)
 	require.NoError(t, err)

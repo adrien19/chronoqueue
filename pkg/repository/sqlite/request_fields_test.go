@@ -138,6 +138,13 @@ func TestListResources_FiltersLiteralPrefixes(t *testing.T) {
 	literalQueues, err := storage.ListQueuesWithPrefix(ctx, "%")
 	require.NoError(t, err)
 	require.Empty(t, literalQueues)
+	firstQueuePage, err := storage.ListQueuesPage(ctx, "", 2, 0)
+	require.NoError(t, err)
+	require.Equal(t, []string{"orders-eu", "orders-us"}, []string{firstQueuePage[0].GetName(), firstQueuePage[1].GetName()})
+	secondQueuePage, err := storage.ListQueuesPage(ctx, "", 2, 2)
+	require.NoError(t, err)
+	require.Len(t, secondQueuePage, 1)
+	require.Equal(t, "payments", secondQueuePage[0].GetName())
 
 	schedules, err := storage.ListSchedulesWithPrefix(ctx, "billing-")
 	require.NoError(t, err)
@@ -148,6 +155,13 @@ func TestListResources_FiltersLiteralPrefixes(t *testing.T) {
 	literalSchedules, err := storage.ListSchedulesWithPrefix(ctx, "%")
 	require.NoError(t, err)
 	require.Empty(t, literalSchedules)
+	firstSchedulePage, err := storage.ListSchedulesPage(ctx, "", 2, 0)
+	require.NoError(t, err)
+	require.Equal(t, []string{"billing-daily", "billing-monthly"}, []string{firstSchedulePage[0].GetScheduleId(), firstSchedulePage[1].GetScheduleId()})
+	secondSchedulePage, err := storage.ListSchedulesPage(ctx, "", 2, 2)
+	require.NoError(t, err)
+	require.Len(t, secondSchedulePage, 1)
+	require.Equal(t, "cleanup", secondSchedulePage[0].GetScheduleId())
 }
 
 func TestRequestFieldQueries_PropagateClosedDatabaseErrors(t *testing.T) {

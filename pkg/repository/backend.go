@@ -26,7 +26,7 @@ type BackendStorage interface {
 	GetQueue(ctx context.Context, name string) (*queuepb.Queue, error)
 	GetQueueMetadata(ctx context.Context, name string) (*queuepb.QueueMetadata, error)
 	IsDLQ(ctx context.Context, name string) (bool, error)
-	ListQueuesWithPrefix(ctx context.Context, prefix string) ([]*queuepb.Queue, error)
+	ListQueuesPage(ctx context.Context, prefix string, limit int32, offset int64) ([]*queuepb.Queue, error)
 	DeleteQueue(ctx context.Context, name string) error
 
 	// Message Operations
@@ -38,21 +38,21 @@ type BackendStorage interface {
 	NackMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error
 	HeartbeatMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) (messagepb.Message_Metadata_State, int64, error)
 	ExtendMessageLease(ctx context.Context, queueName string, messageId string, attemptId string, workerId string, extensionMs int64) (int64, error)
-	PeekMessagesWithPriorityRange(ctx context.Context, queueName string, limit int32, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error)
+	PeekMessagesPage(ctx context.Context, queueName string, limit int32, offset int64, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error)
 
 	// Schedule Operations
 	CreateSchedule(ctx context.Context, schedule *schedulepb.Schedule) error
 	GetSchedule(ctx context.Context, scheduleId string) (*schedulepb.Schedule, error)
 	ListSchedules(ctx context.Context, queueName string) ([]*schedulepb.Schedule, error)
-	ListSchedulesWithPrefix(ctx context.Context, prefix string) ([]*schedulepb.Schedule, error)
+	ListSchedulesPage(ctx context.Context, prefix string, limit int32, offset int64) ([]*schedulepb.Schedule, error)
 	DeleteSchedule(ctx context.Context, scheduleId string) error
 	PauseSchedule(ctx context.Context, scheduleId string) error
 	ResumeSchedule(ctx context.Context, scheduleId string) error
 	RecordScheduleExecution(ctx context.Context, scheduleId string, messageId string, executionTime int64) error
-	GetScheduleHistory(ctx context.Context, scheduleId string, limit int64) (*schedulepb.ScheduleHistory, error)
+	GetScheduleHistoryPage(ctx context.Context, scheduleId string, limit int32, offset int64) (*schedulepb.ScheduleHistory, error)
 
 	// DLQ Operations
-	GetDLQMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error)
+	GetDLQMessagesPage(ctx context.Context, queueName string, limit int32, offset int64) ([]*messagepb.Message, error)
 	RetryDLQMessage(ctx context.Context, dlqName string, messageId string, targetQueueName string, resetRetries bool) error
 	DeleteDLQMessage(ctx context.Context, queueName string, messageId string) error
 	PurgeDLQ(ctx context.Context, queueName string) (int64, error)

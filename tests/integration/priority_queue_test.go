@@ -320,7 +320,7 @@ func TestPriorityQueue_PeekWithPriorityRange(t *testing.T) {
 	// Act - Peek messages with priority range 2-4
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
-		Limit:     10,
+		PageSize:  10,
 		PriorityRange: &queueservice_pb.PeekQueueMessagesRequest_PriorityRange{
 			Min: 2,
 			Max: 4,

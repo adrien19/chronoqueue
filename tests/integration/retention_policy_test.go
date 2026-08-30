@@ -202,7 +202,7 @@ func TestRetentionPolicy_RetainDuration(t *testing.T) {
 	// Peek exposes PENDING messages only.
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
-		Limit:     10,
+		PageSize:  10,
 	})
 	require.NoError(t, err)
 	require.Empty(t, peekResp.Messages)
@@ -297,7 +297,7 @@ func TestRetentionPolicy_RetainForever(t *testing.T) {
 
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
-		Limit:     10,
+		PageSize:  10,
 	})
 	require.NoError(t, err)
 	require.Empty(t, peekResp.Messages)
@@ -397,7 +397,7 @@ func TestRetentionPolicy_NackWithRetention(t *testing.T) {
 
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
-		Limit:     10,
+		PageSize:  10,
 	})
 	require.NoError(t, err)
 	require.Empty(t, peekResp.Messages)
@@ -500,7 +500,7 @@ func TestRetentionPolicy_MultipleMessages(t *testing.T) {
 	// Peek exposes PENDING messages only.
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
-		Limit:     10,
+		PageSize:  10,
 	})
 	require.NoError(t, err)
 	require.Empty(t, peekResp.Messages)

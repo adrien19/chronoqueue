@@ -214,16 +214,18 @@ message RenewMessageLeaseResponse{
 // View pending messages on a queueu
 message PeekQueueMessagesRequest{
   string queue_name = 1;
-  int64  limit      = 2;
+  int32  page_size  = 2; // 0 uses the default of 100; maximum is 1000.
   message PriorityRange {
     int64 min = 1;
     int64 max = 2;
   }
   optional PeekQueueMessagesRequest.PriorityRange priority_range = 3;
+  string page_token = 4;
 }
 
 message PeekQueueMessagesResponse{
   repeated chronoqueue.api.message.v1.Message messages = 1;
+  string next_page_token = 2;
 }
 
 // vew the state of a given queue
@@ -254,10 +256,13 @@ message SendMessageHeartBeatResponse {
 // List queues
 message ListQueuesRequest {
   string prefix = 1;
+  int32 page_size = 2; // 0 uses the default of 100; maximum is 1000.
+  string page_token = 3;
 }
 
 message ListQueuesResponse {
   repeated chronoqueue.api.queue.v1.Queue queues = 1;
+  string next_page_token = 2;
 }
 
 // Create a schedule
@@ -308,20 +313,25 @@ message GetScheduleResponse {
 // List schedules
 message ListSchedulesRequest {
   string prefix = 1;
+  int32 page_size = 2; // 0 uses the default of 100; maximum is 1000.
+  string page_token = 3;
 }
 
 message ListSchedulesResponse {
   repeated chronoqueue.api.schedule.v1.Schedule schedules = 1;
+  string next_page_token = 2;
 }
 
 // Get schedule history
 message GetScheduleHistoryRequest {
   string schedule_id = 1;
-  int64  limit       = 2;
+  int32  page_size   = 2; // 0 uses the default of 100; maximum is 1000.
+  string page_token  = 3;
 }
 
 message GetScheduleHistoryResponse {
   chronoqueue.api.schedule.v1.ScheduleHistory schedule_history = 1;
+  string next_page_token = 2;
 }
 
 // Dead Letter Queue Management Operations
@@ -329,11 +339,13 @@ message GetScheduleHistoryResponse {
 // Get messages from DLQ
 message GetDLQMessagesRequest {
   string dlq_name = 1;
-  int32  limit    = 2; // Maximum results. 0 uses the default of 100; maximum is 1000.
+  int32  page_size = 2; // 0 uses the default of 100; maximum is 1000.
+  string page_token = 3;
 }
 
 message GetDLQMessagesResponse {
   repeated chronoqueue.api.message.v1.Message messages = 1;
+  string next_page_token = 2;
 }
 
 // Requeue message from a DLQ to a required target queue.
@@ -445,13 +457,15 @@ message GetSchemaResponse {
 // List schemas with optional filtering
 message ListSchemasRequest {
   string prefix      = 1; // Filter by schema_id prefix
-  int32  limit       = 2; // Maximum number of results (default: 100)
+  int32  page_size   = 2; // 0 uses the default of 100; maximum is 1000.
   bool   active_only = 3; // Only return active schemas
+  string page_token  = 4;
 }
 
 message ListSchemasResponse {
   repeated SchemaInfo schemas     = 1;
   int32               total_count = 2;
+  string               next_page_token = 3;
 }
 
 // Schema information for list responses

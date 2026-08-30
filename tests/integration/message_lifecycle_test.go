@@ -631,7 +631,7 @@ func TestMessageLifecycle_PeekMessages(t *testing.T) {
 	// Act - Peek messages
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
-		Limit:     10, // Request more than 5 to see if message 0 is there
+		PageSize:  10, // Request more than 5 to see if message 0 is there
 	})
 
 	// Assert
