@@ -575,7 +575,7 @@ func TestScheduleDetailLifecycleHistoryAndFailures(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, "/schedules/daily?history_limit=25", nil)
 			request.SetPathValue("id", "daily")
 			handler.Detail(recorder, request)
-			if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), state.String()) || service.getHistoryRequest.GetLimit() != 25 {
+			if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), state.String()) || service.getHistoryRequest.GetPageSize() != 25 {
 				t.Fatalf("detail response = (%d, %q), history request = %v", recorder.Code, recorder.Body.String(), service.getHistoryRequest)
 			}
 		})

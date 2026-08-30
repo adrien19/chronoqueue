@@ -297,6 +297,17 @@ func TestSQLiteRegistry_List(t *testing.T) {
 		assert.Equal(t, int32(3), limited.TotalCount)
 		assert.Equal(t, int32(1), limited.Metadata[limited.Schemas[0].GetSchemaId()].TotalVersions)
 
+		secondPage, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "schema", Limit: 1, Cursor: "schema1"})
+		require.NoError(t, err)
+		require.Len(t, secondPage.Schemas, 1)
+		assert.Equal(t, "schema2", secondPage.Schemas[0].GetSchemaId())
+		assert.Equal(t, int32(3), secondPage.TotalCount)
+
+		emptyPage, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "schema", Limit: 1, Cursor: "schema3"})
+		require.NoError(t, err)
+		assert.Empty(t, emptyPage.Schemas)
+		assert.Equal(t, int32(3), emptyPage.TotalCount)
+
 		inactive, err := registry.ListWithOptions(ctx, ListOptions{Prefix: "schema2", Limit: 100})
 		require.NoError(t, err)
 		require.Len(t, inactive.Schemas, 1)

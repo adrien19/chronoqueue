@@ -1113,8 +1113,9 @@ func (x *RenewMessageLeaseResponse) GetState() v11.Message_Metadata_State {
 type PeekQueueMessagesRequest struct {
 	state         protoimpl.MessageState                  `protogen:"open.v1"`
 	QueueName     string                                  `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
-	Limit         int64                                   `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	PageSize      int32                                   `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // 0 uses the default of 100; maximum is 1000.
 	PriorityRange *PeekQueueMessagesRequest_PriorityRange `protobuf:"bytes,3,opt,name=priority_range,json=priorityRange,proto3,oneof" json:"priority_range,omitempty"`
+	PageToken     string                                  `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1156,9 +1157,9 @@ func (x *PeekQueueMessagesRequest) GetQueueName() string {
 	return ""
 }
 
-func (x *PeekQueueMessagesRequest) GetLimit() int64 {
+func (x *PeekQueueMessagesRequest) GetPageSize() int32 {
 	if x != nil {
-		return x.Limit
+		return x.PageSize
 	}
 	return 0
 }
@@ -1170,9 +1171,17 @@ func (x *PeekQueueMessagesRequest) GetPriorityRange() *PeekQueueMessagesRequest_
 	return nil
 }
 
+func (x *PeekQueueMessagesRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type PeekQueueMessagesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Messages      []*v11.Message         `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1212,6 +1221,13 @@ func (x *PeekQueueMessagesResponse) GetMessages() []*v11.Message {
 		return x.Messages
 	}
 	return nil
+}
+
+func (x *PeekQueueMessagesResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 // vew the state of a given queue
@@ -1438,6 +1454,8 @@ func (x *SendMessageHeartBeatResponse) GetState() v11.Message_Metadata_State {
 type ListQueuesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Prefix        string                 `protobuf:"bytes,1,opt,name=prefix,proto3" json:"prefix,omitempty"`
+	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // 0 uses the default of 100; maximum is 1000.
+	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1479,9 +1497,24 @@ func (x *ListQueuesRequest) GetPrefix() string {
 	return ""
 }
 
+func (x *ListQueuesRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListQueuesRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type ListQueuesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Queues        []*v1.Queue            `protobuf:"bytes,1,rep,name=queues,proto3" json:"queues,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1521,6 +1554,13 @@ func (x *ListQueuesResponse) GetQueues() []*v1.Queue {
 		return x.Queues
 	}
 	return nil
+}
+
+func (x *ListQueuesResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 // Create a schedule
@@ -1972,6 +2012,8 @@ func (x *GetScheduleResponse) GetSchedule() *v12.Schedule {
 type ListSchedulesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Prefix        string                 `protobuf:"bytes,1,opt,name=prefix,proto3" json:"prefix,omitempty"`
+	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // 0 uses the default of 100; maximum is 1000.
+	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2013,9 +2055,24 @@ func (x *ListSchedulesRequest) GetPrefix() string {
 	return ""
 }
 
+func (x *ListSchedulesRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListSchedulesRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type ListSchedulesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Schedules     []*v12.Schedule        `protobuf:"bytes,1,rep,name=schedules,proto3" json:"schedules,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2057,11 +2114,19 @@ func (x *ListSchedulesResponse) GetSchedules() []*v12.Schedule {
 	return nil
 }
 
+func (x *ListSchedulesResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 // Get schedule history
 type GetScheduleHistoryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ScheduleId    string                 `protobuf:"bytes,1,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
-	Limit         int64                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // 0 uses the default of 100; maximum is 1000.
+	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2103,16 +2168,24 @@ func (x *GetScheduleHistoryRequest) GetScheduleId() string {
 	return ""
 }
 
-func (x *GetScheduleHistoryRequest) GetLimit() int64 {
+func (x *GetScheduleHistoryRequest) GetPageSize() int32 {
 	if x != nil {
-		return x.Limit
+		return x.PageSize
 	}
 	return 0
+}
+
+func (x *GetScheduleHistoryRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
 }
 
 type GetScheduleHistoryResponse struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ScheduleHistory *v12.ScheduleHistory   `protobuf:"bytes,1,opt,name=schedule_history,json=scheduleHistory,proto3" json:"schedule_history,omitempty"`
+	NextPageToken   string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2154,11 +2227,19 @@ func (x *GetScheduleHistoryResponse) GetScheduleHistory() *v12.ScheduleHistory {
 	return nil
 }
 
+func (x *GetScheduleHistoryResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 // Get messages from DLQ
 type GetDLQMessagesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DlqName       string                 `protobuf:"bytes,1,opt,name=dlq_name,json=dlqName,proto3" json:"dlq_name,omitempty"`
-	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"` // Maximum results. 0 uses the default of 100; maximum is 1000.
+	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // 0 uses the default of 100; maximum is 1000.
+	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2200,16 +2281,24 @@ func (x *GetDLQMessagesRequest) GetDlqName() string {
 	return ""
 }
 
-func (x *GetDLQMessagesRequest) GetLimit() int32 {
+func (x *GetDLQMessagesRequest) GetPageSize() int32 {
 	if x != nil {
-		return x.Limit
+		return x.PageSize
 	}
 	return 0
+}
+
+func (x *GetDLQMessagesRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
 }
 
 type GetDLQMessagesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Messages      []*v11.Message         `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2249,6 +2338,13 @@ func (x *GetDLQMessagesResponse) GetMessages() []*v11.Message {
 		return x.Messages
 	}
 	return nil
+}
+
+func (x *GetDLQMessagesResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 // Requeue message from a DLQ to a required target queue.
@@ -3205,8 +3301,9 @@ func (x *GetSchemaResponse) GetSchema() *v13.Schema {
 type ListSchemasRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Prefix        string                 `protobuf:"bytes,1,opt,name=prefix,proto3" json:"prefix,omitempty"`                            // Filter by schema_id prefix
-	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`                             // Maximum number of results (default: 100)
+	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`       // 0 uses the default of 100; maximum is 1000.
 	ActiveOnly    bool                   `protobuf:"varint,3,opt,name=active_only,json=activeOnly,proto3" json:"active_only,omitempty"` // Only return active schemas
+	PageToken     string                 `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3248,9 +3345,9 @@ func (x *ListSchemasRequest) GetPrefix() string {
 	return ""
 }
 
-func (x *ListSchemasRequest) GetLimit() int32 {
+func (x *ListSchemasRequest) GetPageSize() int32 {
 	if x != nil {
-		return x.Limit
+		return x.PageSize
 	}
 	return 0
 }
@@ -3262,10 +3359,18 @@ func (x *ListSchemasRequest) GetActiveOnly() bool {
 	return false
 }
 
+func (x *ListSchemasRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type ListSchemasResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Schemas       []*SchemaInfo          `protobuf:"bytes,1,rep,name=schemas,proto3" json:"schemas,omitempty"`
 	TotalCount    int32                  `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3312,6 +3417,13 @@ func (x *ListSchemasResponse) GetTotalCount() int32 {
 		return x.TotalCount
 	}
 	return 0
+}
+
+func (x *ListSchemasResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 // Schema information for list responses
@@ -3877,18 +3989,21 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\v_attempt_id\"\xa7\x01\n" +
 	"\x19RenewMessageLeaseResponse\x12@\n" +
 	"\x0eremaining_time\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\rremainingTime\x12H\n" +
-	"\x05state\x18\x02 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\"\x8c\x02\n" +
+	"\x05state\x18\x02 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\"\xb2\x02\n" +
 	"\x18PeekQueueMessagesRequest\x12\x1d\n" +
 	"\n" +
-	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x03R\x05limit\x12s\n" +
-	"\x0epriority_range\x18\x03 \x01(\v2G.chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRangeH\x00R\rpriorityRange\x88\x01\x01\x1a3\n" +
+	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12s\n" +
+	"\x0epriority_range\x18\x03 \x01(\v2G.chronoqueue.api.queueservice.v1.PeekQueueMessagesRequest.PriorityRangeH\x00R\rpriorityRange\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\x1a3\n" +
 	"\rPriorityRange\x12\x10\n" +
 	"\x03min\x18\x01 \x01(\x03R\x03min\x12\x10\n" +
 	"\x03max\x18\x02 \x01(\x03R\x03maxB\x11\n" +
-	"\x0f_priority_range\"\\\n" +
+	"\x0f_priority_range\"\x84\x01\n" +
 	"\x19PeekQueueMessagesResponse\x12?\n" +
-	"\bmessages\x18\x01 \x03(\v2#.chronoqueue.api.message.v1.MessageR\bmessages\"5\n" +
+	"\bmessages\x18\x01 \x03(\v2#.chronoqueue.api.message.v1.MessageR\bmessages\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"5\n" +
 	"\x14GetQueueStateRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\"\x8c\x02\n" +
@@ -3911,11 +4026,15 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\v_attempt_id\"\xaa\x01\n" +
 	"\x1cSendMessageHeartBeatResponse\x12@\n" +
 	"\x0eremaining_time\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\rremainingTime\x12H\n" +
-	"\x05state\x18\x02 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\"+\n" +
+	"\x05state\x18\x02 \x01(\x0e22.chronoqueue.api.message.v1.Message.Metadata.StateR\x05state\"g\n" +
 	"\x11ListQueuesRequest\x12\x16\n" +
-	"\x06prefix\x18\x01 \x01(\tR\x06prefix\"M\n" +
+	"\x06prefix\x18\x01 \x01(\tR\x06prefix\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"u\n" +
 	"\x12ListQueuesResponse\x127\n" +
-	"\x06queues\x18\x01 \x03(\v2\x1f.chronoqueue.api.queue.v1.QueueR\x06queues\"Z\n" +
+	"\x06queues\x18\x01 \x03(\v2\x1f.chronoqueue.api.queue.v1.QueueR\x06queues\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"Z\n" +
 	"\x15CreateScheduleRequest\x12A\n" +
 	"\bschedule\x18\x01 \x01(\v2%.chronoqueue.api.schedule.v1.ScheduleR\bschedule\"2\n" +
 	"\x16CreateScheduleResponse\x12\x18\n" +
@@ -3939,22 +4058,32 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\vschedule_id\x18\x01 \x01(\tR\n" +
 	"scheduleId\"X\n" +
 	"\x13GetScheduleResponse\x12A\n" +
-	"\bschedule\x18\x01 \x01(\v2%.chronoqueue.api.schedule.v1.ScheduleR\bschedule\".\n" +
+	"\bschedule\x18\x01 \x01(\v2%.chronoqueue.api.schedule.v1.ScheduleR\bschedule\"j\n" +
 	"\x14ListSchedulesRequest\x12\x16\n" +
-	"\x06prefix\x18\x01 \x01(\tR\x06prefix\"\\\n" +
+	"\x06prefix\x18\x01 \x01(\tR\x06prefix\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\x84\x01\n" +
 	"\x15ListSchedulesResponse\x12C\n" +
-	"\tschedules\x18\x01 \x03(\v2%.chronoqueue.api.schedule.v1.ScheduleR\tschedules\"R\n" +
+	"\tschedules\x18\x01 \x03(\v2%.chronoqueue.api.schedule.v1.ScheduleR\tschedules\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"x\n" +
 	"\x19GetScheduleHistoryRequest\x12\x1f\n" +
 	"\vschedule_id\x18\x01 \x01(\tR\n" +
-	"scheduleId\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x03R\x05limit\"u\n" +
+	"scheduleId\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\x9d\x01\n" +
 	"\x1aGetScheduleHistoryResponse\x12W\n" +
-	"\x10schedule_history\x18\x01 \x01(\v2,.chronoqueue.api.schedule.v1.ScheduleHistoryR\x0fscheduleHistory\"H\n" +
+	"\x10schedule_history\x18\x01 \x01(\v2,.chronoqueue.api.schedule.v1.ScheduleHistoryR\x0fscheduleHistory\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"n\n" +
 	"\x15GetDLQMessagesRequest\x12\x19\n" +
-	"\bdlq_name\x18\x01 \x01(\tR\adlqName\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\"Y\n" +
+	"\bdlq_name\x18\x01 \x01(\tR\adlqName\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\x81\x01\n" +
 	"\x16GetDLQMessagesResponse\x12?\n" +
-	"\bmessages\x18\x01 \x03(\v2#.chronoqueue.api.message.v1.MessageR\bmessages\"y\n" +
+	"\bmessages\x18\x01 \x03(\v2#.chronoqueue.api.message.v1.MessageR\bmessages\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"y\n" +
 	"\x15RequeueFromDLQRequest\x12\x19\n" +
 	"\bdlq_name\x18\x01 \x01(\tR\adlqName\x12\x1d\n" +
 	"\n" +
@@ -4024,16 +4153,19 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\tschema_id\x18\x01 \x01(\tR\bschemaId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\"N\n" +
 	"\x11GetSchemaResponse\x129\n" +
-	"\x06schema\x18\x01 \x01(\v2!.chronoqueue.api.schema.v1.SchemaR\x06schema\"c\n" +
+	"\x06schema\x18\x01 \x01(\v2!.chronoqueue.api.schema.v1.SchemaR\x06schema\"\x89\x01\n" +
 	"\x12ListSchemasRequest\x12\x16\n" +
-	"\x06prefix\x18\x01 \x01(\tR\x06prefix\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1f\n" +
+	"\x06prefix\x18\x01 \x01(\tR\x06prefix\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1f\n" +
 	"\vactive_only\x18\x03 \x01(\bR\n" +
-	"activeOnly\"}\n" +
+	"activeOnly\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\"\xa5\x01\n" +
 	"\x13ListSchemasResponse\x12E\n" +
 	"\aschemas\x18\x01 \x03(\v2+.chronoqueue.api.queueservice.v1.SchemaInfoR\aschemas\x12\x1f\n" +
 	"\vtotal_count\x18\x02 \x01(\x05R\n" +
-	"totalCount\"\x86\x02\n" +
+	"totalCount\x12&\n" +
+	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\"\x86\x02\n" +
 	"\n" +
 	"SchemaInfo\x12\x1b\n" +
 	"\tschema_id\x18\x01 \x01(\tR\bschemaId\x12%\n" +

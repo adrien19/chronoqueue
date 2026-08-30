@@ -87,7 +87,7 @@ func TestPeekStateConsistency_LeasedMessageExcluded(t *testing.T) {
 
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
-		Limit:     10,
+		PageSize:  10,
 	})
 	require.NoError(t, err)
 	require.Empty(t, peekResp.GetMessages())
@@ -103,7 +103,7 @@ func TestPeekStateConsistency_LeasedMessageExcluded(t *testing.T) {
 
 	peekAfterWait, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
-		Limit:     10,
+		PageSize:  10,
 	})
 	require.NoError(t, err)
 	require.Empty(t, peekAfterWait.GetMessages())

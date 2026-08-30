@@ -253,6 +253,14 @@ func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOpti
 	if options.Limit <= 0 {
 		options.Limit = math.MaxInt32
 	}
+	var totalCount int32
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(DISTINCT schema_id)
+		FROM cq_schemas
+		WHERE STRPOS(schema_id, $1) = 1 AND ($2 = FALSE OR is_active = TRUE)
+	`, options.Prefix, options.ActiveOnly).Scan(&totalCount); err != nil {
+		return ListResult{}, fmt.Errorf("failed to count schemas: %w", err)
+	}
 
 	rows, err := r.db.QueryContext(ctx, `
 		WITH family_stats AS (
@@ -264,17 +272,17 @@ func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOpti
 		), ranked AS (
 			SELECT s.*, ROW_NUMBER() OVER (PARTITION BY s.schema_id ORDER BY s.version DESC) AS row_number
 			FROM cq_schemas s
-			WHERE STRPOS(s.schema_id, $2) = 1 AND ($1 = FALSE OR s.is_active = TRUE)
+			WHERE STRPOS(s.schema_id, $2) = 1 AND s.schema_id > $4 AND ($1 = FALSE OR s.is_active = TRUE)
 		), latest AS (
 			SELECT * FROM ranked WHERE row_number = 1
 		)
 		SELECT schema_id, version, name, description, content, content_type, metadata_json,
 		       is_active, created_at, updated_at, family_stats.version_count,
-		       family_stats.first_created_at, family_stats.last_updated_at, COUNT(*) OVER ()
+		       family_stats.first_created_at, family_stats.last_updated_at
 		FROM latest JOIN family_stats USING (schema_id)
 		ORDER BY schema_id
 		LIMIT $3
-	`, options.ActiveOnly, options.Prefix, options.Limit)
+	`, options.ActiveOnly, options.Prefix, int64(options.Limit)+1, options.Cursor)
 	if err != nil {
 		return ListResult{}, fmt.Errorf("failed to list schemas: %w", err)
 	}
@@ -285,7 +293,6 @@ func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOpti
 	}()
 
 	var schemas []*schema_pb.Schema
-	var totalCount int32
 	metadata := make(map[string]SchemaMetadata)
 	for rows.Next() {
 		var schema schema_pb.Schema
@@ -309,7 +316,6 @@ func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOpti
 			&versionCount,
 			&firstCreatedAt,
 			&lastUpdatedAt,
-			&totalCount,
 		); err != nil {
 			r.logger.ErrorWithFields("Failed to scan schema", "error", err)
 			continue
@@ -328,7 +334,12 @@ func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOpti
 		return ListResult{}, fmt.Errorf("error iterating schemas: %w", err)
 	}
 
-	return ListResult{Schemas: schemas, TotalCount: totalCount, Metadata: metadata}, nil
+	var nextCursor string
+	if len(schemas) > int(options.Limit) {
+		schemas = schemas[:options.Limit]
+		nextCursor = schemas[len(schemas)-1].GetSchemaId()
+	}
+	return ListResult{Schemas: schemas, TotalCount: totalCount, Metadata: metadata, NextCursor: nextCursor}, nil
 }
 
 // Deactivate marks a schema version as inactive.

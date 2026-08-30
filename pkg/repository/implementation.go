@@ -18,6 +18,7 @@ import (
 	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/internal/domainerror"
+	"github.com/adrien19/chronoqueue/internal/pagination"
 	"github.com/adrien19/chronoqueue/pkg/calendar"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
 	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
@@ -35,6 +36,49 @@ const (
 	BackendSQLite   BackendType = "sqlite"
 	BackendPostgres BackendType = "postgres"
 )
+
+func pageRequest(requested int32, token, scope, filter string) (int32, int64, error) {
+	pageSize, err := pagination.PageSize(requested)
+	if err != nil {
+		return 0, 0, domainerror.New(domainerror.InvalidArgument, err.Error(), err)
+	}
+	offset, err := pagination.Decode(token, scope, filter)
+	if err != nil {
+		return 0, 0, domainerror.New(domainerror.InvalidArgument, err.Error(), err)
+	}
+	return pageSize, offset, nil
+}
+
+func positionPageRequest(requested int32, token, scope, filter string) (int32, string, error) {
+	pageSize, err := pagination.PageSize(requested)
+	if err != nil {
+		return 0, "", domainerror.New(domainerror.InvalidArgument, err.Error(), err)
+	}
+	cursor, err := pagination.DecodePosition(token, scope, filter)
+	if err != nil {
+		return 0, "", domainerror.New(domainerror.InvalidArgument, err.Error(), err)
+	}
+	return pageSize, cursor, nil
+}
+
+func positionPageToken(scope, filter, cursor string) (string, error) {
+	if cursor == "" {
+		return "", nil
+	}
+	return pagination.EncodePosition(scope, filter, cursor)
+}
+
+func finishPage[T any](items []T, pageSize int32, offset int64, scope, filter string) ([]T, string, error) {
+	if len(items) <= int(pageSize) {
+		return items, "", nil
+	}
+	items = items[:pageSize]
+	nextToken, err := pagination.Encode(scope, filter, offset+int64(pageSize))
+	if err != nil {
+		return nil, "", err
+	}
+	return items, nextToken, nil
+}
 
 // implementation is the concrete implementation of Storage interface
 // It delegates to a backend storage implementation
@@ -328,11 +372,22 @@ func (impl *implementation) DeleteQueue(ctx context.Context, request *queueservi
 
 // ListQueues lists all queues
 func (impl *implementation) ListQueues(ctx context.Context, request *queueservicepb.ListQueuesRequest) (*queueservicepb.ListQueuesResponse, error) {
-	queues, err := impl.backend.ListQueuesWithPrefix(ctx, request.GetPrefix())
+	if request == nil {
+		request = &queueservicepb.ListQueuesRequest{}
+	}
+	pageSize, cursor, err := positionPageRequest(request.GetPageSize(), request.GetPageToken(), "queues", request.GetPrefix())
 	if err != nil {
 		return nil, err
 	}
-	return &queueservicepb.ListQueuesResponse{Queues: queues}, nil
+	queues, nextCursor, err := impl.backend.ListQueuesPage(ctx, request.GetPrefix(), pageSize, cursor)
+	if err != nil {
+		return nil, err
+	}
+	nextToken, err := positionPageToken("queues", request.GetPrefix(), nextCursor)
+	if err != nil {
+		return nil, err
+	}
+	return &queueservicepb.ListQueuesResponse{Queues: queues, NextPageToken: nextToken}, nil
 }
 
 // GetQueueState returns the current state of a queue
@@ -1000,11 +1055,8 @@ func (impl *implementation) PeekQueueMessages(ctx context.Context, request *queu
 	if request == nil || request.GetQueueName() == "" {
 		return nil, domainerror.New(domainerror.InvalidArgument, "queue name is required", nil)
 	}
-	if request.GetLimit() < 0 || request.GetLimit() > int64(^uint32(0)>>1) {
-		return nil, domainerror.New(domainerror.InvalidArgument, "limit must be between 0 and 2147483647", nil)
-	}
-
 	var priorityRange *repositorysql.PriorityRange
+	filter := request.GetQueueName()
 	if requestedRange := request.GetPriorityRange(); requestedRange != nil {
 		if requestedRange.GetMin() < validator.DefaultMinPriority || requestedRange.GetMax() > validator.DefaultMaxPriority {
 			message := fmt.Sprintf("priority range must be between %d and %d", validator.DefaultMinPriority, validator.DefaultMaxPriority)
@@ -1014,14 +1066,24 @@ func (impl *implementation) PeekQueueMessages(ctx context.Context, request *queu
 			return nil, domainerror.New(domainerror.InvalidArgument, "priority range minimum must not exceed maximum", nil)
 		}
 		priorityRange = &repositorysql.PriorityRange{Min: requestedRange.GetMin(), Max: requestedRange.GetMax()}
+		filter = fmt.Sprintf("%s:%d:%d", filter, priorityRange.Min, priorityRange.Max)
 	}
 
-	messages, err := impl.backend.PeekMessagesWithPriorityRange(ctx, request.QueueName, int32(request.Limit), priorityRange)
+	pageSize, offset, err := pageRequest(request.GetPageSize(), request.GetPageToken(), "peek", filter)
+	if err != nil {
+		return nil, err
+	}
+	messages, err := impl.backend.PeekMessagesPage(ctx, request.QueueName, pageSize+1, offset, priorityRange)
+	if err != nil {
+		return nil, err
+	}
+	messages, nextToken, err := finishPage(messages, pageSize, offset, "peek", filter)
 	if err != nil {
 		return nil, err
 	}
 	return &queueservicepb.PeekQueueMessagesResponse{
-		Messages: messages,
+		Messages:      messages,
+		NextPageToken: nextToken,
 	}, nil
 }
 
@@ -1171,11 +1233,22 @@ func (impl *implementation) GetSchedule(ctx context.Context, request *queueservi
 
 // ListSchedules lists schedules for a queue
 func (impl *implementation) ListSchedules(ctx context.Context, request *queueservicepb.ListSchedulesRequest) (*queueservicepb.ListSchedulesResponse, error) {
-	schedules, err := impl.backend.ListSchedulesWithPrefix(ctx, request.GetPrefix())
+	if request == nil {
+		request = &queueservicepb.ListSchedulesRequest{}
+	}
+	pageSize, cursor, err := positionPageRequest(request.GetPageSize(), request.GetPageToken(), "schedules", request.GetPrefix())
 	if err != nil {
 		return nil, err
 	}
-	return &queueservicepb.ListSchedulesResponse{Schedules: schedules}, nil
+	schedules, nextCursor, err := impl.backend.ListSchedulesPage(ctx, request.GetPrefix(), pageSize, cursor)
+	if err != nil {
+		return nil, err
+	}
+	nextToken, err := positionPageToken("schedules", request.GetPrefix(), nextCursor)
+	if err != nil {
+		return nil, err
+	}
+	return &queueservicepb.ListSchedulesResponse{Schedules: schedules, NextPageToken: nextToken}, nil
 }
 
 // GetScheduleHistory retrieves execution history for a schedule
@@ -1183,16 +1256,21 @@ func (impl *implementation) GetScheduleHistory(ctx context.Context, request *que
 	if request == nil || request.GetScheduleId() == "" {
 		return nil, domainerror.New(domainerror.InvalidArgument, "schedule id is required", nil)
 	}
-	if request.GetLimit() < 0 {
-		return nil, domainerror.New(domainerror.InvalidArgument, "limit must be >= 0", nil)
-	}
-	history, err := impl.backend.GetScheduleHistory(ctx, request.ScheduleId, request.Limit)
+	pageSize, cursor, err := positionPageRequest(request.GetPageSize(), request.GetPageToken(), "schedule-history", request.GetScheduleId())
 	if err != nil {
 		return nil, err
 	}
-
+	history, nextCursor, err := impl.backend.GetScheduleHistoryPage(ctx, request.ScheduleId, pageSize, cursor)
+	if err != nil {
+		return nil, err
+	}
+	nextToken, err := positionPageToken("schedule-history", request.GetScheduleId(), nextCursor)
+	if err != nil {
+		return nil, err
+	}
 	return &queueservicepb.GetScheduleHistoryResponse{
 		ScheduleHistory: history,
+		NextPageToken:   nextToken,
 	}, nil
 }
 
@@ -1280,7 +1358,30 @@ func (impl *implementation) GetDLQMessages(ctx context.Context, dlqName string, 
 	if err := impl.requireDLQ(ctx, dlqName); err != nil {
 		return nil, err
 	}
-	return impl.backend.GetDLQMessages(ctx, dlqName, limit)
+	messages, _, err := impl.backend.GetDLQMessagesPage(ctx, dlqName, limit, "")
+	return messages, err
+}
+
+func (impl *implementation) GetDLQMessagesPage(ctx context.Context, request *queueservicepb.GetDLQMessagesRequest) (*queueservicepb.GetDLQMessagesResponse, error) {
+	if request == nil || request.GetDlqName() == "" {
+		return nil, domainerror.New(domainerror.InvalidArgument, "DLQ name is required", nil)
+	}
+	pageSize, cursor, err := positionPageRequest(request.GetPageSize(), request.GetPageToken(), "dlq", request.GetDlqName())
+	if err != nil {
+		return nil, err
+	}
+	if err := impl.requireDLQ(ctx, request.GetDlqName()); err != nil {
+		return nil, err
+	}
+	messages, nextCursor, err := impl.backend.GetDLQMessagesPage(ctx, request.GetDlqName(), pageSize, cursor)
+	if err != nil {
+		return nil, err
+	}
+	nextToken, err := positionPageToken("dlq", request.GetDlqName(), nextCursor)
+	if err != nil {
+		return nil, err
+	}
+	return &queueservicepb.GetDLQMessagesResponse{Messages: messages, NextPageToken: nextToken}, nil
 }
 
 // RequeueFromDLQ moves a message from DLQ back to the original queue

@@ -36,6 +36,7 @@ type ListOptions struct {
 	Prefix string
 	// Limit is the maximum number of schemas to return. A value of zero or less means no limit.
 	Limit      int32
+	Cursor     string
 	ActiveOnly bool // If true, only return active schemas; if false, return all schemas
 }
 
@@ -43,6 +44,7 @@ type ListResult struct {
 	Schemas    []*schema_pb.Schema
 	TotalCount int32
 	Metadata   map[string]SchemaMetadata
+	NextCursor string
 }
 
 // SchemaMetadata contains metadata about a schema

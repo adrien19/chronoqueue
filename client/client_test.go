@@ -24,6 +24,7 @@ import (
 	message_pb "github.com/adrien19/chronoqueue/api/message/v1"
 	queue_pb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
+	schedule_pb "github.com/adrien19/chronoqueue/api/schedule/v1"
 )
 
 func TestAPIKeyUnaryClientInterceptor(t *testing.T) {
@@ -280,6 +281,15 @@ func (*mockChronoQueueServer) CancelMessage(ctx context.Context, req *queueservi
 }
 
 func (*mockChronoQueueServer) ListQueues(ctx context.Context, req *queueservice_pb.ListQueuesRequest) (*queueservice_pb.ListQueuesResponse, error) {
+	if req.GetPrefix() == "paginated" || req.GetPrefix() == "paginated-error" {
+		if req.GetPageToken() == "queue-page-2" {
+			if req.GetPrefix() == "paginated-error" {
+				return nil, status.Error(codes.Unavailable, "queue second page unavailable")
+			}
+			return &queueservice_pb.ListQueuesResponse{Queues: []*queue_pb.Queue{{Name: "queue-2"}}}, nil
+		}
+		return &queueservice_pb.ListQueuesResponse{Queues: []*queue_pb.Queue{{Name: "queue-1"}}, NextPageToken: "queue-page-2"}, nil
+	}
 	return &queueservice_pb.ListQueuesResponse{
 		Queues: []*queue_pb.Queue{
 			{
@@ -288,6 +298,16 @@ func (*mockChronoQueueServer) ListQueues(ctx context.Context, req *queueservice_
 			},
 		},
 	}, nil
+}
+
+func (*mockChronoQueueServer) ListSchedules(ctx context.Context, req *queueservice_pb.ListSchedulesRequest) (*queueservice_pb.ListSchedulesResponse, error) {
+	if req.GetPageToken() == "schedule-page-2" {
+		if req.GetPrefix() == "paginated-error" {
+			return nil, status.Error(codes.Unavailable, "schedule second page unavailable")
+		}
+		return &queueservice_pb.ListSchedulesResponse{Schedules: []*schedule_pb.Schedule{{ScheduleId: "schedule-2"}}}, nil
+	}
+	return &queueservice_pb.ListSchedulesResponse{Schedules: []*schedule_pb.Schedule{{ScheduleId: "schedule-1"}}, NextPageToken: "schedule-page-2"}, nil
 }
 
 // DLQ Methods for mockChronoQueueServer
@@ -1694,6 +1714,38 @@ func TestChronoQueueClient_ListQueues(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestChronoQueueClient_ListMethodsAggregatePages(t *testing.T) {
+	client, err := NewChronoQueueClient("bufnet", ClientOptions{Connector: testConnector(dialer())})
+	require.NoError(t, err)
+	t.Cleanup(client.Close)
+
+	queues, err := client.ListQueues(context.Background(), "paginated")
+	require.NoError(t, err)
+	require.Equal(t, []string{"queue-1", "queue-2"}, []string{queues.GetQueues()[0].GetName(), queues.GetQueues()[1].GetName()})
+	require.Empty(t, queues.GetNextPageToken())
+
+	schedules, err := client.ListSchedules(context.Background(), "")
+	require.NoError(t, err)
+	require.Equal(t, []string{"schedule-1", "schedule-2"}, []string{schedules.GetSchedules()[0].GetScheduleId(), schedules.GetSchedules()[1].GetScheduleId()})
+	require.Empty(t, schedules.GetNextPageToken())
+}
+
+func TestChronoQueueClient_ListMethodsDiscardPartialResultsOnLaterPageFailure(t *testing.T) {
+	client, err := NewChronoQueueClient("bufnet", ClientOptions{Connector: testConnector(dialer())})
+	require.NoError(t, err)
+	t.Cleanup(client.Close)
+
+	queues, err := client.ListQueues(context.Background(), "paginated-error")
+	require.Nil(t, queues)
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.ErrorContains(t, err, "queue second page unavailable")
+
+	schedules, err := client.ListSchedules(context.Background(), "paginated-error")
+	require.Nil(t, schedules)
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.ErrorContains(t, err, "schedule second page unavailable")
 }
 
 func TestChronoQueueClient_Close(t *testing.T) {

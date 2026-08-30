@@ -981,6 +981,10 @@ func (s *Storage) PeekMessages(ctx context.Context, queueName string, limit int3
 
 // PeekMessagesWithPriorityRange retrieves messages within an optional inclusive priority range.
 func (s *Storage) PeekMessagesWithPriorityRange(ctx context.Context, queueName string, limit int32, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error) {
+	return s.PeekMessagesPage(ctx, queueName, limit, 0, priorityRange)
+}
+
+func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit int32, offset int64, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error) {
 	nowMs := s.Clock.NowMs()
 	query := `
 		SELECT metadata_pb,
@@ -1007,9 +1011,9 @@ func (s *Storage) PeekMessagesWithPriorityRange(ctx context.Context, queueName s
 	}
 	query += `
 		ORDER BY priority DESC, id ASC
-		LIMIT ?
+		LIMIT ? OFFSET ?
 	`
-	args = append(args, limit)
+	args = append(args, limit, offset)
 
 	rows, err := s.DB.QueryContext(ctx, query, args...)
 	if err != nil {

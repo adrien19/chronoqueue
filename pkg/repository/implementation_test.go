@@ -78,6 +78,8 @@ type stubBackend struct {
 	dlqLimits        []int32
 	queues           []*queuepb.Queue
 	schedules        []*schedulepb.Schedule
+	messages         []*messagepb.Message
+	history          *schedulepb.ScheduleHistory
 	queuePrefix      string
 	schedulePrefix   string
 	enqueued         []enqueuedCall
@@ -203,6 +205,12 @@ func (b *stubBackend) ListQueuesWithPrefix(ctx context.Context, prefix string) (
 	return b.queues, nil
 }
 
+func (b *stubBackend) ListQueuesPage(ctx context.Context, prefix string, limit int32, cursor string) ([]*queuepb.Queue, string, error) {
+	b.queuePrefix = prefix
+	items, next := keysetPage(b.queues, limit, cursor, func(queue *queuepb.Queue) string { return queue.GetName() })
+	return items, next, nil
+}
+
 func (b *stubBackend) DeleteQueue(ctx context.Context, name string) error {
 	b.deletedQueues = append(b.deletedQueues, name)
 	return nil
@@ -276,6 +284,11 @@ func (b *stubBackend) PeekMessagesWithPriorityRange(ctx context.Context, queueNa
 	return nil, nil
 }
 
+func (b *stubBackend) PeekMessagesPage(ctx context.Context, queueName string, limit int32, offset int64, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error) {
+	b.peekCalls = append(b.peekCalls, peekCall{queueName: queueName, limit: limit, priorityRange: priorityRange})
+	return pageSlice(b.messages, limit, offset), nil
+}
+
 func (b *stubBackend) CreateSchedule(ctx context.Context, schedule *schedulepb.Schedule) error {
 	b.schedules = append(b.schedules, schedule)
 	return nil
@@ -293,6 +306,12 @@ func (b *stubBackend) ListSchedulesWithPrefix(ctx context.Context, prefix string
 	b.schedulePrefix = prefix
 	return b.schedules, nil
 }
+
+func (b *stubBackend) ListSchedulesPage(ctx context.Context, prefix string, limit int32, cursor string) ([]*schedulepb.Schedule, string, error) {
+	b.schedulePrefix = prefix
+	items, next := keysetPage(b.schedules, limit, cursor, func(schedule *schedulepb.Schedule) string { return schedule.GetScheduleId() })
+	return items, next, nil
+}
 func (b *stubBackend) DeleteSchedule(ctx context.Context, scheduleId string) error { return nil }
 func (b *stubBackend) PauseSchedule(ctx context.Context, scheduleId string) error  { return nil }
 func (b *stubBackend) ResumeSchedule(ctx context.Context, scheduleId string) error { return nil }
@@ -304,9 +323,50 @@ func (b *stubBackend) GetScheduleHistory(ctx context.Context, scheduleId string,
 	return nil, nil
 }
 
+func (b *stubBackend) GetScheduleHistoryPage(ctx context.Context, scheduleId string, limit int32, cursor string) (*schedulepb.ScheduleHistory, string, error) {
+	if b.history == nil {
+		return &schedulepb.ScheduleHistory{}, "", nil
+	}
+	items, next := keysetPage(b.history.GetExecutions(), limit, cursor, func(execution *schedulepb.ScheduleHistory_Execution) string { return execution.GetMessageId() })
+	return &schedulepb.ScheduleHistory{ScheduleId: b.history.GetScheduleId(), Executions: items}, next, nil
+}
+
 func (b *stubBackend) GetDLQMessages(ctx context.Context, dlqName string, limit int32) ([]*messagepb.Message, error) {
 	b.dlqLimits = append(b.dlqLimits, limit)
 	return nil, nil
+}
+
+func (b *stubBackend) GetDLQMessagesPage(ctx context.Context, dlqName string, limit int32, cursor string) ([]*messagepb.Message, string, error) {
+	b.dlqLimits = append(b.dlqLimits, limit)
+	items, next := keysetPage(b.messages, limit, cursor, func(message *messagepb.Message) string { return message.GetMessageId() })
+	return items, next, nil
+}
+
+func keysetPage[T any](values []T, limit int32, cursor string, key func(T) string) ([]T, string) {
+	start := 0
+	if cursor != "" {
+		start = len(values)
+		for index, value := range values {
+			if key(value) > cursor {
+				start = index
+				break
+			}
+		}
+	}
+	end := min(start+int(limit), len(values))
+	items := values[start:end]
+	if end == len(values) || len(items) == 0 {
+		return items, ""
+	}
+	return items, key(items[len(items)-1])
+}
+
+func pageSlice[T any](values []T, limit int32, offset int64) []T {
+	if offset >= int64(len(values)) {
+		return nil
+	}
+	end := min(offset+int64(limit), int64(len(values)))
+	return values[offset:end]
 }
 
 func (b *stubBackend) RetryDLQMessage(ctx context.Context, dlqName string, messageId string, targetQueueName string, resetRetries bool) error {
@@ -695,7 +755,7 @@ func TestPeekQueueMessages_PriorityRange(t *testing.T) {
 			backend := &stubBackend{}
 			impl := &implementation{backend: backend}
 			_, err := impl.PeekQueueMessages(context.Background(), &queueservicepb.PeekQueueMessagesRequest{
-				QueueName: "queue", Limit: 10, PriorityRange: tt.rangeReq,
+				QueueName: "queue", PageSize: 10, PriorityRange: tt.rangeReq,
 			})
 			if tt.wantError != "" {
 				require.ErrorContains(t, err, tt.wantError)
@@ -729,6 +789,112 @@ func TestListQueues_FiltersByPrefix(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "missing", backend.queuePrefix)
 	require.Empty(t, none.GetQueues())
+}
+
+func TestListQueues_PaginatesAndValidatesTokens(t *testing.T) {
+	backend := &stubBackend{queues: []*queuepb.Queue{{Name: "queue-a"}, {Name: "queue-b"}, {Name: "queue-c"}}}
+	impl := &implementation{backend: backend}
+
+	first, err := impl.ListQueues(context.Background(), &queueservicepb.ListQueuesRequest{Prefix: "queue-", PageSize: 2})
+	require.NoError(t, err)
+	require.Equal(t, []string{"queue-a", "queue-b"}, []string{first.Queues[0].GetName(), first.Queues[1].GetName()})
+	require.NotEmpty(t, first.GetNextPageToken())
+
+	second, err := impl.ListQueues(context.Background(), &queueservicepb.ListQueuesRequest{Prefix: "queue-", PageSize: 2, PageToken: first.GetNextPageToken()})
+	require.NoError(t, err)
+	require.Len(t, second.GetQueues(), 1)
+	require.Equal(t, "queue-c", second.GetQueues()[0].GetName())
+	require.Empty(t, second.GetNextPageToken())
+
+	for name, request := range map[string]*queueservicepb.ListQueuesRequest{
+		"malformed token":  {Prefix: "queue-", PageSize: 2, PageToken: "%%%"},
+		"mismatched token": {Prefix: "other-", PageSize: 2, PageToken: first.GetNextPageToken()},
+		"negative size":    {PageSize: -1},
+		"oversized page":   {PageSize: 1001},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := impl.ListQueues(context.Background(), request)
+			require.Equal(t, codes.InvalidArgument, status.Code(domainerror.ToGRPC(err)))
+		})
+	}
+}
+
+func TestPeekScheduleHistoryAndDLQPagination(t *testing.T) {
+	messages := []*messagepb.Message{{MessageId: "message-a"}, {MessageId: "message-b"}, {MessageId: "message-c"}}
+	executions := []*schedulepb.ScheduleHistory_Execution{{MessageId: "message-a"}, {MessageId: "message-b"}, {MessageId: "message-c"}}
+	backend := &stubBackend{
+		queues:   []*queuepb.Queue{{Name: "source", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "source-dlq"}}},
+		messages: messages,
+		history:  &schedulepb.ScheduleHistory{ScheduleId: "schedule", Executions: executions},
+	}
+	impl := &implementation{backend: backend}
+	ctx := context.Background()
+	backend.schedules = []*schedulepb.Schedule{{ScheduleId: "schedule-a"}, {ScheduleId: "schedule-b"}, {ScheduleId: "schedule-c"}}
+	schedulesFirst, err := impl.ListSchedules(ctx, &queueservicepb.ListSchedulesRequest{Prefix: "schedule-", PageSize: 2})
+	require.NoError(t, err)
+	require.Len(t, schedulesFirst.GetSchedules(), 2)
+	require.NotEmpty(t, schedulesFirst.GetNextPageToken())
+	schedulesLast, err := impl.ListSchedules(ctx, &queueservicepb.ListSchedulesRequest{Prefix: "schedule-", PageSize: 2, PageToken: schedulesFirst.GetNextPageToken()})
+	require.NoError(t, err)
+	require.Len(t, schedulesLast.GetSchedules(), 1)
+	require.Equal(t, "schedule-c", schedulesLast.GetSchedules()[0].GetScheduleId())
+	require.Empty(t, schedulesLast.GetNextPageToken())
+	for name, request := range map[string]*queueservicepb.ListSchedulesRequest{
+		"malformed token":  {Prefix: "schedule-", PageSize: 2, PageToken: "%%%"},
+		"mismatched token": {Prefix: "other-", PageSize: 2, PageToken: schedulesFirst.GetNextPageToken()},
+	} {
+		t.Run("schedules "+name, func(t *testing.T) {
+			_, err := impl.ListSchedules(ctx, request)
+			require.Equal(t, codes.InvalidArgument, status.Code(domainerror.ToGRPC(err)))
+		})
+	}
+
+	peekFirst, err := impl.PeekQueueMessages(ctx, &queueservicepb.PeekQueueMessagesRequest{QueueName: "queue", PageSize: 2})
+	require.NoError(t, err)
+	require.Len(t, peekFirst.GetMessages(), 2)
+	require.NotEmpty(t, peekFirst.GetNextPageToken())
+	peekLast, err := impl.PeekQueueMessages(ctx, &queueservicepb.PeekQueueMessagesRequest{QueueName: "queue", PageSize: 2, PageToken: peekFirst.GetNextPageToken()})
+	require.NoError(t, err)
+	require.Len(t, peekLast.GetMessages(), 1)
+	require.Empty(t, peekLast.GetNextPageToken())
+	_, err = impl.PeekQueueMessages(ctx, &queueservicepb.PeekQueueMessagesRequest{QueueName: "other", PageSize: 2, PageToken: peekFirst.GetNextPageToken()})
+	require.Equal(t, codes.InvalidArgument, status.Code(domainerror.ToGRPC(err)))
+
+	historyFirst, err := impl.GetScheduleHistory(ctx, &queueservicepb.GetScheduleHistoryRequest{ScheduleId: "schedule", PageSize: 2})
+	require.NoError(t, err)
+	require.Len(t, historyFirst.GetScheduleHistory().GetExecutions(), 2)
+	require.NotEmpty(t, historyFirst.GetNextPageToken())
+	historyLast, err := impl.GetScheduleHistory(ctx, &queueservicepb.GetScheduleHistoryRequest{ScheduleId: "schedule", PageSize: 2, PageToken: historyFirst.GetNextPageToken()})
+	require.NoError(t, err)
+	require.Len(t, historyLast.GetScheduleHistory().GetExecutions(), 1)
+	require.Empty(t, historyLast.GetNextPageToken())
+	for name, request := range map[string]*queueservicepb.GetScheduleHistoryRequest{
+		"malformed token":  {ScheduleId: "schedule", PageSize: 2, PageToken: "%%%"},
+		"mismatched token": {ScheduleId: "other-schedule", PageSize: 2, PageToken: historyFirst.GetNextPageToken()},
+	} {
+		t.Run("schedule history "+name, func(t *testing.T) {
+			_, err := impl.GetScheduleHistory(ctx, request)
+			require.Equal(t, codes.InvalidArgument, status.Code(domainerror.ToGRPC(err)))
+		})
+	}
+
+	dlqFirst, err := impl.GetDLQMessagesPage(ctx, &queueservicepb.GetDLQMessagesRequest{DlqName: "source-dlq", PageSize: 2})
+	require.NoError(t, err)
+	require.Len(t, dlqFirst.GetMessages(), 2)
+	require.NotEmpty(t, dlqFirst.GetNextPageToken())
+	dlqLast, err := impl.GetDLQMessagesPage(ctx, &queueservicepb.GetDLQMessagesRequest{DlqName: "source-dlq", PageSize: 2, PageToken: dlqFirst.GetNextPageToken()})
+	require.NoError(t, err)
+	require.Len(t, dlqLast.GetMessages(), 1)
+	require.Empty(t, dlqLast.GetNextPageToken())
+	for name, request := range map[string]*queueservicepb.GetDLQMessagesRequest{
+		"malformed token":  {DlqName: "source-dlq", PageSize: 2, PageToken: "%%%"},
+		"mismatched token": {DlqName: "other-dlq", PageSize: 2, PageToken: dlqFirst.GetNextPageToken()},
+	} {
+		t.Run("DLQ "+name, func(t *testing.T) {
+			_, err := impl.GetDLQMessagesPage(ctx, request)
+			require.Equal(t, codes.InvalidArgument, status.Code(domainerror.ToGRPC(err)))
+		})
+	}
 }
 
 func TestListSchedules_FiltersByPrefix(t *testing.T) {

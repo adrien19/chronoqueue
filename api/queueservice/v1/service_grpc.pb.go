@@ -386,9 +386,9 @@ type QueueServiceClient interface {
 	//
 	// Example:
 	//
-	//	GET /v1/queues/order-processing/messages:peek?limit=10
+	//	GET /v1/queues/order-processing/messages:peek?page_size=10
 	//
-	// Returns: List of messages (up to requested count)
+	// Returns: One deterministically ordered page of pending messages.
 	PeekQueueMessages(ctx context.Context, in *PeekQueueMessagesRequest, opts ...grpc.CallOption) (*PeekQueueMessagesResponse, error)
 	// SendMessageHeartBeat indicates a worker is still processing a message.
 	//
@@ -557,7 +557,7 @@ type QueueServiceClient interface {
 	//
 	// Example:
 	//
-	//	GET /v1/dlq/order-dlq/messages?limit=50
+	//	GET /v1/dlq/order-dlq/messages?page_size=50
 	//
 	// Returns: List of failed messages with error details
 	GetDLQMessages(ctx context.Context, in *GetDLQMessagesRequest, opts ...grpc.CallOption) (*GetDLQMessagesResponse, error)
@@ -1402,9 +1402,9 @@ type QueueServiceServer interface {
 	//
 	// Example:
 	//
-	//	GET /v1/queues/order-processing/messages:peek?limit=10
+	//	GET /v1/queues/order-processing/messages:peek?page_size=10
 	//
-	// Returns: List of messages (up to requested count)
+	// Returns: One deterministically ordered page of pending messages.
 	PeekQueueMessages(context.Context, *PeekQueueMessagesRequest) (*PeekQueueMessagesResponse, error)
 	// SendMessageHeartBeat indicates a worker is still processing a message.
 	//
@@ -1573,7 +1573,7 @@ type QueueServiceServer interface {
 	//
 	// Example:
 	//
-	//	GET /v1/dlq/order-dlq/messages?limit=50
+	//	GET /v1/dlq/order-dlq/messages?page_size=50
 	//
 	// Returns: List of failed messages with error details
 	GetDLQMessages(context.Context, *GetDLQMessagesRequest) (*GetDLQMessagesResponse, error)

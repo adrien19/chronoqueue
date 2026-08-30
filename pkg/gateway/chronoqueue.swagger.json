@@ -88,7 +88,7 @@
     "/v1/dlq/{dlqName}/messages": {
       "get": {
         "summary": "GetDLQMessages retrieves messages from a dead letter queue.",
-        "description": "Dead letter queues contain:\n- Messages that exhausted retry attempts\n- Messages that caused persistent errors\n- Messages rejected by workers\n\nUse for:\n- Investigating failures\n- Manual reprocessing after fixing bugs\n- Identifying systematic issues\n\nExample:\n  GET /v1/dlq/order-dlq/messages?limit=50\n\nReturns: List of failed messages with error details",
+        "description": "Dead letter queues contain:\n- Messages that exhausted retry attempts\n- Messages that caused persistent errors\n- Messages rejected by workers\n\nUse for:\n- Investigating failures\n- Manual reprocessing after fixing bugs\n- Identifying systematic issues\n\nExample:\n  GET /v1/dlq/order-dlq/messages?page_size=50\n\nReturns: List of failed messages with error details",
         "operationId": "QueueService_GetDLQMessages",
         "responses": {
           "200": {
@@ -113,12 +113,18 @@
             "pattern": "[^/]+"
           },
           {
-            "name": "limit",
-            "description": "Maximum results. 0 uses the default of 100; maximum is 1000.",
+            "name": "pageSize",
+            "description": "0 uses the default of 100; maximum is 1000.",
             "in": "query",
             "required": false,
             "type": "integer",
             "format": "int32"
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
@@ -310,6 +316,20 @@
         "parameters": [
           {
             "name": "prefix",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "pageSize",
+            "description": "0 uses the default of 100; maximum is 1000.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "pageToken",
             "in": "query",
             "required": false,
             "type": "string"
@@ -696,7 +716,7 @@
     "/v1/queues/{queueName}/messages:peek": {
       "get": {
         "summary": "PeekQueueMessages views messages without leasing them.",
-        "description": "Use for:\n- Debugging (inspect message payloads)\n- Monitoring (see what's pending)\n- Admin dashboards\n\nDoes NOT:\n- Change message state\n- Create leases\n- Affect message ordering\n\nExample:\n  GET /v1/queues/order-processing/messages:peek?limit=10\n\nReturns: List of messages (up to requested count)",
+        "description": "Use for:\n- Debugging (inspect message payloads)\n- Monitoring (see what's pending)\n- Admin dashboards\n\nDoes NOT:\n- Change message state\n- Create leases\n- Affect message ordering\n\nExample:\n  GET /v1/queues/order-processing/messages:peek?page_size=10\n\nReturns: One deterministically ordered page of pending messages.",
         "operationId": "QueueService_PeekQueueMessages",
         "responses": {
           "200": {
@@ -721,11 +741,12 @@
             "pattern": "[^/]+"
           },
           {
-            "name": "limit",
+            "name": "pageSize",
+            "description": "0 uses the default of 100; maximum is 1000.",
             "in": "query",
             "required": false,
-            "type": "string",
-            "format": "int64"
+            "type": "integer",
+            "format": "int32"
           },
           {
             "name": "priorityRange.min",
@@ -740,6 +761,12 @@
             "required": false,
             "type": "string",
             "format": "int64"
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
@@ -802,6 +829,20 @@
         "parameters": [
           {
             "name": "prefix",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "pageSize",
+            "description": "0 uses the default of 100; maximum is 1000.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "pageToken",
             "in": "query",
             "required": false,
             "type": "string"
@@ -936,11 +977,18 @@
             "pattern": "[^/]+"
           },
           {
-            "name": "limit",
+            "name": "pageSize",
+            "description": "0 uses the default of 100; maximum is 1000.",
             "in": "query",
             "required": false,
-            "type": "string",
-            "format": "int64"
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
@@ -1058,8 +1106,8 @@
             "type": "string"
           },
           {
-            "name": "limit",
-            "description": "Maximum number of results (default: 100)",
+            "name": "pageSize",
+            "description": "0 uses the default of 100; maximum is 1000.",
             "in": "query",
             "required": false,
             "type": "integer",
@@ -1071,6 +1119,12 @@
             "in": "query",
             "required": false,
             "type": "boolean"
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
@@ -1945,6 +1999,9 @@
             "type": "object",
             "$ref": "#/definitions/v1Message"
           }
+        },
+        "nextPageToken": {
+          "type": "string"
         }
       }
     },
@@ -2005,6 +2062,9 @@
       "properties": {
         "scheduleHistory": {
           "$ref": "#/definitions/v1ScheduleHistory"
+        },
+        "nextPageToken": {
+          "type": "string"
         }
       }
     },
@@ -2102,6 +2162,9 @@
             "type": "object",
             "$ref": "#/definitions/v1Queue"
           }
+        },
+        "nextPageToken": {
+          "type": "string"
         }
       }
     },
@@ -2114,6 +2177,9 @@
             "type": "object",
             "$ref": "#/definitions/v1Schedule"
           }
+        },
+        "nextPageToken": {
+          "type": "string"
         }
       }
     },
@@ -2130,6 +2196,9 @@
         "totalCount": {
           "type": "integer",
           "format": "int32"
+        },
+        "nextPageToken": {
+          "type": "string"
         }
       }
     },
@@ -2319,6 +2388,9 @@
             "type": "object",
             "$ref": "#/definitions/v1Message"
           }
+        },
+        "nextPageToken": {
+          "type": "string"
         }
       }
     },

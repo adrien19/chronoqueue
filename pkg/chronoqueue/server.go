@@ -2,6 +2,7 @@ package chronoqueue
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	queueservice_pb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schema_pb "github.com/adrien19/chronoqueue/api/schema/v1"
 	"github.com/adrien19/chronoqueue/internal/domainerror"
+	"github.com/adrien19/chronoqueue/internal/pagination"
 	"github.com/adrien19/chronoqueue/pkg/log"
 	"github.com/adrien19/chronoqueue/pkg/repository"
 	"github.com/adrien19/chronoqueue/pkg/schema"
@@ -400,15 +402,13 @@ func (s *ChronoQueueServer) PreviewCalendarSchedule(ctx context.Context, req *qu
 func (s *ChronoQueueServer) GetDLQMessages(ctx context.Context, req *queueservice_pb.GetDLQMessagesRequest) (*queueservice_pb.GetDLQMessagesResponse, error) {
 	s.logger.InfoWithFields("GetDLQMessages called", "dlq_name", req.GetDlqName())
 
-	messages, err := s.storage.GetDLQMessages(ctx, req.GetDlqName(), req.GetLimit())
+	response, err := s.storage.GetDLQMessagesPage(ctx, req)
 	if err != nil {
 		s.logger.ErrorWithFields("Failed to get DLQ messages", "dlq_name", req.GetDlqName(), "error", err)
 		return nil, domainerror.PrefixMessage(err, "failed to get DLQ messages")
 	}
 
-	return &queueservice_pb.GetDLQMessagesResponse{
-		Messages: messages,
-	}, nil
+	return response, nil
 }
 
 func (s *ChronoQueueServer) RequeueFromDLQ(ctx context.Context, req *queueservice_pb.RequeueFromDLQRequest) (*queueservice_pb.RequeueFromDLQResponse, error) {
@@ -548,18 +548,23 @@ func (s *ChronoQueueServer) GetSchema(ctx context.Context, req *queueservice_pb.
 
 func (s *ChronoQueueServer) ListSchemas(ctx context.Context, req *queueservice_pb.ListSchemasRequest) (*queueservice_pb.ListSchemasResponse, error) {
 	s.logger.Info("ListSchemas called")
-
-	limit := req.GetLimit()
-	if limit < 0 {
-		return nil, domainerror.New(domainerror.InvalidArgument, "schema list limit must not be negative", nil)
+	if req == nil {
+		req = &queueservice_pb.ListSchemasRequest{}
 	}
-	if limit == 0 {
-		limit = 100
+	pageSize, err := pagination.PageSize(req.GetPageSize())
+	if err != nil {
+		return nil, domainerror.New(domainerror.InvalidArgument, err.Error(), err)
+	}
+	filter := fmt.Sprintf("%s:%t", req.GetPrefix(), req.GetActiveOnly())
+	cursor, err := pagination.DecodePosition(req.GetPageToken(), "schemas", filter)
+	if err != nil {
+		return nil, domainerror.New(domainerror.InvalidArgument, err.Error(), err)
 	}
 
 	result, err := s.schemaRegistry.ListWithOptions(ctx, schema.ListOptions{
 		Prefix:     req.GetPrefix(),
-		Limit:      limit,
+		Limit:      pageSize,
+		Cursor:     cursor,
 		ActiveOnly: req.GetActiveOnly(),
 	})
 	if err != nil {
@@ -582,9 +587,17 @@ func (s *ChronoQueueServer) ListSchemas(ctx context.Context, req *queueservice_p
 		})
 	}
 
+	var nextPageToken string
+	if result.NextCursor != "" {
+		nextPageToken, err = pagination.EncodePosition("schemas", filter, result.NextCursor)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &queueservice_pb.ListSchemasResponse{
-		Schemas:    schemasInfo,
-		TotalCount: result.TotalCount,
+		Schemas:       schemasInfo,
+		TotalCount:    result.TotalCount,
+		NextPageToken: nextPageToken,
 	}, nil
 }
 

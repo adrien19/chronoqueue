@@ -56,6 +56,7 @@ type Storage interface {
 
 	// DLQ Management
 	GetDLQMessages(ctx context.Context, dlqName string, limit int32) ([]*messagepb.Message, error)
+	GetDLQMessagesPage(ctx context.Context, request *queueservicepb.GetDLQMessagesRequest) (*queueservicepb.GetDLQMessagesResponse, error)
 	RequeueFromDLQ(ctx context.Context, dlqName string, messageID string, targetQueueName string, resetRetries bool) error
 	DeleteFromDLQ(ctx context.Context, dlqName string, messageID string) error
 	PurgeDLQ(ctx context.Context, dlqName string) error

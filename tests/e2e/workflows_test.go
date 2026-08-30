@@ -177,8 +177,8 @@ func TestE2E_CompleteMessageWorkflow(t *testing.T) {
 	// Step 5: Check DLQ for failed messages
 	t.Log("Step 5: Checking DLQ for failed messages...")
 	dlqResp, err := client.GetDLQMessages(ctx, &queueservice_pb.GetDLQMessagesRequest{
-		DlqName: dlqName,
-		Limit:   10,
+		DlqName:  dlqName,
+		PageSize: 10,
 	})
 
 	require.NoError(t, err)
