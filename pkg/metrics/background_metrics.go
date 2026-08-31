@@ -41,6 +41,41 @@ var (
 		[]string{"service"},
 	)
 
+	backgroundServiceBatchSize = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "chronoqueue_background_service_batch_size",
+			Help:    "Number of candidates handled in each background service batch",
+			Buckets: []float64{1, 10, 25, 50, 100, 250, 500, 1000},
+		},
+		[]string{"service"},
+	)
+
+	backgroundServiceBudgetExhausted = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "chronoqueue_background_service_budget_exhausted_total",
+			Help: "Background service cycles stopped by their batch or duration budget",
+		},
+		[]string{"service"},
+	)
+
+	backgroundServiceCycleBatches = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "chronoqueue_background_service_cycle_batches",
+			Help:    "Number of batches handled in a background service cycle",
+			Buckets: []float64{0, 1, 2, 5, 10, 25, 50},
+		},
+		[]string{"service"},
+	)
+
+	backgroundServiceCycleItems = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "chronoqueue_background_service_cycle_items",
+			Help:    "Number of candidates handled in a background service cycle",
+			Buckets: []float64{0, 1, 10, 50, 100, 250, 500, 1000, 2500, 5000},
+		},
+		[]string{"service"},
+	)
+
 	// messagesCleanedUpTotal tracks the total number of messages permanently deleted
 	// by the cleanup service after their retention period expires.
 	messagesCleanedUpTotal = prometheus.NewCounter(
@@ -68,6 +103,19 @@ func IncrementBackgroundServiceProcessedMessages(service, queueName string) {
 // Service should be: "scheduler" or "reclaim"
 func ObserveBackgroundServiceIterationDuration(service string, durationSeconds float64) {
 	backgroundServiceIterationDuration.WithLabelValues(service).Observe(durationSeconds)
+}
+
+func ObserveBackgroundServiceBatchSize(service string, count int) {
+	backgroundServiceBatchSize.WithLabelValues(service).Observe(float64(count))
+}
+
+func IncrementBackgroundServiceBudgetExhausted(service string) {
+	backgroundServiceBudgetExhausted.WithLabelValues(service).Inc()
+}
+
+func ObserveBackgroundServiceCycle(service string, batches int, items int64) {
+	backgroundServiceCycleBatches.WithLabelValues(service).Observe(float64(batches))
+	backgroundServiceCycleItems.WithLabelValues(service).Observe(float64(items))
 }
 
 // RecordMessagesCleanedUp records the number of messages permanently deleted by cleanup service.

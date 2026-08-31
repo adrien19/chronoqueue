@@ -65,7 +65,7 @@ func NewLeaseMonitorHandler(
 // QueueInflight summarises inflight (RUNNING) message activity for one queue.
 type QueueInflight struct {
 	Queue        string
-	RunningCount int32
+	RunningCount int64
 	// Rows contains individual message detail when available via best-effort peek.
 	Rows []LeaseRow
 }
@@ -121,14 +121,14 @@ func (h *LeaseMonitorHandler) Table(w http.ResponseWriter, r *http.Request) {
 }
 
 // collectInflight fetches RUNNING message counts (and best-effort details) for all queues.
-func (h *LeaseMonitorHandler) collectInflight(ctx context.Context, activeClient *client.ChronoQueueClient) ([]QueueInflight, int32, bool, error) {
+func (h *LeaseMonitorHandler) collectInflight(ctx context.Context, activeClient *client.ChronoQueueClient) ([]QueueInflight, int64, bool, error) {
 	queuesResp, err := activeClient.ListQueues(ctx, "")
 	if err != nil {
 		return nil, 0, false, err
 	}
 
 	var inflight []QueueInflight
-	var totalRunning int32
+	var totalRunning int64
 	partialData := false
 
 	for _, q := range queuesResp.GetQueues() {

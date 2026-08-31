@@ -545,7 +545,7 @@
     "/v1/queues/{queueName}/messages/{messageId}:renewLease": {
       "post": {
         "summary": "RenewMessageLease extends the processing time for a message.",
-        "description": "Use when:\n- Processing takes longer than expected\n- Long-running batch operations\n- External API calls with unpredictable latency\n\nCall periodically during processing to prevent lease expiration.\nattempt_id and worker_id from GetNextMessage are required and must identify\nthe active, unexpired lease.\n\nExample pattern (heartbeat-style lease renewal):\n  msg := getNextMessage()\n  done := make(chan bool)\n\n  go func() {\n      ticker := time.NewTicker(leaseDuration / 2)\n      defer ticker.Stop()\n      for {\n          select {\n          case \u003c-ticker.C:\n              renewMessageLease(msg.MessageId)\n          case \u003c-done:\n              return\n          }\n      }\n  }()\n\n  processMessage(msg)\n  close(done)\n  acknowledgeMessage(msg.MessageId)\n\nReturns: remaining lease time and current state\nErrors:\n  - NotFound: Message doesn't exist or already completed\n  - FailedPrecondition: Message not in RUNNING state",
+        "description": "Use when:\n- Processing takes longer than expected\n- Long-running batch operations\n- External API calls with unpredictable latency\n\nCall periodically during processing to prevent lease expiration.\nattempt_id and worker_id from GetNextMessage are required and must identify\nthe active, unexpired lease.\nAn omitted lease_duration uses the queue/message extend_step. Renewal fails\nwithout consuming a renewal when no positive extension remains.\n\nExample pattern (heartbeat-style lease renewal):\n  msg := getNextMessage()\n  done := make(chan bool)\n\n  go func() {\n      ticker := time.NewTicker(leaseDuration / 2)\n      defer ticker.Stop()\n      for {\n          select {\n          case \u003c-ticker.C:\n              renewMessageLease(msg.MessageId)\n          case \u003c-done:\n              return\n          }\n      }\n  }()\n\n  processMessage(msg)\n  close(done)\n  acknowledgeMessage(msg.MessageId)\n\nReturns: remaining lease time and current state\nErrors:\n  - NotFound: Message doesn't exist or already completed\n  - FailedPrecondition: Message not in RUNNING state",
         "operationId": "QueueService_RenewMessageLease",
         "responses": {
           "200": {
@@ -1080,8 +1080,8 @@
     },
     "/v1/schemas": {
       "get": {
-        "summary": "ListSchemas returns all registered schemas.",
-        "description": "Use for:\n- Schema discovery\n- Admin dashboards\n- Schema management\n\nExample:\n  GET /v1/schemas\n\nReturns: List of schemas (all versions)",
+        "summary": "ListSchemas returns one summary for each registered schema family.",
+        "description": "Use for:\n- Schema discovery\n- Admin dashboards\n- Schema management\n\nExample:\n  GET /v1/schemas\n\nReturns: Latest matching version and aggregate version metadata for each family",
         "operationId": "QueueService_ListSchemas",
         "responses": {
           "200": {
@@ -1972,7 +1972,7 @@
         "HYBRID"
       ],
       "default": "STRICT",
-      "description": "FairnessPolicy determines how messages with different priorities compete for processing.\n\nPriority fairness is critical in systems with both urgent and background tasks.\nWithout fairness policies, low-priority messages could starve indefinitely.\n\n - STRICT: Process strictly by priority (high before medium before low)\n - WEIGHTED: Balance priority with fairness using weights\n - AGING: Boost priority of messages waiting too long\n - HYBRID: Combines weighted and aging strategies"
+      "description": "FairnessPolicy determines how messages with different priorities compete for processing.\n\nPriority fairness is critical in systems with both urgent and background tasks.\nWithout fairness policies, low-priority messages could starve indefinitely.\n\n - STRICT: Process strictly by priority (high before medium before low)\n - WEIGHTED: Balance priority with fairness using weights\n - AGING: Boost a priority band's selection weight when its oldest message waits too long\n - HYBRID: Combines weighted and aging strategies"
     },
     "v1FixedDate": {
       "type": "object",
@@ -2047,8 +2047,8 @@
         "stateCounts": {
           "type": "object",
           "additionalProperties": {
-            "type": "integer",
-            "format": "int32"
+            "type": "string",
+            "format": "int64"
           }
         },
         "earliestDeadline": {
@@ -2143,7 +2143,7 @@
         },
         "extendStep": {
           "type": "string",
-          "description": "extend_step:\nAmount of time to extend the lease by when a heartbeat is received,\nuntil max_extension is exhausted.\n\nExample:\n  base_lease = 3s\n  max_extension = 10s\n  extend_step = 2s\n\nThe attempt can slide its lease by 2s increments up to ~13s total."
+          "description": "extend_step:\nAmount of time to extend the lease when a renewal omits its duration or\nwhen a heartbeat is received, until max_extension is exhausted.\nIf omitted at queue creation, defaults to one fifth of base_lease.\n\nExample:\n  base_lease = 3s\n  max_extension = 10s\n  extend_step = 2s\n\nThe attempt can slide its lease by 2s increments up to ~13s total."
         },
         "maxRenewals": {
           "type": "integer",
@@ -2195,7 +2195,8 @@
         },
         "totalCount": {
           "type": "integer",
-          "format": "int32"
+          "format": "int32",
+          "description": "Number of matching schema families, not versions."
         },
         "nextPageToken": {
           "type": "string"
@@ -2361,11 +2362,11 @@
         },
         "data": {
           "type": "object",
-          "description": "data: The actual message payload as structured data (JSON, Protobuf, etc.).\nThis is your business data - orders, events, tasks, notifications, etc.\nStored as google.protobuf.Struct for flexibility across different data formats."
+          "description": "data: The actual message payload as a JSON-compatible object.\nThis is your business data - orders, events, tasks, notifications, etc.\nValues must be representable by google.protobuf.Struct."
         },
         "contentType": {
           "type": "string",
-          "description": "content_type: MIME type indicating the data format.\nExamples: \"application/json\", \"application/xml\", \"text/plain\", \"application/protobuf\"\nUsed for automatic deserialization and processing by workers."
+          "description": "content_type: MIME type identifying the JSON representation.\nSupported values: \"application/json\" and \"application/x-json\".\nAn empty value defaults to \"application/json\"."
         },
         "schemaId": {
           "type": "string",
@@ -2377,7 +2378,7 @@
           "description": "schema_version: Version number of the schema to use.\nAllows schema evolution while maintaining backward compatibility.\nIf omitted, uses the latest active version of schema_id."
         }
       },
-      "description": "Payload represents the user data and metadata for a message.\n\nThe Payload is the core data container in ChronoQueue that allows you to:\n- Store arbitrary structured data (JSON, XML, binary, etc.)\n- Attach custom metadata for filtering, routing, or tracking\n- Enforce schema validation for data quality\n\nExample usage in Go:\n  payload := \u0026common.Payload{\n      Metadata: map[string]*structpb.Value{\n          \"source\": structpb.NewStringValue(\"web-api\"),\n          \"user_id\": structpb.NewStringValue(\"user-123\"),\n          \"correlation_id\": structpb.NewStringValue(\"req-xyz\"),\n      },\n      Data: dataStruct, // Your business data\n      ContentType: \"application/json\",\n      SchemaId: \"order.v1\",      // Optional: enforce schema\n      SchemaVersion: 1,\n  }\n\nBest practices:\n- Use metadata for: correlation IDs, trace context, routing info, custom headers\n- Use content_type to indicate data format (aids debugging and processing)\n- Use schema_id for validation in production to catch data quality issues early\n- Keep payloads under 256KB for optimal performance (configurable per queue)"
+      "description": "Payload represents the user data and metadata for a message.\n\nThe Payload is the core data container in ChronoQueue that allows you to:\n- Store JSON-compatible structured data\n- Attach custom metadata for filtering, routing, or tracking\n- Enforce schema validation for data quality\n\nExample usage in Go:\n  payload := \u0026common.Payload{\n      Metadata: map[string]*structpb.Value{\n          \"source\": structpb.NewStringValue(\"web-api\"),\n          \"user_id\": structpb.NewStringValue(\"user-123\"),\n          \"correlation_id\": structpb.NewStringValue(\"req-xyz\"),\n      },\n      Data: dataStruct, // Your business data\n      ContentType: \"application/json\",\n      SchemaId: \"order.v1\",      // Optional: enforce schema\n      SchemaVersion: 1,\n  }\n\nBest practices:\n- Use metadata for: correlation IDs, trace context, routing info, custom headers\n- Use content_type to identify the JSON representation\n- Use schema_id for validation in production to catch data quality issues early\n- Keep payloads under 256KB for optimal performance (configurable per queue)"
     },
     "v1PeekQueueMessagesResponse": {
       "type": "object",
@@ -2483,15 +2484,15 @@
         },
         "ageBoostThreshold": {
           "type": "string",
-          "description": "age_boost_threshold: For AGING/HYBRID policies, how long before boosting priority.\nMessages waiting longer than this duration get their priority boosted.\nPrevents indefinite starvation of low-priority messages.\nTypical values: 15m (aggressive), 30m (standard), 1h (relaxed)."
+          "description": "age_boost_threshold: For AGING/HYBRID policies, how long before boosting a band's weight.\nThe boost applies when the oldest eligible message in the band reaches this duration.\nPrevents indefinite starvation of low-priority messages.\nTypical values: 15m (aggressive), 30m (standard), 1h (relaxed)."
         },
         "ageBoostMultiplier": {
           "type": "integer",
           "format": "int32",
-          "description": "age_boost_multiplier: For AGING/HYBRID policies, how much to boost priority.\nPriority multiplied by this factor every age_boost_threshold period.\nExample: multiplier=2, threshold=30m means priority doubles every 30 minutes.\nTypical values: 1.5 (gentle), 2 (standard), 3 (aggressive)."
+          "description": "age_boost_multiplier: For AGING/HYBRID policies, how much to boost an eligible band's weight.\nThe weight is multiplied by this factor once while the threshold condition holds.\nExample: multiplier=2, threshold=30m means the band's weight doubles after 30 minutes.\nTypical values: 1.5 (gentle), 2 (standard), 3 (aggressive)."
         }
       },
-      "description": "PriorityConfig provides fine-grained control over priority-based processing.\n\nExample - Weighted fairness with aging:\n  config := \u0026queue.PriorityConfig{\n      Policy: queue.FairnessPolicy_HYBRID,\n      PriorityWeights: map[int32]int32{\n          4: 70,  // High priority: 70% of processing capacity\n          2: 20,  // Medium priority: 20%\n          0: 10,  // Low priority: 10%\n      },\n      AgeBoostThreshold: durationpb.New(30*time.Minute),  // Boost after 30min wait\n      AgeBoostMultiplier: 2,  // Double the priority every 30min\n  }"
+      "description": "PriorityConfig provides fine-grained control over priority-based processing.\n\nExample - Weighted fairness with aging:\n  config := \u0026queue.PriorityConfig{\n      Policy: queue.FairnessPolicy_HYBRID,\n      PriorityWeights: map[int32]int32{\n          4: 70,  // High priority: 70% of processing capacity\n          2: 20,  // Medium priority: 20%\n          0: 10,  // Low priority: 10%\n      },\n      AgeBoostThreshold: durationpb.New(30*time.Minute),  // Boost after 30min wait\n      AgeBoostMultiplier: 2,  // Double the band's weight after a 30min wait\n  }"
     },
     "v1PurgeDLQResponse": {
       "type": "object",
@@ -2561,7 +2562,7 @@
           "items": {
             "type": "string"
           },
-          "description": "allowed_content_types: List of permitted MIME types for message payloads.\nEmpty list = all content types allowed (default).\nExamples: [\"application/json\"], [\"application/json\", \"application/xml\"]\nUse to enforce data format standards across your organization."
+          "description": "allowed_content_types: List of permitted MIME types for message payloads.\nEmpty list = all supported JSON content types allowed (default).\nExamples: [\"application/json\"], [\"application/json\", \"application/x-json\"]\nUse to enforce data format standards across your organization."
         },
         "priorityConfig": {
           "$ref": "#/definitions/v1PriorityConfig",
@@ -2774,7 +2775,7 @@
           "items": {
             "type": "string"
           },
-          "description": "message_ids: IDs of messages created by this schedule (for tracking/debugging).\nAuto-populated by ChronoQueue. Format: \"{schedule_id}-{timestamp}\"\nUse to correlate schedule executions with processed messages."
+          "description": "message_ids: Deprecated legacy execution IDs.\nNew executions are available through GetScheduleHistory, which retains\nimmutable message snapshots without growing this schedule record."
         },
         "nextRun": {
           "type": "string",
@@ -2913,7 +2914,7 @@
         "latestVersion": {
           "type": "integer",
           "format": "int32",
-          "title": "Latest version number"
+          "description": "Latest version matching the request's active filter."
         },
         "name": {
           "type": "string"
@@ -2938,7 +2939,7 @@
           "type": "boolean"
         }
       },
-      "title": "Schema information for list responses\nNote: This is a summary view with aggregated version info, different from schema.v1.Schema"
+      "description": "Schema information for list responses.\nThis is one family summary with aggregated version info, not a schema version list."
     },
     "v1SendMessageHeartBeatResponse": {
       "type": "object",

@@ -105,3 +105,34 @@ func TestPostgresRegistryActiveSelectionFallsBackFromInactiveLatestVersion(t *te
 	require.NotEmpty(t, validation.GetErrors())
 	require.Equal(t, schemapb.ErrorCode_SCHEMA_NOT_FOUND.String(), validation.GetErrors()[0].GetErrorCode())
 }
+
+func TestPostgresRegistryListReturnsScanErrorWithoutPartialPage(t *testing.T) {
+	ctx := context.Background()
+	container, err := postgrescontainer.Run(ctx, "postgres:17-alpine",
+		postgrescontainer.WithDatabase("chronoqueue"),
+		postgrescontainer.WithUsername("chronoqueue"),
+		postgrescontainer.WithPassword("chronoqueue"),
+		postgrescontainer.BasicWaitStrategies(),
+		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, container.Terminate(ctx)) })
+	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+	db, err := sql.Open("postgres", dsn)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	registry, err := NewPostgresRegistry(db, log.NewLogger())
+	require.NoError(t, err)
+	_, err = registry.Register(ctx, &schemapb.Schema{SchemaId: "bad", Name: "Bad", Content: `{"type":"object"}`})
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `ALTER TABLE cq_schemas ALTER COLUMN version TYPE TEXT USING version::text`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `UPDATE cq_schemas SET version = 'not-an-integer' WHERE schema_id = 'bad'`)
+	require.NoError(t, err)
+
+	result, err := registry.ListWithOptions(ctx, ListOptions{Limit: 10})
+	require.ErrorContains(t, err, "scan schema list row")
+	require.Empty(t, result.Schemas)
+	require.Empty(t, result.NextCursor)
+}

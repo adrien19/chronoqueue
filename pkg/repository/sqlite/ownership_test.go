@@ -43,6 +43,28 @@ func TestExtendMessageLease_ReturnsPolicyCappedRemainingTime(t *testing.T) {
 	require.Greater(t, remainingMs, int64((64 * time.Second).Milliseconds()))
 }
 
+func TestExtendMessageLease_ZeroEffectiveExtensionDoesNotConsumeRenewal(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "renew-zero.db"))
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "owned", Metadata: &queuepb.QueueMetadata{}}))
+	message := reclaimTestMessage("renew-zero", 1, 1)
+	message.Metadata.LeasePolicy = &commonpb.LeasePolicy{
+		BaseLease:    durationpb.New(time.Minute),
+		MaxExtension: durationpb.New(5 * time.Second),
+	}
+	require.NoError(t, storage.EnqueueMessage(ctx, "owned", message))
+	_, err := storage.ClaimMessage(ctx, "owned", "worker", "attempt", "")
+	require.NoError(t, err)
+
+	_, err = storage.ExtendMessageLease(ctx, "owned", message.GetMessageId(), "attempt", "worker", 0)
+	require.ErrorContains(t, err, "lease cannot be extended")
+	var extensionUsed int64
+	var renewalCount int32
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT lease_extension_used, lease_renewal_count FROM cq_messages WHERE message_id = ?`, message.GetMessageId()).Scan(&extensionUsed, &renewalCount))
+	require.Zero(t, extensionUsed)
+	require.Zero(t, renewalCount)
+}
+
 func TestNackMessage_PreservesInfiniteRetries(t *testing.T) {
 	ctx := context.Background()
 	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "nack-infinite.db"))

@@ -18,6 +18,7 @@ import (
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/pkg/log"
+	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
 	"github.com/adrien19/chronoqueue/pkg/repository/sqlite"
 )
 
@@ -76,6 +77,7 @@ func TestCronProcessorExecutesSchedule(t *testing.T) {
 	schedule := &schedulepb.Schedule{
 		ScheduleId: "cron-s1",
 		Metadata: &schedulepb.Schedule_Metadata{
+			MessageIds: []string{"legacy-message"},
 			Headers: []*messagepb.Message_Metadata_Header{
 				{Key: "trace-id", Value: []byte{0x00, 0xff}},
 				{Key: "trace-id", Value: []byte("second")},
@@ -121,6 +123,9 @@ func TestCronProcessorExecutesSchedule(t *testing.T) {
 	require.Equal(t, int64(3), executionCount)
 	require.Equal(t, baseTime.Add(6*time.Minute).UnixMilli(), nextRunMs)
 	require.Equal(t, baseTime.Add(4*time.Minute).UnixMilli(), lastRunMs)
+	updated, err := storage.GetSchedule(ctx, schedule.ScheduleId)
+	require.NoError(t, err)
+	require.False(t, repositorycommon.HasLegacyScheduleMessageIDs(updated.GetMetadata()))
 }
 
 func TestCronProcessorEnforcesMaxMessagesAndResumeResetsLimit(t *testing.T) {
@@ -265,7 +270,7 @@ func TestCronProcessorMarksInvalidExpression(t *testing.T) {
 	require.Contains(t, errorMessage, "invalid cron")
 }
 
-func TestCronProcessorCoalescesMissedRunAndRecoversAfterRestart(t *testing.T) {
+func TestCronProcessorDrainsMissedRunsAndRecoversAfterRestart(t *testing.T) {
 	if os.Getenv("CGO_ENABLED") == "0" {
 		t.Skip("Skipping test because CGO is disabled (required for SQLite)")
 	}
@@ -297,13 +302,20 @@ func TestCronProcessorCoalescesMissedRunAndRecoversAfterRestart(t *testing.T) {
 
 	var count int
 	require.NoError(t, storage.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM cq_messages WHERE queue_name = ?", queue.Name).Scan(&count))
-	require.Equal(t, 1, count, "missed occurrences are coalesced into one execution")
+	require.Equal(t, 6, count, "all due occurrences should drain in bounded transactions")
+	var executedAt int64
+	require.NoError(t, storage.DB.QueryRowContext(ctx, "SELECT MIN(executed_at) FROM cq_schedule_history WHERE schedule_id = ?", schedule.ScheduleId).Scan(&executedAt))
+	require.Equal(t, firstDue.UnixMilli(), executedAt)
+	updated, err := storage.GetSchedule(ctx, schedule.ScheduleId)
+	require.NoError(t, err)
+	require.Equal(t, firstDue.Add(10*time.Minute).UnixMilli(), updated.GetMetadata().GetLastRun().AsTime().UnixMilli())
+	require.False(t, repositorycommon.HasLegacyScheduleMessageIDs(updated.GetMetadata()))
 
 	restartedProcessor := NewCronProcessorService(storage.BaseSQL, time.Second)
 	restartedProcessor.nowFn = func() time.Time { return firstDue.Add(12 * time.Minute) }
 	require.NoError(t, restartedProcessor.RunOnce(ctx))
 	require.NoError(t, storage.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM cq_messages WHERE queue_name = ?", queue.Name).Scan(&count))
-	require.Equal(t, 2, count, "a restarted processor must continue from persisted next_run")
+	require.Equal(t, 7, count, "a restarted processor must continue from persisted next_run")
 }
 
 func TestCronProcessorDoesNotRecordConflictingMessage(t *testing.T) {
@@ -324,6 +336,7 @@ func TestCronProcessorDoesNotRecordConflictingMessage(t *testing.T) {
 	schedule := &schedulepb.Schedule{
 		ScheduleId: "cron-conflict",
 		Metadata: &schedulepb.Schedule_Metadata{
+			MessageIds:     []string{"legacy-message"},
 			State:          schedulepb.Schedule_Metadata_SCHEDULED,
 			QueueName:      queue.Name,
 			NextRun:        timestamppb.New(now),
@@ -345,6 +358,9 @@ func TestCronProcessorDoesNotRecordConflictingMessage(t *testing.T) {
 	require.Equal(t, 1, messageCount)
 	require.Zero(t, historyCount)
 	require.Zero(t, executionCount)
+	updated, err := storage.GetSchedule(ctx, schedule.ScheduleId)
+	require.NoError(t, err)
+	require.True(t, repositorycommon.HasLegacyScheduleMessageIDs(updated.GetMetadata()))
 
 	counts, err := storage.StateManager.GetStateCounts(ctx, storage.DB, queue.Name)
 	require.NoError(t, err)

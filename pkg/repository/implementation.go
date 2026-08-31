@@ -26,6 +26,7 @@ import (
 	repositorysql "github.com/adrien19/chronoqueue/pkg/repository/sql"
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/background"
 	"github.com/adrien19/chronoqueue/pkg/repository/sqlite"
+	"github.com/adrien19/chronoqueue/pkg/schema"
 	"github.com/adrien19/chronoqueue/pkg/validator"
 )
 
@@ -36,18 +37,6 @@ const (
 	BackendSQLite   BackendType = "sqlite"
 	BackendPostgres BackendType = "postgres"
 )
-
-func pageRequest(requested int32, token, scope, filter string) (int32, int64, error) {
-	pageSize, err := pagination.PageSize(requested)
-	if err != nil {
-		return 0, 0, domainerror.New(domainerror.InvalidArgument, err.Error(), err)
-	}
-	offset, err := pagination.Decode(token, scope, filter)
-	if err != nil {
-		return 0, 0, domainerror.New(domainerror.InvalidArgument, err.Error(), err)
-	}
-	return pageSize, offset, nil
-}
 
 func positionPageRequest(requested int32, token, scope, filter string) (int32, string, error) {
 	pageSize, err := pagination.PageSize(requested)
@@ -68,16 +57,30 @@ func positionPageToken(scope, filter, cursor string) (string, error) {
 	return pagination.EncodePosition(scope, filter, cursor)
 }
 
-func finishPage[T any](items []T, pageSize int32, offset int64, scope, filter string) ([]T, string, error) {
-	if len(items) <= int(pageSize) {
-		return items, "", nil
-	}
-	items = items[:pageSize]
-	nextToken, err := pagination.Encode(scope, filter, offset+int64(pageSize))
+func peekPageRequest(requested int32, token, scope, filter string) (int32, *repositorysql.PeekCursor, error) {
+	pageSize, err := pagination.PageSize(requested)
 	if err != nil {
-		return nil, "", err
+		return 0, nil, domainerror.New(domainerror.InvalidArgument, err.Error(), err)
 	}
-	return items, nextToken, nil
+	priority, rowID, err := pagination.DecodePeek(token, scope, filter)
+	if err != nil {
+		return 0, nil, domainerror.New(domainerror.InvalidArgument, err.Error(), err)
+	}
+	if rowID == 0 {
+		return pageSize, nil, nil
+	}
+	return pageSize, &repositorysql.PeekCursor{Priority: priority, RowID: rowID}, nil
+}
+
+func peekPageToken(scope, filter string, cursor *repositorysql.PeekCursor) (string, error) {
+	if cursor == nil {
+		return "", nil
+	}
+	nextToken, err := pagination.EncodePeek(scope, filter, cursor.Priority, cursor.RowID)
+	if err != nil {
+		return "", fmt.Errorf("encode peek page token: %w", err)
+	}
+	return nextToken, nil
 }
 
 // implementation is the concrete implementation of Storage interface
@@ -91,6 +94,7 @@ type implementation struct {
 	cronService      *background.CronProcessorService
 	cleanupService   *background.CleanupService
 	calendarEngine   calendar.Engine
+	schemaRegistry   schema.Registry
 	clock            *repositorysql.Clock
 	cancelFunc       context.CancelFunc
 }
@@ -118,6 +122,8 @@ func NewSQLiteStorage(ctx context.Context, config *sqlite.Config) (Storage, erro
 		reclaimInterval = 5 * time.Second
 	}
 	schedulerService := background.NewSchedulerService(storage.BaseSQL, schedulerInterval)
+	drainConfig := background.DrainConfig{BatchSize: config.BackgroundBatchSize, MaxBatches: config.BackgroundMaxDrainBatches, MaxDuration: config.BackgroundMaxCycleDuration}
+	schedulerService.SetDrainConfig(drainConfig)
 	go schedulerService.Start(bgCtx)
 	config.Logger.Info("Starting SQLite scheduler service", "interval", schedulerInterval)
 
@@ -130,14 +136,17 @@ func NewSQLiteStorage(ctx context.Context, config *sqlite.Config) (Storage, erro
 	config.Logger.Info("Starting SQLite metrics reporter", "interval", "30s")
 
 	calendarService := background.NewCalendarService(storage.BaseSQL, calendarEngine, 1*time.Second)
+	calendarService.SetDrainConfig(drainConfig)
 	go calendarService.Start(bgCtx)
 	config.Logger.Info("Starting SQLite calendar service", "interval", "1s")
 
 	cronService := background.NewCronProcessorService(storage.BaseSQL, 1*time.Second)
+	cronService.SetDrainConfig(drainConfig)
 	go cronService.Start(bgCtx)
 	config.Logger.Info("Starting SQLite cron processor", "interval", "1s")
 
 	cleanupService := background.NewCleanupService(storage.BaseSQL, 1*time.Hour)
+	cleanupService.SetDrainConfig(drainConfig)
 	go cleanupService.Start(bgCtx)
 	config.Logger.Info("Starting SQLite cleanup service", "interval", "1h")
 
@@ -152,6 +161,7 @@ func NewSQLiteStorage(ctx context.Context, config *sqlite.Config) (Storage, erro
 		cronService:      cronService,
 		cleanupService:   cleanupService,
 		calendarEngine:   calendarEngine,
+		schemaRegistry:   config.SchemaRegistry,
 		clock:            storage.Clock,
 		cancelFunc:       cancel,
 	}, nil
@@ -178,6 +188,8 @@ func NewPostgresStorage(ctx context.Context, config *postgres.Config) (Storage, 
 		reclaimInterval = 5 * time.Second
 	}
 	schedulerService := background.NewSchedulerService(storage.BaseSQL, schedulerInterval)
+	drainConfig := background.DrainConfig{BatchSize: config.BackgroundBatchSize, MaxBatches: config.BackgroundMaxDrainBatches, MaxDuration: config.BackgroundMaxCycleDuration}
+	schedulerService.SetDrainConfig(drainConfig)
 	go schedulerService.Start(bgCtx)
 	config.Logger.Info("Starting Postgres scheduler service", "interval", schedulerInterval)
 
@@ -190,14 +202,17 @@ func NewPostgresStorage(ctx context.Context, config *postgres.Config) (Storage, 
 	config.Logger.Info("Starting Postgres metrics reporter", "interval", "30s")
 
 	calendarService := background.NewCalendarService(storage.BaseSQL, calendarEngine, 1*time.Second)
+	calendarService.SetDrainConfig(drainConfig)
 	go calendarService.Start(bgCtx)
 	config.Logger.Info("Starting Postgres calendar service", "interval", "1s")
 
 	cronService := background.NewCronProcessorService(storage.BaseSQL, 1*time.Second)
+	cronService.SetDrainConfig(drainConfig)
 	go cronService.Start(bgCtx)
 	config.Logger.Info("Starting Postgres cron processor", "interval", "1s")
 
 	cleanupService := background.NewCleanupService(storage.BaseSQL, 1*time.Hour)
+	cleanupService.SetDrainConfig(drainConfig)
 	go cleanupService.Start(bgCtx)
 	config.Logger.Info("Starting Postgres cleanup service", "interval", "1h")
 
@@ -212,6 +227,7 @@ func NewPostgresStorage(ctx context.Context, config *postgres.Config) (Storage, 
 		cronService:      cronService,
 		cleanupService:   cleanupService,
 		calendarEngine:   calendarEngine,
+		schemaRegistry:   config.SchemaRegistry,
 		clock:            storage.Clock,
 		cancelFunc:       cancel,
 	}, nil
@@ -247,6 +263,9 @@ func (impl *implementation) Close() error {
 	}
 	if impl.cleanupService != nil {
 		errCleanup = impl.cleanupService.StopGracefully(shutdownCtx)
+	}
+	if engine, ok := impl.calendarEngine.(interface{ Close() }); ok {
+		engine.Close()
 	}
 
 	// Close the appropriate backend
@@ -304,6 +323,13 @@ func (impl *implementation) CreateQueue(ctx context.Context, request *queueservi
 	} else if metadata.LeasePolicy.BaseLease == nil {
 		metadata.LeasePolicy.BaseLease = baseLease
 	}
+	if metadata.LeasePolicy.ExtendStep == nil {
+		extendStep := metadata.LeasePolicy.GetBaseLease().AsDuration() / 5
+		if extendStep < time.Millisecond {
+			extendStep = time.Millisecond
+		}
+		metadata.LeasePolicy.ExtendStep = durationpb.New(extendStep)
+	}
 	if metadata.DefaultMaxAttempts == 0 {
 		metadata.DefaultMaxAttempts = validator.DefaultMaxRetryAttempts
 	}
@@ -316,6 +342,18 @@ func (impl *implementation) CreateQueue(ctx context.Context, request *queueservi
 			return nil, domainerror.InvalidWithFields(err.Error(), []domainerror.FieldViolation{{Field: configErr.Field, Description: configErr.Message}}, err)
 		}
 		return nil, domainerror.New(domainerror.InvalidArgument, err.Error(), err)
+	}
+	if metadata.GetSchemaId() != "" {
+		if impl.schemaRegistry == nil {
+			return nil, domainerror.New(domainerror.FailedPrecondition, "configured schema registry is unavailable", nil)
+		}
+		registered, err := impl.schemaRegistry.GetLatest(ctx, metadata.GetSchemaId())
+		if err != nil {
+			return nil, domainerror.New(domainerror.FailedPrecondition, fmt.Sprintf("configured schema %q is unavailable", metadata.GetSchemaId()), err)
+		}
+		if !registered.GetIsActive() {
+			return nil, domainerror.New(domainerror.FailedPrecondition, fmt.Sprintf("configured schema %q is inactive", metadata.GetSchemaId()), nil)
+		}
 	}
 	if metadata.GetDeadLetterQueueName() != "" && !metadata.GetAutoCreateDlq() {
 		if _, err := impl.backend.GetQueue(ctx, metadata.GetDeadLetterQueueName()); err != nil {
@@ -405,7 +443,7 @@ func (impl *implementation) GetQueueState(ctx context.Context, request *queueser
 	}
 
 	qb := repositorysql.NewQueryBuilder(baseSQL.Dialect)
-	counts := map[string]int32{
+	counts := map[string]int64{
 		"INVISIBLE": 0,
 		"PENDING":   0,
 		"RUNNING":   0,
@@ -427,19 +465,22 @@ func (impl *implementation) GetQueueState(ctx context.Context, request *queueser
 		if err := rows.Scan(&stateInt, &count); err != nil {
 			return nil, fmt.Errorf("scan state count: %w", err)
 		}
+		if count < 0 {
+			return nil, fmt.Errorf("state %d has negative message count %d", stateInt, count)
+		}
 		switch messagepb.Message_Metadata_State(stateInt) {
 		case messagepb.Message_Metadata_INVISIBLE:
-			counts["INVISIBLE"] = int32(count)
+			counts["INVISIBLE"] = count
 		case messagepb.Message_Metadata_PENDING:
-			counts["PENDING"] = int32(count)
+			counts["PENDING"] = count
 		case messagepb.Message_Metadata_RUNNING:
-			counts["RUNNING"] = int32(count)
+			counts["RUNNING"] = count
 		case messagepb.Message_Metadata_COMPLETED:
-			counts["COMPLETED"] = int32(count)
+			counts["COMPLETED"] = count
 		case messagepb.Message_Metadata_CANCELED:
-			counts["CANCELED"] = int32(count)
+			counts["CANCELED"] = count
 		case messagepb.Message_Metadata_ERRORED:
-			counts["ERRORED"] = int32(count)
+			counts["ERRORED"] = count
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -1073,15 +1114,15 @@ func (impl *implementation) PeekQueueMessages(ctx context.Context, request *queu
 		filter = fmt.Sprintf("%s:%d:%d", filter, priorityRange.Min, priorityRange.Max)
 	}
 
-	pageSize, offset, err := pageRequest(request.GetPageSize(), request.GetPageToken(), "peek", filter)
+	pageSize, cursor, err := peekPageRequest(request.GetPageSize(), request.GetPageToken(), "peek", filter)
 	if err != nil {
 		return nil, err
 	}
-	messages, err := impl.backend.PeekMessagesPage(ctx, request.QueueName, pageSize+1, offset, priorityRange)
+	messages, nextCursor, err := impl.backend.PeekMessagesPage(ctx, request.QueueName, pageSize, cursor, priorityRange)
 	if err != nil {
 		return nil, err
 	}
-	messages, nextToken, err := finishPage(messages, pageSize, offset, "peek", filter)
+	nextToken, err := peekPageToken("peek", filter, nextCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1107,7 +1148,7 @@ func (impl *implementation) CreateSchedule(ctx context.Context, request *queuese
 	if meta.GetState() != schedulepb.Schedule_Metadata_SCHEDULED {
 		runtimeFields = append(runtimeFields, domainerror.FieldViolation{Field: "schedule.metadata.state", Description: "must be SCHEDULED when creating a schedule"})
 	}
-	if len(meta.GetMessageIds()) > 0 {
+	if repositorycommon.HasLegacyScheduleMessageIDs(meta) {
 		runtimeFields = append(runtimeFields, domainerror.FieldViolation{Field: "schedule.metadata.message_ids", Description: "is managed by the server"})
 	}
 	if meta.GetNextRun() != nil {

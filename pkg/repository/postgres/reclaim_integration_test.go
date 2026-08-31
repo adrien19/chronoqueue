@@ -5,6 +5,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -99,6 +100,63 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 		require.False(t, heartbeatExpiry.Valid)
 		require.EqualValues(t, time.Second.Milliseconds(), extensionUsed)
 		require.EqualValues(t, 1, renewalCount)
+	})
+
+	t.Run("zero effective renewal does not consume renewal", func(t *testing.T) {
+		const queueName = "renew-zero"
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
+		message := postgresReclaimTestMessage("renew-zero-message", 1, 1)
+		message.Metadata.LeasePolicy = &commonpb.LeasePolicy{BaseLease: durationpb.New(time.Minute), MaxExtension: durationpb.New(5 * time.Second)}
+		require.NoError(t, first.EnqueueMessage(ctx, queueName, message))
+		_, claimErr := first.ClaimMessage(ctx, queueName, "worker", "attempt", "")
+		require.NoError(t, claimErr)
+		_, renewErr := first.ExtendMessageLease(ctx, queueName, message.GetMessageId(), "attempt", "worker", 0)
+		require.ErrorContains(t, renewErr, "lease cannot be extended")
+		var extensionUsed int64
+		var renewalCount int32
+		require.NoError(t, first.DB.QueryRowContext(ctx, `SELECT lease_extension_used, lease_renewal_count FROM cq_messages WHERE message_id = $1`, message.GetMessageId()).Scan(&extensionUsed, &renewalCount))
+		require.Zero(t, extensionUsed)
+		require.Zero(t, renewalCount)
+	})
+
+	t.Run("peek uses stable priority keyset", func(t *testing.T) {
+		const queueName = "peek-keyset"
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
+		for _, message := range []*messagepb.Message{
+			{MessageId: "high-a", Metadata: &messagepb.Message_Metadata{State: messagepb.Message_Metadata_PENDING, Priority: 3}},
+			{MessageId: "high-b", Metadata: &messagepb.Message_Metadata{State: messagepb.Message_Metadata_PENDING, Priority: 3}},
+			{MessageId: "normal", Metadata: &messagepb.Message_Metadata{State: messagepb.Message_Metadata_PENDING, Priority: 2}},
+		} {
+			require.NoError(t, first.EnqueueMessage(ctx, queueName, message))
+		}
+		page, cursor, pageErr := first.PeekMessagesPage(ctx, queueName, 2, nil, nil)
+		require.NoError(t, pageErr)
+		require.NotNil(t, cursor)
+		require.Equal(t, []string{"high-a", "high-b"}, []string{page[0].GetMessageId(), page[1].GetMessageId()})
+		require.NoError(t, first.CancelMessage(ctx, queueName, "high-a", "removed before page two"))
+		require.NoError(t, first.EnqueueMessage(ctx, queueName, &messagepb.Message{MessageId: "urgent", Metadata: &messagepb.Message_Metadata{State: messagepb.Message_Metadata_PENDING, Priority: 4}}))
+		require.NoError(t, first.EnqueueMessage(ctx, queueName, &messagepb.Message{MessageId: "high-aa", Metadata: &messagepb.Message_Metadata{State: messagepb.Message_Metadata_PENDING, Priority: 3}}))
+		require.NoError(t, first.EnqueueMessage(ctx, queueName, &messagepb.Message{MessageId: "high-c", Metadata: &messagepb.Message_Metadata{State: messagepb.Message_Metadata_PENDING, Priority: 3}}))
+		page, cursor, pageErr = first.PeekMessagesPage(ctx, queueName, 10, cursor, nil)
+		require.NoError(t, pageErr)
+		require.Nil(t, cursor)
+		require.Equal(t, []string{"high-aa", "high-c", "normal"}, []string{page[0].GetMessageId(), page[1].GetMessageId(), page[2].GetMessageId()})
+	})
+
+	t.Run("purges DLQ across bounded batches", func(t *testing.T) {
+		const queueName = "batched-purge"
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
+		for index := range dlqPurgeBatchSize*2 + 5 {
+			require.NoError(t, first.EnqueueMessage(ctx, queueName, &messagepb.Message{
+				MessageId: fmt.Sprintf("errored-%03d", index), Metadata: &messagepb.Message_Metadata{State: messagepb.Message_Metadata_ERRORED},
+			}))
+		}
+		deleted, purgeErr := first.PurgeDLQ(ctx, queueName)
+		require.NoError(t, purgeErr)
+		require.EqualValues(t, dlqPurgeBatchSize*2+5, deleted)
+		counts, countErr := first.StateManager.GetStateCounts(ctx, first.DB, queueName)
+		require.NoError(t, countErr)
+		require.Zero(t, counts["errored"])
 	})
 
 	t.Run("archives schedules when deleting queue", func(t *testing.T) {

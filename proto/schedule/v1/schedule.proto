@@ -102,10 +102,10 @@ message Schedule {
         // Messages inherit queue's retry, lease, and DLQ settings.
     string queue_name = 4;
 
-        // message_ids: IDs of messages created by this schedule (for tracking/debugging).
-        // Auto-populated by ChronoQueue. Format: "{schedule_id}-{timestamp}"
-        // Use to correlate schedule executions with processed messages.
-    repeated string message_ids = 5;
+        // message_ids: Deprecated legacy execution IDs.
+        // New executions are available through GetScheduleHistory, which retains
+        // immutable message snapshots without growing this schedule record.
+    repeated string message_ids = 5 [deprecated = true];
 
         // next_run: When this schedule will execute next.
         // Auto-calculated by ChronoQueue based on schedule_config.

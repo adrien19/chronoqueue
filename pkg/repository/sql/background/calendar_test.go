@@ -18,6 +18,7 @@ import (
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
 	"github.com/adrien19/chronoqueue/pkg/calendar"
 	"github.com/adrien19/chronoqueue/pkg/log"
+	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
 	"github.com/adrien19/chronoqueue/pkg/repository/sqlite"
 )
 
@@ -79,6 +80,7 @@ func TestCalendarServiceProcessesDueSchedule(t *testing.T) {
 	schedule := &schedulepb.Schedule{
 		ScheduleId: "s1",
 		Metadata: &schedulepb.Schedule_Metadata{
+			MessageIds: []string{"legacy-message"},
 			Headers: []*messagepb.Message_Metadata_Header{
 				{Key: "trace-id", Value: []byte{0x00, 0xff}},
 				{Key: "trace-id", Value: []byte("second")},
@@ -119,6 +121,7 @@ func TestCalendarServiceProcessesDueSchedule(t *testing.T) {
 	require.NotNil(t, updated.Metadata.NextRun)
 	require.Equal(t, next.UnixMilli(), updated.Metadata.NextRun.AsTime().UnixMilli())
 	require.Equal(t, schedulepb.Schedule_Metadata_SCHEDULED, updated.Metadata.State)
+	require.False(t, repositorycommon.HasLegacyScheduleMessageIDs(updated.GetMetadata()))
 }
 
 func TestCalendarServicePausesWhenNoFutureRuns(t *testing.T) {
@@ -301,6 +304,7 @@ func TestCalendarServiceDoesNotRecordConflictingMessage(t *testing.T) {
 	schedule := &schedulepb.Schedule{
 		ScheduleId: "calendar-conflict",
 		Metadata: &schedulepb.Schedule_Metadata{
+			MessageIds:     []string{"legacy-message"},
 			State:          schedulepb.Schedule_Metadata_SCHEDULED,
 			QueueName:      queue.Name,
 			NextRun:        timestamppb.New(now),
@@ -333,4 +337,5 @@ func TestCalendarServiceDoesNotRecordConflictingMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, schedulepb.Schedule_Metadata_ERRORED, updated.GetMetadata().GetState())
 	require.Contains(t, updated.GetMetadata().GetStateMessage(), "insert message")
+	require.True(t, repositorycommon.HasLegacyScheduleMessageIDs(updated.GetMetadata()))
 }

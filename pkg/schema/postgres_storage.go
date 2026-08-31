@@ -317,8 +317,7 @@ func (r *PostgresRegistry) ListWithOptions(ctx context.Context, options ListOpti
 			&firstCreatedAt,
 			&lastUpdatedAt,
 		); err != nil {
-			r.logger.ErrorWithFields("Failed to scan schema", "error", err)
-			continue
+			return ListResult{}, fmt.Errorf("scan schema list row: %w", err)
 		}
 
 		schema.IsActive = isActive

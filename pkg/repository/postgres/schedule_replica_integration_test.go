@@ -94,7 +94,7 @@ func TestCronSchedule_ExecutesOnceAcrossPostgresReplicas(t *testing.T) {
 	second := newPostgresReclaimTestStorage(t, ctx, dsn)
 	queue := &queuepb.Queue{Name: "cron-replicas", Metadata: &queuepb.QueueMetadata{DefaultMaxAttempts: 1}}
 	require.NoError(t, first.CreateQueue(ctx, queue))
-	now := time.Date(2025, time.January, 5, 10, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Add(-time.Second)
 	payload, err := structpb.NewStruct(map[string]any{"source": "cron-replicas"})
 	require.NoError(t, err)
 	require.NoError(t, first.CreateSchedule(ctx, &schedulepb.Schedule{
@@ -104,7 +104,7 @@ func TestCronSchedule_ExecutesOnceAcrossPostgresReplicas(t *testing.T) {
 			QueueName:      queue.Name,
 			NextRun:        timestamppb.New(now),
 			Payload:        &commonpb.Payload{Data: payload, ContentType: "application/json"},
-			ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "*/2 * * * *"},
+			ScheduleConfig: &schedulepb.Schedule_Metadata_CronSchedule{CronSchedule: "0 0 1 1 *"},
 		},
 	}))
 

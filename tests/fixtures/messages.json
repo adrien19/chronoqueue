@@ -47,8 +47,13 @@
         "priority": 2
     },
     "low_priority_log": {
-        "content": "INFO: Background cleanup job started at 2025-10-20T08:00:00Z",
-        "content_type": "text/plain",
+        "content": {
+            "log_level": "INFO",
+            "message": "Background cleanup job started at 2025-10-20T08:00:00Z",
+            "timestamp": "2025-10-20T08:45:00Z",
+            "job_id": "JOB-98765"
+        },
+        "content_type": "application/json",
         "priority": 0
     },
     "notification": {

@@ -55,7 +55,7 @@ func TestRetentionPolicy_DeleteImmediately(t *testing.T) {
 	msgID := helpers.GenerateUniqueMessageID(t)
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, "Test retention delete immediately"),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	message := &message_pb.Message{
@@ -141,7 +141,7 @@ func TestRetentionPolicy_RetainDuration(t *testing.T) {
 	msgID := helpers.GenerateUniqueMessageID(t)
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, "Test retention duration"),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	message := &message_pb.Message{
@@ -197,7 +197,7 @@ func TestRetentionPolicy_RetainDuration(t *testing.T) {
 
 	stateResp, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{QueueName: queueName})
 	require.NoError(t, err)
-	assert.Equal(t, int32(1), stateResp.GetStateCounts()[message_pb.Message_Metadata_COMPLETED.String()])
+	assert.Equal(t, int64(1), stateResp.GetStateCounts()[message_pb.Message_Metadata_COMPLETED.String()])
 
 	// Peek exposes PENDING messages only.
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
@@ -238,7 +238,7 @@ func TestRetentionPolicy_RetainForever(t *testing.T) {
 	msgID := helpers.GenerateUniqueMessageID(t)
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, "Test retention forever"),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	message := &message_pb.Message{
@@ -293,7 +293,7 @@ func TestRetentionPolicy_RetainForever(t *testing.T) {
 
 	stateResp, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{QueueName: queueName})
 	require.NoError(t, err)
-	assert.Equal(t, int32(1), stateResp.GetStateCounts()[message_pb.Message_Metadata_COMPLETED.String()])
+	assert.Equal(t, int64(1), stateResp.GetStateCounts()[message_pb.Message_Metadata_COMPLETED.String()])
 
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
@@ -337,7 +337,7 @@ func TestRetentionPolicy_NackWithRetention(t *testing.T) {
 	msgID := helpers.GenerateUniqueMessageID(t)
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, "Test NACK with retention"),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	message := &message_pb.Message{
@@ -393,7 +393,7 @@ func TestRetentionPolicy_NackWithRetention(t *testing.T) {
 
 	stateResp, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{QueueName: queueName})
 	require.NoError(t, err)
-	assert.Equal(t, int32(1), stateResp.GetStateCounts()[message_pb.Message_Metadata_ERRORED.String()])
+	assert.Equal(t, int64(1), stateResp.GetStateCounts()[message_pb.Message_Metadata_ERRORED.String()])
 
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
@@ -438,7 +438,7 @@ func TestRetentionPolicy_MultipleMessages(t *testing.T) {
 		msgID := helpers.GenerateUniqueMessageID(t)
 		payload := &common_pb.Payload{
 			Data:        createStructFromString(t, "Test message"),
-			ContentType: "text/plain",
+			ContentType: "application/json",
 		}
 
 		message := &message_pb.Message{
@@ -495,7 +495,7 @@ func TestRetentionPolicy_MultipleMessages(t *testing.T) {
 
 	stateResp, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{QueueName: queueName})
 	require.NoError(t, err)
-	assert.Equal(t, int32(messageCount), stateResp.GetStateCounts()[message_pb.Message_Metadata_COMPLETED.String()])
+	assert.Equal(t, int64(messageCount), stateResp.GetStateCounts()[message_pb.Message_Metadata_COMPLETED.String()])
 
 	// Peek exposes PENDING messages only.
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
@@ -538,7 +538,7 @@ func TestRetentionPolicy_ExplicitDeleteImmediately(t *testing.T) {
 	msgID := helpers.GenerateUniqueMessageID(t)
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, "Test explicit delete immediately"),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	message := &message_pb.Message{

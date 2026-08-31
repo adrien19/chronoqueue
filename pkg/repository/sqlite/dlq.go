@@ -186,47 +186,50 @@ func (s *Storage) DeleteDLQMessage(ctx context.Context, queueName string, messag
 	})
 }
 
-// PurgeDLQ bulk-deletes all messages in ERRORED state for a queue
+const dlqPurgeBatchSize = 100
+
+// PurgeDLQ deletes errored messages in bounded transactions until the queue is empty.
 func (s *Storage) PurgeDLQ(ctx context.Context, queueName string) (int64, error) {
-	var deletedCount int64
+	var total int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return total, fmt.Errorf("purge DLQ canceled after %d messages: %w", total, err)
+		}
+		deleted, err := s.purgeDLQBatch(ctx, queueName, dlqPurgeBatchSize)
+		if err != nil {
+			return total, fmt.Errorf("purge DLQ batch after %d messages: %w", total, err)
+		}
+		total += deleted
+		if deleted < dlqPurgeBatchSize {
+			return total, nil
+		}
+	}
+}
 
+func (s *Storage) purgeDLQBatch(ctx context.Context, queueName string, limit int64) (int64, error) {
+	var deleted int64
 	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
-		// Count messages before deletion
-		var count int64
-		countQuery := `SELECT COUNT(*) FROM cq_messages WHERE queue_name = ? AND state = ?`
-		err := tx.QueryRowContext(ctx, countQuery, queueName, messagepb.Message_Metadata_ERRORED).Scan(&count)
+		query := `
+			DELETE FROM cq_messages
+			WHERE id IN (
+				SELECT id FROM cq_messages
+				WHERE queue_name = ? AND state = ?
+				ORDER BY id
+				LIMIT ?
+			)
+		`
+		result, err := tx.ExecContext(ctx, query, queueName, messagepb.Message_Metadata_ERRORED, limit)
 		if err != nil {
-			return fmt.Errorf("count DLQ messages: %w", err)
+			return fmt.Errorf("delete DLQ message batch: %w", err)
 		}
-
-		if count == 0 {
-			deletedCount = 0
-			return nil
-		}
-
-		// Delete all ERRORED messages
-		deleteQuery := `DELETE FROM cq_messages WHERE queue_name = ? AND state = ?`
-		result, err := tx.ExecContext(ctx, deleteQuery, queueName, messagepb.Message_Metadata_ERRORED)
+		deleted, err = result.RowsAffected()
 		if err != nil {
-			return fmt.Errorf("delete DLQ messages: %w", err)
+			return fmt.Errorf("get deleted DLQ batch size: %w", err)
 		}
-
-		rows, err := result.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("get rows affected: %w", err)
+		if err := s.StateManager.RemoveCounters(ctx, tx, queueName, messagepb.Message_Metadata_ERRORED, deleted); err != nil {
+			return fmt.Errorf("update state counts: %w", err)
 		}
-
-		deletedCount = rows
-
-		// Update state counts (decrement ERRORED state by count)
-		for i := int64(0); i < count; i++ {
-			if err := s.StateManager.RemoveCounter(ctx, tx, queueName, messagepb.Message_Metadata_ERRORED); err != nil {
-				return fmt.Errorf("update state counts: %w", err)
-			}
-		}
-
 		return nil
 	})
-
-	return deletedCount, err
+	return deleted, err
 }

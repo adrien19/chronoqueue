@@ -50,10 +50,33 @@ func NewDefaultEngine(options ...CalendarEngineOption) *DefaultEngine {
 
 	// Initialize cache if enabled
 	if config.EnableCaching {
-		engine.cache = newExecutionCache(config.CacheTTL)
+		cacheConfig := config.CacheConfig
+		if cacheConfig == nil {
+			cacheConfig = &types.CacheConfig{}
+			config.CacheConfig = cacheConfig
+		}
+		if cacheConfig.TTL <= 0 {
+			cacheConfig.TTL = config.CacheTTL
+		}
+		if cacheConfig.TTL <= 0 {
+			cacheConfig.TTL = 24 * time.Hour
+		}
+		if cacheConfig.MaxEntries <= 0 {
+			cacheConfig.MaxEntries = 10000
+		}
+		if cacheConfig.CleanupInterval <= 0 {
+			cacheConfig.CleanupInterval = cacheConfig.TTL / 2
+		}
+		engine.cache = newExecutionCache(cacheConfig.TTL, cacheConfig.MaxEntries, cacheConfig.CleanupInterval)
 	}
 
 	return engine
+}
+
+func (e *DefaultEngine) Close() {
+	if e.cache != nil {
+		e.cache.close()
+	}
 }
 
 // CalculateNextRun calculates the next execution time for a calendar schedule

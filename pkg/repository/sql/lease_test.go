@@ -111,3 +111,34 @@ func TestLeaseRuntimeCalculator_ExtendLeaseAddsToCurrentExpiryAndCapsExtension(t
 	assert.Equal(t, currentExpiry+3_000, runtime.LeaseExpiry)
 	assert.EqualValues(t, 5_000, runtime.LeaseExtensionUsed)
 }
+
+func TestLeaseRuntimeCalculatorRejectsZeroEffectiveExtension(t *testing.T) {
+	calculator := NewLeaseRuntimeCalculator(NewClock())
+	currentExpiry := time.Now().Add(time.Minute).UnixMilli()
+	policy := &commonpb.LeasePolicy{MaxExtension: durationpb.New(5 * time.Second)}
+
+	runtime, err := calculator.ExtendLease(policy, currentExpiry, 0, 0)
+	assert.ErrorIs(t, err, ErrInvalidLeaseExtension)
+	assert.Nil(t, runtime)
+}
+
+func TestLeaseRuntimeCalculatorRejectsExhaustedExtensionWithoutMutation(t *testing.T) {
+	calculator := NewLeaseRuntimeCalculator(NewClock())
+	currentExpiry := time.Now().Add(time.Minute).UnixMilli()
+	policy := &commonpb.LeasePolicy{MaxExtension: durationpb.New(5 * time.Second), ExtendStep: durationpb.New(time.Second)}
+
+	runtime, err := calculator.ExtendLease(policy, currentExpiry, 5_000, 1_000)
+	assert.ErrorIs(t, err, ErrMaxExtensionReached)
+	assert.Nil(t, runtime)
+}
+
+func TestLeaseRuntimeCalculatorUsesLastMillisecondOfCapacity(t *testing.T) {
+	calculator := NewLeaseRuntimeCalculator(NewClock())
+	currentExpiry := time.Now().Add(time.Minute).UnixMilli()
+	policy := &commonpb.LeasePolicy{MaxExtension: durationpb.New(5 * time.Second), ExtendStep: durationpb.New(time.Second)}
+
+	runtime, err := calculator.ExtendLease(policy, currentExpiry, 4_999, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, currentExpiry+1, runtime.LeaseExpiry)
+	assert.EqualValues(t, 5_000, runtime.LeaseExtensionUsed)
+}

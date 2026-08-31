@@ -871,7 +871,7 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
 
 		newLeaseRuntime, err := s.LeaseRuntime.ExtendLease(leasePolicy, currentLeaseExpiry, leaseExtensionUsed, extensionMs)
 		if err != nil {
-			return domainerror.New(domainerror.FailedPrecondition, "maximum lease extension reached", err)
+			return domainerror.New(domainerror.FailedPrecondition, "lease cannot be extended", err)
 		}
 
 		updateQuery := s.ph(`
@@ -1003,13 +1003,19 @@ func (s *Storage) PeekMessages(ctx context.Context, queueName string, limit int3
 
 // PeekMessagesWithPriorityRange retrieves messages within an optional inclusive priority range.
 func (s *Storage) PeekMessagesWithPriorityRange(ctx context.Context, queueName string, limit int32, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error) {
-	return s.PeekMessagesPage(ctx, queueName, limit, 0, priorityRange)
+	messages, _, err := s.PeekMessagesPage(ctx, queueName, limit, nil, priorityRange)
+	return messages, err
 }
 
-func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit int32, offset int64, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error) {
+func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit int32, cursor *repositorysql.PeekCursor, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, *repositorysql.PeekCursor, error) {
+	if limit <= 0 {
+		return nil, nil, nil
+	}
 	nowMs := s.Clock.NowMs()
 	query := `
-	SELECT metadata_pb,
+	SELECT id,
+	       priority,
+	       metadata_pb,
 	       state,
 	       attempts_left,
 	       max_attempts,
@@ -1031,20 +1037,26 @@ func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit 
 		query += ` AND priority BETWEEN ? AND ?`
 		args = append(args, priorityRange.Min, priorityRange.Max)
 	}
+	if cursor != nil {
+		query += ` AND (priority < ? OR (priority = ? AND id > ?))`
+		args = append(args, cursor.Priority, cursor.Priority, cursor.RowID)
+	}
 	query += `
-        ORDER BY priority DESC, id ASC
-		LIMIT ? OFFSET ?
+		ORDER BY priority DESC, id ASC
+		LIMIT ?
 	`
-	args = append(args, limit, offset)
+	args = append(args, limit+1)
 
 	rows, err := s.DB.QueryContext(ctx, s.ph(query), args...)
 	if err != nil {
-		return nil, fmt.Errorf("query messages: %w", err)
+		return nil, nil, fmt.Errorf("query messages: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
 	var messages []*messagepb.Message
+	var cursors []repositorysql.PeekCursor
 	for rows.Next() {
+		var rowID, priority int64
 		var messageBytes []byte
 		var stateInt int32
 		var attemptsLeft int32
@@ -1059,6 +1071,8 @@ func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit 
 		var heartbeatExpiry sql.NullInt64
 
 		if err := rows.Scan(
+			&rowID,
+			&priority,
 			&messageBytes,
 			&stateInt,
 			&attemptsLeft,
@@ -1072,16 +1086,16 @@ func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit 
 			&lastHeartbeatAt,
 			&heartbeatExpiry,
 		); err != nil {
-			return nil, fmt.Errorf("scan message: %w", err)
+			return nil, nil, fmt.Errorf("scan message: %w", err)
 		}
 
 		msg, err := s.Serializer.UnmarshalMessage(messageBytes)
 		if err != nil {
-			return nil, fmt.Errorf("unmarshal message: %w", err)
+			return nil, nil, fmt.Errorf("unmarshal message: %w", err)
 		}
 
 		if err := repositorycommon.DecryptMessagePayload(msg, s.KeyManager); err != nil {
-			return nil, fmt.Errorf("decrypt message payload: %w", err)
+			return nil, nil, fmt.Errorf("decrypt message payload: %w", err)
 		}
 
 		repositorycommon.ApplyRuntimeMetadata(msg, repositorycommon.RuntimeMetadata{
@@ -1109,7 +1123,14 @@ func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit 
 		})
 
 		messages = append(messages, msg)
+		cursors = append(cursors, repositorysql.PeekCursor{Priority: priority, RowID: rowID})
 	}
-
-	return messages, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	if len(messages) <= int(limit) {
+		return messages, nil, nil
+	}
+	nextCursor := cursors[limit-1]
+	return messages[:limit], &nextCursor, nil
 }

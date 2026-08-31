@@ -88,7 +88,7 @@ type FairnessPolicy int32
 const (
 	FairnessPolicy_STRICT   FairnessPolicy = 0 // Process strictly by priority (high before medium before low)
 	FairnessPolicy_WEIGHTED FairnessPolicy = 1 // Balance priority with fairness using weights
-	FairnessPolicy_AGING    FairnessPolicy = 2 // Boost priority of messages waiting too long
+	FairnessPolicy_AGING    FairnessPolicy = 2 // Boost a priority band's selection weight when its oldest message waits too long
 	FairnessPolicy_HYBRID   FairnessPolicy = 3 // Combines weighted and aging strategies
 )
 
@@ -262,8 +262,8 @@ type QueueMetadata struct {
 	// Note: Very large messages impact performance - consider using references instead.
 	MaxPayloadSize int32 `protobuf:"varint,10,opt,name=max_payload_size,json=maxPayloadSize,proto3" json:"max_payload_size,omitempty"`
 	// allowed_content_types: List of permitted MIME types for message payloads.
-	// Empty list = all content types allowed (default).
-	// Examples: ["application/json"], ["application/json", "application/xml"]
+	// Empty list = all supported JSON content types allowed (default).
+	// Examples: ["application/json"], ["application/json", "application/x-json"]
 	// Use to enforce data format standards across your organization.
 	AllowedContentTypes []string `protobuf:"bytes,11,rep,name=allowed_content_types,json=allowedContentTypes,proto3" json:"allowed_content_types,omitempty"`
 	// priority_config: Advanced priority scheduling configuration.
@@ -491,7 +491,7 @@ func (x *MessageRetentionPolicy) GetRetentionSeconds() int64 {
 //	        0: 10,  // Low priority: 10%
 //	    },
 //	    AgeBoostThreshold: durationpb.New(30*time.Minute),  // Boost after 30min wait
-//	    AgeBoostMultiplier: 2,  // Double the priority every 30min
+//	    AgeBoostMultiplier: 2,  // Double the band's weight after a 30min wait
 //	}
 type PriorityConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -503,14 +503,14 @@ type PriorityConfig struct {
 	// Value: relative weight (e.g., 70, 20, 10 = 70% high, 20% medium, 10% low)
 	// Weights are relative - they're normalized to percentages.
 	PriorityWeights map[int32]int32 `protobuf:"bytes,2,rep,name=priority_weights,json=priorityWeights,proto3" json:"priority_weights,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	// age_boost_threshold: For AGING/HYBRID policies, how long before boosting priority.
-	// Messages waiting longer than this duration get their priority boosted.
+	// age_boost_threshold: For AGING/HYBRID policies, how long before boosting a band's weight.
+	// The boost applies when the oldest eligible message in the band reaches this duration.
 	// Prevents indefinite starvation of low-priority messages.
 	// Typical values: 15m (aggressive), 30m (standard), 1h (relaxed).
 	AgeBoostThreshold *durationpb.Duration `protobuf:"bytes,3,opt,name=age_boost_threshold,json=ageBoostThreshold,proto3" json:"age_boost_threshold,omitempty"`
-	// age_boost_multiplier: For AGING/HYBRID policies, how much to boost priority.
-	// Priority multiplied by this factor every age_boost_threshold period.
-	// Example: multiplier=2, threshold=30m means priority doubles every 30 minutes.
+	// age_boost_multiplier: For AGING/HYBRID policies, how much to boost an eligible band's weight.
+	// The weight is multiplied by this factor once while the threshold condition holds.
+	// Example: multiplier=2, threshold=30m means the band's weight doubles after 30 minutes.
 	// Typical values: 1.5 (gentle), 2 (standard), 3 (aggressive).
 	AgeBoostMultiplier int32 `protobuf:"varint,4,opt,name=age_boost_multiplier,json=ageBoostMultiplier,proto3" json:"age_boost_multiplier,omitempty"`
 	unknownFields      protoimpl.UnknownFields

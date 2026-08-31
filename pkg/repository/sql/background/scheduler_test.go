@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -32,7 +33,7 @@ func TestSchedulerActivationIsCompareAndSet(t *testing.T) {
 	require.NoError(t, err)
 
 	service := NewSchedulerService(storage.BaseSQL, time.Second)
-	candidates, err := service.collectScheduledMessages(ctx, storage.Clock.NowMs())
+	candidates, err := service.collectScheduledMessages(ctx, storage.Clock.NowMs(), service.batchSize)
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	candidate := candidates[0]
@@ -50,4 +51,30 @@ func TestSchedulerActivationIsCompareAndSet(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 0, counts["invisible"])
 	require.EqualValues(t, 1, counts["pending"])
+}
+
+func TestSchedulerDrainsMultipleBatchesInOneCycle(t *testing.T) {
+	ctx := context.Background()
+	storage := newTestStorage(t)
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+	queueName := "scheduled-drain"
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
+	due := time.Now().Add(-time.Minute)
+	for index := range 3 {
+		require.NoError(t, storage.EnqueueMessage(ctx, queueName, &messagepb.Message{
+			MessageId: fmt.Sprintf("due-%d", index),
+			Metadata: &messagepb.Message_Metadata{
+				State:         messagepb.Message_Metadata_INVISIBLE,
+				ScheduledTime: timestamppb.New(due),
+			},
+		}))
+	}
+	service := NewSchedulerService(storage.BaseSQL, time.Second)
+	service.batchSize = 1
+	service.maxDrainBatches = 3
+	require.NoError(t, service.RunOnce(ctx))
+	counts, err := storage.StateManager.GetStateCounts(ctx, storage.DB, queueName)
+	require.NoError(t, err)
+	require.EqualValues(t, 3, counts["pending"])
+	require.Zero(t, counts["invisible"])
 }

@@ -30,7 +30,7 @@ const (
 // Payload represents the user data and metadata for a message.
 //
 // The Payload is the core data container in ChronoQueue that allows you to:
-// - Store arbitrary structured data (JSON, XML, binary, etc.)
+// - Store JSON-compatible structured data
 // - Attach custom metadata for filtering, routing, or tracking
 // - Enforce schema validation for data quality
 //
@@ -50,7 +50,7 @@ const (
 //
 // Best practices:
 // - Use metadata for: correlation IDs, trace context, routing info, custom headers
-// - Use content_type to indicate data format (aids debugging and processing)
+// - Use content_type to identify the JSON representation
 // - Use schema_id for validation in production to catch data quality issues early
 // - Keep payloads under 256KB for optimal performance (configurable per queue)
 type Payload struct {
@@ -59,13 +59,13 @@ type Payload struct {
 	// Common uses: correlation IDs, trace context, source system, user ID, tenant ID.
 	// These values are indexed and can be queried without deserializing the data field.
 	Metadata map[string]*structpb.Value `protobuf:"bytes,1,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// data: The actual message payload as structured data (JSON, Protobuf, etc.).
+	// data: The actual message payload as a JSON-compatible object.
 	// This is your business data - orders, events, tasks, notifications, etc.
-	// Stored as google.protobuf.Struct for flexibility across different data formats.
+	// Values must be representable by google.protobuf.Struct.
 	Data *structpb.Struct `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
-	// content_type: MIME type indicating the data format.
-	// Examples: "application/json", "application/xml", "text/plain", "application/protobuf"
-	// Used for automatic deserialization and processing by workers.
+	// content_type: MIME type identifying the JSON representation.
+	// Supported values: "application/json" and "application/x-json".
+	// An empty value defaults to "application/json".
 	ContentType string `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
 	// schema_id: Reference to a registered schema for validation.
 	// If provided, ChronoQueue validates the data against this schema before accepting the message.
@@ -166,8 +166,9 @@ type LeasePolicy struct {
 	// If zero/unset, heartbeat-based timeout is disabled.
 	HeartbeatTimeout *durationpb.Duration `protobuf:"bytes,3,opt,name=heartbeat_timeout,json=heartbeatTimeout,proto3" json:"heartbeat_timeout,omitempty"`
 	// extend_step:
-	// Amount of time to extend the lease by when a heartbeat is received,
-	// until max_extension is exhausted.
+	// Amount of time to extend the lease when a renewal omits its duration or
+	// when a heartbeat is received, until max_extension is exhausted.
+	// If omitted at queue creation, defaults to one fifth of base_lease.
 	//
 	// Example:
 	//

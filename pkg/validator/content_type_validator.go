@@ -11,12 +11,9 @@ import (
 
 // SupportedContentTypes defines the MIME types we support
 var SupportedContentTypes = map[string]bool{
-	"application/json":         true,
-	"application/x-json":       true,
-	"text/plain":               true,
-	"application/xml":          true,
-	"application/octet-stream": true,
-	"":                         true, // Empty defaults to application/json
+	"application/json":   true,
+	"application/x-json": true,
+	"":                   true, // Empty defaults to application/json
 }
 
 // ContentTypeValidator validates message content types
@@ -63,7 +60,7 @@ func (v *ContentTypeValidator) Validate(ctx context.Context, msg *message_pb.Mes
 				schema_pb.ErrorCode_CONTENT_TYPE_INVALID,
 				"Unsupported content type",
 			).WithDetail("provided", contentType).
-				WithDetail("supported", "application/json, text/plain, application/xml, application/octet-stream"),
+				WithDetail("supported", "application/json, application/x-json"),
 		)
 		return result
 	}

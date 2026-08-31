@@ -23,11 +23,14 @@ type Config struct {
 	// Conn carries connection details (DSN overrides discrete fields when set).
 	Conn ConnectionConfig
 
-	Logger            *log.Logger
-	KeyManager        *keymanager.EncryptionKeyManager
-	SchedulerInterval time.Duration
-	ReclaimInterval   time.Duration
-	SchemaRegistry    schema.Registry
+	Logger                     *log.Logger
+	KeyManager                 *keymanager.EncryptionKeyManager
+	SchedulerInterval          time.Duration
+	ReclaimInterval            time.Duration
+	SchemaRegistry             schema.Registry
+	BackgroundBatchSize        int
+	BackgroundMaxDrainBatches  int
+	BackgroundMaxCycleDuration time.Duration
 }
 
 func (c *Config) connectionConfig() *ConnectionConfig {

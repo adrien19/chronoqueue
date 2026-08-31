@@ -13,7 +13,7 @@ option go_package = "github.com/adrien19/chronoqueue/api/common/v1;common";
 // Payload represents the user data and metadata for a message.
 //
 // The Payload is the core data container in ChronoQueue that allows you to:
-// - Store arbitrary structured data (JSON, XML, binary, etc.)
+// - Store JSON-compatible structured data
 // - Attach custom metadata for filtering, routing, or tracking
 // - Enforce schema validation for data quality
 //
@@ -32,7 +32,7 @@ option go_package = "github.com/adrien19/chronoqueue/api/common/v1;common";
 //
 // Best practices:
 // - Use metadata for: correlation IDs, trace context, routing info, custom headers
-// - Use content_type to indicate data format (aids debugging and processing)
+// - Use content_type to identify the JSON representation
 // - Use schema_id for validation in production to catch data quality issues early
 // - Keep payloads under 256KB for optimal performance (configurable per queue)
   message Payload {
@@ -41,14 +41,14 @@ option go_package = "github.com/adrien19/chronoqueue/api/common/v1;common";
     // These values are indexed and can be queried without deserializing the data field.
     map<string, google.protobuf.Value> metadata = 1;
 
-    // data: The actual message payload as structured data (JSON, Protobuf, etc.).
+    // data: The actual message payload as a JSON-compatible object.
     // This is your business data - orders, events, tasks, notifications, etc.
-    // Stored as google.protobuf.Struct for flexibility across different data formats.
+    // Values must be representable by google.protobuf.Struct.
     google.protobuf.Struct data = 2;
 
-    // content_type: MIME type indicating the data format.
-    // Examples: "application/json", "application/xml", "text/plain", "application/protobuf"
-    // Used for automatic deserialization and processing by workers.
+    // content_type: MIME type identifying the JSON representation.
+    // Supported values: "application/json" and "application/x-json".
+    // An empty value defaults to "application/json".
     string content_type = 3;
 
     // schema_id: Reference to a registered schema for validation.
@@ -85,8 +85,9 @@ option go_package = "github.com/adrien19/chronoqueue/api/common/v1;common";
     google.protobuf.Duration heartbeat_timeout = 3;
 
   // extend_step:
-  // Amount of time to extend the lease by when a heartbeat is received,
-  // until max_extension is exhausted.
+  // Amount of time to extend the lease when a renewal omits its duration or
+  // when a heartbeat is received, until max_extension is exhausted.
+  // If omitted at queue creation, defaults to one fifth of base_lease.
   //
   // Example:
   //   base_lease = 3s

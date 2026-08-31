@@ -64,8 +64,39 @@ func (sm *StateManager) MoveCounter(ctx context.Context, tx *sql.Tx, sourceQueue
 }
 
 func (sm *StateManager) RemoveCounter(ctx context.Context, tx *sql.Tx, queueName string, state messagepb.Message_Metadata_State) error {
-	if err := sm.decrementCounter(ctx, tx, queueName, state); err != nil {
+	if err := sm.RemoveCounters(ctx, tx, queueName, state, 1); err != nil {
 		return fmt.Errorf("decrement %s counter: %w", state.String(), err)
+	}
+	return nil
+}
+
+func (sm *StateManager) RemoveCounters(ctx context.Context, tx *sql.Tx, queueName string, state messagepb.Message_Metadata_State, count int64) error {
+	if count < 0 {
+		return fmt.Errorf("counter decrement must be non-negative: %d", count)
+	}
+	if count == 0 {
+		return nil
+	}
+	stateKey := sm.stateToKey(state)
+	jsonSet := sm.dialect.JSONSet()
+	jsonSetPath := sm.dialect.JSONSetPath(stateKey)
+	jsonExtract := sm.dialect.JSONExtract()
+	jsonExtractPath := sm.dialect.JSONExtractPath(stateKey)
+
+	query := fmt.Sprintf(`
+		UPDATE cq_queues
+		SET state_counts = %s(
+			COALESCE(state_counts, '{}'),
+			%s,
+			%s
+		)
+		WHERE name = %s
+	`, jsonSet, jsonSetPath,
+		sm.dialect.ToJSON(fmt.Sprintf("COALESCE(CAST(%s(state_counts, %s) AS INTEGER), 0) - %s", jsonExtract, jsonExtractPath, sm.dialect.Placeholder(1))),
+		sm.dialect.Placeholder(2))
+
+	if _, err := tx.ExecContext(ctx, query, count, queueName); err != nil {
+		return fmt.Errorf("decrement %s counter by %d: %w", state.String(), count, err)
 	}
 	return nil
 }

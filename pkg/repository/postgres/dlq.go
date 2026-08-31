@@ -184,47 +184,57 @@ func (s *Storage) DeleteDLQMessage(ctx context.Context, queueName string, messag
 	})
 }
 
-// PurgeDLQ deletes all errored messages for a queue and returns the count deleted.
+const (
+	dlqPurgeBatchSize  = 100
+	dlqPurgeMaxBatches = 1000
+)
+
+// PurgeDLQ deletes errored messages in bounded transactions until the queue is empty.
 func (s *Storage) PurgeDLQ(ctx context.Context, queueName string) (int64, error) {
-	var deletedCount int64
+	var total int64
+	for batch := 0; batch < dlqPurgeMaxBatches; batch++ {
+		if err := ctx.Err(); err != nil {
+			return total, fmt.Errorf("purge DLQ canceled after %d messages: %w", total, err)
+		}
+		deleted, err := s.purgeDLQBatch(ctx, queueName, dlqPurgeBatchSize)
+		if err != nil {
+			return total, fmt.Errorf("purge DLQ batch after %d messages: %w", total, err)
+		}
+		total += deleted
+		if deleted < dlqPurgeBatchSize {
+			return total, nil
+		}
+	}
+	return total, nil
+}
+
+func (s *Storage) purgeDLQBatch(ctx context.Context, queueName string, limit int64) (int64, error) {
+	var deleted int64
 	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
-		countQuery := s.ph(`SELECT COUNT(*) FROM cq_messages WHERE queue_name = ? AND state = ?`)
-		var count int64
-		if err := tx.QueryRowContext(ctx, countQuery, queueName, int(messagepb.Message_Metadata_ERRORED)).Scan(&count); err != nil {
-			return fmt.Errorf("count DLQ messages: %w", err)
-		}
-
-		if count == 0 {
-			deletedCount = 0
-			return nil
-		}
-
-		deleteQuery := s.ph(`DELETE FROM cq_messages WHERE queue_name = ? AND state = ?`)
-		result, err := tx.ExecContext(ctx, deleteQuery, queueName, int(messagepb.Message_Metadata_ERRORED))
+		query := s.ph(`
+			DELETE FROM cq_messages
+			WHERE id IN (
+				SELECT id FROM cq_messages
+				WHERE queue_name = ? AND state = ?
+				ORDER BY id
+				LIMIT ?
+				FOR UPDATE SKIP LOCKED
+			)
+		`)
+		result, err := tx.ExecContext(ctx, query, queueName, int(messagepb.Message_Metadata_ERRORED), limit)
 		if err != nil {
-			return fmt.Errorf("delete DLQ messages: %w", err)
+			return fmt.Errorf("delete DLQ message batch: %w", err)
 		}
-
-		rows, err := result.RowsAffected()
+		deleted, err = result.RowsAffected()
 		if err != nil {
-			return fmt.Errorf("get rows affected: %w", err)
+			return fmt.Errorf("get deleted DLQ batch size: %w", err)
 		}
-
-		deletedCount = rows
-
-		for i := int64(0); i < rows; i++ {
-			if err := s.StateManager.RemoveCounter(ctx, tx, queueName, messagepb.Message_Metadata_ERRORED); err != nil {
-				return fmt.Errorf("update state counters: %w", err)
-			}
+		if err := s.StateManager.RemoveCounters(ctx, tx, queueName, messagepb.Message_Metadata_ERRORED, deleted); err != nil {
+			return fmt.Errorf("update state counts: %w", err)
 		}
-
 		return nil
 	})
-	if err != nil {
-		return 0, err
-	}
-
-	return deletedCount, nil
+	return deleted, err
 }
 
 // FindExpiredMessages finds messages with expired leases or heartbeats.

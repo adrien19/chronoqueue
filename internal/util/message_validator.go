@@ -94,6 +94,9 @@ func ValidateLeasePolicy(policy *common_pb.LeasePolicy) error {
 	if baseLease <= 0 {
 		return fmt.Errorf("lease_policy.base_lease must be > 0, got %v", baseLease)
 	}
+	if baseLease.Milliseconds() <= 0 {
+		return fmt.Errorf("lease_policy.base_lease must be at least 1 millisecond, got %v", baseLease)
+	}
 
 	// Rule 2: Base lease must be reasonable (not too long)
 	if baseLease > 1*time.Hour {
@@ -103,11 +106,17 @@ func ValidateLeasePolicy(policy *common_pb.LeasePolicy) error {
 	if maxExtension < 0 {
 		return fmt.Errorf("lease_policy.max_extension must be >= 0, got %v", maxExtension)
 	}
+	if maxExtension > 0 && maxExtension.Milliseconds() <= 0 {
+		return fmt.Errorf("lease_policy.max_extension must be at least 1 millisecond when set, got %v", maxExtension)
+	}
 	if heartbeatTimeout < 0 {
 		return fmt.Errorf("lease_policy.heartbeat_timeout must be >= 0, got %v", heartbeatTimeout)
 	}
 	if extendStep < 0 {
 		return fmt.Errorf("lease_policy.extend_step must be >= 0, got %v", extendStep)
+	}
+	if extendStep > 0 && extendStep.Milliseconds() <= 0 {
+		return fmt.Errorf("lease_policy.extend_step must be at least 1 millisecond when set, got %v", extendStep)
 	}
 	if policy.GetMaxRenewals() < 0 {
 		return fmt.Errorf("lease_policy.max_renewals must be >= 0, got %d", policy.GetMaxRenewals())

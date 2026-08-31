@@ -87,11 +87,18 @@ func (lrc *LeaseRuntimeCalculator) ExtendLease(
 	if actualExtensionMs > remainingExtensionMs {
 		actualExtensionMs = remainingExtensionMs
 	}
+	if actualExtensionMs <= 0 {
+		return nil, ErrInvalidLeaseExtension
+	}
 
 	newExtensionUsed := currentExtensionUsed + actualExtensionMs
+	newLeaseExpiry := currentLeaseExpiry + actualExtensionMs
+	if newLeaseExpiry <= currentLeaseExpiry {
+		return nil, ErrInvalidLeaseExtension
+	}
 
 	return &LeaseRuntime{
-		LeaseExpiry:        currentLeaseExpiry + actualExtensionMs,
+		LeaseExpiry:        newLeaseExpiry,
 		LeaseExtensionUsed: newExtensionUsed,
 	}, nil
 }
@@ -112,5 +119,6 @@ func (lrc *LeaseRuntimeCalculator) Heartbeat() *LeaseRuntime {
 
 // Common errors
 var (
-	ErrMaxExtensionReached = fmt.Errorf("maximum lease extension reached")
+	ErrMaxExtensionReached   = fmt.Errorf("maximum lease extension reached")
+	ErrInvalidLeaseExtension = fmt.Errorf("lease extension must advance expiry by at least 1 millisecond")
 )

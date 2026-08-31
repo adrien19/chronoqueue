@@ -126,6 +126,23 @@ func TestSQLiteRegistryRejectsUnsupportedContentType(t *testing.T) {
 	require.Contains(t, err.Error(), "unsupported schema content type")
 }
 
+func TestSQLiteRegistryListReturnsScanErrorWithoutPartialPage(t *testing.T) {
+	registry, cleanup := setupTestSQLiteRegistry(t)
+	defer cleanup()
+	ctx := context.Background()
+	_, err := registry.Register(ctx, &schema_pb.Schema{SchemaId: "good", Name: "Good", Content: `{"type":"object"}`})
+	require.NoError(t, err)
+	_, err = registry.Register(ctx, &schema_pb.Schema{SchemaId: "bad", Name: "Bad", Content: `{"type":"object"}`})
+	require.NoError(t, err)
+	_, err = registry.db.ExecContext(ctx, `UPDATE cq_schemas SET version = 'not-an-integer' WHERE schema_id = 'bad'`)
+	require.NoError(t, err)
+
+	result, err := registry.ListWithOptions(ctx, ListOptions{Limit: 10})
+	require.ErrorContains(t, err, "scan schema list row")
+	require.Empty(t, result.Schemas)
+	require.Empty(t, result.NextCursor)
+}
+
 func TestSQLiteRegistryRoundTripsMetadata(t *testing.T) {
 	registry, cleanup := setupTestSQLiteRegistry(t)
 	defer cleanup()
