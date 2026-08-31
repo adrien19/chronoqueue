@@ -483,7 +483,7 @@ func (c *CronProcessorService) createCronMessage(ctx context.Context, tx *sql.Tx
 		return "", fmt.Errorf("insert message: %w", err)
 	}
 
-	if err := c.base.StateManager.UpdateCounters(ctx, tx, queueName, 0, messagepb.Message_Metadata_INVISIBLE); err != nil {
+	if err := c.base.StateManager.InsertCounter(ctx, tx, queueName, messagepb.Message_Metadata_INVISIBLE); err != nil {
 		return "", fmt.Errorf("update counters: %w", err)
 	}
 

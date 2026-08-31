@@ -237,7 +237,7 @@ func (s *Storage) enqueueMessageInTx(ctx context.Context, tx *sql.Tx, queueName 
 		return "", fmt.Errorf("%w: %s", repositorycommon.ErrDuplicateMessageID, message.MessageId)
 	}
 
-	if err := s.StateManager.UpdateCounters(ctx, tx, queueName, 0, metadata.State); err != nil {
+	if err := s.StateManager.InsertCounter(ctx, tx, queueName, metadata.State); err != nil {
 		return "", fmt.Errorf("update counters: %w", err)
 	}
 
@@ -524,6 +524,9 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 			}
 		}
 
+		if shouldDelete {
+			return s.StateManager.RemoveCounter(ctx, tx, queueName, messagepb.Message_Metadata_RUNNING)
+		}
 		return s.StateManager.UpdateCounters(ctx, tx, queueName, messagepb.Message_Metadata_RUNNING, messagepb.Message_Metadata_COMPLETED)
 	})
 
@@ -542,6 +545,7 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error {
 	var movedToDLQ bool
 	var exhausted bool
+	var removed bool
 	var dlqName string
 
 	// Fetch queue metadata outside transaction to avoid connection pool contention
@@ -593,6 +597,7 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 			}
 
 			if shouldDelete {
+				removed = true
 				deleteQuery := s.ph(`
 					DELETE FROM cq_messages
 					WHERE queue_name = ? AND message_id = ? AND state = ?
@@ -682,6 +687,9 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 		if movedToDLQ && dlqName != "" {
 			return s.StateManager.MoveCounter(ctx, tx, queueName, oldState, dlqName, newState)
 		}
+		if removed {
+			return s.StateManager.RemoveCounter(ctx, tx, queueName, oldState)
+		}
 		return s.StateManager.UpdateCounters(ctx, tx, queueName, oldState, newState)
 	})
 
@@ -716,7 +724,7 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 
 	err = s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		// Verify message exists and is in cancellable state
-		query := s.ph(`SELECT state FROM cq_messages WHERE message_id = ? AND queue_name = ?`)
+		query := s.ph(`SELECT state FROM cq_messages WHERE message_id = ? AND queue_name = ? FOR UPDATE`)
 		err := tx.QueryRowContext(ctx, query, messageId, queueName).Scan(&currentState)
 		if err == sql.ErrNoRows {
 			return domainerror.New(domainerror.NotFound, fmt.Sprintf("message %q not found", messageId), err)
@@ -798,6 +806,9 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 		}
 
 		// Update state counters
+		if shouldDelete {
+			return s.StateManager.RemoveCounter(ctx, tx, queueName, currentState)
+		}
 		return s.StateManager.UpdateCounters(ctx, tx, queueName, currentState, messagepb.Message_Metadata_CANCELED)
 	})
 

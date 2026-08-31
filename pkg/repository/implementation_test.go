@@ -91,6 +91,7 @@ type stubBackend struct {
 	cancelErr        error
 	extendRemaining  int64
 	pingErr          error
+	acknowledged     int
 }
 
 type stubEngine struct {
@@ -256,11 +257,24 @@ func (b *stubBackend) ClaimMessageWithLeaseDuration(ctx context.Context, queueNa
 }
 
 func (b *stubBackend) AcknowledgeMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error {
+	b.acknowledged++
 	return nil
 }
 
 func (b *stubBackend) NackMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error {
 	return nil
+}
+
+func TestAcknowledgeMessage_DefaultStateCompletes(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend}
+	attemptID, workerID := "attempt", "worker"
+	response, err := impl.AcknowledgeMessage(context.Background(), &queueservicepb.AcknowledgeMessageRequest{
+		QueueName: "queue", MessageId: "message", AttemptId: &attemptID, WorkerId: &workerID,
+	})
+	require.NoError(t, err)
+	require.True(t, response.GetSuccess())
+	require.Equal(t, 1, backend.acknowledged)
 }
 
 func (b *stubBackend) CancelMessage(ctx context.Context, queueName string, messageId string, reason string) error {

@@ -12,7 +12,7 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/schema"
 )
 
-const latestVersion = uint(9)
+const latestVersion = uint(10)
 
 type SchemaManager struct {
 	baseManager *schema.BaseManager
@@ -136,12 +136,74 @@ func (m *SchemaManager) Migrate(ctx context.Context, db *sql.DB, targetVersion u
 			if err := m.migrateToV9_AddDLQRelationshipIndex(ctx, db); err != nil {
 				return fmt.Errorf("migrate to version 9: %w", err)
 			}
+		case 10:
+			if err := m.migrateToV10_NormalizeMessageRuntime(ctx, db); err != nil {
+				return fmt.Errorf("migrate to version 10: %w", err)
+			}
 		default:
 			return fmt.Errorf("unsupported target version %d", v)
 		}
 	}
 
 	return nil
+}
+
+func (m *SchemaManager) migrateToV10_NormalizeMessageRuntime(ctx context.Context, db *sql.DB) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin migration tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var messagesExist bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'cq_messages')`).Scan(&messagesExist); err != nil {
+		return fmt.Errorf("inspect messages table: %w", err)
+	}
+	if messagesExist {
+		for _, column := range []string{"created_at", "updated_at"} {
+			query := fmt.Sprintf("UPDATE cq_messages SET %s = unixepoch(%s) * 1000 WHERE typeof(%s) = 'text'", column, column, column)
+			if _, err := tx.ExecContext(ctx, query); err != nil {
+				return fmt.Errorf("normalize message %s: %w", column, err)
+			}
+		}
+	}
+	var stateCountsColumn bool
+	rows, err := tx.QueryContext(ctx, `PRAGMA table_info(cq_queues)`)
+	if err != nil {
+		return fmt.Errorf("inspect queues table: %w", err)
+	}
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("scan queues table: %w", err)
+		}
+		stateCountsColumn = stateCountsColumn || name == "state_counts"
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("iterate queues table info: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close queues table info: %w", err)
+	}
+	if messagesExist && stateCountsColumn {
+		if _, err := tx.ExecContext(ctx, `
+		UPDATE cq_queues SET state_counts = json_object(
+			'invisible', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 0),
+			'pending', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 1),
+			'running', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 2),
+			'completed', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 3),
+			'errored', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 4),
+			'canceled', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 5))`); err != nil {
+			return fmt.Errorf("rebuild queue state counters: %w", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES (?, ?)`, 10, "Normalize message timestamps and rebuild state counters"); err != nil {
+		return fmt.Errorf("record schema version: %w", err)
+	}
+	return tx.Commit()
 }
 
 func (m *SchemaManager) migrateToV9_AddDLQRelationshipIndex(ctx context.Context, db *sql.DB) error {

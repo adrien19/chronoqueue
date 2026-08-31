@@ -87,6 +87,7 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 		return nil, fmt.Errorf("get queue metadata: %w", err)
 	}
 	dlqName := queueMetadata.GetDeadLetterQueueName()
+	shouldDelete, deletedAt := s.calculateDeletion(queueMetadata.GetMessageRetentionPolicy())
 	err = s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		nowMs := s.nowMs()
 		var leaseExpiry, heartbeatExpiry sql.NullInt64
@@ -109,6 +110,10 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 		if !result.LeaseExpired && !result.HeartbeatExpired {
 			return fmt.Errorf("message is no longer expired")
 		}
+		var completedAt, terminalDeletedAt any
+		if dlqName == "" && message.GetMetadata().GetAttemptsLeft() != -1 && message.GetMetadata().GetAttemptsLeft() <= 1 {
+			completedAt, terminalDeletedAt = nowMs, deletedAt
+		}
 		updateQuery := s.ph(`
             UPDATE cq_messages
             SET state = CASE WHEN max_attempts = -1 OR attempts_left > 1 THEN ?::integer ELSE ?::integer END,
@@ -121,6 +126,8 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
                 lease_renewal_count = 0,
                 last_heartbeat_at = NULL,
                 heartbeat_expiry = NULL,
+				completed_at = ?,
+				deleted_at = ?,
                 updated_at = ?
 			WHERE queue_name = ?
 			  AND message_id = ?
@@ -138,6 +145,8 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 			updateQuery,
 			messagepb.Message_Metadata_PENDING,
 			messagepb.Message_Metadata_ERRORED,
+			completedAt,
+			terminalDeletedAt,
 			nowMs,
 			queueName,
 			message.GetMessageId(),
@@ -153,6 +162,17 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 		}
 		if err != nil {
 			return fmt.Errorf("update message: %w", err)
+		}
+		if newState == messagepb.Message_Metadata_ERRORED && dlqName == "" && shouldDelete {
+			deleteResult, err := tx.ExecContext(ctx, `DELETE FROM cq_messages WHERE queue_name = $1 AND message_id = $2 AND state = $3`, queueName, message.GetMessageId(), newState)
+			if err != nil {
+				return fmt.Errorf("delete exhausted message: %w", err)
+			}
+			rows, rowsErr := deleteResult.RowsAffected()
+			if rowsErr != nil || rows != 1 {
+				return fmt.Errorf("delete exhausted message: expected one row, deleted %d: %w", rows, rowsErr)
+			}
+			return s.StateManager.RemoveCounter(ctx, tx, queueName, messagepb.Message_Metadata_RUNNING)
 		}
 
 		if newState == messagepb.Message_Metadata_ERRORED && dlqName != "" {

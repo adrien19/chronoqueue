@@ -4,6 +4,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -28,7 +29,9 @@ func TestReclaimExpiredMessage_UsesAuthoritativeAttemptsAndFencesAttempt(t *test
 	second := newReclaimTestStorage(t, ctx, path)
 
 	queueName := "reclaim-fencing"
-	require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
+	require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{
+		MessageRetentionPolicy: &queuepb.MessageRetentionPolicy{Mode: queuepb.MessageRetentionPolicy_RETAIN_FOREVER},
+	}}))
 	require.NoError(t, first.EnqueueMessage(ctx, queueName, reclaimTestMessage("finite", 2, 2)))
 
 	claimed, err := first.ClaimMessage(ctx, queueName, "worker-1", "attempt-1", "")
@@ -128,6 +131,43 @@ func TestReclaimExpiredMessage_PreservesInfiniteRetries(t *testing.T) {
 	require.Len(t, peeked, 1)
 	assert.Equal(t, messagepb.Message_Metadata_PENDING, peeked[0].GetMetadata().GetState())
 	assert.EqualValues(t, -1, peeked[0].GetMetadata().GetAttemptsLeft())
+}
+
+func TestReclaimExpiredMessage_AppliesTerminalRetention(t *testing.T) {
+	ctx := context.Background()
+	for _, tt := range []struct {
+		name       string
+		policy     *queuepb.MessageRetentionPolicy
+		wantRow    bool
+		wantExpiry bool
+	}{
+		{name: "delete immediately", policy: &queuepb.MessageRetentionPolicy{Mode: queuepb.MessageRetentionPolicy_DELETE_IMMEDIATELY}},
+		{name: "retain duration", policy: &queuepb.MessageRetentionPolicy{Mode: queuepb.MessageRetentionPolicy_RETAIN_DURATION, RetentionSeconds: 60}, wantRow: true, wantExpiry: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "retention.db"))
+			require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "retention", Metadata: &queuepb.QueueMetadata{MessageRetentionPolicy: tt.policy}}))
+			require.NoError(t, storage.EnqueueMessage(ctx, "retention", reclaimTestMessage("message", 1, 1)))
+			claimed, err := storage.ClaimMessage(ctx, "retention", "worker", "attempt", "")
+			require.NoError(t, err)
+			expireReclaimTestMessage(t, ctx, storage, claimed.GetMessageId())
+			expired, err := storage.FindExpiredMessages(ctx, "retention", 1)
+			require.NoError(t, err)
+			require.Len(t, expired, 1)
+			_, err = storage.ReclaimExpiredMessage(ctx, "retention", expired[0])
+			require.NoError(t, err)
+
+			var completedAt, deletedAt sql.NullInt64
+			err = storage.DB.QueryRowContext(ctx, `SELECT completed_at, deleted_at FROM cq_messages WHERE queue_name = ? AND message_id = ?`, "retention", "message").Scan(&completedAt, &deletedAt)
+			if !tt.wantRow {
+				require.ErrorIs(t, err, sql.ErrNoRows)
+				return
+			}
+			require.NoError(t, err)
+			require.True(t, completedAt.Valid)
+			require.Equal(t, tt.wantExpiry, deletedAt.Valid)
+		})
+	}
 }
 
 func newReclaimTestStorage(t *testing.T, ctx context.Context, path string) *Storage {

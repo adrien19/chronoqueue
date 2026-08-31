@@ -85,6 +85,19 @@ func NewStorage(ctx context.Context, config *Config) (*Storage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open connection: %w", err)
 	}
+	migrationConn, err := db.Conn(ctx)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("acquire migration connection: %w", err)
+	}
+	defer func() { _ = migrationConn.Close() }()
+	if _, err := migrationConn.ExecContext(ctx, `SELECT pg_advisory_lock(hashtext('chronoqueue_schema_migration'))`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("lock schema migration: %w", err)
+	}
+	defer func() {
+		_, _ = migrationConn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(hashtext('chronoqueue_schema_migration'))`)
+	}()
 
 	// Create schema manager
 	schemaManager := NewSchemaManager()

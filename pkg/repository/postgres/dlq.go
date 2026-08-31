@@ -13,6 +13,7 @@ import (
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
+	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
 )
 
 func (s *Storage) GetDLQMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error) {
@@ -60,6 +61,10 @@ func (s *Storage) GetDLQMessagesPage(ctx context.Context, queueName string, limi
 		msg, err := s.Serializer.UnmarshalMessage(messageBytes)
 		if err != nil {
 			scanErr = fmt.Errorf("unmarshal message: %w", err)
+			break
+		}
+		if err := repositorycommon.DecryptMessagePayload(msg, s.KeyManager); err != nil {
+			scanErr = fmt.Errorf("decrypt message payload: %w", err)
 			break
 		}
 		if msg.GetMetadata() == nil {

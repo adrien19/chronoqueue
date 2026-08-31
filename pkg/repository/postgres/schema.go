@@ -12,7 +12,7 @@ import (
 	"github.com/adrien19/chronoqueue/pkg/repository/sql/schema"
 )
 
-const latestVersion = uint(9)
+const latestVersion = uint(10)
 
 // SchemaManager handles PostgreSQL schema initialization and versioning.
 type SchemaManager struct {
@@ -136,12 +136,50 @@ func (m *SchemaManager) Migrate(ctx context.Context, db *sql.DB, targetVersion u
 			if err := m.migrateToV9_AddDLQRelationshipIndex(ctx, db); err != nil {
 				return fmt.Errorf("migrate to version 9: %w", err)
 			}
+		case 10:
+			if err := m.migrateToV10_RebuildStateCounters(ctx, db); err != nil {
+				return fmt.Errorf("migrate to version 10: %w", err)
+			}
 		default:
 			return fmt.Errorf("unsupported target version %d", v)
 		}
 	}
 
 	return nil
+}
+
+func (m *SchemaManager) migrateToV10_RebuildStateCounters(ctx context.Context, db *sql.DB) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin migration tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var canRebuild bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
+		SELECT 1 FROM information_schema.columns
+		WHERE table_schema = current_schema() AND table_name = 'cq_queues' AND column_name = 'state_counts'
+	) AND EXISTS (
+		SELECT 1 FROM information_schema.tables
+		WHERE table_schema = current_schema() AND table_name = 'cq_messages'
+	)`).Scan(&canRebuild); err != nil {
+		return fmt.Errorf("inspect state counter tables: %w", err)
+	}
+	if canRebuild {
+		if _, err := tx.ExecContext(ctx, `
+		UPDATE cq_queues SET state_counts = jsonb_build_object(
+			'invisible', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 0),
+			'pending', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 1),
+			'running', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 2),
+			'completed', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 3),
+			'errored', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 4),
+			'canceled', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 5))`); err != nil {
+			return fmt.Errorf("rebuild queue state counters: %w", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES ($1, $2)`, 10, "Rebuild queue state counters"); err != nil {
+		return fmt.Errorf("record schema version: %w", err)
+	}
+	return tx.Commit()
 }
 
 func (m *SchemaManager) migrateToV9_AddDLQRelationshipIndex(ctx context.Context, db *sql.DB) error {

@@ -44,6 +44,14 @@ func (sm *StateManager) UpdateCounters(
 	return nil
 }
 
+// InsertCounter records a newly inserted message without decrementing a prior state.
+func (sm *StateManager) InsertCounter(ctx context.Context, tx *sql.Tx, queueName string, state messagepb.Message_Metadata_State) error {
+	if err := sm.incrementCounter(ctx, tx, queueName, state); err != nil {
+		return fmt.Errorf("increment %s counter: %w", state.String(), err)
+	}
+	return nil
+}
+
 // MoveCounter transfers one message between queues without inventing an intermediate state.
 func (sm *StateManager) MoveCounter(ctx context.Context, tx *sql.Tx, sourceQueue string, sourceState messagepb.Message_Metadata_State, targetQueue string, targetState messagepb.Message_Metadata_State) error {
 	if err := sm.decrementCounter(ctx, tx, sourceQueue, sourceState); err != nil {
@@ -133,6 +141,8 @@ func (sm *StateManager) stateToKey(state messagepb.Message_Metadata_State) strin
 		return "errored"
 	case messagepb.Message_Metadata_COMPLETED:
 		return "completed"
+	case messagepb.Message_Metadata_CANCELED:
+		return "canceled"
 	default:
 		return "unknown"
 	}
@@ -152,16 +162,17 @@ func (sm *StateManager) GetStateCounts(
 			COALESCE(CAST(%s(state_counts, '$.running') AS INTEGER), 0) as running,
 			COALESCE(CAST(%s(state_counts, '$.invisible') AS INTEGER), 0) as invisible,
 			COALESCE(CAST(%s(state_counts, '$.errored') AS INTEGER), 0) as errored,
-			COALESCE(CAST(%s(state_counts, '$.completed') AS INTEGER), 0) as completed
+			COALESCE(CAST(%s(state_counts, '$.completed') AS INTEGER), 0) as completed,
+			COALESCE(CAST(%s(state_counts, '$.canceled') AS INTEGER), 0) as canceled
 		FROM cq_queues
 		WHERE name = %s
-	`, jsonExtract, jsonExtract, jsonExtract, jsonExtract, jsonExtract, sm.dialect.Placeholder(1))
+	`, jsonExtract, jsonExtract, jsonExtract, jsonExtract, jsonExtract, jsonExtract, sm.dialect.Placeholder(1))
 
 	counts := make(map[string]int64)
-	var pending, running, invisible, errored, completed int64
+	var pending, running, invisible, errored, completed, canceled int64
 
 	err := db.QueryRowContext(ctx, query, queueName).Scan(
-		&pending, &running, &invisible, &errored, &completed,
+		&pending, &running, &invisible, &errored, &completed, &canceled,
 	)
 	if err != nil {
 		return nil, err
@@ -172,6 +183,7 @@ func (sm *StateManager) GetStateCounts(
 	counts["invisible"] = invisible
 	counts["errored"] = errored
 	counts["completed"] = completed
+	counts["canceled"] = canceled
 
 	return counts, nil
 }

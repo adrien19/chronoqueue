@@ -76,6 +76,59 @@ func TestEncryptionKeyRotation_SQLiteRestartWithoutHistoricalKeyFailsClaim(t *te
 	assert.Nil(t, message)
 }
 
+func TestGetDLQMessages_DecryptsPayload(t *testing.T) {
+	ctx := context.Background()
+	logger := log.NewLogger()
+	manager := newSQLiteRotationKeyManager(t, logger, "0123456789abcdef", nil)
+	storage, err := NewStorage(ctx, &Config{Path: filepath.Join(t.TempDir(), "encrypted-dlq.db"), Logger: logger, KeyManager: manager})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+	queueName := "encrypted-dlq"
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{
+		MessageRetentionPolicy: &queuepb.MessageRetentionPolicy{Mode: queuepb.MessageRetentionPolicy_RETAIN_FOREVER},
+	}}))
+	require.NoError(t, storage.EnqueueMessage(ctx, queueName, sqliteRotationMessage("failed", "plaintext")))
+	_, err = storage.ClaimMessage(ctx, queueName, "worker", "attempt", "")
+	require.NoError(t, err)
+	require.NoError(t, storage.NackMessage(ctx, queueName, "failed", "attempt", "worker"))
+
+	messages, err := storage.GetDLQMessages(ctx, queueName, 1)
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.Equal(t, "plaintext", messages[0].GetMetadata().GetPayload().GetMetadata()["version"].GetStringValue())
+}
+
+func TestGetDLQMessages_ReturnsPayloadDecryptionError(t *testing.T) {
+	ctx := context.Background()
+	logger := log.NewLogger()
+	manager := newSQLiteRotationKeyManager(t, logger, "0123456789abcdef", nil)
+	storage, err := NewStorage(ctx, &Config{Path: filepath.Join(t.TempDir(), "corrupt-dlq.db"), Logger: logger, KeyManager: manager})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+	queueName := "corrupt-dlq"
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{
+		MessageRetentionPolicy: &queuepb.MessageRetentionPolicy{Mode: queuepb.MessageRetentionPolicy_RETAIN_FOREVER},
+	}}))
+	require.NoError(t, storage.EnqueueMessage(ctx, queueName, sqliteRotationMessage("failed", "plaintext")))
+	_, err = storage.ClaimMessage(ctx, queueName, "worker", "attempt", "")
+	require.NoError(t, err)
+	require.NoError(t, storage.NackMessage(ctx, queueName, "failed", "attempt", "worker"))
+
+	var messageBytes []byte
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT metadata_pb FROM cq_messages WHERE queue_name = ? AND message_id = ?`, queueName, "failed").Scan(&messageBytes))
+	message, err := storage.Serializer.UnmarshalMessage(messageBytes)
+	require.NoError(t, err)
+	message.Metadata.Payload.Metadata["encryptedPayload"] = structpb.NewStringValue("not-base64")
+	messageBytes, err = storage.Serializer.MarshalMessage(message)
+	require.NoError(t, err)
+	_, err = storage.DB.ExecContext(ctx, `UPDATE cq_messages SET metadata_pb = ? WHERE queue_name = ? AND message_id = ?`, messageBytes, queueName, "failed")
+	require.NoError(t, err)
+
+	messages, err := storage.GetDLQMessages(ctx, queueName, 1)
+	require.ErrorContains(t, err, "decrypt message payload")
+	require.Nil(t, messages)
+}
+
 func newSQLiteRotationKeyManager(t *testing.T, logger *log.Logger, current string, previous []string) *keymanager.EncryptionKeyManager {
 	t.Helper()
 	t.Setenv("ENCRYPTION_KEY", current)

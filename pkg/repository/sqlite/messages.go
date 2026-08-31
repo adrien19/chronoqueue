@@ -199,7 +199,7 @@ func (s *Storage) enqueueMessageInTx(ctx context.Context, tx *sql.Tx, queueName 
 		INSERT INTO cq_messages (
 			message_id, queue_name, state, attempts_left, max_attempts,
 			priority, scheduled_at, metadata_pb, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(queue_name, message_id) DO NOTHING
 	`
 
@@ -220,6 +220,8 @@ func (s *Storage) enqueueMessageInTx(ctx context.Context, tx *sql.Tx, queueName 
 		metadata.Priority,
 		scheduledTimeMs,
 		messageBytes,
+		s.Clock.NowMs(),
+		s.Clock.NowMs(),
 	)
 	if err != nil {
 		return "", fmt.Errorf("insert message: %w", err)
@@ -235,7 +237,7 @@ func (s *Storage) enqueueMessageInTx(ctx context.Context, tx *sql.Tx, queueName 
 		return "", fmt.Errorf("%w: %s", repositorycommon.ErrDuplicateMessageID, message.MessageId)
 	}
 
-	if err := s.StateManager.UpdateCounters(ctx, tx, queueName, 0, metadata.State); err != nil {
+	if err := s.StateManager.InsertCounter(ctx, tx, queueName, metadata.State); err != nil {
 		return "", fmt.Errorf("update counters: %w", err)
 	}
 
@@ -406,7 +408,7 @@ func (s *Storage) ClaimMessageWithLeaseDuration(ctx context.Context, queueName s
 				lease_renewal_count = 0,
 				last_heartbeat_at = ?,
 				heartbeat_expiry = ?,
-				updated_at = CURRENT_TIMESTAMP
+				updated_at = ?
 			WHERE id = ?
 		`
 		_, err = tx.ExecContext(
@@ -418,6 +420,7 @@ func (s *Storage) ClaimMessageWithLeaseDuration(ctx context.Context, queueName s
 			leaseRuntime.LeaseExpiry,
 			leaseRuntime.LastHeartbeatAt,
 			leaseRuntime.HeartbeatExpiry,
+			nowMs,
 			id,
 		)
 		if err != nil {
@@ -529,6 +532,9 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 			}
 		}
 
+		if shouldDelete {
+			return s.StateManager.RemoveCounter(ctx, tx, queueName, messagepb.Message_Metadata_RUNNING)
+		}
 		return s.StateManager.UpdateCounters(ctx, tx, queueName, messagepb.Message_Metadata_RUNNING, messagepb.Message_Metadata_COMPLETED)
 	})
 
@@ -546,6 +552,7 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error {
 	var movedToDLQ bool
 	var exhausted bool
+	var removed bool
 	var dlqName string
 
 	// Fetch queue metadata outside transaction to avoid connection pool contention
@@ -596,6 +603,7 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 			}
 
 			if shouldDelete {
+				removed = true
 				deleteQuery := `
 					DELETE FROM cq_messages
 					WHERE queue_name = ? AND message_id = ? AND state = ?
@@ -684,6 +692,9 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 
 		if movedToDLQ && dlqName != "" {
 			return s.StateManager.MoveCounter(ctx, tx, queueName, oldState, dlqName, newState)
+		}
+		if removed {
+			return s.StateManager.RemoveCounter(ctx, tx, queueName, oldState)
 		}
 		return s.StateManager.UpdateCounters(ctx, tx, queueName, oldState, newState)
 	})
@@ -800,6 +811,9 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 		}
 
 		// Update state counters
+		if shouldDelete {
+			return s.StateManager.RemoveCounter(ctx, tx, queueName, currentState)
+		}
 		return s.StateManager.UpdateCounters(ctx, tx, queueName, currentState, messagepb.Message_Metadata_CANCELED)
 	})
 
@@ -874,7 +888,7 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
 			SET lease_expiry = ?,
 				lease_extension_used = ?,
 				lease_renewal_count = lease_renewal_count + 1,
-				updated_at = CURRENT_TIMESTAMP
+				updated_at = ?
 			WHERE queue_name = ? AND message_id = ? AND state = ?
 			  AND current_attempt_id = ? AND current_worker_id = ?
 			  AND lease_expiry > ?
@@ -885,6 +899,7 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
 			ctx, updateQuery,
 			newLeaseRuntime.LeaseExpiry,
 			newLeaseRuntime.LeaseExtensionUsed,
+			nowMs,
 			queueName, messageId, messagepb.Message_Metadata_RUNNING,
 			attemptId, workerId, nowMs, nowMs,
 		)

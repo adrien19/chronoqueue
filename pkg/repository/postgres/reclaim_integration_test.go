@@ -113,6 +113,47 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 		require.NoError(t, historyErr)
 		require.Equal(t, schedule.ScheduleId, history.GetScheduleId())
 	})
+
+	t.Run("cancel removes the locked message state counter", func(t *testing.T) {
+		const queueName = "cancel-counter-lock"
+		const messageID = "cancel-counter-message"
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
+		require.NoError(t, first.EnqueueMessage(ctx, queueName, postgresReclaimTestMessage(messageID, 1, 1)))
+
+		tx, txErr := first.DB.BeginTx(ctx, nil)
+		require.NoError(t, txErr)
+		t.Cleanup(func() { _ = tx.Rollback() })
+		var state messagepb.Message_Metadata_State
+		require.NoError(t, tx.QueryRowContext(ctx, `SELECT state FROM cq_messages WHERE queue_name = $1 AND message_id = $2 FOR UPDATE`, queueName, messageID).Scan(&state))
+		require.Equal(t, messagepb.Message_Metadata_PENDING, state)
+		cancelErr := make(chan error, 1)
+		go func() { cancelErr <- second.CancelMessage(ctx, queueName, messageID, "cancel") }()
+		require.Eventually(t, func() bool {
+			var blocked bool
+			err := first.DB.QueryRowContext(ctx, `
+				SELECT EXISTS (
+					SELECT 1 FROM pg_stat_activity
+					WHERE state = 'active'
+					  AND wait_event_type = 'Lock'
+					  AND query LIKE '%SELECT state FROM cq_messages WHERE message_id%FOR UPDATE%'
+				)`).Scan(&blocked)
+			return err == nil && blocked
+		}, 5*time.Second, 10*time.Millisecond, "cancellation query did not block on the message row")
+		_, txErr = tx.ExecContext(ctx, `UPDATE cq_messages SET state = $1 WHERE queue_name = $2 AND message_id = $3`, messagepb.Message_Metadata_INVISIBLE, queueName, messageID)
+		require.NoError(t, txErr)
+		_, txErr = tx.ExecContext(ctx, `UPDATE cq_queues SET state_counts = '{"pending":0,"invisible":1}' WHERE name = $1`, queueName)
+		require.NoError(t, txErr)
+		require.NoError(t, tx.Commit())
+		require.NoError(t, <-cancelErr)
+
+		counts, countErr := first.StateManager.GetStateCounts(ctx, first.DB, queueName)
+		require.NoError(t, countErr)
+		require.Zero(t, counts["pending"])
+		require.Zero(t, counts["invisible"])
+		var remaining int
+		require.NoError(t, first.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_messages WHERE queue_name = $1 AND message_id = $2`, queueName, messageID).Scan(&remaining))
+		require.Zero(t, remaining)
+	})
 	t.Run("rejects deletion of referenced DLQ", func(t *testing.T) {
 		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "protected-dlq", Metadata: &queuepb.QueueMetadata{}}))
 		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: "protected-source", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "protected-dlq"}}))
@@ -196,7 +237,9 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 	})
 
 	queueName := "reclaim-fencing"
-	require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
+	require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{
+		MessageRetentionPolicy: &queuepb.MessageRetentionPolicy{Mode: queuepb.MessageRetentionPolicy_RETAIN_FOREVER},
+	}}))
 	require.NoError(t, first.EnqueueMessage(ctx, queueName, postgresReclaimTestMessage("finite", 2, 2)))
 
 	claimed, err := first.ClaimMessage(ctx, queueName, "worker-1", "attempt-1", "")

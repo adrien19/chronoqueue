@@ -936,8 +936,12 @@ func (impl *implementation) AcknowledgeMessage(ctx context.Context, request *que
 		return nil, domainerror.New(domainerror.InvalidArgument, "attempt id and worker id are required", nil)
 	}
 
+	ackState := request.GetState()
+	if ackState == messagepb.Message_Metadata_INVISIBLE {
+		ackState = messagepb.Message_Metadata_COMPLETED
+	}
 	// Route to appropriate backend method based on requested state
-	switch request.State {
+	switch ackState {
 	case messagepb.Message_Metadata_COMPLETED:
 		if err := impl.backend.AcknowledgeMessage(ctx, request.QueueName, request.MessageId, request.GetAttemptId(), request.GetWorkerId()); err != nil {
 			return nil, err

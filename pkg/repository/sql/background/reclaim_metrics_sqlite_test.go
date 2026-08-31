@@ -44,7 +44,10 @@ func TestReclaimMetricsReflectPersistedExpiryCause(t *testing.T) {
 			if tt.dlqTarget != "" {
 				require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: tt.dlqTarget, Metadata: &queuepb.QueueMetadata{}}))
 			}
-			require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: tt.dlqTarget}}))
+			require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{
+				DeadLetterQueueName:    tt.dlqTarget,
+				MessageRetentionPolicy: &queuepb.MessageRetentionPolicy{Mode: queuepb.MessageRetentionPolicy_RETAIN_FOREVER},
+			}}))
 			attemptsLeft := int32(2)
 			if tt.transitionsToErrored {
 				attemptsLeft = 1

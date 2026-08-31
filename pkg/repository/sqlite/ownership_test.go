@@ -111,6 +111,22 @@ func TestHeartbeatMessage_UsesConfiguredExtensionBounds(t *testing.T) {
 	require.EqualValues(t, 1, renewalCount)
 }
 
+func TestMessageInsertMaintainsIntegerTimestampsAndCounters(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "runtime-invariants.db"))
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "invariants", Metadata: &queuepb.QueueMetadata{}}))
+	require.NoError(t, storage.EnqueueMessage(ctx, "invariants", reclaimTestMessage("message", 1, 1)))
+
+	var createdType, updatedType string
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT typeof(created_at), typeof(updated_at) FROM cq_messages WHERE queue_name = ?`, "invariants").Scan(&createdType, &updatedType))
+	require.Equal(t, "integer", createdType)
+	require.Equal(t, "integer", updatedType)
+	counts, err := storage.StateManager.GetStateCounts(ctx, storage.DB, "invariants")
+	require.NoError(t, err)
+	require.EqualValues(t, 1, counts["pending"])
+	require.Zero(t, counts["invisible"])
+}
+
 func TestWorkerMutations_RequireActiveOwnership(t *testing.T) {
 	ctx := context.Background()
 	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "ownership.db"))

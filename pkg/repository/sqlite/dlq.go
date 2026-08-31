@@ -10,6 +10,7 @@ import (
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
+	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
 )
 
 func (s *Storage) GetDLQMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error) {
@@ -57,6 +58,10 @@ func (s *Storage) GetDLQMessagesPage(ctx context.Context, queueName string, limi
 		msg, err := s.Serializer.UnmarshalMessage(messageBytes)
 		if err != nil {
 			scanErr = fmt.Errorf("unmarshal message: %w", err)
+			break
+		}
+		if err := repositorycommon.DecryptMessagePayload(msg, s.KeyManager); err != nil {
+			scanErr = fmt.Errorf("decrypt message payload: %w", err)
 			break
 		}
 		if msg.GetMetadata() == nil {
@@ -120,10 +125,10 @@ func (s *Storage) RetryDLQMessage(ctx context.Context, dlqName string, messageId
 			UPDATE cq_messages
 			SET queue_name = ?, state = ?,
 				attempts_left = ?,
-				updated_at = CURRENT_TIMESTAMP
+				updated_at = ?
 			WHERE message_id = ? AND queue_name = ?
 		`
-		_, err = tx.ExecContext(ctx, updateQuery, targetQueueName, messagepb.Message_Metadata_PENDING, attemptsLeft, messageId, dlqName)
+		_, err = tx.ExecContext(ctx, updateQuery, targetQueueName, messagepb.Message_Metadata_PENDING, attemptsLeft, s.Clock.NowMs(), messageId, dlqName)
 		if err != nil {
 			if isUniqueConstraintError(err) {
 				return domainerror.New(domainerror.AlreadyExists, fmt.Sprintf("message %q already exists in queue %q", messageId, targetQueueName), err)
