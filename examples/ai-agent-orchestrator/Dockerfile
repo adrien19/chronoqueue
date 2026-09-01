@@ -22,7 +22,7 @@ FROM alpine:3.24
 WORKDIR /app
 
 # Install runtime dependencies
-RUN apk add --no-cache --upgrade libssl3 ca-certificates curl
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates curl
 
 # Copy binary from builder
 COPY --from=builder /build/ai-orchestrator .

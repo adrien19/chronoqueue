@@ -40,7 +40,7 @@ RUN CGO_ENABLED=1 go build \
 FROM alpine:3.24
 
 # Install runtime dependencies and timezone data for calendar schedules
-RUN apk add --no-cache --upgrade libssl3 ca-certificates tzdata
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates tzdata
 
 # Set working directory
 WORKDIR /

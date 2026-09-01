@@ -43,7 +43,7 @@ RUN target_os="${TARGETOS:-$(go env GOOS)}" && \
 FROM alpine:3.24
 
 # Install CA certificates for HTTPS/TLS and timezone data for calendar schedules
-RUN apk add --no-cache --upgrade libssl3 ca-certificates tzdata
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates tzdata
 
 # Set working directory
 WORKDIR /
