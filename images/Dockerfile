@@ -40,10 +40,10 @@ RUN target_os="${TARGETOS:-$(go env GOOS)}" && \
     main.go
 
 ## Runtime stage - minimal image with just the binary
-FROM alpine:latest
+FROM alpine:3.24
 
 # Install CA certificates for HTTPS/TLS and timezone data for calendar schedules
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache --upgrade libssl3 ca-certificates tzdata
 
 # Set working directory
 WORKDIR /
