@@ -1277,7 +1277,7 @@ func (x *GetQueueStateRequest) GetQueueName() string {
 
 type GetQueueStateResponse struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
-	StateCounts      map[string]int32       `protobuf:"bytes,1,rep,name=state_counts,json=stateCounts,proto3" json:"state_counts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	StateCounts      map[string]int64       `protobuf:"bytes,1,rep,name=state_counts,json=stateCounts,proto3" json:"state_counts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	EarliestDeadline *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=earliest_deadline,json=earliestDeadline,proto3" json:"earliest_deadline,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -1313,7 +1313,7 @@ func (*GetQueueStateResponse) Descriptor() ([]byte, []int) {
 	return file_proto_queueservice_v1_request_response_proto_rawDescGZIP(), []int{19}
 }
 
-func (x *GetQueueStateResponse) GetStateCounts() map[string]int32 {
+func (x *GetQueueStateResponse) GetStateCounts() map[string]int64 {
 	if x != nil {
 		return x.StateCounts
 	}
@@ -3297,7 +3297,8 @@ func (x *GetSchemaResponse) GetSchema() *v13.Schema {
 	return nil
 }
 
-// List schemas with optional filtering
+// List schema families with optional filtering.
+// Each family contributes at most one summary for its latest matching version.
 type ListSchemasRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Prefix        string                 `protobuf:"bytes,1,opt,name=prefix,proto3" json:"prefix,omitempty"`                            // Filter by schema_id prefix
@@ -3369,7 +3370,7 @@ func (x *ListSchemasRequest) GetPageToken() string {
 type ListSchemasResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Schemas       []*SchemaInfo          `protobuf:"bytes,1,rep,name=schemas,proto3" json:"schemas,omitempty"`
-	TotalCount    int32                  `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	TotalCount    int32                  `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"` // Number of matching schema families, not versions.
 	NextPageToken string                 `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3426,12 +3427,12 @@ func (x *ListSchemasResponse) GetNextPageToken() string {
 	return ""
 }
 
-// Schema information for list responses
-// Note: This is a summary view with aggregated version info, different from schema.v1.Schema
+// Schema information for list responses.
+// This is one family summary with aggregated version info, not a schema version list.
 type SchemaInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SchemaId      string                 `protobuf:"bytes,1,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`
-	LatestVersion int32                  `protobuf:"varint,2,opt,name=latest_version,json=latestVersion,proto3" json:"latest_version,omitempty"` // Latest version number
+	LatestVersion int32                  `protobuf:"varint,2,opt,name=latest_version,json=latestVersion,proto3" json:"latest_version,omitempty"` // Latest version matching the request's active filter.
 	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
 	CreatedAt     int64                  `protobuf:"varint,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
@@ -4012,7 +4013,7 @@ const file_proto_queueservice_v1_request_response_proto_rawDesc = "" +
 	"\x11earliest_deadline\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x10earliestDeadline\x1a>\n" +
 	"\x10StateCountsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x01\"\xbe\x01\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xbe\x01\n" +
 	"\x1bSendMessageHeartBeatRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1d\n" +

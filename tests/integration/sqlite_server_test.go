@@ -115,8 +115,8 @@ func TestSQLiteServerIntegration(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.NotNil(t, stateResp)
-		assert.Equal(t, int32(0), stateResp.GetStateCounts()["PENDING"])
-		assert.Equal(t, int32(1), stateResp.GetStateCounts()["RUNNING"])
+		assert.Equal(t, int64(0), stateResp.GetStateCounts()["PENDING"])
+		assert.Equal(t, int64(1), stateResp.GetStateCounts()["RUNNING"])
 	})
 
 	t.Run("AcknowledgeMessage", func(t *testing.T) {
@@ -132,7 +132,7 @@ func TestSQLiteServerIntegration(t *testing.T) {
 
 		stateAfterMismatch, err := client.GetQueueState(ctx, &queueservicepb.GetQueueStateRequest{QueueName: queueName})
 		require.NoError(t, err)
-		assert.Equal(t, int32(1), stateAfterMismatch.GetStateCounts()["RUNNING"])
+		assert.Equal(t, int64(1), stateAfterMismatch.GetStateCounts()["RUNNING"])
 
 		ackReq := &queueservicepb.AcknowledgeMessageRequest{
 			QueueName: queueName,
@@ -148,8 +148,8 @@ func TestSQLiteServerIntegration(t *testing.T) {
 
 		stateResp, err := client.GetQueueState(ctx, &queueservicepb.GetQueueStateRequest{QueueName: queueName})
 		require.NoError(t, err)
-		assert.Equal(t, int32(0), stateResp.GetStateCounts()["RUNNING"])
-		assert.Equal(t, int32(0), stateResp.GetStateCounts()["PENDING"])
+		assert.Equal(t, int64(0), stateResp.GetStateCounts()["RUNNING"])
+		assert.Equal(t, int64(0), stateResp.GetStateCounts()["PENDING"])
 	})
 
 	_, err = os.Stat(h.dbPath)

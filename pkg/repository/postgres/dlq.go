@@ -13,6 +13,7 @@ import (
 	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
+	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
 )
 
 func (s *Storage) GetDLQMessages(ctx context.Context, queueName string, limit int32) ([]*messagepb.Message, error) {
@@ -60,6 +61,10 @@ func (s *Storage) GetDLQMessagesPage(ctx context.Context, queueName string, limi
 		msg, err := s.Serializer.UnmarshalMessage(messageBytes)
 		if err != nil {
 			scanErr = fmt.Errorf("unmarshal message: %w", err)
+			break
+		}
+		if err := repositorycommon.DecryptMessagePayload(msg, s.KeyManager); err != nil {
+			scanErr = fmt.Errorf("decrypt message payload: %w", err)
 			break
 		}
 		if msg.GetMetadata() == nil {
@@ -179,47 +184,81 @@ func (s *Storage) DeleteDLQMessage(ctx context.Context, queueName string, messag
 	})
 }
 
-// PurgeDLQ deletes all errored messages for a queue and returns the count deleted.
+const (
+	dlqPurgeBatchSize  = 100
+	dlqPurgeMaxBatches = 1000
+)
+
+// PurgeDLQ deletes errored messages in bounded transactions until the queue is empty.
 func (s *Storage) PurgeDLQ(ctx context.Context, queueName string) (int64, error) {
-	var deletedCount int64
-	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
-		countQuery := s.ph(`SELECT COUNT(*) FROM cq_messages WHERE queue_name = ? AND state = ?`)
-		var count int64
-		if err := tx.QueryRowContext(ctx, countQuery, queueName, int(messagepb.Message_Metadata_ERRORED)).Scan(&count); err != nil {
-			return fmt.Errorf("count DLQ messages: %w", err)
-		}
+	return s.purgeDLQ(ctx, queueName, dlqPurgeBatchSize, dlqPurgeMaxBatches)
+}
 
-		if count == 0 {
-			deletedCount = 0
-			return nil
+func (s *Storage) purgeDLQ(ctx context.Context, queueName string, batchSize int64, maxBatches int) (int64, error) {
+	var total int64
+	for batch := 0; batch < maxBatches; batch++ {
+		if err := ctx.Err(); err != nil {
+			return total, fmt.Errorf("purge DLQ canceled after %d messages: %w", total, err)
 		}
-
-		deleteQuery := s.ph(`DELETE FROM cq_messages WHERE queue_name = ? AND state = ?`)
-		result, err := tx.ExecContext(ctx, deleteQuery, queueName, int(messagepb.Message_Metadata_ERRORED))
+		deleted, err := s.purgeDLQBatch(ctx, queueName, batchSize)
 		if err != nil {
-			return fmt.Errorf("delete DLQ messages: %w", err)
+			return total, fmt.Errorf("purge DLQ batch after %d messages: %w", total, err)
 		}
-
-		rows, err := result.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("get rows affected: %w", err)
-		}
-
-		deletedCount = rows
-
-		for i := int64(0); i < rows; i++ {
-			if err := s.StateManager.RemoveCounter(ctx, tx, queueName, messagepb.Message_Metadata_ERRORED); err != nil {
-				return fmt.Errorf("update state counters: %w", err)
+		total += deleted
+		if deleted < batchSize {
+			remaining, err := s.hasDLQMessages(ctx, queueName)
+			if err != nil {
+				return total, fmt.Errorf("check DLQ after purging %d messages: %w", total, err)
 			}
+			if remaining {
+				return total, fmt.Errorf("purge DLQ incomplete after %d messages: errored messages remain after an undersized batch", total)
+			}
+			return total, nil
 		}
+	}
+	remaining, err := s.hasDLQMessages(ctx, queueName)
+	if err != nil {
+		return total, fmt.Errorf("check DLQ after purging %d messages: %w", total, err)
+	}
+	if remaining {
+		return total, fmt.Errorf("purge DLQ incomplete after %d messages: batch limit of %d reached", total, maxBatches)
+	}
+	return total, nil
+}
 
+func (s *Storage) hasDLQMessages(ctx context.Context, queueName string) (bool, error) {
+	var remaining bool
+	err := s.DB.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM cq_messages WHERE queue_name = $1 AND state = $2)`, queueName, messagepb.Message_Metadata_ERRORED).Scan(&remaining)
+	return remaining, err
+}
+
+func (s *Storage) purgeDLQBatch(ctx context.Context, queueName string, limit int64) (int64, error) {
+	var deleted int64
+	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+		query := s.ph(`
+			DELETE FROM cq_messages
+			WHERE id IN (
+				SELECT id FROM cq_messages
+				WHERE queue_name = ? AND state = ?
+				ORDER BY id
+				LIMIT ?
+				FOR UPDATE SKIP LOCKED
+			)
+		`)
+		result, err := tx.ExecContext(ctx, query, queueName, int(messagepb.Message_Metadata_ERRORED), limit)
+		if err != nil {
+			return fmt.Errorf("delete DLQ message batch: %w", err)
+		}
+		deleted, err = result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("get deleted DLQ batch size: %w", err)
+		}
+		if err := s.StateManager.RemoveCounters(ctx, tx, queueName, messagepb.Message_Metadata_ERRORED, deleted); err != nil {
+			return fmt.Errorf("update state counts: %w", err)
+		}
 		return nil
 	})
-	if err != nil {
-		return 0, err
-	}
-
-	return deletedCount, nil
+	return deleted, err
 }
 
 // FindExpiredMessages finds messages with expired leases or heartbeats.

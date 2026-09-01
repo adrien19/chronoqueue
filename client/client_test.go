@@ -203,7 +203,7 @@ func (*mockChronoQueueServer) GetQueueState(ctx context.Context, req *queueservi
 	}
 	if req.GetQueueName() == "emptyQueue" {
 		return &queueservice_pb.GetQueueStateResponse{
-			StateCounts: map[string]int32{
+			StateCounts: map[string]int64{
 				"INVISIBLE": 0,
 				"PENDING":   0,
 				"RUNNING":   0,
@@ -215,7 +215,7 @@ func (*mockChronoQueueServer) GetQueueState(ctx context.Context, req *queueservi
 		}, nil
 	}
 	return &queueservice_pb.GetQueueStateResponse{
-		StateCounts: map[string]int32{
+		StateCounts: map[string]int64{
 			"INVISIBLE": 1,
 			"PENDING":   0,
 			"RUNNING":   0,
@@ -1367,7 +1367,7 @@ func TestChronoQueueClient_GetQueueState(t *testing.T) {
 				queue: "validQueue",
 			},
 			want: &queueservice_pb.GetQueueStateResponse{
-				StateCounts: map[string]int32{
+				StateCounts: map[string]int64{
 					"INVISIBLE": 1,
 					"PENDING":   0,
 					"RUNNING":   0,
@@ -1386,7 +1386,7 @@ func TestChronoQueueClient_GetQueueState(t *testing.T) {
 				queue: "emptyQueue",
 			},
 			want: &queueservice_pb.GetQueueStateResponse{
-				StateCounts: map[string]int32{
+				StateCounts: map[string]int64{
 					"INVISIBLE": 0,
 					"PENDING":   0,
 					"RUNNING":   0,

@@ -472,7 +472,7 @@ func showStats(ctx context.Context) error {
 	fmt.Println("📊 Event Processing Statistics")
 	fmt.Println("═══════════════════════════════════════════════════════════════")
 
-	totalStats := make(map[string]int32)
+	totalStats := make(map[string]int64)
 
 	for _, qName := range queues {
 		state, err := c.GetQueueState(ctx, qName)

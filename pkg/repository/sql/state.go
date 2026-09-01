@@ -44,6 +44,14 @@ func (sm *StateManager) UpdateCounters(
 	return nil
 }
 
+// InsertCounter records a newly inserted message without decrementing a prior state.
+func (sm *StateManager) InsertCounter(ctx context.Context, tx *sql.Tx, queueName string, state messagepb.Message_Metadata_State) error {
+	if err := sm.incrementCounter(ctx, tx, queueName, state); err != nil {
+		return fmt.Errorf("increment %s counter: %w", state.String(), err)
+	}
+	return nil
+}
+
 // MoveCounter transfers one message between queues without inventing an intermediate state.
 func (sm *StateManager) MoveCounter(ctx context.Context, tx *sql.Tx, sourceQueue string, sourceState messagepb.Message_Metadata_State, targetQueue string, targetState messagepb.Message_Metadata_State) error {
 	if err := sm.decrementCounter(ctx, tx, sourceQueue, sourceState); err != nil {
@@ -56,8 +64,39 @@ func (sm *StateManager) MoveCounter(ctx context.Context, tx *sql.Tx, sourceQueue
 }
 
 func (sm *StateManager) RemoveCounter(ctx context.Context, tx *sql.Tx, queueName string, state messagepb.Message_Metadata_State) error {
-	if err := sm.decrementCounter(ctx, tx, queueName, state); err != nil {
+	if err := sm.RemoveCounters(ctx, tx, queueName, state, 1); err != nil {
 		return fmt.Errorf("decrement %s counter: %w", state.String(), err)
+	}
+	return nil
+}
+
+func (sm *StateManager) RemoveCounters(ctx context.Context, tx *sql.Tx, queueName string, state messagepb.Message_Metadata_State, count int64) error {
+	if count < 0 {
+		return fmt.Errorf("counter decrement must be non-negative: %d", count)
+	}
+	if count == 0 {
+		return nil
+	}
+	stateKey := sm.stateToKey(state)
+	jsonSet := sm.dialect.JSONSet()
+	jsonSetPath := sm.dialect.JSONSetPath(stateKey)
+	jsonExtract := sm.dialect.JSONExtract()
+	jsonExtractPath := sm.dialect.JSONExtractPath(stateKey)
+
+	query := fmt.Sprintf(`
+		UPDATE cq_queues
+		SET state_counts = %s(
+			COALESCE(state_counts, '{}'),
+			%s,
+			%s
+		)
+		WHERE name = %s
+	`, jsonSet, jsonSetPath,
+		sm.dialect.ToJSON(fmt.Sprintf("COALESCE(CAST(%s(state_counts, %s) AS %s), 0) - %s", jsonExtract, jsonExtractPath, sm.dialect.BigIntType(), sm.dialect.Placeholder(1))),
+		sm.dialect.Placeholder(2))
+
+	if _, err := tx.ExecContext(ctx, query, count, queueName); err != nil {
+		return fmt.Errorf("decrement %s counter by %d: %w", state.String(), count, err)
 	}
 	return nil
 }
@@ -84,7 +123,7 @@ func (sm *StateManager) decrementCounter(
 		) 
 		WHERE name = %s
 	`, jsonSet, jsonSetPath,
-		sm.dialect.ToJSON(fmt.Sprintf("COALESCE(CAST(%s(state_counts, %s) AS INTEGER), 0) - 1", jsonExtract, jsonExtractPath)),
+		sm.dialect.ToJSON(fmt.Sprintf("COALESCE(CAST(%s(state_counts, %s) AS %s), 0) - 1", jsonExtract, jsonExtractPath, sm.dialect.BigIntType())),
 		sm.dialect.Placeholder(1))
 
 	_, err := tx.ExecContext(ctx, query, queueName)
@@ -113,7 +152,7 @@ func (sm *StateManager) incrementCounter(
 		) 
 		WHERE name = %s
 	`, jsonSet, jsonSetPath,
-		sm.dialect.ToJSON(fmt.Sprintf("COALESCE(CAST(%s(state_counts, %s) AS INTEGER), 0) + 1", jsonExtract, jsonExtractPath)),
+		sm.dialect.ToJSON(fmt.Sprintf("COALESCE(CAST(%s(state_counts, %s) AS %s), 0) + 1", jsonExtract, jsonExtractPath, sm.dialect.BigIntType())),
 		sm.dialect.Placeholder(1))
 
 	_, err := tx.ExecContext(ctx, query, queueName)
@@ -133,6 +172,8 @@ func (sm *StateManager) stateToKey(state messagepb.Message_Metadata_State) strin
 		return "errored"
 	case messagepb.Message_Metadata_COMPLETED:
 		return "completed"
+	case messagepb.Message_Metadata_CANCELED:
+		return "canceled"
 	default:
 		return "unknown"
 	}
@@ -145,23 +186,30 @@ func (sm *StateManager) GetStateCounts(
 	queueName string,
 ) (map[string]int64, error) {
 	jsonExtract := sm.dialect.JSONExtract()
+	pendingPath := sm.dialect.JSONExtractPath("pending")
+	runningPath := sm.dialect.JSONExtractPath("running")
+	invisiblePath := sm.dialect.JSONExtractPath("invisible")
+	erroredPath := sm.dialect.JSONExtractPath("errored")
+	completedPath := sm.dialect.JSONExtractPath("completed")
+	canceledPath := sm.dialect.JSONExtractPath("canceled")
 
 	query := fmt.Sprintf(`
 		SELECT 
-			COALESCE(CAST(%s(state_counts, '$.pending') AS INTEGER), 0) as pending,
-			COALESCE(CAST(%s(state_counts, '$.running') AS INTEGER), 0) as running,
-			COALESCE(CAST(%s(state_counts, '$.invisible') AS INTEGER), 0) as invisible,
-			COALESCE(CAST(%s(state_counts, '$.errored') AS INTEGER), 0) as errored,
-			COALESCE(CAST(%s(state_counts, '$.completed') AS INTEGER), 0) as completed
+			COALESCE(CAST(%s(state_counts, %s) AS %s), 0) as pending,
+			COALESCE(CAST(%s(state_counts, %s) AS %s), 0) as running,
+			COALESCE(CAST(%s(state_counts, %s) AS %s), 0) as invisible,
+			COALESCE(CAST(%s(state_counts, %s) AS %s), 0) as errored,
+			COALESCE(CAST(%s(state_counts, %s) AS %s), 0) as completed,
+			COALESCE(CAST(%s(state_counts, %s) AS %s), 0) as canceled
 		FROM cq_queues
 		WHERE name = %s
-	`, jsonExtract, jsonExtract, jsonExtract, jsonExtract, jsonExtract, sm.dialect.Placeholder(1))
+	`, jsonExtract, pendingPath, sm.dialect.BigIntType(), jsonExtract, runningPath, sm.dialect.BigIntType(), jsonExtract, invisiblePath, sm.dialect.BigIntType(), jsonExtract, erroredPath, sm.dialect.BigIntType(), jsonExtract, completedPath, sm.dialect.BigIntType(), jsonExtract, canceledPath, sm.dialect.BigIntType(), sm.dialect.Placeholder(1))
 
 	counts := make(map[string]int64)
-	var pending, running, invisible, errored, completed int64
+	var pending, running, invisible, errored, completed, canceled int64
 
 	err := db.QueryRowContext(ctx, query, queueName).Scan(
-		&pending, &running, &invisible, &errored, &completed,
+		&pending, &running, &invisible, &errored, &completed, &canceled,
 	)
 	if err != nil {
 		return nil, err
@@ -172,6 +220,7 @@ func (sm *StateManager) GetStateCounts(
 	counts["invisible"] = invisible
 	counts["errored"] = errored
 	counts["completed"] = completed
+	counts["canceled"] = canceled
 
 	return counts, nil
 }

@@ -109,8 +109,8 @@ func TestSQLitePeekStateConsistency_LeasedMessageExcluded(t *testing.T) {
 
 	stateResp, err := client.GetQueueState(ctx, &queueservicepb.GetQueueStateRequest{QueueName: queueName})
 	require.NoError(t, err)
-	assert.Equal(t, int32(0), stateResp.GetStateCounts()["PENDING"])
-	assert.Equal(t, int32(1), stateResp.GetStateCounts()["RUNNING"])
+	assert.Equal(t, int64(0), stateResp.GetStateCounts()["PENDING"])
+	assert.Equal(t, int64(1), stateResp.GetStateCounts()["RUNNING"])
 
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservicepb.PeekQueueMessagesRequest{
 		QueueName: queueName,
@@ -124,8 +124,8 @@ func TestSQLitePeekStateConsistency_LeasedMessageExcluded(t *testing.T) {
 
 	stateAfterWait, err := client.GetQueueState(ctx, &queueservicepb.GetQueueStateRequest{QueueName: queueName})
 	require.NoError(t, err)
-	assert.Equal(t, int32(0), stateAfterWait.GetStateCounts()["PENDING"])
-	assert.Equal(t, int32(1), stateAfterWait.GetStateCounts()["RUNNING"])
+	assert.Equal(t, int64(0), stateAfterWait.GetStateCounts()["PENDING"])
+	assert.Equal(t, int64(1), stateAfterWait.GetStateCounts()["RUNNING"])
 
 	peekAfterWait, err := client.PeekQueueMessages(ctx, &queueservicepb.PeekQueueMessagesRequest{
 		QueueName: queueName,
@@ -147,8 +147,8 @@ func TestSQLitePeekStateConsistency_LeasedMessageExcluded(t *testing.T) {
 
 	finalState, err := client.GetQueueState(ctx, &queueservicepb.GetQueueStateRequest{QueueName: queueName})
 	require.NoError(t, err)
-	assert.Equal(t, int32(0), finalState.GetStateCounts()["RUNNING"])
-	assert.Equal(t, int32(0), finalState.GetStateCounts()["PENDING"])
+	assert.Equal(t, int64(0), finalState.GetStateCounts()["RUNNING"])
+	assert.Equal(t, int64(0), finalState.GetStateCounts()["PENDING"])
 
 	cancel()
 	select {

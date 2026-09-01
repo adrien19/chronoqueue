@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -21,10 +23,12 @@ import (
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
 	queueservicepb "github.com/adrien19/chronoqueue/api/queueservice/v1"
 	schedulepb "github.com/adrien19/chronoqueue/api/schedule/v1"
+	schemapb "github.com/adrien19/chronoqueue/api/schema/v1"
 	"github.com/adrien19/chronoqueue/internal/domainerror"
 	"github.com/adrien19/chronoqueue/pkg/calendar"
 	repositorycommon "github.com/adrien19/chronoqueue/pkg/repository/common"
 	repositorysql "github.com/adrien19/chronoqueue/pkg/repository/sql"
+	"github.com/adrien19/chronoqueue/pkg/schema"
 	"github.com/adrien19/chronoqueue/pkg/validator"
 )
 
@@ -64,6 +68,7 @@ type claimCall struct {
 type peekCall struct {
 	queueName     string
 	limit         int32
+	cursor        *repositorysql.PeekCursor
 	priorityRange *repositorysql.PriorityRange
 }
 
@@ -79,6 +84,7 @@ type stubBackend struct {
 	queues           []*queuepb.Queue
 	schedules        []*schedulepb.Schedule
 	messages         []*messagepb.Message
+	peekRowIDs       map[string]int64
 	history          *schedulepb.ScheduleHistory
 	queuePrefix      string
 	schedulePrefix   string
@@ -91,6 +97,17 @@ type stubBackend struct {
 	cancelErr        error
 	extendRemaining  int64
 	pingErr          error
+	acknowledged     int
+}
+
+type latestSchemaRegistry struct {
+	schema.Registry
+	latest *schemapb.Schema
+	err    error
+}
+
+func (r latestSchemaRegistry) GetLatest(context.Context, string) (*schemapb.Schema, error) {
+	return r.latest, r.err
 }
 
 type stubEngine struct {
@@ -256,11 +273,24 @@ func (b *stubBackend) ClaimMessageWithLeaseDuration(ctx context.Context, queueNa
 }
 
 func (b *stubBackend) AcknowledgeMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error {
+	b.acknowledged++
 	return nil
 }
 
 func (b *stubBackend) NackMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error {
 	return nil
+}
+
+func TestAcknowledgeMessage_DefaultStateCompletes(t *testing.T) {
+	backend := &stubBackend{}
+	impl := &implementation{backend: backend}
+	attemptID, workerID := "attempt", "worker"
+	response, err := impl.AcknowledgeMessage(context.Background(), &queueservicepb.AcknowledgeMessageRequest{
+		QueueName: "queue", MessageId: "message", AttemptId: &attemptID, WorkerId: &workerID,
+	})
+	require.NoError(t, err)
+	require.True(t, response.GetSuccess())
+	require.Equal(t, 1, backend.acknowledged)
 }
 
 func (b *stubBackend) CancelMessage(ctx context.Context, queueName string, messageId string, reason string) error {
@@ -284,9 +314,27 @@ func (b *stubBackend) PeekMessagesWithPriorityRange(ctx context.Context, queueNa
 	return nil, nil
 }
 
-func (b *stubBackend) PeekMessagesPage(ctx context.Context, queueName string, limit int32, offset int64, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error) {
-	b.peekCalls = append(b.peekCalls, peekCall{queueName: queueName, limit: limit, priorityRange: priorityRange})
-	return pageSlice(b.messages, limit, offset), nil
+func (b *stubBackend) PeekMessagesPage(ctx context.Context, queueName string, limit int32, cursor *repositorysql.PeekCursor, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, *repositorysql.PeekCursor, error) {
+	b.peekCalls = append(b.peekCalls, peekCall{queueName: queueName, limit: limit, cursor: cursor, priorityRange: priorityRange})
+	var messages []*messagepb.Message
+	var cursors []repositorysql.PeekCursor
+	for index, message := range b.messages {
+		rowID := int64(index + 1)
+		if configuredID := b.peekRowIDs[message.GetMessageId()]; configuredID > 0 {
+			rowID = configuredID
+		}
+		priority := message.GetMetadata().GetPriority()
+		if cursor != nil && (priority > cursor.Priority || (priority == cursor.Priority && rowID <= cursor.RowID)) {
+			continue
+		}
+		messages = append(messages, message)
+		cursors = append(cursors, repositorysql.PeekCursor{Priority: priority, RowID: rowID})
+	}
+	if len(messages) <= int(limit) {
+		return messages, nil, nil
+	}
+	next := cursors[limit-1]
+	return messages[:limit], &next, nil
 }
 
 func (b *stubBackend) CreateSchedule(ctx context.Context, schedule *schedulepb.Schedule) error {
@@ -359,14 +407,6 @@ func keysetPage[T any](values []T, limit int32, cursor string, key func(T) strin
 		return items, ""
 	}
 	return items, key(items[len(items)-1])
-}
-
-func pageSlice[T any](values []T, limit int32, offset int64) []T {
-	if offset >= int64(len(values)) {
-		return nil
-	}
-	end := min(offset+int64(limit), int64(len(values)))
-	return values[offset:end]
 }
 
 func (b *stubBackend) RetryDLQMessage(ctx context.Context, dlqName string, messageId string, targetQueueName string, resetRetries bool) error {
@@ -668,6 +708,34 @@ func TestCreateQueue_RequiresConfiguredDLQToExist(t *testing.T) {
 	require.Empty(t, backend.createdQueues)
 }
 
+func TestCreateQueue_ValidatesSchemaReferenceBeforeInsert(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		registry schema.Registry
+		wantCode codes.Code
+	}{
+		{name: "registry unavailable", wantCode: codes.FailedPrecondition},
+		{name: "schema missing", registry: latestSchemaRegistry{err: errors.New("missing")}, wantCode: codes.FailedPrecondition},
+		{name: "schema inactive", registry: latestSchemaRegistry{latest: &schemapb.Schema{SchemaId: "orders"}}, wantCode: codes.FailedPrecondition},
+		{name: "schema active", registry: latestSchemaRegistry{latest: &schemapb.Schema{SchemaId: "orders", IsActive: true}}, wantCode: codes.OK},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			backend := &stubBackend{}
+			impl := &implementation{backend: backend, schemaRegistry: test.registry}
+			_, err := impl.CreateQueue(context.Background(), &queueservicepb.CreateQueueRequest{
+				Name: "orders", Metadata: &queuepb.QueueMetadata{SchemaId: "orders", SchemaRequired: true},
+			})
+			require.Equal(t, test.wantCode, status.Code(domainerror.ToGRPC(err)))
+			if test.wantCode == codes.OK {
+				require.Len(t, backend.createdQueues, 1)
+				require.Equal(t, 6*time.Second, backend.createdQueues[0].GetMetadata().GetLeasePolicy().GetExtendStep().AsDuration())
+			} else {
+				require.Empty(t, backend.createdQueues)
+			}
+		})
+	}
+}
+
 func TestRenewMessageLease_ReturnsBackendRemainingTime(t *testing.T) {
 	backend := &stubBackend{extendRemaining: 1_250}
 	impl := &implementation{backend: backend}
@@ -769,6 +837,41 @@ func TestPeekQueueMessages_PriorityRange(t *testing.T) {
 	}
 }
 
+func TestPeekQueueMessages_UsesPriorityKeysetCursor(t *testing.T) {
+	messages := []*messagepb.Message{
+		{MessageId: "high-a", Metadata: &messagepb.Message_Metadata{Priority: 4}},
+		{MessageId: "high-b", Metadata: &messagepb.Message_Metadata{Priority: 4}},
+		{MessageId: "normal-a", Metadata: &messagepb.Message_Metadata{Priority: 2}},
+	}
+	backend := &stubBackend{messages: messages, peekRowIDs: map[string]int64{"high-a": 1, "high-b": 2, "normal-a": 3}}
+	impl := &implementation{backend: backend}
+
+	first, err := impl.PeekQueueMessages(context.Background(), &queueservicepb.PeekQueueMessagesRequest{QueueName: "queue", PageSize: 2})
+	require.NoError(t, err)
+	require.Equal(t, []string{"high-a", "high-b"}, []string{first.Messages[0].GetMessageId(), first.Messages[1].GetMessageId()})
+	require.NotEmpty(t, first.GetNextPageToken())
+
+	backend.messages = []*messagepb.Message{messages[1], messages[2]}
+	second, err := impl.PeekQueueMessages(context.Background(), &queueservicepb.PeekQueueMessagesRequest{QueueName: "queue", PageSize: 2, PageToken: first.GetNextPageToken()})
+	require.NoError(t, err)
+	require.Len(t, backend.peekCalls, 2)
+	require.Equal(t, &repositorysql.PeekCursor{Priority: 4, RowID: 2}, backend.peekCalls[1].cursor)
+	require.Equal(t, []string{"normal-a"}, []string{second.Messages[0].GetMessageId()})
+	require.Empty(t, second.GetNextPageToken())
+
+	_, err = impl.PeekQueueMessages(context.Background(), &queueservicepb.PeekQueueMessagesRequest{QueueName: "other", PageSize: 2, PageToken: first.GetNextPageToken()})
+	require.ErrorContains(t, err, "does not match")
+}
+
+func TestQueueStateCountsRoundTripBeyondInt32(t *testing.T) {
+	want := int64(math.MaxInt32) + 1
+	encoded, err := proto.Marshal(&queueservicepb.GetQueueStateResponse{StateCounts: map[string]int64{"PENDING": want}})
+	require.NoError(t, err)
+	var decoded queueservicepb.GetQueueStateResponse
+	require.NoError(t, proto.Unmarshal(encoded, &decoded))
+	require.Equal(t, want, decoded.GetStateCounts()["PENDING"])
+}
+
 func TestListQueues_FiltersByPrefix(t *testing.T) {
 	backend := &stubBackend{queues: []*queuepb.Queue{{Name: "orders-eu"}, {Name: "orders-us"}}}
 	impl := &implementation{backend: backend}
@@ -820,7 +923,11 @@ func TestListQueues_PaginatesAndValidatesTokens(t *testing.T) {
 }
 
 func TestPeekScheduleHistoryAndDLQPagination(t *testing.T) {
-	messages := []*messagepb.Message{{MessageId: "message-a"}, {MessageId: "message-b"}, {MessageId: "message-c"}}
+	messages := []*messagepb.Message{
+		{MessageId: "message-a", Metadata: &messagepb.Message_Metadata{Priority: 2}},
+		{MessageId: "message-b", Metadata: &messagepb.Message_Metadata{Priority: 2}},
+		{MessageId: "message-c", Metadata: &messagepb.Message_Metadata{Priority: 2}},
+	}
 	executions := []*schedulepb.ScheduleHistory_Execution{{MessageId: "message-a"}, {MessageId: "message-b"}, {MessageId: "message-c"}}
 	backend := &stubBackend{
 		queues:   []*queuepb.Queue{{Name: "source", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "source-dlq"}}},

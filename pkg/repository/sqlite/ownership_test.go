@@ -4,6 +4,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -40,6 +41,112 @@ func TestExtendMessageLease_ReturnsPolicyCappedRemainingTime(t *testing.T) {
 	require.Positive(t, remainingMs)
 	require.LessOrEqual(t, remainingMs, int64((65 * time.Second).Milliseconds()))
 	require.Greater(t, remainingMs, int64((64 * time.Second).Milliseconds()))
+}
+
+func TestExtendMessageLease_ZeroEffectiveExtensionDoesNotConsumeRenewal(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "renew-zero.db"))
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "owned", Metadata: &queuepb.QueueMetadata{}}))
+	message := reclaimTestMessage("renew-zero", 1, 1)
+	message.Metadata.LeasePolicy = &commonpb.LeasePolicy{
+		BaseLease:    durationpb.New(time.Minute),
+		MaxExtension: durationpb.New(5 * time.Second),
+	}
+	require.NoError(t, storage.EnqueueMessage(ctx, "owned", message))
+	_, err := storage.ClaimMessage(ctx, "owned", "worker", "attempt", "")
+	require.NoError(t, err)
+
+	_, err = storage.ExtendMessageLease(ctx, "owned", message.GetMessageId(), "attempt", "worker", 0)
+	require.ErrorContains(t, err, "lease cannot be extended")
+	var extensionUsed int64
+	var renewalCount int32
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT lease_extension_used, lease_renewal_count FROM cq_messages WHERE message_id = ?`, message.GetMessageId()).Scan(&extensionUsed, &renewalCount))
+	require.Zero(t, extensionUsed)
+	require.Zero(t, renewalCount)
+}
+
+func TestNackMessage_PreservesInfiniteRetries(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "nack-infinite.db"))
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "infinite", Metadata: &queuepb.QueueMetadata{}}))
+	require.NoError(t, storage.EnqueueMessage(ctx, "infinite", reclaimTestMessage("message", -1, -1)))
+
+	for _, attempt := range []string{"attempt-1", "attempt-2"} {
+		claimed, err := storage.ClaimMessage(ctx, "infinite", "worker", attempt, "")
+		require.NoError(t, err)
+		require.NotNil(t, claimed)
+		require.NoError(t, storage.NackMessage(ctx, "infinite", "message", attempt, "worker"))
+	}
+
+	peeked, err := storage.PeekMessages(ctx, "infinite", 1)
+	require.NoError(t, err)
+	require.Len(t, peeked, 1)
+	require.EqualValues(t, -1, peeked[0].GetMetadata().GetAttemptsLeft())
+}
+
+func TestNackMessage_ExhaustsLastFiniteAttempt(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "nack-finite.db"))
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "finite", Metadata: &queuepb.QueueMetadata{
+		MessageRetentionPolicy: &queuepb.MessageRetentionPolicy{Mode: queuepb.MessageRetentionPolicy_RETAIN_FOREVER},
+	}}))
+	require.NoError(t, storage.EnqueueMessage(ctx, "finite", reclaimTestMessage("message", 1, 1)))
+	claimed, err := storage.ClaimMessage(ctx, "finite", "worker", "attempt", "")
+	require.NoError(t, err)
+	require.NotNil(t, claimed)
+	require.NoError(t, storage.NackMessage(ctx, "finite", "message", "attempt", "worker"))
+
+	var state messagepb.Message_Metadata_State
+	var attemptsLeft int32
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT state, attempts_left FROM cq_messages WHERE queue_name = ? AND message_id = ?`, "finite", "message").Scan(&state, &attemptsLeft))
+	require.Equal(t, messagepb.Message_Metadata_ERRORED, state)
+	require.Zero(t, attemptsLeft)
+}
+
+func TestHeartbeatMessage_UsesConfiguredExtensionBounds(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "heartbeat-policy.db"))
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "heartbeat", Metadata: &queuepb.QueueMetadata{}}))
+	maxRenewals := int32(1)
+	message := reclaimTestMessage("message", 1, 1)
+	message.Metadata.LeasePolicy = &commonpb.LeasePolicy{
+		BaseLease:    durationpb.New(time.Minute),
+		MaxExtension: durationpb.New(2 * time.Second),
+		ExtendStep:   durationpb.New(time.Second),
+		MaxRenewals:  &maxRenewals,
+	}
+	require.NoError(t, storage.EnqueueMessage(ctx, "heartbeat", message))
+	_, err := storage.ClaimMessage(ctx, "heartbeat", "worker", "attempt", "")
+	require.NoError(t, err)
+
+	_, _, err = storage.HeartbeatMessage(ctx, "heartbeat", "message", "attempt", "worker")
+	require.NoError(t, err)
+	_, _, err = storage.HeartbeatMessage(ctx, "heartbeat", "message", "attempt", "worker")
+	require.NoError(t, err)
+
+	var heartbeatExpiry sql.NullInt64
+	var extensionUsed int64
+	var renewalCount int32
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT heartbeat_expiry, lease_extension_used, lease_renewal_count FROM cq_messages WHERE message_id = ?`, "message").Scan(&heartbeatExpiry, &extensionUsed, &renewalCount))
+	require.False(t, heartbeatExpiry.Valid)
+	require.EqualValues(t, time.Second.Milliseconds(), extensionUsed)
+	require.EqualValues(t, 1, renewalCount)
+}
+
+func TestMessageInsertMaintainsIntegerTimestampsAndCounters(t *testing.T) {
+	ctx := context.Background()
+	storage := newReclaimTestStorage(t, ctx, filepath.Join(t.TempDir(), "runtime-invariants.db"))
+	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: "invariants", Metadata: &queuepb.QueueMetadata{}}))
+	require.NoError(t, storage.EnqueueMessage(ctx, "invariants", reclaimTestMessage("message", 1, 1)))
+
+	var createdType, updatedType string
+	require.NoError(t, storage.DB.QueryRowContext(ctx, `SELECT typeof(created_at), typeof(updated_at) FROM cq_messages WHERE queue_name = ?`, "invariants").Scan(&createdType, &updatedType))
+	require.Equal(t, "integer", createdType)
+	require.Equal(t, "integer", updatedType)
+	counts, err := storage.StateManager.GetStateCounts(ctx, storage.DB, "invariants")
+	require.NoError(t, err)
+	require.EqualValues(t, 1, counts["pending"])
+	require.Zero(t, counts["invisible"])
 }
 
 func TestWorkerMutations_RequireActiveOwnership(t *testing.T) {

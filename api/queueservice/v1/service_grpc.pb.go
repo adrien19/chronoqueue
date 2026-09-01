@@ -170,7 +170,7 @@ type QueueServiceClient interface {
 	//	GET /v1/queues/order-processing/state
 	//	Response:
 	//	{
-	//	  "stateCounts": {"INVISIBLE": 0, "PENDING": 150, "RUNNING": 10, "COMPLETED": 5420, "CANCELED": 0, "ERRORED": 3}
+	//	  "stateCounts": {"INVISIBLE": "0", "PENDING": "150", "RUNNING": "10", "COMPLETED": "5420", "CANCELED": "0", "ERRORED": "3"}
 	//	}
 	//
 	// Returns: state counts and the earliest active deadline
@@ -344,6 +344,8 @@ type QueueServiceClient interface {
 	// Call periodically during processing to prevent lease expiration.
 	// attempt_id and worker_id from GetNextMessage are required and must identify
 	// the active, unexpired lease.
+	// An omitted lease_duration uses the queue/message extend_step. Renewal fails
+	// without consuming a renewal when no positive extension remains.
 	//
 	// Example pattern (heartbeat-style lease renewal):
 	//
@@ -718,7 +720,7 @@ type QueueServiceClient interface {
 	// Errors:
 	//   - NotFound: Schema not found
 	GetSchema(ctx context.Context, in *GetSchemaRequest, opts ...grpc.CallOption) (*GetSchemaResponse, error)
-	// ListSchemas returns all registered schemas.
+	// ListSchemas returns one summary for each registered schema family.
 	//
 	// Use for:
 	// - Schema discovery
@@ -729,7 +731,7 @@ type QueueServiceClient interface {
 	//
 	//	GET /v1/schemas
 	//
-	// Returns: List of schemas (all versions)
+	// Returns: Latest matching version and aggregate version metadata for each family
 	ListSchemas(ctx context.Context, in *ListSchemasRequest, opts ...grpc.CallOption) (*ListSchemasResponse, error)
 	// DeleteSchema deactivates a schema version, or all versions when version is 0.
 	//
@@ -1186,7 +1188,7 @@ type QueueServiceServer interface {
 	//	GET /v1/queues/order-processing/state
 	//	Response:
 	//	{
-	//	  "stateCounts": {"INVISIBLE": 0, "PENDING": 150, "RUNNING": 10, "COMPLETED": 5420, "CANCELED": 0, "ERRORED": 3}
+	//	  "stateCounts": {"INVISIBLE": "0", "PENDING": "150", "RUNNING": "10", "COMPLETED": "5420", "CANCELED": "0", "ERRORED": "3"}
 	//	}
 	//
 	// Returns: state counts and the earliest active deadline
@@ -1360,6 +1362,8 @@ type QueueServiceServer interface {
 	// Call periodically during processing to prevent lease expiration.
 	// attempt_id and worker_id from GetNextMessage are required and must identify
 	// the active, unexpired lease.
+	// An omitted lease_duration uses the queue/message extend_step. Renewal fails
+	// without consuming a renewal when no positive extension remains.
 	//
 	// Example pattern (heartbeat-style lease renewal):
 	//
@@ -1734,7 +1738,7 @@ type QueueServiceServer interface {
 	// Errors:
 	//   - NotFound: Schema not found
 	GetSchema(context.Context, *GetSchemaRequest) (*GetSchemaResponse, error)
-	// ListSchemas returns all registered schemas.
+	// ListSchemas returns one summary for each registered schema family.
 	//
 	// Use for:
 	// - Schema discovery
@@ -1745,7 +1749,7 @@ type QueueServiceServer interface {
 	//
 	//	GET /v1/schemas
 	//
-	// Returns: List of schemas (all versions)
+	// Returns: Latest matching version and aggregate version metadata for each family
 	ListSchemas(context.Context, *ListSchemasRequest) (*ListSchemasResponse, error)
 	// DeleteSchema deactivates a schema version, or all versions when version is 0.
 	//

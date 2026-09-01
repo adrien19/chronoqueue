@@ -51,7 +51,7 @@ func TestPeekStateConsistency_LeasedMessageExcluded(t *testing.T) {
 
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, fmt.Sprintf("consistency payload %s", messageID)),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	_, err = client.PostMessage(ctx, &queueservice_pb.PostMessageRequest{
@@ -82,8 +82,8 @@ func TestPeekStateConsistency_LeasedMessageExcluded(t *testing.T) {
 
 	stateResp, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{QueueName: queueName})
 	require.NoError(t, err)
-	assert.Equal(t, int32(0), stateResp.GetStateCounts()["PENDING"])
-	assert.Equal(t, int32(1), stateResp.GetStateCounts()["RUNNING"])
+	assert.Equal(t, int64(0), stateResp.GetStateCounts()["PENDING"])
+	assert.Equal(t, int64(1), stateResp.GetStateCounts()["RUNNING"])
 
 	peekResp, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
@@ -98,8 +98,8 @@ func TestPeekStateConsistency_LeasedMessageExcluded(t *testing.T) {
 
 	stateAfterWait, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{QueueName: queueName})
 	require.NoError(t, err)
-	assert.Equal(t, int32(0), stateAfterWait.GetStateCounts()["PENDING"])
-	assert.Equal(t, int32(1), stateAfterWait.GetStateCounts()["RUNNING"])
+	assert.Equal(t, int64(0), stateAfterWait.GetStateCounts()["PENDING"])
+	assert.Equal(t, int64(1), stateAfterWait.GetStateCounts()["RUNNING"])
 
 	peekAfterWait, err := client.PeekQueueMessages(ctx, &queueservice_pb.PeekQueueMessagesRequest{
 		QueueName: queueName,
@@ -122,6 +122,6 @@ func TestPeekStateConsistency_LeasedMessageExcluded(t *testing.T) {
 
 	finalState, err := client.GetQueueState(ctx, &queueservice_pb.GetQueueStateRequest{QueueName: queueName})
 	require.NoError(t, err)
-	assert.Equal(t, int32(0), finalState.GetStateCounts()["RUNNING"])
-	assert.Equal(t, int32(0), finalState.GetStateCounts()["PENDING"])
+	assert.Equal(t, int64(0), finalState.GetStateCounts()["RUNNING"])
+	assert.Equal(t, int64(0), finalState.GetStateCounts()["PENDING"])
 }

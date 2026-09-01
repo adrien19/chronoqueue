@@ -18,6 +18,29 @@ type cursor struct {
 	Filter   string `json:"f"`
 	Offset   int64  `json:"o,omitempty"`
 	Position string `json:"p,omitempty"`
+	Priority *int64 `json:"priority,omitempty"`
+	RowID    *int64 `json:"row_id,omitempty"`
+}
+
+func DecodePeek(token, scope, filter string) (int64, int64, error) {
+	if token == "" {
+		return 0, 0, nil
+	}
+	value, err := decode(token)
+	if err != nil {
+		return 0, 0, err
+	}
+	if value.Version != 2 || value.Scope != scope || value.Filter != filter || value.Priority == nil || value.RowID == nil || *value.RowID <= 0 || value.Offset != 0 || value.Position != "" {
+		return 0, 0, errors.New("page token does not match this request")
+	}
+	return *value.Priority, *value.RowID, nil
+}
+
+func EncodePeek(scope, filter string, priority, rowID int64) (string, error) {
+	if rowID <= 0 {
+		return "", errors.New("page token row id must be positive")
+	}
+	return encode(cursor{Version: 2, Scope: scope, Filter: filter, Priority: &priority, RowID: &rowID})
 }
 
 func DecodePosition(token, scope, filter string) (string, error) {
@@ -28,7 +51,7 @@ func DecodePosition(token, scope, filter string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if value.Version != 1 || value.Scope != scope || value.Filter != filter || value.Position == "" || value.Offset != 0 {
+	if value.Version != 1 || value.Scope != scope || value.Filter != filter || value.Position == "" || value.Offset != 0 || value.Priority != nil || value.RowID != nil {
 		return "", errors.New("page token does not match this request")
 	}
 	return value.Position, nil
@@ -59,7 +82,7 @@ func Decode(token, scope, filter string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if value.Version != 1 || value.Scope != scope || value.Filter != filter || value.Offset < 0 || value.Position != "" {
+	if value.Version != 1 || value.Scope != scope || value.Filter != filter || value.Offset < 0 || value.Position != "" || value.Priority != nil || value.RowID != nil {
 		return 0, errors.New("page token does not match this request")
 	}
 	return value.Offset, nil

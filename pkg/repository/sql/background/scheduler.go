@@ -15,19 +15,31 @@ import (
 // This service is generic and works with any SQL backend (SQLite, Postgres, etc.)
 // by using the BaseSQL abstraction layer.
 type SchedulerService struct {
-	base     *sqlbase.BaseSQL
-	interval time.Duration
-	stopChan chan struct{}
-	doneChan chan struct{}
+	base             *sqlbase.BaseSQL
+	interval         time.Duration
+	batchSize        int
+	maxDrainBatches  int
+	maxCycleDuration time.Duration
+	stopChan         chan struct{}
+	doneChan         chan struct{}
 }
+
+const (
+	defaultBackgroundBatchSize       = 100
+	defaultBackgroundMaxDrainBatches = 10
+	defaultBackgroundCycleDuration   = 5 * time.Second
+)
 
 // NewSchedulerService creates a new scheduler service.
 func NewSchedulerService(base *sqlbase.BaseSQL, interval time.Duration) *SchedulerService {
 	return &SchedulerService{
-		base:     base,
-		interval: interval,
-		stopChan: make(chan struct{}),
-		doneChan: make(chan struct{}),
+		base:             base,
+		interval:         interval,
+		batchSize:        defaultBackgroundBatchSize,
+		maxDrainBatches:  defaultBackgroundMaxDrainBatches,
+		maxCycleDuration: defaultBackgroundCycleDuration,
+		stopChan:         make(chan struct{}),
+		doneChan:         make(chan struct{}),
 	}
 }
 
@@ -90,69 +102,89 @@ type scheduledMessage struct {
 func (s *SchedulerService) processScheduledMessages(ctx context.Context) error {
 	start := time.Now()
 	status := "success"
+	batches := 0
+	handled := 0
 	defer func() {
 		metrics.IncrementBackgroundServiceIterations("scheduler", status)
 		metrics.ObserveBackgroundServiceIterationDuration("scheduler", time.Since(start).Seconds())
+		metrics.ObserveBackgroundServiceCycle("scheduler", batches, int64(handled))
 	}()
 
 	nowMs := s.base.Clock.NowMs()
 
-	// Phase 1: Collect scheduled messages (READ)
-	messages, err := s.collectScheduledMessages(ctx, nowMs)
-	if err != nil {
-		status = "error"
-		return fmt.Errorf("collect scheduled messages: %w", err)
-	}
-
-	if len(messages) == 0 {
-		return nil
-	}
-
-	// Phase 2: Process updates (WRITE)
 	var activated int
-
-	for _, msg := range messages {
-		if msg.message == nil || msg.message.Metadata == nil {
-			s.base.Logger.ErrorWithFields("Scheduled message missing metadata", "message_id", msg.messageID)
-			continue
+	budgetExhausted := true
+	for batch := 0; batch < s.maxDrainBatches && time.Since(start) < s.maxCycleDuration; batch++ {
+		if err := ctx.Err(); err != nil {
+			status = "error"
+			return fmt.Errorf("scheduler cycle canceled: %w", err)
 		}
-
-		oldState := msg.message.Metadata.State
-		msg.message.Metadata.State = messagepb.Message_Metadata_PENDING
-
-		// Update state in transaction
-		activatedMessage, err := s.activateMessage(ctx, msg.id, msg.queueName, msg.messageID, msg.message, oldState, nowMs)
+		messages, err := s.collectScheduledMessages(ctx, nowMs, s.batchSize)
 		if err != nil {
-			s.base.Logger.ErrorWithFields(
-				"Failed to activate scheduled message",
+			status = "error"
+			return fmt.Errorf("collect scheduled messages: %w", err)
+		}
+		if len(messages) == 0 {
+			budgetExhausted = false
+			break
+		}
+		batches++
+		handled += len(messages)
+		metrics.ObserveBackgroundServiceBatchSize("scheduler", len(messages))
+		progressed := 0
+
+		for _, msg := range messages {
+			if msg.message == nil || msg.message.Metadata == nil {
+				s.base.Logger.ErrorWithFields("Scheduled message missing metadata", "message_id", msg.messageID)
+				continue
+			}
+
+			oldState := msg.message.Metadata.State
+			msg.message.Metadata.State = messagepb.Message_Metadata_PENDING
+
+			// Update state in transaction
+			activatedMessage, err := s.activateMessage(ctx, msg.id, msg.queueName, msg.messageID, msg.message, oldState, nowMs)
+			if err != nil {
+				s.base.Logger.ErrorWithFields(
+					"Failed to activate scheduled message",
+					"message_id", msg.messageID,
+					"error", err,
+				)
+				continue
+			}
+			if !activatedMessage {
+				continue
+			}
+
+			activated++
+			progressed++
+
+			// Record metrics for activation
+			metrics.IncrementScheduleActivations(msg.queueName)
+			metrics.IncrementBackgroundServiceProcessedMessages("scheduler", msg.queueName)
+			metrics.RecordStateTransition(msg.queueName, "INVISIBLE", "PENDING")
+
+			// Calculate and record scheduler lag
+			if msg.message.GetMetadata().GetScheduledTime() != nil {
+				scheduledTime := msg.message.GetMetadata().GetScheduledTime().AsTime()
+				lag := time.Since(scheduledTime).Seconds()
+				metrics.SetScheduleLag(msg.queueName, lag)
+			}
+
+			s.base.Logger.DebugWithFields(
+				"Activated scheduled message",
 				"message_id", msg.messageID,
-				"error", err,
+				"queue", msg.queueName,
 			)
-			continue
 		}
-		if !activatedMessage {
-			continue
+		if progressed == 0 {
+			budgetExhausted = false
+			break
 		}
-
-		activated++
-
-		// Record metrics for activation
-		metrics.IncrementScheduleActivations(msg.queueName)
-		metrics.IncrementBackgroundServiceProcessedMessages("scheduler", msg.queueName)
-		metrics.RecordStateTransition(msg.queueName, "INVISIBLE", "PENDING")
-
-		// Calculate and record scheduler lag
-		if msg.message.GetMetadata().GetScheduledTime() != nil {
-			scheduledTime := msg.message.GetMetadata().GetScheduledTime().AsTime()
-			lag := time.Since(scheduledTime).Seconds()
-			metrics.SetScheduleLag(msg.queueName, lag)
-		}
-
-		s.base.Logger.DebugWithFields(
-			"Activated scheduled message",
-			"message_id", msg.messageID,
-			"queue", msg.queueName,
-		)
+		yieldBetweenBatches(s.base.Dialect.SupportsSkipLocked())
+	}
+	if budgetExhausted {
+		metrics.IncrementBackgroundServiceBudgetExhausted("scheduler")
 	}
 
 	if activated > 0 {
@@ -166,16 +198,16 @@ func (s *SchedulerService) processScheduledMessages(ctx context.Context) error {
 }
 
 // collectScheduledMessages queries for INVISIBLE messages whose time has arrived
-func (s *SchedulerService) collectScheduledMessages(ctx context.Context, nowMs int64) ([]scheduledMessage, error) {
+func (s *SchedulerService) collectScheduledMessages(ctx context.Context, nowMs int64, limit int) ([]scheduledMessage, error) {
 	query := fmt.Sprintf(`
 		SELECT id, queue_name, message_id, metadata_pb
 		FROM cq_messages
 		WHERE state = %s
 		  AND scheduled_at <= %s
 		ORDER BY scheduled_at ASC, priority DESC
-		LIMIT 100
+		LIMIT %d
 	`, s.base.Dialect.Placeholder(1),
-		s.base.Dialect.Placeholder(2))
+		s.base.Dialect.Placeholder(2), limit)
 
 	rows, err := s.base.DB.QueryContext(
 		ctx, query,

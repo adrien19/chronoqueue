@@ -71,3 +71,22 @@ func TestPositionRoundTripAndRejectsOffsetTokens(t *testing.T) {
 	_, err = Decode(token, "queues", "orders-")
 	require.Error(t, err)
 }
+
+func TestPeekRoundTripAndRejectsOtherTokenKinds(t *testing.T) {
+	token, err := EncodePeek("peek", "orders:1:3", 2, 42)
+	require.NoError(t, err)
+
+	priority, rowID, err := DecodePeek(token, "peek", "orders:1:3")
+	require.NoError(t, err)
+	require.EqualValues(t, 2, priority)
+	require.EqualValues(t, 42, rowID)
+
+	_, _, err = DecodePeek(token, "peek", "payments:1:3")
+	require.Error(t, err)
+	offsetToken, err := Encode("peek", "orders:1:3", 2)
+	require.NoError(t, err)
+	_, _, err = DecodePeek(offsetToken, "peek", "orders:1:3")
+	require.Error(t, err)
+	_, err = EncodePeek("peek", "orders:1:3", 2, 0)
+	require.Error(t, err)
+}

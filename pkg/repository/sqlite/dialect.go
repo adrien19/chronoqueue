@@ -57,8 +57,7 @@ func (d *Dialect) ToJSON(value string) string {
 
 // UnixMillis extracts unix milliseconds from a timestamp column
 func (d *Dialect) UnixMillis(column string) string {
-	// SQLite: Convert timestamp to unix milliseconds
-	return fmt.Sprintf("CAST((julianday(%s) - 2440587.5) * 86400000 AS INTEGER)", column)
+	return fmt.Sprintf("CAST(strftime('%%s', %s) AS INTEGER) * 1000 + CAST(substr(strftime('%%f', %s), 4, 3) AS INTEGER)", column, column)
 }
 
 // Type mapping methods

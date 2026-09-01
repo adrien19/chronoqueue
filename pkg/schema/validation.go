@@ -3,24 +3,53 @@ package schema
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
+
+	"github.com/xeipuuv/gojsonschema"
 )
+
+const maxSchemaContentBytes = 1 << 20
 
 // validateSchemaContent validates that content is valid JSON Schema
 func validateSchemaContent(contentType, content string) error {
 	if contentType != "" && contentType != "json-schema" {
 		return fmt.Errorf("unsupported content type %q: only json-schema is supported", contentType)
 	}
-	// Validate that content is valid JSON
-	var schema map[string]interface{}
+	if len(content) > maxSchemaContentBytes {
+		return fmt.Errorf("schema exceeds maximum size of %d bytes", maxSchemaContentBytes)
+	}
+	var schema any
 	if err := json.Unmarshal([]byte(content), &schema); err != nil {
 		return fmt.Errorf("invalid JSON: %w", err)
 	}
-
-	// Check for required JSON Schema fields
-	if _, ok := schema["type"]; !ok {
-		return fmt.Errorf("schema missing required 'type' field")
+	if err := rejectExternalReferences(schema); err != nil {
+		return err
+	}
+	if _, err := gojsonschema.NewSchema(gojsonschema.NewStringLoader(content)); err != nil {
+		return fmt.Errorf("invalid Draft 7 schema: %w", err)
 	}
 
+	return nil
+}
+
+func rejectExternalReferences(value any) error {
+	switch value := value.(type) {
+	case map[string]any:
+		if ref, ok := value["$ref"].(string); ok && ref != "" && !strings.HasPrefix(ref, "#") {
+			return fmt.Errorf("external schema reference %q is not allowed", ref)
+		}
+		for _, child := range value {
+			if err := rejectExternalReferences(child); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for _, child := range value {
+			if err := rejectExternalReferences(child); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

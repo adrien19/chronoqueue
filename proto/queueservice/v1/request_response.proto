@@ -234,7 +234,7 @@ message GetQueueStateRequest{
 }
 
 message GetQueueStateResponse{
-  map<string, int32>        state_counts      = 1;
+  map<string, int64>        state_counts      = 1;
   google.protobuf.Timestamp earliest_deadline = 2;
 }
 
@@ -454,7 +454,8 @@ message GetSchemaResponse {
   chronoqueue.api.schema.v1.Schema schema = 1; // Full schema object
 }
 
-// List schemas with optional filtering
+// List schema families with optional filtering.
+// Each family contributes at most one summary for its latest matching version.
 message ListSchemasRequest {
   string prefix      = 1; // Filter by schema_id prefix
   int32  page_size   = 2; // 0 uses the default of 100; maximum is 1000.
@@ -464,15 +465,15 @@ message ListSchemasRequest {
 
 message ListSchemasResponse {
   repeated SchemaInfo schemas     = 1;
-  int32               total_count = 2;
+  int32               total_count = 2; // Number of matching schema families, not versions.
   string               next_page_token = 3;
 }
 
-// Schema information for list responses
-// Note: This is a summary view with aggregated version info, different from schema.v1.Schema
+// Schema information for list responses.
+// This is one family summary with aggregated version info, not a schema version list.
 message SchemaInfo {
   string schema_id      = 1;
-  int32  latest_version = 2; // Latest version number
+  int32  latest_version = 2; // Latest version matching the request's active filter.
   string name           = 3;
   string description    = 4;
   int64  created_at     = 5;

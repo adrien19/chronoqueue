@@ -237,7 +237,7 @@ func (s *Storage) enqueueMessageInTx(ctx context.Context, tx *sql.Tx, queueName 
 		return "", fmt.Errorf("%w: %s", repositorycommon.ErrDuplicateMessageID, message.MessageId)
 	}
 
-	if err := s.StateManager.UpdateCounters(ctx, tx, queueName, 0, metadata.State); err != nil {
+	if err := s.StateManager.InsertCounter(ctx, tx, queueName, metadata.State); err != nil {
 		return "", fmt.Errorf("update counters: %w", err)
 	}
 
@@ -524,6 +524,9 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 			}
 		}
 
+		if shouldDelete {
+			return s.StateManager.RemoveCounter(ctx, tx, queueName, messagepb.Message_Metadata_RUNNING)
+		}
 		return s.StateManager.UpdateCounters(ctx, tx, queueName, messagepb.Message_Metadata_RUNNING, messagepb.Message_Metadata_COMPLETED)
 	})
 
@@ -542,6 +545,7 @@ func (s *Storage) AcknowledgeMessage(ctx context.Context, queueName string, mess
 func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId string, attemptId string, workerId string) error {
 	var movedToDLQ bool
 	var exhausted bool
+	var removed bool
 	var dlqName string
 
 	// Fetch queue metadata outside transaction to avoid connection pool contention
@@ -579,8 +583,11 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 		}
 
 		newState := messagepb.Message_Metadata_PENDING
-		newAttemptsLeft := attemptsLeft - 1
-		if newAttemptsLeft <= 0 {
+		newAttemptsLeft := attemptsLeft
+		if attemptsLeft != -1 {
+			newAttemptsLeft--
+		}
+		if newAttemptsLeft != -1 && newAttemptsLeft <= 0 {
 			exhausted = true
 			newState = messagepb.Message_Metadata_ERRORED
 			movedToDLQ = dlqName != ""
@@ -590,6 +597,7 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 			}
 
 			if shouldDelete {
+				removed = true
 				deleteQuery := s.ph(`
 					DELETE FROM cq_messages
 					WHERE queue_name = ? AND message_id = ? AND state = ?
@@ -679,6 +687,9 @@ func (s *Storage) NackMessage(ctx context.Context, queueName string, messageId s
 		if movedToDLQ && dlqName != "" {
 			return s.StateManager.MoveCounter(ctx, tx, queueName, oldState, dlqName, newState)
 		}
+		if removed {
+			return s.StateManager.RemoveCounter(ctx, tx, queueName, oldState)
+		}
 		return s.StateManager.UpdateCounters(ctx, tx, queueName, oldState, newState)
 	})
 
@@ -713,7 +724,7 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 
 	err = s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		// Verify message exists and is in cancellable state
-		query := s.ph(`SELECT state FROM cq_messages WHERE message_id = ? AND queue_name = ?`)
+		query := s.ph(`SELECT state FROM cq_messages WHERE message_id = ? AND queue_name = ? FOR UPDATE`)
 		err := tx.QueryRowContext(ctx, query, messageId, queueName).Scan(&currentState)
 		if err == sql.ErrNoRows {
 			return domainerror.New(domainerror.NotFound, fmt.Sprintf("message %q not found", messageId), err)
@@ -795,6 +806,9 @@ func (s *Storage) CancelMessage(ctx context.Context, queueName string, messageId
 		}
 
 		// Update state counters
+		if shouldDelete {
+			return s.StateManager.RemoveCounter(ctx, tx, queueName, currentState)
+		}
 		return s.StateManager.UpdateCounters(ctx, tx, queueName, currentState, messagepb.Message_Metadata_CANCELED)
 	})
 
@@ -857,7 +871,7 @@ func (s *Storage) ExtendMessageLease(ctx context.Context, queueName string, mess
 
 		newLeaseRuntime, err := s.LeaseRuntime.ExtendLease(leasePolicy, currentLeaseExpiry, leaseExtensionUsed, extensionMs)
 		if err != nil {
-			return domainerror.New(domainerror.FailedPrecondition, "maximum lease extension reached", err)
+			return domainerror.New(domainerror.FailedPrecondition, "lease cannot be extended", err)
 		}
 
 		updateQuery := s.ph(`
@@ -904,9 +918,11 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 	err := s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		var messageBytes []byte
 		var state messagepb.Message_Metadata_State
+		var leaseExpiry, leaseExtensionUsed int64
+		var leaseRenewalCount int32
 		nowMs := s.Clock.NowMs()
 		query := s.ph(`
-			SELECT metadata_pb, state
+			SELECT metadata_pb, state, lease_expiry, lease_extension_used, lease_renewal_count
 			FROM cq_messages
 			WHERE queue_name = ? AND message_id = ? AND state = ?
 			  AND current_attempt_id = ? AND current_worker_id = ?
@@ -914,7 +930,7 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 			  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
 			  AND deleted_at IS NULL
 			FOR UPDATE`)
-		err := tx.QueryRowContext(ctx, query, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs).Scan(&messageBytes, &state)
+		err := tx.QueryRowContext(ctx, query, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs).Scan(&messageBytes, &state, &leaseExpiry, &leaseExtensionUsed, &leaseRenewalCount)
 		if err == sql.ErrNoRows {
 			return s.classifyOwnedMessageFailure(ctx, tx, queueName, messageId, attemptId, workerId, nowMs)
 		}
@@ -927,23 +943,33 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 			return fmt.Errorf("unmarshal message: %w", err)
 		}
 
-		heartbeatTimeoutMs := int64(30000)
-		if lp := msg.GetMetadata().GetLeasePolicy(); lp != nil && lp.GetHeartbeatTimeout() != nil {
-			heartbeatTimeoutMs = lp.GetHeartbeatTimeout().AsDuration().Milliseconds()
-			if heartbeatTimeoutMs <= 0 {
-				heartbeatTimeoutMs = 30000
-			}
+		leasePolicy := msg.GetMetadata().GetLeasePolicy()
+		var heartbeatExpiry any
+		if timeout := leasePolicy.GetHeartbeatTimeout(); timeout != nil && timeout.AsDuration() > 0 {
+			heartbeatExpiry = nowMs + timeout.AsDuration().Milliseconds()
 		}
 
-		heartbeatExpiry := nowMs + heartbeatTimeoutMs
-		// Extend the lease when heartbeat is received to prevent message re-claiming
-		newLeaseExpiry := nowMs + heartbeatTimeoutMs
+		newLeaseExpiry := leaseExpiry
+		newExtensionUsed := leaseExtensionUsed
+		newRenewalCount := leaseRenewalCount
+		canRenew := leasePolicy.GetMaxRenewals() == 0 || leaseRenewalCount < leasePolicy.GetMaxRenewals()
+		if step := leasePolicy.GetExtendStep(); canRenew && step != nil && step.AsDuration() > 0 && leasePolicy.GetMaxExtension() != nil && leaseExtensionUsed < leasePolicy.GetMaxExtension().AsDuration().Milliseconds() {
+			runtime, extendErr := s.LeaseRuntime.ExtendLease(leasePolicy, leaseExpiry, leaseExtensionUsed, step.AsDuration().Milliseconds())
+			if extendErr != nil {
+				return fmt.Errorf("extend lease for heartbeat: %w", extendErr)
+			}
+			newLeaseExpiry = runtime.LeaseExpiry
+			newExtensionUsed = runtime.LeaseExtensionUsed
+			newRenewalCount++
+		}
 
 		update := s.ph(`
             UPDATE cq_messages
             SET last_heartbeat_at = ?,
                 heartbeat_expiry = ?,
                 lease_expiry = ?,
+				lease_extension_used = ?,
+				lease_renewal_count = ?,
                 updated_at = ?
 			WHERE queue_name = ? AND message_id = ? AND state = ?
 			  AND current_attempt_id = ? AND current_worker_id = ?
@@ -951,7 +977,7 @@ func (s *Storage) HeartbeatMessage(ctx context.Context, queueName string, messag
 			  AND (heartbeat_expiry IS NULL OR heartbeat_expiry <= 0 OR heartbeat_expiry > ?)
 			  AND deleted_at IS NULL
         `)
-		result, err := tx.ExecContext(ctx, update, nowMs, heartbeatExpiry, newLeaseExpiry, nowMs, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs)
+		result, err := tx.ExecContext(ctx, update, nowMs, heartbeatExpiry, newLeaseExpiry, newExtensionUsed, newRenewalCount, nowMs, queueName, messageId, messagepb.Message_Metadata_RUNNING, attemptId, workerId, nowMs, nowMs)
 		if err != nil {
 			return fmt.Errorf("update heartbeat: %w", err)
 		}
@@ -977,13 +1003,19 @@ func (s *Storage) PeekMessages(ctx context.Context, queueName string, limit int3
 
 // PeekMessagesWithPriorityRange retrieves messages within an optional inclusive priority range.
 func (s *Storage) PeekMessagesWithPriorityRange(ctx context.Context, queueName string, limit int32, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error) {
-	return s.PeekMessagesPage(ctx, queueName, limit, 0, priorityRange)
+	messages, _, err := s.PeekMessagesPage(ctx, queueName, limit, nil, priorityRange)
+	return messages, err
 }
 
-func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit int32, offset int64, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, error) {
+func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit int32, cursor *repositorysql.PeekCursor, priorityRange *repositorysql.PriorityRange) ([]*messagepb.Message, *repositorysql.PeekCursor, error) {
+	if limit <= 0 {
+		return nil, nil, nil
+	}
 	nowMs := s.Clock.NowMs()
 	query := `
-	SELECT metadata_pb,
+	SELECT id,
+	       priority,
+	       metadata_pb,
 	       state,
 	       attempts_left,
 	       max_attempts,
@@ -1005,20 +1037,30 @@ func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit 
 		query += ` AND priority BETWEEN ? AND ?`
 		args = append(args, priorityRange.Min, priorityRange.Max)
 	}
+	if cursor != nil {
+		query += ` AND (priority < ? OR (priority = ? AND id > ?))`
+		args = append(args, cursor.Priority, cursor.Priority, cursor.RowID)
+	}
 	query += `
-        ORDER BY priority DESC, id ASC
-		LIMIT ? OFFSET ?
+		ORDER BY priority DESC, id ASC
+		LIMIT ?
 	`
-	args = append(args, limit, offset)
+	args = append(args, limit+1)
 
 	rows, err := s.DB.QueryContext(ctx, s.ph(query), args...)
 	if err != nil {
-		return nil, fmt.Errorf("query messages: %w", err)
+		return nil, nil, fmt.Errorf("query messages: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			s.Logger.DPanic("Failed to close message rows", "error", err)
+		}
+	}()
 
 	var messages []*messagepb.Message
+	var cursors []repositorysql.PeekCursor
 	for rows.Next() {
+		var rowID, priority int64
 		var messageBytes []byte
 		var stateInt int32
 		var attemptsLeft int32
@@ -1033,6 +1075,8 @@ func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit 
 		var heartbeatExpiry sql.NullInt64
 
 		if err := rows.Scan(
+			&rowID,
+			&priority,
 			&messageBytes,
 			&stateInt,
 			&attemptsLeft,
@@ -1046,16 +1090,16 @@ func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit 
 			&lastHeartbeatAt,
 			&heartbeatExpiry,
 		); err != nil {
-			return nil, fmt.Errorf("scan message: %w", err)
+			return nil, nil, fmt.Errorf("scan message: %w", err)
 		}
 
 		msg, err := s.Serializer.UnmarshalMessage(messageBytes)
 		if err != nil {
-			return nil, fmt.Errorf("unmarshal message: %w", err)
+			return nil, nil, fmt.Errorf("unmarshal message: %w", err)
 		}
 
 		if err := repositorycommon.DecryptMessagePayload(msg, s.KeyManager); err != nil {
-			return nil, fmt.Errorf("decrypt message payload: %w", err)
+			return nil, nil, fmt.Errorf("decrypt message payload: %w", err)
 		}
 
 		repositorycommon.ApplyRuntimeMetadata(msg, repositorycommon.RuntimeMetadata{
@@ -1083,7 +1127,17 @@ func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit 
 		})
 
 		messages = append(messages, msg)
+		cursors = append(cursors, repositorysql.PeekCursor{Priority: priority, RowID: rowID})
 	}
-
-	return messages, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, nil, fmt.Errorf("close message rows: %w", err)
+	}
+	if len(messages) <= int(limit) {
+		return messages, nil, nil
+	}
+	nextCursor := cursors[limit-1]
+	return messages[:limit], &nextCursor, nil
 }

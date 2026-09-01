@@ -2,9 +2,12 @@ package background
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
+	messagepb "github.com/adrien19/chronoqueue/api/message/v1"
 	"github.com/adrien19/chronoqueue/pkg/metrics"
 	sqlbase "github.com/adrien19/chronoqueue/pkg/repository/sql"
 )
@@ -12,20 +15,26 @@ import (
 // CleanupService handles permanent deletion of soft-deleted messages
 // after their retention period expires.
 type CleanupService struct {
-	base     *sqlbase.BaseSQL
-	interval time.Duration
-	stopChan chan struct{}
-	doneChan chan struct{}
+	base             *sqlbase.BaseSQL
+	interval         time.Duration
+	batchSize        int
+	maxDrainBatches  int
+	maxCycleDuration time.Duration
+	stopChan         chan struct{}
+	doneChan         chan struct{}
 }
 
 // NewCleanupService creates a new cleanup service.
 // Recommended interval: 1 hour (cleanup is not time-sensitive).
 func NewCleanupService(base *sqlbase.BaseSQL, interval time.Duration) *CleanupService {
 	return &CleanupService{
-		base:     base,
-		interval: interval,
-		stopChan: make(chan struct{}),
-		doneChan: make(chan struct{}),
+		base:             base,
+		interval:         interval,
+		batchSize:        defaultBackgroundBatchSize,
+		maxDrainBatches:  defaultBackgroundMaxDrainBatches,
+		maxCycleDuration: defaultBackgroundCycleDuration,
+		stopChan:         make(chan struct{}),
+		doneChan:         make(chan struct{}),
 	}
 }
 
@@ -74,10 +83,12 @@ func (s *CleanupService) cleanupExpiredMessages(ctx context.Context) error {
 	start := time.Now()
 	status := "success"
 	deletedCount := int64(0)
+	batches := 0
 
 	defer func() {
 		metrics.IncrementBackgroundServiceIterations("cleanup", status)
 		metrics.ObserveBackgroundServiceIterationDuration("cleanup", time.Since(start).Seconds())
+		metrics.ObserveBackgroundServiceCycle("cleanup", batches, deletedCount)
 		if deletedCount > 0 {
 			s.base.Logger.InfoWithFields(
 				"Cleanup completed",
@@ -89,22 +100,28 @@ func (s *CleanupService) cleanupExpiredMessages(ctx context.Context) error {
 
 	nowMs := s.base.Clock.NowMs()
 
-	deleteQuery := fmt.Sprintf(`
-		DELETE FROM cq_messages 
-		WHERE deleted_at IS NOT NULL 
-		  AND deleted_at <= %s
-	`, s.base.Dialect.Placeholder(1))
-
-	result, err := s.base.DB.ExecContext(ctx, deleteQuery, nowMs)
-	if err != nil {
-		status = "error"
-		return fmt.Errorf("delete expired messages: %w", err)
+	budgetExhausted := true
+	for batch := 0; batch < s.maxDrainBatches && time.Since(start) < s.maxCycleDuration; batch++ {
+		if err := ctx.Err(); err != nil {
+			status = "error"
+			return fmt.Errorf("cleanup cycle canceled: %w", err)
+		}
+		deleted, err := s.cleanupExpiredBatch(ctx, nowMs, s.batchSize)
+		if err != nil {
+			status = "error"
+			return fmt.Errorf("delete expired message batch: %w", err)
+		}
+		batches++
+		deletedCount += deleted
+		metrics.ObserveBackgroundServiceBatchSize("cleanup", int(deleted))
+		if deleted < int64(s.batchSize) {
+			budgetExhausted = false
+			break
+		}
+		yieldBetweenBatches(s.base.Dialect.SupportsSkipLocked())
 	}
-
-	deletedCount, err = result.RowsAffected()
-	if err != nil {
-		status = "error"
-		return fmt.Errorf("get deleted count: %w", err)
+	if budgetExhausted {
+		metrics.IncrementBackgroundServiceBudgetExhausted("cleanup")
 	}
 
 	if deletedCount > 0 {
@@ -112,4 +129,61 @@ func (s *CleanupService) cleanupExpiredMessages(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (s *CleanupService) cleanupExpiredBatch(ctx context.Context, nowMs int64, limit int) (int64, error) {
+	var deleted int64
+	err := s.base.WithTransaction(ctx, &sqlbase.TxOptions{Timeout: 5 * time.Second}, func(tx *sql.Tx) error {
+		lockClause := ""
+		if s.base.Dialect.SupportsSkipLocked() {
+			lockClause = " FOR UPDATE SKIP LOCKED"
+		}
+		query := fmt.Sprintf(`
+			WITH expired AS (
+				SELECT id
+				FROM cq_messages
+				WHERE deleted_at IS NOT NULL AND deleted_at <= %s
+				ORDER BY deleted_at, id
+				LIMIT %d%s
+			)
+			DELETE FROM cq_messages
+			WHERE id IN (SELECT id FROM expired)
+			RETURNING queue_name, state
+		`, s.base.Dialect.Placeholder(1), limit, lockClause)
+
+		rows, err := tx.QueryContext(ctx, strings.TrimSpace(query), nowMs)
+		if err != nil {
+			return fmt.Errorf("delete expired messages: %w", err)
+		}
+		counts := make(map[string]map[messagepb.Message_Metadata_State]int64)
+		for rows.Next() {
+			var queueName string
+			var state messagepb.Message_Metadata_State
+			if err := rows.Scan(&queueName, &state); err != nil {
+				_ = rows.Close()
+				return fmt.Errorf("scan deleted message: %w", err)
+			}
+			if counts[queueName] == nil {
+				counts[queueName] = make(map[messagepb.Message_Metadata_State]int64)
+			}
+			counts[queueName][state]++
+			deleted++
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("iterate deleted messages: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return fmt.Errorf("close deleted message rows: %w", err)
+		}
+		for queueName, stateCounts := range counts {
+			for state, count := range stateCounts {
+				if err := s.base.StateManager.RemoveCounters(ctx, tx, queueName, state, count); err != nil {
+					return fmt.Errorf("update %s cleanup counters: %w", queueName, err)
+				}
+			}
+		}
+		return nil
+	})
+	return deleted, err
 }

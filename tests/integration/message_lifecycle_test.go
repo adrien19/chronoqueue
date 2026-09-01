@@ -287,7 +287,7 @@ func TestMessageLifecycle_GetNextMessageFIFO(t *testing.T) {
 
 		payload := &common_pb.Payload{
 			Data:        createStructFromString(t, fmt.Sprintf("Message %d", i)),
-			ContentType: "text/plain",
+			ContentType: "application/json",
 		}
 
 		message := &message_pb.Message{
@@ -358,7 +358,7 @@ func TestMessageLifecycle_MessageLeaseManagement(t *testing.T) {
 	msgID := helpers.GenerateUniqueMessageID(t)
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, "Test lease message"),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	message := &message_pb.Message{
@@ -438,7 +438,7 @@ func TestMessageLifecycle_RenewMessageLease(t *testing.T) {
 	msgID := helpers.GenerateUniqueMessageID(t)
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, "Test lease renewal"),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	message := &message_pb.Message{
@@ -518,7 +518,7 @@ func TestMessageLifecycle_AcknowledgeMessage(t *testing.T) {
 	msgID := helpers.GenerateUniqueMessageID(t)
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, "Test acknowledgment"),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	message := &message_pb.Message{
@@ -604,7 +604,7 @@ func TestMessageLifecycle_PeekMessages(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		payload := &common_pb.Payload{
 			Data:        createStructFromString(t, fmt.Sprintf("Peek test message %d", i)),
-			ContentType: "text/plain",
+			ContentType: "application/json",
 		}
 
 		message := &message_pb.Message{
@@ -680,7 +680,7 @@ func TestMessageLifecycle_SendHeartbeat(t *testing.T) {
 	msgID := helpers.GenerateUniqueMessageID(t)
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, "Test heartbeat"),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	message := &message_pb.Message{
@@ -792,7 +792,7 @@ func TestMessageLifecycle_CancelInvisibleMessage(t *testing.T) {
 
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, "Test cancel invisible"),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	message := &message_pb.Message{
@@ -861,7 +861,7 @@ func TestMessageLifecycle_CancelPendingMessage(t *testing.T) {
 	msgID := helpers.GenerateUniqueMessageID(t)
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, "Test cancel pending"),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	message := &message_pb.Message{
@@ -931,7 +931,7 @@ func TestMessageLifecycle_CancelRunningMessageFails(t *testing.T) {
 	msgID := helpers.GenerateUniqueMessageID(t)
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, "Test cancel running"),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	message := &message_pb.Message{
@@ -1039,7 +1039,7 @@ func TestMessageLifecycle_CancelWithReason(t *testing.T) {
 	msgID := helpers.GenerateUniqueMessageID(t)
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, "Test cancel with reason"),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	message := &message_pb.Message{
@@ -1119,7 +1119,7 @@ func TestMessageLifecycle_CancelMultipleMessages(t *testing.T) {
 
 		payload := &common_pb.Payload{
 			Data:        createStructFromString(t, fmt.Sprintf("Test message %d", i)),
-			ContentType: "text/plain",
+			ContentType: "application/json",
 		}
 
 		message := &message_pb.Message{
@@ -1190,7 +1190,7 @@ func TestMessageLifecycle_CancelAfterAcknowledgeFails(t *testing.T) {
 	msgID := helpers.GenerateUniqueMessageID(t)
 	payload := &common_pb.Payload{
 		Data:        createStructFromString(t, "Test cancel after ack"),
-		ContentType: "text/plain",
+		ContentType: "application/json",
 	}
 
 	message := &message_pb.Message{

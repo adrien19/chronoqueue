@@ -23,23 +23,29 @@ import (
 
 // CalendarService triggers calendar-based schedules when their next_run arrives.
 type CalendarService struct {
-	base       *sqlbase.BaseSQL
-	engine     calendar.Engine
-	interval   time.Duration
-	stopChan   chan struct{}
-	doneChan   chan struct{}
-	generateID func() (string, error)
+	base             *sqlbase.BaseSQL
+	engine           calendar.Engine
+	interval         time.Duration
+	stopChan         chan struct{}
+	doneChan         chan struct{}
+	generateID       func() (string, error)
+	batchSize        int
+	maxDrainBatches  int
+	maxCycleDuration time.Duration
 }
 
 // NewCalendarService creates a new calendar background processor.
 func NewCalendarService(base *sqlbase.BaseSQL, engine calendar.Engine, interval time.Duration) *CalendarService {
 	return &CalendarService{
-		base:       base,
-		engine:     engine,
-		interval:   interval,
-		stopChan:   make(chan struct{}),
-		doneChan:   make(chan struct{}),
-		generateID: util.GenerateID,
+		base:             base,
+		engine:           engine,
+		interval:         interval,
+		stopChan:         make(chan struct{}),
+		doneChan:         make(chan struct{}),
+		generateID:       util.GenerateID,
+		batchSize:        defaultBackgroundBatchSize,
+		maxDrainBatches:  defaultBackgroundMaxDrainBatches,
+		maxCycleDuration: defaultBackgroundCycleDuration,
 	}
 }
 
@@ -89,39 +95,69 @@ type dueSchedule struct {
 func (c *CalendarService) processDueSchedules(ctx context.Context) error {
 	start := time.Now()
 	status := "success"
+	batches := 0
+	handled := 0
 	defer func() {
 		metrics.IncrementBackgroundServiceIterations("calendar", status)
 		metrics.ObserveBackgroundServiceIterationDuration("calendar", time.Since(start).Seconds())
+		metrics.ObserveBackgroundServiceCycle("calendar", batches, int64(handled))
 	}()
 
-	nowMs := c.base.Clock.NowMs()
-
-	schedules, err := c.collectDueSchedules(ctx, nowMs)
-	if err != nil {
-		status = "error"
-		return fmt.Errorf("collect due schedules: %w", err)
-	}
-
-	for _, sched := range schedules {
-		if err := c.processSchedule(ctx, sched.id, nowMs); err != nil {
+	budgetExhausted := true
+	for batch := 0; batch < c.maxDrainBatches && time.Since(start) < c.maxCycleDuration; batch++ {
+		if err := ctx.Err(); err != nil {
 			status = "error"
-			c.base.Logger.ErrorWithFields("Failed to process schedule", "schedule_id", sched.id, "error", err)
+			return fmt.Errorf("calendar cycle canceled: %w", err)
 		}
+		nowMs := c.base.Clock.NowMs()
+		schedules, err := c.collectDueSchedules(ctx, nowMs, c.batchSize)
+		if err != nil {
+			status = "error"
+			return fmt.Errorf("collect due schedules: %w", err)
+		}
+		if len(schedules) == 0 {
+			budgetExhausted = false
+			break
+		}
+		batches++
+		handled += len(schedules)
+		metrics.ObserveBackgroundServiceBatchSize("calendar", len(schedules))
+		progressed := 0
+		for _, sched := range schedules {
+			processed, err := c.processSchedule(ctx, sched.id, nowMs)
+			if err != nil {
+				status = "error"
+				c.base.Logger.ErrorWithFields("Failed to process schedule", "schedule_id", sched.id, "error", err)
+				continue
+			}
+			if processed {
+				progressed++
+			}
+		}
+		if progressed == 0 {
+			budgetExhausted = false
+			break
+		}
+		yieldBetweenBatches(c.base.Dialect.SupportsSkipLocked())
+	}
+	if budgetExhausted {
+		metrics.IncrementBackgroundServiceBudgetExhausted("calendar")
 	}
 
 	return nil
 }
 
-func (c *CalendarService) collectDueSchedules(ctx context.Context, nowMs int64) ([]dueSchedule, error) {
+func (c *CalendarService) collectDueSchedules(ctx context.Context, nowMs int64, limit int) ([]dueSchedule, error) {
 	query := fmt.Sprintf(`
 		SELECT id
 		FROM cq_schedules
 		WHERE state = %s
 		  AND next_run IS NOT NULL
 		  AND next_run <= %s
+		  AND (cron_schedule IS NULL OR cron_schedule = '')
 		ORDER BY next_run ASC
-		LIMIT 100
-	`, c.base.Dialect.Placeholder(1), c.base.Dialect.Placeholder(2))
+		LIMIT %d
+	`, c.base.Dialect.Placeholder(1), c.base.Dialect.Placeholder(2), limit)
 
 	rows, err := c.base.DB.QueryContext(ctx, query, int(schedulepb.Schedule_Metadata_SCHEDULED), nowMs)
 	if err != nil {
@@ -141,8 +177,9 @@ func (c *CalendarService) collectDueSchedules(ctx context.Context, nowMs int64) 
 	return out, rows.Err()
 }
 
-func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string, nowMs int64) error {
-	return c.base.WithTransaction(ctx, &sqlbase.TxOptions{Timeout: 5 * time.Second}, func(tx *sql.Tx) error {
+func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string, nowMs int64) (bool, error) {
+	processed := false
+	err := c.base.WithTransaction(ctx, &sqlbase.TxOptions{Timeout: 5 * time.Second}, func(tx *sql.Tx) error {
 		query := fmt.Sprintf(`
 			SELECT metadata_pb, state, queue_name, next_run, execution_count
 			FROM cq_schedules
@@ -187,8 +224,19 @@ func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string
 		if schedule.Metadata == nil {
 			schedule.Metadata = &schedulepb.Schedule_Metadata{}
 		}
+		markError := func(message string) error {
+			if err := c.markScheduleError(ctx, tx, schedule, scheduleID, message); err != nil {
+				return err
+			}
+			processed = true
+			return nil
+		}
 		if schedule.Metadata.GetHasMaxMessages() && execCount >= schedule.Metadata.GetMaxMessages() {
-			return c.pauseAtMessageLimit(ctx, tx, schedule, scheduleID, nowMs, execCount)
+			if err := c.pauseAtMessageLimit(ctx, tx, schedule, scheduleID, nowMs, execCount); err != nil {
+				return err
+			}
+			processed = true
+			return nil
 		}
 
 		// Skip cron-only schedules; cron processor owns them and sets next_run
@@ -196,7 +244,7 @@ func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string
 			if schedule.Metadata.GetCronSchedule() != "" {
 				return nil
 			}
-			return c.markScheduleError(ctx, tx, schedule, scheduleID, "missing calendar schedule")
+			return markError("missing calendar schedule")
 		}
 
 		runTime := time.UnixMilli(nextRun.Int64)
@@ -205,15 +253,15 @@ func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string
 		}
 
 		if err := c.engine.ValidateSchedule(ctx, schedule.Metadata.GetCalendarSchedule()); err != nil {
-			return c.markScheduleError(ctx, tx, schedule, scheduleID, fmt.Sprintf("invalid calendar schedule: %v", err))
+			return markError(fmt.Sprintf("invalid calendar schedule: %v", err))
 		}
 
-		messageID, err := c.createScheduledMessage(ctx, tx, queueName, schedule, runTime)
+		_, err = c.createScheduledMessage(ctx, tx, queueName, schedule, runTime)
 		if err != nil {
-			return c.markScheduleError(ctx, tx, schedule, scheduleID, err.Error())
+			return markError(err.Error())
 		}
 
-		schedule.Metadata.MessageIds = append(schedule.Metadata.MessageIds, messageID)
+		repositorycommon.ClearLegacyScheduleMessageIDs(schedule.Metadata)
 		schedule.Metadata.LastRun = timestamppb.New(runTime)
 		execCount++
 
@@ -221,7 +269,7 @@ func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string
 		if schedule.Metadata.GetHasMaxMessages() && execCount >= schedule.Metadata.GetMaxMessages() {
 			nextRunTime, err := c.engine.CalculateNextRun(ctx, schedule.Metadata.GetCalendarSchedule(), runTime)
 			if err != nil {
-				return c.markScheduleError(ctx, tx, schedule, scheduleID, err.Error())
+				return markError(err.Error())
 			}
 			schedule.Metadata.State = schedulepb.Schedule_Metadata_PAUSED
 			schedule.Metadata.StateMessage = "maximum message count reached"
@@ -234,7 +282,7 @@ func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string
 		} else {
 			nextRunTime, err := c.engine.CalculateNextRun(ctx, schedule.Metadata.GetCalendarSchedule(), runTime)
 			if err != nil {
-				return c.markScheduleError(ctx, tx, schedule, scheduleID, err.Error())
+				return markError(err.Error())
 			}
 			if nextRunTime == nil {
 				schedule.Metadata.State = schedulepb.Schedule_Metadata_PAUSED
@@ -274,9 +322,11 @@ func (c *CalendarService) processSchedule(ctx context.Context, scheduleID string
 
 		metrics.IncrementScheduleExecutions(scheduleID, queueName, "success")
 		metrics.IncrementBackgroundServiceProcessedMessages("calendar", queueName)
+		processed = true
 
 		return nil
 	})
+	return processed, err
 }
 
 func (c *CalendarService) pauseAtMessageLimit(ctx context.Context, tx *sql.Tx, schedule *schedulepb.Schedule, scheduleID string, nowMs, execCount int64) error {
@@ -434,7 +484,7 @@ func (c *CalendarService) createScheduledMessage(ctx context.Context, tx *sql.Tx
 		return "", fmt.Errorf("insert message: %w", err)
 	}
 
-	if err := c.base.StateManager.UpdateCounters(ctx, tx, queueName, 0, messagepb.Message_Metadata_INVISIBLE); err != nil {
+	if err := c.base.StateManager.InsertCounter(ctx, tx, queueName, messagepb.Message_Metadata_INVISIBLE); err != nil {
 		return "", fmt.Errorf("update counters: %w", err)
 	}
 

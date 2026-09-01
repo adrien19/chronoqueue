@@ -24,6 +24,7 @@ type (
 	ExceptionPreview         = types.ExceptionPreview
 	BusinessDayInfo          = types.BusinessDayInfo
 	ValidationIssue          = types.ValidationIssue
+	CacheConfig              = types.CacheConfig
 )
 
 // Constants from types package
@@ -88,6 +89,7 @@ func WithExceptionHandler(handler ExceptionHandler) CalendarEngineOption {
 func WithCaching(cacheConfig *types.CacheConfig) CalendarEngineOption {
 	return func(config *CalendarEngineConfig) {
 		config.CacheConfig = cacheConfig
+		config.EnableCaching = cacheConfig != nil && cacheConfig.Enabled
 	}
 }
 

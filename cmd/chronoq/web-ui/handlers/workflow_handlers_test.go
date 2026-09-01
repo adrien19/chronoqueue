@@ -156,7 +156,7 @@ func TestQueueListAcceptsNormalizedHTMXHeader(t *testing.T) {
 func TestQueueDetailKeepsPageOnDLQStatsFailure(t *testing.T) {
 	service := &workflowQueueService{
 		listQueuesResponse:    &queueservicepb.ListQueuesResponse{Queues: []*queuepb.Queue{{Name: "orders", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "orders-dlq"}}}},
-		getQueueStateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int32{}},
+		getQueueStateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int64{}},
 		peekQueueResponse:     &queueservicepb.PeekQueueMessagesResponse{},
 		getDLQStatsErr:        status.Error(codes.Unavailable, "private"),
 	}
@@ -177,7 +177,7 @@ func TestDashboardStatsUseTruthfulAggregateStates(t *testing.T) {
 		stateErr      error
 		want          string
 	}{
-		{name: "complete", stateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int32{"PENDING": 3, "RUNNING": 2, "COMPLETED": 5}}, want: "Reachable|3|2|5|0|false"},
+		{name: "complete", stateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int64{"PENDING": 3, "RUNNING": 2, "COMPLETED": 5}}, want: "Reachable|3|2|5|0|false"},
 		{name: "partial", stateErr: status.Error(codes.Unavailable, "private"), want: "Partial data|—|—|—|—|true"},
 	}
 	for _, test := range tests {
@@ -199,7 +199,7 @@ func TestDashboardStatsUseTruthfulAggregateStates(t *testing.T) {
 	t.Run("DLQ failure", func(t *testing.T) {
 		service := &workflowQueueService{
 			listQueuesResponse:    &queueservicepb.ListQueuesResponse{Queues: []*queuepb.Queue{{Name: "orders", Metadata: &queuepb.QueueMetadata{DeadLetterQueueName: "orders-dlq"}}}},
-			getQueueStateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int32{"PENDING": 3}},
+			getQueueStateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int64{"PENDING": 3}},
 			getDLQStatsErr:        status.Error(codes.Unavailable, "private"),
 		}
 		handler := &DashboardHandler{BaseHandler: workflowBaseHandler(t, service)}
@@ -255,7 +255,7 @@ func TestLeaseMonitorRuntimeMetadataAndFailures(t *testing.T) {
 	t.Run("peek success", func(t *testing.T) {
 		service := &workflowQueueService{
 			listQueuesResponse:    &queueservicepb.ListQueuesResponse{Queues: []*queuepb.Queue{{Name: "orders"}}},
-			getQueueStateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int32{"RUNNING": 1}},
+			getQueueStateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int64{"RUNNING": 1}},
 			peekQueueResponse:     &queueservicepb.PeekQueueMessagesResponse{Messages: []*messagepb.Message{message}},
 		}
 		base := workflowBaseHandler(t, service)
@@ -285,7 +285,7 @@ func TestLeaseMonitorRuntimeMetadataAndFailures(t *testing.T) {
 	t.Run("peek failure is partial", func(t *testing.T) {
 		service := &workflowQueueService{
 			listQueuesResponse:    &queueservicepb.ListQueuesResponse{Queues: []*queuepb.Queue{{Name: "orders"}}},
-			getQueueStateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int32{"RUNNING": 1}},
+			getQueueStateResponse: &queueservicepb.GetQueueStateResponse{StateCounts: map[string]int64{"RUNNING": 1}},
 			peekQueueErr:          status.Error(codes.Unavailable, "private"),
 		}
 		base := workflowBaseHandler(t, service)

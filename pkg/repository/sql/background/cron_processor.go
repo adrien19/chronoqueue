@@ -23,22 +23,28 @@ import (
 
 // CronProcessorService triggers cron-based schedules when their cron expressions are due.
 type CronProcessorService struct {
-	base       *sqlbase.BaseSQL
-	interval   time.Duration
-	stopChan   chan struct{}
-	doneChan   chan struct{}
-	nowFn      func() time.Time
-	generateID func() (string, error)
+	base             *sqlbase.BaseSQL
+	interval         time.Duration
+	stopChan         chan struct{}
+	doneChan         chan struct{}
+	nowFn            func() time.Time
+	generateID       func() (string, error)
+	batchSize        int
+	maxDrainBatches  int
+	maxCycleDuration time.Duration
 }
 
 // NewCronProcessorService creates a new cron background processor.
 func NewCronProcessorService(base *sqlbase.BaseSQL, interval time.Duration) *CronProcessorService {
 	return &CronProcessorService{
-		base:       base,
-		interval:   interval,
-		stopChan:   make(chan struct{}),
-		doneChan:   make(chan struct{}),
-		generateID: util.GenerateID,
+		base:             base,
+		interval:         interval,
+		stopChan:         make(chan struct{}),
+		doneChan:         make(chan struct{}),
+		generateID:       util.GenerateID,
+		batchSize:        defaultBackgroundBatchSize,
+		maxDrainBatches:  defaultBackgroundMaxDrainBatches,
+		maxCycleDuration: defaultBackgroundCycleDuration,
 		nowFn: func() time.Time {
 			return base.Clock.Now().UTC()
 		},
@@ -91,30 +97,48 @@ type cronCandidate struct {
 func (c *CronProcessorService) processCronSchedules(ctx context.Context) error {
 	start := time.Now()
 	status := "success"
+	batches := 0
+	handled := 0
 	defer func() {
 		metrics.IncrementBackgroundServiceIterations("cron_processor", status)
 		metrics.ObserveBackgroundServiceIterationDuration("cron_processor", time.Since(start).Seconds())
+		metrics.ObserveBackgroundServiceCycle("cron_processor", batches, int64(handled))
 	}()
 
-	nowMs := c.base.Clock.NowMs()
-
-	schedules, err := c.collectDueCronSchedules(ctx, nowMs)
-	if err != nil {
-		status = "error"
-		return fmt.Errorf("collect cron schedules: %w", err)
-	}
-
-	for _, sched := range schedules {
-		if err := c.processSchedule(ctx, sched.id); err != nil {
+	budgetExhausted := true
+	for batch := 0; batch < c.maxDrainBatches && time.Since(start) < c.maxCycleDuration; batch++ {
+		if err := ctx.Err(); err != nil {
 			status = "error"
-			c.base.Logger.ErrorWithFields("Failed to process cron schedule", "schedule_id", sched.id, "error", err)
+			return fmt.Errorf("cron processor cycle canceled: %w", err)
 		}
+		schedules, err := c.collectDueCronSchedules(ctx, c.base.Clock.NowMs(), c.batchSize)
+		if err != nil {
+			status = "error"
+			return fmt.Errorf("collect cron schedules: %w", err)
+		}
+		if len(schedules) == 0 {
+			budgetExhausted = false
+			break
+		}
+		batches++
+		handled += len(schedules)
+		metrics.ObserveBackgroundServiceBatchSize("cron_processor", len(schedules))
+		for _, sched := range schedules {
+			if err := c.processSchedule(ctx, sched.id); err != nil {
+				status = "error"
+				c.base.Logger.ErrorWithFields("Failed to process cron schedule", "schedule_id", sched.id, "error", err)
+			}
+		}
+		yieldBetweenBatches(c.base.Dialect.SupportsSkipLocked())
+	}
+	if budgetExhausted {
+		metrics.IncrementBackgroundServiceBudgetExhausted("cron_processor")
 	}
 
 	return nil
 }
 
-func (c *CronProcessorService) collectDueCronSchedules(ctx context.Context, nowMs int64) ([]cronCandidate, error) {
+func (c *CronProcessorService) collectDueCronSchedules(ctx context.Context, nowMs int64, limit int) ([]cronCandidate, error) {
 	query := fmt.Sprintf(`
         SELECT id
         FROM cq_schedules
@@ -123,8 +147,8 @@ func (c *CronProcessorService) collectDueCronSchedules(ctx context.Context, nowM
           AND cron_schedule <> ''
           AND (next_run IS NULL OR next_run <= %s)
         ORDER BY next_run ASC
-        LIMIT 100
-    `, c.base.Dialect.Placeholder(1), c.base.Dialect.Placeholder(2))
+        LIMIT %d
+    `, c.base.Dialect.Placeholder(1), c.base.Dialect.Placeholder(2), limit)
 
 	rows, err := c.base.DB.QueryContext(ctx, query, int(schedulepb.Schedule_Metadata_SCHEDULED), nowMs)
 	if err != nil {
@@ -227,7 +251,7 @@ func (c *CronProcessorService) processSchedule(ctx context.Context, scheduleID s
 			return nil
 		}
 
-		messageID, err := c.createCronMessage(ctx, tx, queueName, schedule, now)
+		_, err = c.createCronMessage(ctx, tx, queueName, schedule, nextRunTime)
 		if err != nil {
 			if isScheduledMessageValidationError(err) {
 				return c.markScheduleError(ctx, tx, schedule, scheduleID, err.Error())
@@ -240,17 +264,17 @@ func (c *CronProcessorService) processSchedule(ctx context.Context, scheduleID s
 
 		count++
 
-		schedule.Metadata.MessageIds = append(schedule.Metadata.MessageIds, messageID)
-		schedule.Metadata.LastRun = timestamppb.New(now)
+		repositorycommon.ClearLegacyScheduleMessageIDs(schedule.Metadata)
+		schedule.Metadata.LastRun = timestamppb.New(nextRunTime)
 		var nextRunMs any
 		if schedule.Metadata.GetHasMaxMessages() && count >= schedule.Metadata.GetMaxMessages() {
-			nextRunTime := c.calculateNextCronRun(cronSchedule, now)
+			nextRunTime = c.calculateNextCronRun(cronSchedule, nextRunTime)
 			schedule.Metadata.State = schedulepb.Schedule_Metadata_PAUSED
 			schedule.Metadata.StateMessage = "maximum message count reached"
 			schedule.Metadata.NextRun = timestamppb.New(nextRunTime)
 			nextRunMs = nextRunTime.UnixMilli()
 		} else {
-			nextRunTime := c.calculateNextCronRun(cronSchedule, now)
+			nextRunTime = c.calculateNextCronRun(cronSchedule, nextRunTime)
 			schedule.Metadata.NextRun = timestamppb.New(nextRunTime)
 			schedule.Metadata.StateMessage = ""
 			nextRunMs = nextRunTime.UnixMilli()
@@ -286,7 +310,7 @@ func (c *CronProcessorService) processSchedule(ctx context.Context, scheduleID s
 			c.base.Dialect.Placeholder(7),
 		)
 
-		if _, err := tx.ExecContext(ctx, updateQuery, updatedBytes, schedule.Metadata.GetState(), nextRunMs, now.UnixMilli(), count, now.UnixMilli(), scheduleID); err != nil {
+		if _, err := tx.ExecContext(ctx, updateQuery, updatedBytes, schedule.Metadata.GetState(), nextRunMs, schedule.Metadata.GetLastRun().AsTime().UnixMilli(), count, now.UnixMilli(), scheduleID); err != nil {
 			return fmt.Errorf("update schedule: %w", err)
 		}
 
@@ -483,7 +507,7 @@ func (c *CronProcessorService) createCronMessage(ctx context.Context, tx *sql.Tx
 		return "", fmt.Errorf("insert message: %w", err)
 	}
 
-	if err := c.base.StateManager.UpdateCounters(ctx, tx, queueName, 0, messagepb.Message_Metadata_INVISIBLE); err != nil {
+	if err := c.base.StateManager.InsertCounter(ctx, tx, queueName, messagepb.Message_Metadata_INVISIBLE); err != nil {
 		return "", fmt.Errorf("update counters: %w", err)
 	}
 

@@ -168,6 +168,10 @@ func NewMetricsRegistry() *MetricsRegistry {
 		backgroundServiceIterations,
 		backgroundServiceProcessedMessages,
 		backgroundServiceIterationDuration,
+		backgroundServiceBatchSize,
+		backgroundServiceBudgetExhausted,
+		backgroundServiceCycleBatches,
+		backgroundServiceCycleItems,
 		messagesCleanedUpTotal,
 	)
 

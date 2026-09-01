@@ -19,12 +19,15 @@ type Storage struct {
 
 // Config holds SQLite storage configuration
 type Config struct {
-	Path              string
-	Logger            *log.Logger
-	KeyManager        *keymanager.EncryptionKeyManager
-	SchedulerInterval time.Duration
-	ReclaimInterval   time.Duration
-	SchemaRegistry    schema.Registry
+	Path                       string
+	Logger                     *log.Logger
+	KeyManager                 *keymanager.EncryptionKeyManager
+	SchedulerInterval          time.Duration
+	ReclaimInterval            time.Duration
+	SchemaRegistry             schema.Registry
+	BackgroundBatchSize        int
+	BackgroundMaxDrainBatches  int
+	BackgroundMaxCycleDuration time.Duration
 }
 
 // NewStorage creates a new SQLite storage instance

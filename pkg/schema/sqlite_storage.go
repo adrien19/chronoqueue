@@ -364,8 +364,7 @@ func (s *SQLiteRegistry) ListWithOptions(ctx context.Context, options ListOption
 			&lastUpdatedAt,
 		)
 		if err != nil {
-			s.logger.ErrorWithFields("Failed to scan schema", "error", err)
-			continue
+			return ListResult{}, fmt.Errorf("scan schema list row: %w", err)
 		}
 
 		schema.IsActive = isActive == 1

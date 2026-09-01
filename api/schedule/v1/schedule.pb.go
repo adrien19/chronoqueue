@@ -1971,9 +1971,11 @@ type Schedule_Metadata struct {
 	// Must be an existing queue.
 	// Messages inherit queue's retry, lease, and DLQ settings.
 	QueueName string `protobuf:"bytes,4,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
-	// message_ids: IDs of messages created by this schedule (for tracking/debugging).
-	// Auto-populated by ChronoQueue. Format: "{schedule_id}-{timestamp}"
-	// Use to correlate schedule executions with processed messages.
+	// message_ids: Deprecated legacy execution IDs.
+	// New executions are available through GetScheduleHistory, which retains
+	// immutable message snapshots without growing this schedule record.
+	//
+	// Deprecated: Marked as deprecated in proto/schedule/v1/schedule.proto.
 	MessageIds []string `protobuf:"bytes,5,rep,name=message_ids,json=messageIds,proto3" json:"message_ids,omitempty"`
 	// next_run: When this schedule will execute next.
 	// Auto-calculated by ChronoQueue based on schedule_config.
@@ -2099,6 +2101,7 @@ func (x *Schedule_Metadata) GetQueueName() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in proto/schedule/v1/schedule.proto.
 func (x *Schedule_Metadata) GetMessageIds() []string {
 	if x != nil {
 		return x.MessageIds
@@ -2310,19 +2313,19 @@ var File_proto_schedule_v1_schedule_proto protoreflect.FileDescriptor
 
 const file_proto_schedule_v1_schedule_proto_rawDesc = "" +
 	"\n" +
-	" proto/schedule/v1/schedule.proto\x12\x1bchronoqueue.api.schedule.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cproto/common/v1/common.proto\x1a\x1eproto/message/v1/message.proto\"\x98\t\n" +
+	" proto/schedule/v1/schedule.proto\x12\x1bchronoqueue.api.schedule.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cproto/common/v1/common.proto\x1a\x1eproto/message/v1/message.proto\"\x9c\t\n" +
 	"\bSchedule\x12\x1f\n" +
 	"\vschedule_id\x18\x01 \x01(\tR\n" +
 	"scheduleId\x12J\n" +
-	"\bmetadata\x18\x02 \x01(\v2..chronoqueue.api.schedule.v1.Schedule.MetadataR\bmetadata\x1a\x9e\b\n" +
+	"\bmetadata\x18\x02 \x01(\v2..chronoqueue.api.schedule.v1.Schedule.MetadataR\bmetadata\x1a\xa2\b\n" +
 	"\bMetadata\x12<\n" +
 	"\apayload\x18\x01 \x01(\v2\".chronoqueue.api.common.v1.PayloadR\apayload\x12J\n" +
 	"\x05state\x18\x02 \x01(\x0e24.chronoqueue.api.schedule.v1.Schedule.Metadata.StateR\x05state\x12%\n" +
 	"\rcron_schedule\x18\x03 \x01(\tH\x00R\fcronSchedule\x12\\\n" +
 	"\x11calendar_schedule\x18\x10 \x01(\v2-.chronoqueue.api.schedule.v1.CalendarScheduleH\x00R\x10calendarSchedule\x12\x1d\n" +
 	"\n" +
-	"queue_name\x18\x04 \x01(\tR\tqueueName\x12\x1f\n" +
-	"\vmessage_ids\x18\x05 \x03(\tR\n" +
+	"queue_name\x18\x04 \x01(\tR\tqueueName\x12#\n" +
+	"\vmessage_ids\x18\x05 \x03(\tB\x02\x18\x01R\n" +
 	"messageIds\x125\n" +
 	"\bnext_run\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\anextRun\x125\n" +
 	"\blast_run\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\alastRun\x129\n" +

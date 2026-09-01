@@ -87,6 +87,7 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 		return nil, fmt.Errorf("get queue metadata: %w", err)
 	}
 	dlqName := queueMetadata.GetDeadLetterQueueName()
+	shouldDelete, deletedAt := s.calculateDeletion(queueMetadata.GetMessageRetentionPolicy())
 	err = s.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
 		nowMs := s.Clock.NowMs()
 		var leaseExpiry, heartbeatExpiry sql.NullInt64
@@ -94,7 +95,7 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 			UPDATE cq_messages
 			SET state = CASE WHEN max_attempts = -1 OR attempts_left > 1 THEN ? ELSE ? END,
 				attempts_left = CASE WHEN max_attempts = -1 THEN -1 ELSE attempts_left - 1 END,
-				updated_at = CURRENT_TIMESTAMP
+				updated_at = ?
 			WHERE queue_name = ?
 			  AND message_id = ?
 			  AND state = ?
@@ -111,6 +112,7 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 			updateQuery,
 			messagepb.Message_Metadata_PENDING,
 			messagepb.Message_Metadata_ERRORED,
+			nowMs,
 			queueName,
 			message.GetMessageId(),
 			messagepb.Message_Metadata_RUNNING,
@@ -128,6 +130,22 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 		}
 		result.LeaseExpired = leaseExpiry.Valid && leaseExpiry.Int64 <= nowMs
 		result.HeartbeatExpired = heartbeatExpiry.Valid && heartbeatExpiry.Int64 > 0 && heartbeatExpiry.Int64 <= nowMs
+		if newState == messagepb.Message_Metadata_ERRORED && dlqName == "" && shouldDelete {
+			deleteResult, err := tx.ExecContext(ctx, `DELETE FROM cq_messages WHERE queue_name = ? AND message_id = ? AND state = ?`, queueName, message.GetMessageId(), newState)
+			if err != nil {
+				return fmt.Errorf("delete exhausted message: %w", err)
+			}
+			rows, rowsErr := deleteResult.RowsAffected()
+			if rowsErr != nil || rows != 1 {
+				return fmt.Errorf("delete exhausted message: expected one row, deleted %d: %w", rows, rowsErr)
+			}
+			return s.StateManager.RemoveCounter(ctx, tx, queueName, messagepb.Message_Metadata_RUNNING)
+		}
+
+		var completedAt, terminalDeletedAt any
+		if newState == messagepb.Message_Metadata_ERRORED && dlqName == "" {
+			completedAt, terminalDeletedAt = nowMs, deletedAt
+		}
 
 		clearResult, err := tx.ExecContext(ctx, `
 			UPDATE cq_messages
@@ -138,9 +156,11 @@ func (s *Storage) ReclaimExpiredMessage(ctx context.Context, queueName string, m
 				lease_extension_used = 0,
 				lease_renewal_count = 0,
 				last_heartbeat_at = NULL,
-				heartbeat_expiry = NULL
+				heartbeat_expiry = NULL,
+				completed_at = ?,
+				deleted_at = ?
 			WHERE queue_name = ? AND message_id = ?
-		`, queueName, message.GetMessageId())
+		`, completedAt, terminalDeletedAt, queueName, message.GetMessageId())
 		if err != nil {
 			return fmt.Errorf("clear message lease: %w", err)
 		}

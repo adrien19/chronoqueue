@@ -531,7 +531,7 @@ func TestE2E_MultiTenantIsolation(t *testing.T) {
 		if err == nil {
 			pendingCount := stateResp.StateCounts["PENDING"]
 			t.Logf("  %s: %d pending messages", queueName, pendingCount)
-			assert.GreaterOrEqual(t, pendingCount, int32(messagesPerQueue),
+			assert.GreaterOrEqual(t, pendingCount, int64(messagesPerQueue),
 				"Tenant B queue should still have all messages")
 		}
 	}

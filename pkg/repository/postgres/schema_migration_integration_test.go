@@ -38,7 +38,7 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 		`CREATE TABLE cq_schema_version (version INTEGER PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, description TEXT)`,
 		`INSERT INTO cq_schema_version (version, description) VALUES (1, 'release fixture')`,
 		`CREATE TABLE cq_schedules (id TEXT PRIMARY KEY, state INTEGER NOT NULL)`,
-		`CREATE TABLE cq_queues (name TEXT PRIMARY KEY, metadata_pb BYTEA NOT NULL, created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL)`,
+		`CREATE TABLE cq_queues (name TEXT PRIMARY KEY, metadata_pb BYTEA NOT NULL, state_counts JSONB DEFAULT '{}'::jsonb, created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL)`,
 		`INSERT INTO cq_queues (name, metadata_pb, created_at, updated_at) VALUES ('queue-a', '\x', 1, 1), ('queue-b', '\x', 1, 1)`,
 		`CREATE TABLE cq_messages (
 			id BIGSERIAL PRIMARY KEY, queue_name TEXT NOT NULL, message_id TEXT NOT NULL UNIQUE,
@@ -46,9 +46,10 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 			scheduled_at BIGINT, lease_expiry BIGINT, heartbeat_expiry BIGINT, attempts_left INTEGER,
 			max_attempts INTEGER, current_attempt_id TEXT, current_worker_id TEXT, lease_started_at BIGINT,
 			lease_extension_used BIGINT DEFAULT 0, lease_renewal_count BIGINT DEFAULT 0,
-			last_heartbeat_at BIGINT, created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL
+			last_heartbeat_at BIGINT, created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL, deleted_at BIGINT
 		)`,
 		`INSERT INTO cq_messages (queue_name, message_id, metadata_pb, state, priority, created_at, updated_at) VALUES ('queue-a', 'shared-id', '\x00', 1, 1, 1, 1)`,
+		`INSERT INTO cq_messages (queue_name, message_id, metadata_pb, state, priority, created_at, updated_at, deleted_at) VALUES ('queue-a', 'soft-deleted', '\x00', 1, 1, 1, 1, 2)`,
 	}
 	for _, statement := range statements {
 		_, err := db.ExecContext(ctx, statement)
@@ -91,6 +92,9 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 	var dlqName string
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT dead_letter_queue_name FROM cq_queues WHERE name = $1`, "queue-a").Scan(&dlqName))
 	assert.Equal(t, "queue-b", dlqName)
+	var pendingCount int64
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT COALESCE((state_counts->>'pending')::BIGINT, 0) FROM cq_queues WHERE name = $1`, "queue-a").Scan(&pendingCount))
+	assert.EqualValues(t, 1, pendingCount)
 
 	_, err = db.ExecContext(ctx, `INSERT INTO cq_messages (queue_name, message_id, metadata_pb, state, priority, created_at, updated_at) VALUES ('queue-b', 'shared-id', '\x00', 1, 1, 1, 1)`)
 	require.NoError(t, err)

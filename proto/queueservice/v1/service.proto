@@ -135,7 +135,7 @@ service QueueService {
     //   GET /v1/queues/order-processing/state
     //   Response:
     //   {
-    //     "stateCounts": {"INVISIBLE": 0, "PENDING": 150, "RUNNING": 10, "COMPLETED": 5420, "CANCELED": 0, "ERRORED": 3}
+    //     "stateCounts": {"INVISIBLE": "0", "PENDING": "150", "RUNNING": "10", "COMPLETED": "5420", "CANCELED": "0", "ERRORED": "3"}
     //   }
     //
     // Returns: state counts and the earliest active deadline
@@ -340,6 +340,8 @@ service QueueService {
     // Call periodically during processing to prevent lease expiration.
     // attempt_id and worker_id from GetNextMessage are required and must identify
     // the active, unexpired lease.
+    // An omitted lease_duration uses the queue/message extend_step. Renewal fails
+    // without consuming a renewal when no positive extension remains.
     //
     // Example pattern (heartbeat-style lease renewal):
     //   msg := getNextMessage()
@@ -808,7 +810,7 @@ service QueueService {
     };
   }
 
-    // ListSchemas returns all registered schemas.
+    // ListSchemas returns one summary for each registered schema family.
     //
     // Use for:
     // - Schema discovery
@@ -818,7 +820,7 @@ service QueueService {
     // Example:
     //   GET /v1/schemas
     //
-    // Returns: List of schemas (all versions)
+    // Returns: Latest matching version and aggregate version metadata for each family
   rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse) {
     option (google.api.http) = {
       get: "/v1/schemas"
