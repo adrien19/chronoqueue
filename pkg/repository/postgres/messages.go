@@ -1051,7 +1051,11 @@ func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit 
 	if err != nil {
 		return nil, nil, fmt.Errorf("query messages: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			s.Logger.DPanic("Failed to close message rows", "error", err)
+		}
+	}()
 
 	var messages []*messagepb.Message
 	var cursors []repositorysql.PeekCursor
@@ -1127,6 +1131,9 @@ func (s *Storage) PeekMessagesPage(ctx context.Context, queueName string, limit 
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, nil, fmt.Errorf("close message rows: %w", err)
 	}
 	if len(messages) <= int(limit) {
 		return messages, nil, nil

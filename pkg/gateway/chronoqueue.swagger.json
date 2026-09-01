@@ -777,7 +777,7 @@
     "/v1/queues/{queueName}/state": {
       "get": {
         "summary": "GetQueueState returns current queue statistics and health.",
-        "description": "Provides:\n- Message counts by state (INVISIBLE, PENDING, RUNNING, COMPLETED, CANCELED, ERRORED)\n- Earliest active lease or heartbeat deadline\n\nUse for:\n- Health checks\n- Autoscaling decisions (scale workers based on PENDING count)\n- Alerting (high ERRORED count, DLQ growth)\n\nExample:\n  GET /v1/queues/order-processing/state\n  Response:\n  {\n    \"stateCounts\": {\"INVISIBLE\": 0, \"PENDING\": 150, \"RUNNING\": 10, \"COMPLETED\": 5420, \"CANCELED\": 0, \"ERRORED\": 3}\n  }\n\nReturns: state counts and the earliest active deadline",
+        "description": "Provides:\n- Message counts by state (INVISIBLE, PENDING, RUNNING, COMPLETED, CANCELED, ERRORED)\n- Earliest active lease or heartbeat deadline\n\nUse for:\n- Health checks\n- Autoscaling decisions (scale workers based on PENDING count)\n- Alerting (high ERRORED count, DLQ growth)\n\nExample:\n  GET /v1/queues/order-processing/state\n  Response:\n  {\n    \"stateCounts\": {\"INVISIBLE\": \"0\", \"PENDING\": \"150\", \"RUNNING\": \"10\", \"COMPLETED\": \"5420\", \"CANCELED\": \"0\", \"ERRORED\": \"3\"}\n  }\n\nReturns: state counts and the earliest active deadline",
         "operationId": "QueueService_GetQueueState",
         "responses": {
           "200": {
@@ -2489,7 +2489,7 @@
         "ageBoostMultiplier": {
           "type": "integer",
           "format": "int32",
-          "description": "age_boost_multiplier: For AGING/HYBRID policies, how much to boost an eligible band's weight.\nThe weight is multiplied by this factor once while the threshold condition holds.\nExample: multiplier=2, threshold=30m means the band's weight doubles after 30 minutes.\nTypical values: 1.5 (gentle), 2 (standard), 3 (aggressive)."
+          "description": "age_boost_multiplier: For AGING/HYBRID policies, how much to boost an eligible band's weight.\nThe weight is multiplied by this factor once while the threshold condition holds.\nExample: multiplier=2, threshold=30m means the band's weight doubles after 30 minutes.\nTypical values: 1 (gentle), 2 (standard), 3 (aggressive)."
         }
       },
       "description": "PriorityConfig provides fine-grained control over priority-based processing.\n\nExample - Weighted fairness with aging:\n  config := \u0026queue.PriorityConfig{\n      Policy: queue.FairnessPolicy_HYBRID,\n      PriorityWeights: map[int32]int32{\n          4: 70,  // High priority: 70% of processing capacity\n          2: 20,  // Medium priority: 20%\n          0: 10,  // Low priority: 10%\n      },\n      AgeBoostThreshold: durationpb.New(30*time.Minute),  // Boost after 30min wait\n      AgeBoostMultiplier: 2,  // Double the band's weight after a 30min wait\n  }"

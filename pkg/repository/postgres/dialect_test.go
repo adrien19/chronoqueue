@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	repositorysql "github.com/adrien19/chronoqueue/pkg/repository/sql"
 )
 
 func TestPostgresDialect_Placeholder(t *testing.T) {
@@ -100,4 +102,10 @@ func TestPostgresDialect_JSONExtractPath(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestPostgresStateCounterQueryUsesBigInt(t *testing.T) {
+	query := repositorysql.NewQueryBuilder(NewDialect()).BuildUpdateStateCountersQuery(true, "pending")
+	assert.Contains(t, query, "AS BIGINT")
+	assert.NotContains(t, query, "AS INTEGER")
 }

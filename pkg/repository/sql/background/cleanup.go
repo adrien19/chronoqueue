@@ -133,7 +133,7 @@ func (s *CleanupService) cleanupExpiredMessages(ctx context.Context) error {
 
 func (s *CleanupService) cleanupExpiredBatch(ctx context.Context, nowMs int64, limit int) (int64, error) {
 	var deleted int64
-	err := s.base.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+	err := s.base.WithTransaction(ctx, &sqlbase.TxOptions{Timeout: 5 * time.Second}, func(tx *sql.Tx) error {
 		lockClause := ""
 		if s.base.Dialect.SupportsSkipLocked() {
 			lockClause = " FOR UPDATE SKIP LOCKED"

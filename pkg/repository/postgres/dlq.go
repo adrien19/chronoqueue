@@ -191,21 +191,45 @@ const (
 
 // PurgeDLQ deletes errored messages in bounded transactions until the queue is empty.
 func (s *Storage) PurgeDLQ(ctx context.Context, queueName string) (int64, error) {
+	return s.purgeDLQ(ctx, queueName, dlqPurgeBatchSize, dlqPurgeMaxBatches)
+}
+
+func (s *Storage) purgeDLQ(ctx context.Context, queueName string, batchSize int64, maxBatches int) (int64, error) {
 	var total int64
-	for batch := 0; batch < dlqPurgeMaxBatches; batch++ {
+	for batch := 0; batch < maxBatches; batch++ {
 		if err := ctx.Err(); err != nil {
 			return total, fmt.Errorf("purge DLQ canceled after %d messages: %w", total, err)
 		}
-		deleted, err := s.purgeDLQBatch(ctx, queueName, dlqPurgeBatchSize)
+		deleted, err := s.purgeDLQBatch(ctx, queueName, batchSize)
 		if err != nil {
 			return total, fmt.Errorf("purge DLQ batch after %d messages: %w", total, err)
 		}
 		total += deleted
-		if deleted < dlqPurgeBatchSize {
+		if deleted < batchSize {
+			remaining, err := s.hasDLQMessages(ctx, queueName)
+			if err != nil {
+				return total, fmt.Errorf("check DLQ after purging %d messages: %w", total, err)
+			}
+			if remaining {
+				return total, fmt.Errorf("purge DLQ incomplete after %d messages: errored messages remain after an undersized batch", total)
+			}
 			return total, nil
 		}
 	}
+	remaining, err := s.hasDLQMessages(ctx, queueName)
+	if err != nil {
+		return total, fmt.Errorf("check DLQ after purging %d messages: %w", total, err)
+	}
+	if remaining {
+		return total, fmt.Errorf("purge DLQ incomplete after %d messages: batch limit of %d reached", total, maxBatches)
+	}
 	return total, nil
+}
+
+func (s *Storage) hasDLQMessages(ctx context.Context, queueName string) (bool, error) {
+	var remaining bool
+	err := s.DB.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM cq_messages WHERE queue_name = $1 AND state = $2)`, queueName, messagepb.Message_Metadata_ERRORED).Scan(&remaining)
+	return remaining, err
 }
 
 func (s *Storage) purgeDLQBatch(ctx context.Context, queueName string, limit int64) (int64, error) {

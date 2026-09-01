@@ -80,6 +80,10 @@ func NewStorage(ctx context.Context, config *Config) (*Storage, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config is required")
 	}
+	logger := config.Logger
+	if logger == nil {
+		logger = log.NewLogger()
+	}
 
 	// Open database connection
 	connConfig := config.connectionConfig()
@@ -93,32 +97,47 @@ func NewStorage(ctx context.Context, config *Config) (*Storage, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("acquire migration connection: %w", err)
 	}
-	defer func() { _ = migrationConn.Close() }()
 	if _, err := migrationConn.ExecContext(ctx, `SELECT pg_advisory_lock(hashtext('chronoqueue_schema_migration'))`); err != nil {
-		_ = db.Close()
+		if closeErr := migrationConn.Close(); closeErr != nil {
+			logger.DPanic("Failed to close schema migration connection after advisory lock failure", "error", closeErr)
+		}
+		if closeErr := db.Close(); closeErr != nil {
+			logger.DPanic("Failed to close Postgres connection after advisory lock failure", "error", closeErr)
+		}
 		return nil, fmt.Errorf("lock schema migration: %w", err)
 	}
+	initialized := false
 	defer func() {
-		_, _ = migrationConn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(hashtext('chronoqueue_schema_migration'))`)
+		var released bool
+		if err := migrationConn.QueryRowContext(context.Background(), `SELECT pg_advisory_unlock(hashtext('chronoqueue_schema_migration'))`).Scan(&released); err != nil {
+			logger.DPanic("Failed to unlock schema migration", "error", err)
+		} else if !released {
+			logger.DPanic("Schema migration advisory lock was not held")
+		}
+		if err := migrationConn.Close(); err != nil {
+			logger.DPanic("Failed to close schema migration connection", "error", err)
+		}
+		if !initialized {
+			if err := db.Close(); err != nil {
+				logger.DPanic("Failed to close Postgres connection after schema setup failure", "error", err)
+			}
+		}
 	}()
 
 	// Create schema manager
 	schemaManager := NewSchemaManager()
 
 	// Ensure version table exists
-	if err := schemaManager.EnsureVersionTable(ctx, db); err != nil {
-		_ = db.Close()
+	if err := schemaManager.ensureVersionTable(ctx, migrationConn); err != nil {
 		return nil, fmt.Errorf("ensure version table: %w", err)
 	}
 
 	// Initialize schema if needed
-	if err := schemaManager.Initialize(ctx, db); err != nil {
-		_ = db.Close()
+	if err := schemaManager.initialize(ctx, migrationConn); err != nil {
 		return nil, fmt.Errorf("initialize schema: %w", err)
 	}
 
-	if err := schemaManager.Migrate(ctx, db, latestVersion); err != nil {
-		_ = db.Close()
+	if err := schemaManager.migrate(ctx, migrationConn, latestVersion); err != nil {
 		return nil, fmt.Errorf("migrate schema: %w", err)
 	}
 
@@ -126,12 +145,13 @@ func NewStorage(ctx context.Context, config *Config) (*Storage, error) {
 	dialect := NewDialect()
 
 	// Create base SQL instance
-	baseSQL := repositorysql.NewBaseSQL(db, config.Logger, config.KeyManager, dialect)
+	baseSQL := repositorysql.NewBaseSQL(db, logger, config.KeyManager, dialect)
 
 	storage := &Storage{
 		BaseSQL: baseSQL,
 		schema:  schemaManager,
 	}
+	initialized = true
 
 	return storage, nil
 }

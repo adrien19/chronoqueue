@@ -105,7 +105,7 @@ func (qb *QueryBuilder) BuildUpdateStateCountersQuery(increment bool, stateKey s
 		)
 		WHERE name = %s
 	`, jsonSet, jsonSetPath,
-		qb.dialect.ToJSON(fmt.Sprintf("COALESCE(CAST(%s(state_counts, %s) AS INTEGER), 0) %s 1", jsonExtract, jsonExtractPath, operation)),
+		qb.dialect.ToJSON(fmt.Sprintf("COALESCE(CAST(%s(state_counts, %s) AS %s), 0) %s 1", jsonExtract, jsonExtractPath, qb.dialect.BigIntType(), operation)),
 		qb.dialect.Placeholder(1))
 }
 

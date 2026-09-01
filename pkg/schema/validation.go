@@ -3,6 +3,7 @@ package schema
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/xeipuuv/gojsonschema"
 )
@@ -21,10 +22,34 @@ func validateSchemaContent(contentType, content string) error {
 	if err := json.Unmarshal([]byte(content), &schema); err != nil {
 		return fmt.Errorf("invalid JSON: %w", err)
 	}
+	if err := rejectExternalReferences(schema); err != nil {
+		return err
+	}
 	if _, err := gojsonschema.NewSchema(gojsonschema.NewStringLoader(content)); err != nil {
 		return fmt.Errorf("invalid Draft 7 schema: %w", err)
 	}
 
+	return nil
+}
+
+func rejectExternalReferences(value any) error {
+	switch value := value.(type) {
+	case map[string]any:
+		if ref, ok := value["$ref"].(string); ok && ref != "" && !strings.HasPrefix(ref, "#") {
+			return fmt.Errorf("external schema reference %q is not allowed", ref)
+		}
+		for _, child := range value {
+			if err := rejectExternalReferences(child); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for _, child := range value {
+			if err := rejectExternalReferences(child); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

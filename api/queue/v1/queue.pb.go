@@ -511,7 +511,7 @@ type PriorityConfig struct {
 	// age_boost_multiplier: For AGING/HYBRID policies, how much to boost an eligible band's weight.
 	// The weight is multiplied by this factor once while the threshold condition holds.
 	// Example: multiplier=2, threshold=30m means the band's weight doubles after 30 minutes.
-	// Typical values: 1.5 (gentle), 2 (standard), 3 (aggressive).
+	// Typical values: 1 (gentle), 2 (standard), 3 (aggressive).
 	AgeBoostMultiplier int32 `protobuf:"varint,4,opt,name=age_boost_multiplier,json=ageBoostMultiplier,proto3" json:"age_boost_multiplier,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache

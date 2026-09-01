@@ -274,6 +274,9 @@ func TestCalendarServiceSkipsCronOnlySchedules(t *testing.T) {
 
 	engine := &stubCalendarEngine{}
 	service := NewCalendarService(storage.BaseSQL, engine, time.Second)
+	candidates, err := service.collectDueSchedules(ctx, storage.Clock.NowMs(), service.batchSize)
+	require.NoError(t, err)
+	require.Empty(t, candidates)
 	require.NoError(t, service.RunOnce(ctx))
 
 	updated, err := storage.GetSchedule(ctx, schedule.ScheduleId)

@@ -226,7 +226,7 @@ message PriorityConfig {
     // age_boost_multiplier: For AGING/HYBRID policies, how much to boost an eligible band's weight.
     // The weight is multiplied by this factor once while the threshold condition holds.
     // Example: multiplier=2, threshold=30m means the band's weight doubles after 30 minutes.
-    // Typical values: 1.5 (gentle), 2 (standard), 3 (aggressive).
+    // Typical values: 1 (gentle), 2 (standard), 3 (aggressive).
   int32 age_boost_multiplier = 4;
 }
 

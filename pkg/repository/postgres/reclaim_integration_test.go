@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -42,6 +43,14 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, container.Terminate(ctx)) })
 	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)
+	singleConnectionCtx, cancelSingleConnection := context.WithTimeout(ctx, 5*time.Second)
+	singleConnectionStorage, err := NewStorage(singleConnectionCtx, &Config{
+		Conn:   ConnectionConfig{DSN: dsn, MaxOpenConns: 1, MaxIdleConns: 1},
+		Logger: log.NewLogger(),
+	})
+	cancelSingleConnection()
+	require.NoError(t, err)
+	require.NoError(t, singleConnectionStorage.Close())
 
 	first := newPostgresReclaimTestStorage(t, ctx, dsn)
 	second := newPostgresReclaimTestStorage(t, ctx, dsn)
@@ -76,6 +85,34 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 		require.NoError(t, first.DB.QueryRowContext(ctx, `SELECT state, attempts_left FROM cq_messages WHERE queue_name = $1 AND message_id = $2`, "nack-finite", messageID).Scan(&state, &attemptsLeft))
 		require.Equal(t, messagepb.Message_Metadata_ERRORED, state)
 		require.Zero(t, attemptsLeft)
+	})
+
+	t.Run("uses persisted attempts for reclaim retention timestamps", func(t *testing.T) {
+		const queueName = "reclaim-persisted-attempts"
+		const messageID = "reclaim-retryable-message"
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{
+			MessageRetentionPolicy: &queuepb.MessageRetentionPolicy{Mode: queuepb.MessageRetentionPolicy_RETAIN_DURATION, RetentionSeconds: 60},
+		}}))
+		require.NoError(t, first.EnqueueMessage(ctx, queueName, postgresReclaimTestMessage(messageID, 2, 2)))
+		claimed, claimErr := first.ClaimMessage(ctx, queueName, "worker", "attempt", "")
+		require.NoError(t, claimErr)
+		expirePostgresReclaimTestMessage(t, ctx, first, messageID)
+
+		sparse := &messagepb.Message{MessageId: messageID, Metadata: &messagepb.Message_Metadata{
+			CurrentAttempt: claimed.GetMetadata().GetCurrentAttempt(),
+		}}
+		result, reclaimErr := first.ReclaimExpiredMessage(ctx, queueName, sparse)
+		require.NoError(t, reclaimErr)
+		require.Equal(t, messagepb.Message_Metadata_PENDING, result.State)
+
+		var state messagepb.Message_Metadata_State
+		var attemptsLeft int32
+		var completedAt, deletedAt sql.NullInt64
+		require.NoError(t, first.DB.QueryRowContext(ctx, `SELECT state, attempts_left, completed_at, deleted_at FROM cq_messages WHERE queue_name = $1 AND message_id = $2`, queueName, messageID).Scan(&state, &attemptsLeft, &completedAt, &deletedAt))
+		require.Equal(t, messagepb.Message_Metadata_PENDING, state)
+		require.EqualValues(t, 1, attemptsLeft)
+		require.False(t, completedAt.Valid)
+		require.False(t, deletedAt.Valid)
 	})
 
 	t.Run("bounds heartbeat extensions", func(t *testing.T) {
@@ -151,12 +188,79 @@ func TestReclaimExpiredMessage_AtomicAcrossPostgresInstances(t *testing.T) {
 				MessageId: fmt.Sprintf("errored-%03d", index), Metadata: &messagepb.Message_Metadata{State: messagepb.Message_Metadata_ERRORED},
 			}))
 		}
-		deleted, purgeErr := first.PurgeDLQ(ctx, queueName)
+		deleted, purgeErr := first.purgeDLQ(ctx, queueName, dlqPurgeBatchSize, 1)
+		require.ErrorContains(t, purgeErr, "purge DLQ incomplete")
+		require.EqualValues(t, dlqPurgeBatchSize, deleted)
+		deleted, purgeErr = first.PurgeDLQ(ctx, queueName)
 		require.NoError(t, purgeErr)
-		require.EqualValues(t, dlqPurgeBatchSize*2+5, deleted)
+		require.EqualValues(t, dlqPurgeBatchSize+5, deleted)
 		counts, countErr := first.StateManager.GetStateCounts(ctx, first.DB, queueName)
 		require.NoError(t, countErr)
 		require.Zero(t, counts["errored"])
+	})
+
+	t.Run("reports incomplete purge when an errored message is locked", func(t *testing.T) {
+		const queueName = "locked-dlq-purge"
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
+		for index := range 2 {
+			require.NoError(t, first.EnqueueMessage(ctx, queueName, &messagepb.Message{
+				MessageId: fmt.Sprintf("locked-errored-%d", index), Metadata: &messagepb.Message_Metadata{State: messagepb.Message_Metadata_ERRORED},
+			}))
+		}
+
+		lockTx, txErr := first.DB.BeginTx(ctx, nil)
+		require.NoError(t, txErr)
+		lockReleased := false
+		t.Cleanup(func() {
+			if lockReleased {
+				return
+			}
+			rollbackErr := lockTx.Rollback()
+			if rollbackErr != nil && rollbackErr != sql.ErrTxDone {
+				t.Errorf("rollback DLQ row lock transaction: %v", rollbackErr)
+			}
+		})
+		var lockedMessageID string
+		require.NoError(t, lockTx.QueryRowContext(ctx, `
+			SELECT message_id FROM cq_messages
+			WHERE queue_name = $1 AND state = $2
+			ORDER BY id
+			LIMIT 1
+			FOR UPDATE
+		`, queueName, messagepb.Message_Metadata_ERRORED).Scan(&lockedMessageID))
+
+		deleted, purgeErr := second.PurgeDLQ(ctx, queueName)
+		require.ErrorContains(t, purgeErr, "purge DLQ incomplete")
+		require.EqualValues(t, 1, deleted)
+		var remaining int
+		require.NoError(t, first.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM cq_messages WHERE queue_name = $1 AND state = $2`, queueName, messagepb.Message_Metadata_ERRORED).Scan(&remaining))
+		require.Equal(t, 1, remaining)
+
+		require.NoError(t, lockTx.Commit())
+		lockReleased = true
+		deleted, purgeErr = second.PurgeDLQ(ctx, queueName)
+		require.NoError(t, purgeErr)
+		require.EqualValues(t, 1, deleted)
+	})
+
+	t.Run("preserves state counters above int32", func(t *testing.T) {
+		const queueName = "int64-state-counter"
+		const initial = int64(math.MaxInt32) + 10
+		require.NoError(t, first.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
+		_, err := first.DB.ExecContext(ctx, `UPDATE cq_queues SET state_counts = jsonb_build_object('pending', $1::bigint) WHERE name = $2`, initial, queueName)
+		require.NoError(t, err)
+		require.NoError(t, first.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+			return first.StateManager.InsertCounter(ctx, tx, queueName, messagepb.Message_Metadata_PENDING)
+		}))
+		counts, err := first.StateManager.GetStateCounts(ctx, first.DB, queueName)
+		require.NoError(t, err)
+		require.Equal(t, initial+1, counts["pending"])
+		require.NoError(t, first.WithTransaction(ctx, nil, func(tx *sql.Tx) error {
+			return first.StateManager.RemoveCounters(ctx, tx, queueName, messagepb.Message_Metadata_PENDING, 2)
+		}))
+		counts, err = first.StateManager.GetStateCounts(ctx, first.DB, queueName)
+		require.NoError(t, err)
+		require.Equal(t, initial-1, counts["pending"])
 	})
 
 	t.Run("archives schedules when deleting queue", func(t *testing.T) {

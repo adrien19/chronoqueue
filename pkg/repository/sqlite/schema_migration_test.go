@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -64,6 +65,35 @@ func TestSchemaMigration_FromV1ToLatest(t *testing.T) {
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, `INSERT INTO cq_messages (queue_name, message_id, metadata_pb, state, priority, created_at, updated_at) VALUES ('queue-a', 'shared-id', X'00', 1, 1, 1, 1)`)
 	require.Error(t, err)
+}
+
+func TestSchemaMigration_V10PreservesFractionalTimestampsAndExcludesDeletedMessages(t *testing.T) {
+	ctx := context.Background()
+	db, err := OpenConnection(ctx, DefaultConnectionConfig(filepath.Join(t.TempDir(), "v10-migration.db")))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+	statements := []string{
+		`CREATE TABLE cq_schema_version (version INTEGER PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, description TEXT)`,
+		`INSERT INTO cq_schema_version (version, description) VALUES (9, 'v9 fixture')`,
+		`CREATE TABLE cq_queues (name TEXT PRIMARY KEY, state_counts TEXT DEFAULT '{}')`,
+		`INSERT INTO cq_queues (name) VALUES ('queue-a')`,
+		`CREATE TABLE cq_messages (id INTEGER PRIMARY KEY, queue_name TEXT NOT NULL, state INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER)`,
+		`INSERT INTO cq_messages (id, queue_name, state, created_at, updated_at) VALUES (1, 'queue-a', 1, '2026-08-31 21:01:04.678', '2026-08-31 21:01:05.987')`,
+		`INSERT INTO cq_messages (id, queue_name, state, created_at, updated_at, deleted_at) VALUES (2, 'queue-a', 1, 1, 1, 2)`,
+	}
+	for _, statement := range statements {
+		_, err := db.ExecContext(ctx, statement)
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, NewSchemaManager().Migrate(ctx, db, latestVersion))
+	var createdAt, updatedAt, pendingCount int64
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT created_at, updated_at FROM cq_messages WHERE id = 1`).Scan(&createdAt, &updatedAt))
+	require.Equal(t, time.Date(2026, time.August, 31, 21, 1, 4, 678_000_000, time.UTC).UnixMilli(), createdAt)
+	require.Equal(t, time.Date(2026, time.August, 31, 21, 1, 5, 987_000_000, time.UTC).UnixMilli(), updatedAt)
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT json_extract(state_counts, '$.pending') FROM cq_queues WHERE name = 'queue-a'`).Scan(&pendingCount))
+	require.EqualValues(t, 1, pendingCount)
 }
 
 func TestSchemaMigration_V9BackfillsDLQRelationship(t *testing.T) {

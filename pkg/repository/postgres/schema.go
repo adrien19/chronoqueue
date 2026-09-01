@@ -9,37 +9,73 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	queuepb "github.com/adrien19/chronoqueue/api/queue/v1"
-	"github.com/adrien19/chronoqueue/pkg/repository/sql/schema"
 )
 
 const latestVersion = uint(10)
 
-// SchemaManager handles PostgreSQL schema initialization and versioning.
-type SchemaManager struct {
-	baseManager *schema.BaseManager
+type schemaExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+	BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
 }
+
+// SchemaManager handles PostgreSQL schema initialization and versioning.
+type SchemaManager struct{}
 
 // NewSchemaManager creates a new PostgreSQL schema manager.
 func NewSchemaManager() *SchemaManager {
-	return &SchemaManager{baseManager: &schema.BaseManager{}}
+	return &SchemaManager{}
 }
 
 func (m *SchemaManager) EnsureVersionTable(ctx context.Context, db *sql.DB) error {
-	return m.baseManager.EnsureVersionTable(ctx, db)
+	return m.ensureVersionTable(ctx, db)
 }
 
 func (m *SchemaManager) GetVersion(ctx context.Context, db *sql.DB) (uint, bool, error) {
-	return m.baseManager.GetVersion(ctx, db)
+	return m.getVersion(ctx, db)
 }
 
 func (m *SchemaManager) SetVersion(ctx context.Context, db *sql.DB, version uint, description string) error {
+	return m.setVersion(ctx, db, version, description)
+}
+
+func (m *SchemaManager) ensureVersionTable(ctx context.Context, db schemaExecutor) error {
+	_, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS cq_schema_version (
+			version INTEGER PRIMARY KEY,
+			applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			description TEXT
+		)`)
+	return err
+}
+
+func (m *SchemaManager) getVersion(ctx context.Context, db schemaExecutor) (uint, bool, error) {
+	if err := m.ensureVersionTable(ctx, db); err != nil {
+		return 0, false, err
+	}
+	var version uint
+	if err := db.QueryRowContext(ctx, `SELECT version FROM cq_schema_version ORDER BY version DESC LIMIT 1`).Scan(&version); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	return version, true, nil
+}
+
+func (m *SchemaManager) setVersion(ctx context.Context, db schemaExecutor, version uint, description string) error {
 	_, err := db.ExecContext(ctx, `INSERT INTO cq_schema_version (version, description) VALUES ($1, $2)`, version, description)
 	return err
 }
 
 // Initialize creates the initial schema if no version is present.
 func (m *SchemaManager) Initialize(ctx context.Context, db *sql.DB) error {
-	version, exists, err := m.GetVersion(ctx, db)
+	return m.initialize(ctx, db)
+}
+
+func (m *SchemaManager) initialize(ctx context.Context, db schemaExecutor) error {
+	version, exists, err := m.getVersion(ctx, db)
 	if err != nil {
 		return fmt.Errorf("check schema version: %w", err)
 	}
@@ -83,10 +119,14 @@ func (m *SchemaManager) Initialize(ctx context.Context, db *sql.DB) error {
 }
 
 func (m *SchemaManager) Migrate(ctx context.Context, db *sql.DB, targetVersion uint) error {
+	return m.migrate(ctx, db, targetVersion)
+}
+
+func (m *SchemaManager) migrate(ctx context.Context, db schemaExecutor, targetVersion uint) error {
 	if targetVersion > latestVersion {
 		return fmt.Errorf("target schema version %d is newer than supported version %d", targetVersion, latestVersion)
 	}
-	current, exists, err := m.GetVersion(ctx, db)
+	current, exists, err := m.getVersion(ctx, db)
 	if err != nil {
 		return fmt.Errorf("get schema version: %w", err)
 	}
@@ -95,7 +135,7 @@ func (m *SchemaManager) Migrate(ctx context.Context, db *sql.DB, targetVersion u
 	}
 
 	if !exists {
-		return m.Initialize(ctx, db)
+		return m.initialize(ctx, db)
 	}
 
 	if current >= targetVersion {
@@ -148,7 +188,7 @@ func (m *SchemaManager) Migrate(ctx context.Context, db *sql.DB, targetVersion u
 	return nil
 }
 
-func (m *SchemaManager) migrateToV10_RebuildStateCounters(ctx context.Context, db *sql.DB) error {
+func (m *SchemaManager) migrateToV10_RebuildStateCounters(ctx context.Context, db schemaExecutor) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin migration tx: %w", err)
@@ -167,12 +207,12 @@ func (m *SchemaManager) migrateToV10_RebuildStateCounters(ctx context.Context, d
 	if canRebuild {
 		if _, err := tx.ExecContext(ctx, `
 		UPDATE cq_queues SET state_counts = jsonb_build_object(
-			'invisible', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 0),
-			'pending', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 1),
-			'running', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 2),
-			'completed', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 3),
-			'errored', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 4),
-			'canceled', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 5))`); err != nil {
+			'invisible', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 0 AND deleted_at IS NULL),
+			'pending', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 1 AND deleted_at IS NULL),
+			'running', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 2 AND deleted_at IS NULL),
+			'completed', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 3 AND deleted_at IS NULL),
+			'errored', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 4 AND deleted_at IS NULL),
+			'canceled', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 5 AND deleted_at IS NULL))`); err != nil {
 			return fmt.Errorf("rebuild queue state counters: %w", err)
 		}
 	}
@@ -182,7 +222,7 @@ func (m *SchemaManager) migrateToV10_RebuildStateCounters(ctx context.Context, d
 	return tx.Commit()
 }
 
-func (m *SchemaManager) migrateToV9_AddDLQRelationshipIndex(ctx context.Context, db *sql.DB) error {
+func (m *SchemaManager) migrateToV9_AddDLQRelationshipIndex(ctx context.Context, db schemaExecutor) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin migration tx: %w", err)
@@ -244,7 +284,7 @@ func nullableDLQName(name string) any {
 	return name
 }
 
-func (m *SchemaManager) migrateToV2(ctx context.Context, db *sql.DB) error {
+func (m *SchemaManager) migrateToV2(ctx context.Context, db schemaExecutor) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin migration tx: %w", err)
@@ -270,7 +310,7 @@ func (m *SchemaManager) migrateToV2(ctx context.Context, db *sql.DB) error {
 	return tx.Commit()
 }
 
-func (m *SchemaManager) migrateToV3(ctx context.Context, db *sql.DB) error {
+func (m *SchemaManager) migrateToV3(ctx context.Context, db schemaExecutor) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin migration tx: %w", err)
@@ -295,7 +335,7 @@ func (m *SchemaManager) migrateToV3(ctx context.Context, db *sql.DB) error {
 	return tx.Commit()
 }
 
-func (m *SchemaManager) migrateToV4_AddRetentionFields(ctx context.Context, db *sql.DB) error {
+func (m *SchemaManager) migrateToV4_AddRetentionFields(ctx context.Context, db schemaExecutor) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin migration tx: %w", err)
@@ -322,7 +362,7 @@ func (m *SchemaManager) migrateToV4_AddRetentionFields(ctx context.Context, db *
 	return tx.Commit()
 }
 
-func (m *SchemaManager) migrateToV5_AddCancellationReason(ctx context.Context, db *sql.DB) error {
+func (m *SchemaManager) migrateToV5_AddCancellationReason(ctx context.Context, db schemaExecutor) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin migration tx: %w", err)
@@ -346,7 +386,7 @@ func (m *SchemaManager) migrateToV5_AddCancellationReason(ctx context.Context, d
 	return tx.Commit()
 }
 
-func (m *SchemaManager) migrateToV6_QueueScopedMessageIDs(ctx context.Context, db *sql.DB) error {
+func (m *SchemaManager) migrateToV6_QueueScopedMessageIDs(ctx context.Context, db schemaExecutor) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin migration tx: %w", err)
@@ -369,7 +409,7 @@ func (m *SchemaManager) migrateToV6_QueueScopedMessageIDs(ctx context.Context, d
 	return tx.Commit()
 }
 
-func (m *SchemaManager) migrateToV7_FixSchedulerIndex(ctx context.Context, db *sql.DB) error {
+func (m *SchemaManager) migrateToV7_FixSchedulerIndex(ctx context.Context, db schemaExecutor) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin migration tx: %w", err)
@@ -388,7 +428,7 @@ func (m *SchemaManager) migrateToV7_FixSchedulerIndex(ctx context.Context, db *s
 	return tx.Commit()
 }
 
-func (m *SchemaManager) migrateToV8_DurableScheduleHistory(ctx context.Context, db *sql.DB) error {
+func (m *SchemaManager) migrateToV8_DurableScheduleHistory(ctx context.Context, db schemaExecutor) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin migration tx: %w", err)
@@ -430,7 +470,7 @@ func (m *SchemaManager) migrateToV8_DurableScheduleHistory(ctx context.Context, 
 }
 
 func (m *SchemaManager) Version(ctx context.Context, db *sql.DB) (uint, bool, error) {
-	return m.GetVersion(ctx, db)
+	return m.getVersion(ctx, db)
 }
 
 func (m *SchemaManager) createQueuesTable(ctx context.Context, tx *sql.Tx) error {

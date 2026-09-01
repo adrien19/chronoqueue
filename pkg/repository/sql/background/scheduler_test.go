@@ -60,7 +60,7 @@ func TestSchedulerDrainsMultipleBatchesInOneCycle(t *testing.T) {
 	queueName := "scheduled-drain"
 	require.NoError(t, storage.CreateQueue(ctx, &queuepb.Queue{Name: queueName, Metadata: &queuepb.QueueMetadata{}}))
 	due := time.Now().Add(-time.Minute)
-	for index := range 3 {
+	for index := range 4 {
 		require.NoError(t, storage.EnqueueMessage(ctx, queueName, &messagepb.Message{
 			MessageId: fmt.Sprintf("due-%d", index),
 			Metadata: &messagepb.Message_Metadata{
@@ -76,5 +76,5 @@ func TestSchedulerDrainsMultipleBatchesInOneCycle(t *testing.T) {
 	counts, err := storage.StateManager.GetStateCounts(ctx, storage.DB, queueName)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, counts["pending"])
-	require.Zero(t, counts["invisible"])
+	require.EqualValues(t, 1, counts["invisible"])
 }

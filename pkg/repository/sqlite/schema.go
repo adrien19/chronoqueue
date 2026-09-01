@@ -159,8 +159,9 @@ func (m *SchemaManager) migrateToV10_NormalizeMessageRuntime(ctx context.Context
 		return fmt.Errorf("inspect messages table: %w", err)
 	}
 	if messagesExist {
+		dialect := NewDialect()
 		for _, column := range []string{"created_at", "updated_at"} {
-			query := fmt.Sprintf("UPDATE cq_messages SET %s = unixepoch(%s) * 1000 WHERE typeof(%s) = 'text'", column, column, column)
+			query := fmt.Sprintf("UPDATE cq_messages SET %s = %s WHERE typeof(%s) = 'text'", column, dialect.UnixMillis(column), column)
 			if _, err := tx.ExecContext(ctx, query); err != nil {
 				return fmt.Errorf("normalize message %s: %w", column, err)
 			}
@@ -191,12 +192,12 @@ func (m *SchemaManager) migrateToV10_NormalizeMessageRuntime(ctx context.Context
 	if messagesExist && stateCountsColumn {
 		if _, err := tx.ExecContext(ctx, `
 		UPDATE cq_queues SET state_counts = json_object(
-			'invisible', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 0),
-			'pending', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 1),
-			'running', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 2),
-			'completed', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 3),
-			'errored', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 4),
-			'canceled', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 5))`); err != nil {
+			'invisible', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 0 AND deleted_at IS NULL),
+			'pending', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 1 AND deleted_at IS NULL),
+			'running', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 2 AND deleted_at IS NULL),
+			'completed', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 3 AND deleted_at IS NULL),
+			'errored', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 4 AND deleted_at IS NULL),
+			'canceled', (SELECT COUNT(*) FROM cq_messages WHERE queue_name = cq_queues.name AND state = 5 AND deleted_at IS NULL))`); err != nil {
 			return fmt.Errorf("rebuild queue state counters: %w", err)
 		}
 	}

@@ -92,7 +92,7 @@ func (sm *StateManager) RemoveCounters(ctx context.Context, tx *sql.Tx, queueNam
 		)
 		WHERE name = %s
 	`, jsonSet, jsonSetPath,
-		sm.dialect.ToJSON(fmt.Sprintf("COALESCE(CAST(%s(state_counts, %s) AS INTEGER), 0) - %s", jsonExtract, jsonExtractPath, sm.dialect.Placeholder(1))),
+		sm.dialect.ToJSON(fmt.Sprintf("COALESCE(CAST(%s(state_counts, %s) AS %s), 0) - %s", jsonExtract, jsonExtractPath, sm.dialect.BigIntType(), sm.dialect.Placeholder(1))),
 		sm.dialect.Placeholder(2))
 
 	if _, err := tx.ExecContext(ctx, query, count, queueName); err != nil {
@@ -123,7 +123,7 @@ func (sm *StateManager) decrementCounter(
 		) 
 		WHERE name = %s
 	`, jsonSet, jsonSetPath,
-		sm.dialect.ToJSON(fmt.Sprintf("COALESCE(CAST(%s(state_counts, %s) AS INTEGER), 0) - 1", jsonExtract, jsonExtractPath)),
+		sm.dialect.ToJSON(fmt.Sprintf("COALESCE(CAST(%s(state_counts, %s) AS %s), 0) - 1", jsonExtract, jsonExtractPath, sm.dialect.BigIntType())),
 		sm.dialect.Placeholder(1))
 
 	_, err := tx.ExecContext(ctx, query, queueName)
@@ -152,7 +152,7 @@ func (sm *StateManager) incrementCounter(
 		) 
 		WHERE name = %s
 	`, jsonSet, jsonSetPath,
-		sm.dialect.ToJSON(fmt.Sprintf("COALESCE(CAST(%s(state_counts, %s) AS INTEGER), 0) + 1", jsonExtract, jsonExtractPath)),
+		sm.dialect.ToJSON(fmt.Sprintf("COALESCE(CAST(%s(state_counts, %s) AS %s), 0) + 1", jsonExtract, jsonExtractPath, sm.dialect.BigIntType())),
 		sm.dialect.Placeholder(1))
 
 	_, err := tx.ExecContext(ctx, query, queueName)
@@ -186,18 +186,24 @@ func (sm *StateManager) GetStateCounts(
 	queueName string,
 ) (map[string]int64, error) {
 	jsonExtract := sm.dialect.JSONExtract()
+	pendingPath := sm.dialect.JSONExtractPath("pending")
+	runningPath := sm.dialect.JSONExtractPath("running")
+	invisiblePath := sm.dialect.JSONExtractPath("invisible")
+	erroredPath := sm.dialect.JSONExtractPath("errored")
+	completedPath := sm.dialect.JSONExtractPath("completed")
+	canceledPath := sm.dialect.JSONExtractPath("canceled")
 
 	query := fmt.Sprintf(`
 		SELECT 
-			COALESCE(CAST(%s(state_counts, '$.pending') AS INTEGER), 0) as pending,
-			COALESCE(CAST(%s(state_counts, '$.running') AS INTEGER), 0) as running,
-			COALESCE(CAST(%s(state_counts, '$.invisible') AS INTEGER), 0) as invisible,
-			COALESCE(CAST(%s(state_counts, '$.errored') AS INTEGER), 0) as errored,
-			COALESCE(CAST(%s(state_counts, '$.completed') AS INTEGER), 0) as completed,
-			COALESCE(CAST(%s(state_counts, '$.canceled') AS INTEGER), 0) as canceled
+			COALESCE(CAST(%s(state_counts, %s) AS %s), 0) as pending,
+			COALESCE(CAST(%s(state_counts, %s) AS %s), 0) as running,
+			COALESCE(CAST(%s(state_counts, %s) AS %s), 0) as invisible,
+			COALESCE(CAST(%s(state_counts, %s) AS %s), 0) as errored,
+			COALESCE(CAST(%s(state_counts, %s) AS %s), 0) as completed,
+			COALESCE(CAST(%s(state_counts, %s) AS %s), 0) as canceled
 		FROM cq_queues
 		WHERE name = %s
-	`, jsonExtract, jsonExtract, jsonExtract, jsonExtract, jsonExtract, jsonExtract, sm.dialect.Placeholder(1))
+	`, jsonExtract, pendingPath, sm.dialect.BigIntType(), jsonExtract, runningPath, sm.dialect.BigIntType(), jsonExtract, invisiblePath, sm.dialect.BigIntType(), jsonExtract, erroredPath, sm.dialect.BigIntType(), jsonExtract, completedPath, sm.dialect.BigIntType(), jsonExtract, canceledPath, sm.dialect.BigIntType(), sm.dialect.Placeholder(1))
 
 	counts := make(map[string]int64)
 	var pending, running, invisible, errored, completed, canceled int64

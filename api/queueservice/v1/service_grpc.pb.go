@@ -170,7 +170,7 @@ type QueueServiceClient interface {
 	//	GET /v1/queues/order-processing/state
 	//	Response:
 	//	{
-	//	  "stateCounts": {"INVISIBLE": 0, "PENDING": 150, "RUNNING": 10, "COMPLETED": 5420, "CANCELED": 0, "ERRORED": 3}
+	//	  "stateCounts": {"INVISIBLE": "0", "PENDING": "150", "RUNNING": "10", "COMPLETED": "5420", "CANCELED": "0", "ERRORED": "3"}
 	//	}
 	//
 	// Returns: state counts and the earliest active deadline
@@ -1188,7 +1188,7 @@ type QueueServiceServer interface {
 	//	GET /v1/queues/order-processing/state
 	//	Response:
 	//	{
-	//	  "stateCounts": {"INVISIBLE": 0, "PENDING": 150, "RUNNING": 10, "COMPLETED": 5420, "CANCELED": 0, "ERRORED": 3}
+	//	  "stateCounts": {"INVISIBLE": "0", "PENDING": "150", "RUNNING": "10", "COMPLETED": "5420", "CANCELED": "0", "ERRORED": "3"}
 	//	}
 	//
 	// Returns: state counts and the earliest active deadline
