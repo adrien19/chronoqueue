@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.26.6-alpine AS builder
+FROM golang:1.26.6-alpine3.24 AS builder
 
 WORKDIR /build
 
@@ -17,12 +17,12 @@ COPY . .
 RUN go build -o ai-orchestrator .
 
 # Runtime stage
-FROM alpine:latest
+FROM alpine:3.24
 
 WORKDIR /app
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates curl
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates curl
 
 # Copy binary from builder
 COPY --from=builder /build/ai-orchestrator .
