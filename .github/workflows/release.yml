@@ -266,7 +266,8 @@ jobs:
           strings "dist/${BINARY_NAME}" | grep -Fx -- "${BUILD_DATE}"
           printf 'version=%s\ncommit=%s\nbuild_date=%s\n' "${TAG}" "${COMMIT}" "${BUILD_DATE}" > "dist/${BINARY_NAME}.release"
           if [[ "${TARGET_OS}" == windows ]]; then
-            (cd dist && zip "${BINARY_NAME}.zip" "${BINARY_NAME}" "${BINARY_NAME}.release" && sha256sum "${BINARY_NAME}.zip" > "${BINARY_NAME}.zip.sha256")
+            ARCHIVE_NAME="${BINARY_NAME%.exe}.zip"
+            (cd dist && zip "${ARCHIVE_NAME}" "${BINARY_NAME}" "${BINARY_NAME}.release" && sha256sum "${ARCHIVE_NAME}" > "${ARCHIVE_NAME}.sha256")
           else
             tar -C dist -czf "dist/${BINARY_NAME}.tar.gz" "${BINARY_NAME}" "${BINARY_NAME}.release"
             (cd dist && sha256sum "${BINARY_NAME}.tar.gz" > "${BINARY_NAME}.tar.gz.sha256")
@@ -451,6 +452,7 @@ jobs:
             Start-Sleep -Seconds 1
             $env:CHRONOQUEUE_RELEASES_URL = "http://127.0.0.1:8765"
             & ./install/install.ps1 -Version $env:VERSION -InstallDir $installDir
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             & (Join-Path $installDir "chronoqueue.exe") --version
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           } finally { Stop-Process -Id $server.Id -Force }
