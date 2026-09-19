@@ -1,5 +1,7 @@
 # API validation and error contract
 
+**Scope: `v2.0.0-rc.1` / preparation for 2.0.0. Incompatible with `v1.2.1`.** `/v1` routes and protobuf packages retain their names; use matching 2.0 clients. See the [release and migration guide](./RELEASE_2.0.md).
+
 ChronoQueue applies the same validation and error mapping to gRPC requests and requests received through the HTTP gateway. Invalid-argument responses include `google.rpc.BadRequest` field violations when a specific field caused the rejection.
 
 ## Error mapping
@@ -35,7 +37,7 @@ Internal errors use the public message `internal server error`. Database and enc
 - `max_attempts` is `-1` for unlimited attempts or a positive value after queue defaults are applied.
 - Message lease-policy fields follow the queue lease rules. Unset duration fields inherit the queue policy; `lease_duration` remains a compatible base-lease override.
 - `scheduled_time` must be a valid protobuf timestamp.
-- Runtime fields (`state`, `lease_expiry`, `lease_renewal_count`, `current_attempt`, and `priority_level`) are server-managed and cannot be supplied when posting.
+- Runtime fields are server-managed. Nonzero `state`, `lease_expiry`, `lease_renewal_count`, and `priority_level`, or a present `current_attempt`, are rejected when posting. Proto3 scalar defaults cannot be distinguished from omission; `state: INVISIBLE` (zero) is accepted, and the server determines the resulting state.
 - Payload size, metadata size, content type, and configured schema are validated before persistence.
 - Bulk posting accepts 1–1000 messages and at most 1 MiB of serialized message data. Validation failure rejects `ALL_OR_NOTHING` batches with `FailedPrecondition`; `BEST_EFFORT` reports individual failures in its response. Schema-originated failures use `SCHEMA_MISMATCH`; queue lookup failure is an RPC-level `NotFound` because every item targets the request's single `queue_name`.
 
@@ -43,14 +45,26 @@ Internal errors use the public message `internal server error`. Database and enc
 
 - `calendar_schedule.timezone` is the canonical timezone for calendar validation, preview, and execution.
 - The deprecated `schedule.metadata.timezone` may be omitted. If supplied for compatibility, it must equal `calendar_schedule.timezone`.
+- Custom calendar expressions are reserved and rejected by the server.
+- `PreviewCalendarSchedule.count` defaults to 10 when zero, rejects negative values, and caps values above 100 at 100.
 - `ValidateCalendarSchedule` is a validation-result endpoint: invalid calendar content returns an OK transport status with `valid: false` and structured `validation_issues`. Transport or server failures still use non-OK status codes.
 
-## Dead-letter queue listing
+## Pagination
+
+- `ListQueues`, `ListSchedules`, `GetScheduleHistory`, `PeekQueueMessages`, `GetDLQMessages`, and `ListSchemas` use `page_size` and `page_token`, returning `next_page_token`.
+- `page_size` accepts 0–1000; 0 selects 100. Continue with the returned token until it is empty, keeping the request filters unchanged.
+- The old `limit` request field is replaced by `page_size`. Generated REST query names are `pageSize` and `pageToken`; response JSON uses `nextPageToken`.
+- Tokens are opaque cursors. Invalid tokens or tokens inconsistent with the operation/filter are rejected; they are not authentication credentials or a snapshot guarantee.
+
+Sources: [request definitions](./proto/queueservice/v1/request_response.proto), [pagination implementation](./internal/pagination/pagination.go), [OpenAPI](./pkg/gateway/chronoqueue.swagger.json).
+
+## Dead-letter queue operations
 
 - `dlq_name` is required.
-- `limit` must be between 0 and 1000. A value of 0 uses the server default of 100.
+- `page_size` and `page_token` follow the pagination rules above.
 - DLQ administration requires the named queue to be referenced by at least one source queue's `dead_letter_queue_name`; ordinary queues return `FailedPrecondition`.
 - Posting and worker claims against a referenced DLQ return `FailedPrecondition`; DLQ messages are managed through the DLQ operations.
+- `RequeueFromDLQ.target_queue` is required and must name an existing queue; do not rely on implicit selection of the original queue.
 
 ## Claim and lifecycle requests
 
