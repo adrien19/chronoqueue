@@ -11,13 +11,13 @@ ChronoQueue is a persistent job queue and execution-supervision service. It prov
 
 > **Project status**
 >
-> ChronoQueue is actively developed. Core queue workflows are implemented and covered by unit, integration, and end-to-end tests. Review the documented limitations and validate ChronoQueue against your workload and operational requirements before deployment.
+> **Current candidate: `v2.0.0-rc.1`; latest stable: `v1.2.1`.** The 2.0 code and documentation are incompatible with `v1.2.1`. Retained `/v1` routes and protobuf package names do not imply backward compatibility. Pin the candidate when following these docs; review the [2.0 release and migration guide](./RELEASE_2.0.md) and [readiness assessment](./version2_readiness_analysis.md) before upgrading. The candidate is a prerelease; final 2.0.0 release validation remains outstanding.
 
 ---
 
 ## Features
 
-The capabilities below are available in the current release. Items marked **Evolving** or **Partial** identify areas still under active development.
+The table below describes the current 2.0 candidate; it is not a compatibility reference for `v1.2.1`. Items marked **Evolving** or **Partial** identify areas still under active development.
 
 | Capability | Status | Current scope |
 | --- | --- | --- |
@@ -46,34 +46,25 @@ The capabilities below are available in the current release. Items marked **Evol
 
 #### Quick Install (Recommended)
 
-The fastest way to install ChronoQueue is using the installation script:
+Pin `2.0.0-rc.1` explicitly. Without a version, the scripts resolve GitHub's `releases/latest` endpoint; that does not select this candidate. These commands require published assets for the tag; if unavailable, build the tagged source below.
 
 **Linux / macOS:**
 
 ```bash
-# Install latest version to /usr/local/bin
-curl -fsSL https://raw.githubusercontent.com/adrien19/chronoqueue/develop/install/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/adrien19/chronoqueue/v2.0.0-rc.1/install/install.sh | bash -s -- 2.0.0-rc.1
 
-# Install a specific version
-curl -fsSL https://raw.githubusercontent.com/adrien19/chronoqueue/develop/install/install.sh | bash -s -- 1.2.1
-
-# Install to a custom directory (no sudo required)
-curl -fsSL https://raw.githubusercontent.com/adrien19/chronoqueue/develop/install/install.sh | CHRONOQUEUE_INSTALL_DIR="$HOME/.chronoqueue" bash
+# Custom directory (no sudo required)
+curl -fsSL https://raw.githubusercontent.com/adrien19/chronoqueue/v2.0.0-rc.1/install/install.sh | CHRONOQUEUE_INSTALL_DIR="$HOME/.chronoqueue" bash -s -- 2.0.0-rc.1
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-# Install latest version
-powershell -Command "iwr -useb https://raw.githubusercontent.com/adrien19/chronoqueue/develop/install/install.ps1 | iex"
-
-# Install a specific version
-$s=iwr -useb https://raw.githubusercontent.com/adrien19/chronoqueue/develop/install/install.ps1; `
-$b=[ScriptBlock]::Create($s); invoke-command -ScriptBlock $b -ArgumentList '1.2.1'
-
-# Install to a custom directory
+# Optional custom directory
 $Env:CHRONOQUEUE_INSTALL_DIR="C:\tools\chronoqueue"
-powershell -Command "iwr -useb https://raw.githubusercontent.com/adrien19/chronoqueue/develop/install/install.ps1 | iex"
+$s=iwr -useb https://raw.githubusercontent.com/adrien19/chronoqueue/v2.0.0-rc.1/install/install.ps1
+$b=[ScriptBlock]::Create($s)
+invoke-command -ScriptBlock $b -ArgumentList '2.0.0-rc.1'
 ```
 
 The scripts automatically:
@@ -90,13 +81,13 @@ You can also run ChronoQueue locally with [Docker Compose](https://docs.docker.c
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/adrien19/chronoqueue.git
+   git clone --branch v2.0.0-rc.1 --depth 1 https://github.com/adrien19/chronoqueue.git
    ```
 
 2. Change to the deployment directory and start the PostgreSQL configuration:
 
     ```bash
-    cd deploy
+    cd chronoqueue/deploy
     docker compose -f docker-compose.postgres.yaml up
     ```
 
@@ -105,12 +96,13 @@ You can also run ChronoQueue locally with [Docker Compose](https://docs.docker.c
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/adrien19/chronoqueue.git
+   git clone --branch v2.0.0-rc.1 --depth 1 https://github.com/adrien19/chronoqueue.git
    ```
 
 2. Download the server dependencies:
 
     ```bash
+    cd chronoqueue
     go mod download
     ```
 
@@ -133,8 +125,10 @@ You can also run ChronoQueue locally with [Docker Compose](https://docs.docker.c
     go run . server --dev --grpc-addr :9000
 
     # Development mode with SQLite
-    go run . server --dev --grpc-addr :9000 --storage-type sqlite --sqlite-db-path chronoqueue.db
+    CGO_ENABLED=1 go run -tags sqlite . server --dev --grpc-addr :9000 --storage-type sqlite --sqlite-db-path chronoqueue.db
     ```
+
+SQLite requires CGO, a C compiler, and the `sqlite` build tag. For a SQLite-capable binary, use `CGO_ENABLED=1 go build -tags sqlite -o chronoqueue .`; an untagged build supports PostgreSQL only. See [server build selection](./internal/server/server_nosqlite.go).
 
 To use mTLS, generate the required certificates or use the provided [`generate_certs.sh`](./generate_certs.sh) helper for local evaluation.
 
@@ -233,6 +227,7 @@ For complete documentation and setup guides, visit the [TypeScript SDK repositor
 Documentation currently lives alongside the relevant components:
 
 - Start the HTTP gateway with `--dev` or `--enable-api-docs` and open `/docs/` for the embedded Swagger UI, or inspect the generated [OpenAPI specification](./pkg/gateway/chronoqueue.swagger.json).
+- See the [2.0 release and migration guide](./RELEASE_2.0.md) for verified breaking changes and upgrade boundaries.
 - See the [API validation and error contract](./API_VALIDATION.md) for queue/message configuration rules and gRPC-to-HTTP error mappings.
 - See the [deployment guide](./deploy/README.md), [monitoring guide](./monitoring/README.md), [test guide](./tests/README.md), and [examples](./examples/README.md).
 - The protobuf service contract is defined in [`proto/queueservice/v1/service.proto`](./proto/queueservice/v1/service.proto).
