@@ -5,11 +5,16 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/adrien19/chronoqueue)](https://goreportcard.com/report/github.com/adrien19/chronoqueue)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
+> [!WARNING]
+> ChronoQueue is being sunset in favor of [Nzovu](https://github.com/adrien19/nzovu). This repository is kept available for existing users, but no further releases, features, or fixes are planned here. If you are starting a new deployment, follow the instructions in the Nzovu repository.
+
 ChronoQueue is a persistent job queue and execution-supervision service. It provides priority-based message processing, leases and heartbeats, retries and dead-letter queues, and recurring or delayed scheduling through gRPC and HTTP APIs.
 
 ---
 
 > **Project status**
+>
+> **Deprecation notice:** ChronoQueue is sunset in favor of [Nzovu](https://github.com/adrien19/nzovu). This repository remains available for existing users, but no further releases, features, or fixes are planned here. For new deployments, follow the instructions in the Nzovu repository.
 >
 > **Current candidate: `v2.0.0-rc.1`; latest stable: `v1.2.1`.** The 2.0 code and documentation are incompatible with `v1.2.1`. Retained `/v1` routes and protobuf package names do not imply backward compatibility. Pin the candidate when following these docs; review the [2.0 release and migration guide](./RELEASE_2.0.md) and [readiness assessment](./version2_readiness_analysis.md) before upgrading. The candidate is a prerelease; final 2.0.0 release validation remains outstanding.
 

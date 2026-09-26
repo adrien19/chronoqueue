@@ -1,3 +1,9 @@
+// Package client provides the ChronoQueue Go client.
+//
+// Deprecated: ChronoQueue is sunset in favor of
+// github.com/adrien19/nzovu. This client package will not receive
+// further updates. For new deployments, follow the instructions in the
+// Nzovu repository.
 package client
 
 import (
